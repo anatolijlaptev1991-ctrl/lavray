@@ -1,0 +1,31 @@
+# --- Go (core) ---
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+coverage.*
+vendor/
+
+# --- Rust / Tauri (shell) ---
+target/
+src-tauri/target/
+*.rs.bk
+
+# --- Node / React (ui) ---
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.tsbuildinfo
+
+# --- Локальные секреты и окружение ---
+*.local
+.env
+.env.*
+
+# --- macOS / системный мусор ---
+.DS_Store
+Thumbs.db

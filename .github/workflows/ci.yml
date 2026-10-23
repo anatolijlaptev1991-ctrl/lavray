@@ -100,3 +100,85 @@ jobs:
               print(f"ok {f}: rev {d['revision']}")
           sys.exit(0 if ok else 1)
           EOF
+
+  # --------------------------------------------------------------------------
+  # go: ядро core/ (модель, хранилище, импортёр). Полная матрица core-гейтов
+  # (sing-box, golden G01+) подключается в W4–W8.
+  # --------------------------------------------------------------------------
+  go:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+      - name: gofmt (форматирование)
+        run: test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./... -timeout 120s
+      - name: go build
+        run: go build ./...
+
+  # --------------------------------------------------------------------------
+  # rust: оболочка shell/ (Tauri 2). Системные зависимости — стандартный набор
+  # Tauri для ubuntu-24.04 (webkit2gtk-4.1).
+  # --------------------------------------------------------------------------
+  rust:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: shell
+    steps:
+      - uses: actions/checkout@v4
+      - name: Системные зависимости Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shell
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: cargo test
+        run: cargo test
+      - name: cargo build
+        run: cargo build
+
+  # --------------------------------------------------------------------------
+  # node: UI (ui/, единый React для приложения и веб-панели)
+  # --------------------------------------------------------------------------
+  node:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: npm ci
+        run: npm ci
+      - name: tsc --noEmit
+        run: npx tsc --noEmit
+      - name: eslint
+        run: npx eslint .
+      - name: vitest
+        run: npx vitest run
+      - name: vite build
+        run: npm run build

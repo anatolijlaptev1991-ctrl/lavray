@@ -1,0 +1,24 @@
+# Генерация кода из proto/lavray.proto (stage3, core-port-plan §2).
+#
+# Запуск из корня репозитория:
+#   buf generate proto
+#
+# Go-код ядра кладётся в core/internal/gen (модуль
+# github.com/anatolijlaptev1991-ctrl/lavray/core); каталог
+# core/internal/gen — «генерится, не редактируется».
+# (es/connect-es для ui/src/api добавляется отдельной записью,
+# когда появится фронтенд-стек — W7.)
+version: v2
+plugins:
+  # protoc-gen-go кладёт файлы по пути прото-файла (source_relative):
+  # core/internal/gen/lavrayv1/lavray.pb.go
+  - local: protoc-gen-go
+    out: core/internal/gen/lavrayv1
+    opt:
+      - paths=source_relative
+  # protoc-gen-connect-go сам добавляет подкаталог <pkg>connect к out:
+  # core/internal/gen/lavrayv1connect/lavray.connect.go (пакет lavrayv1connect)
+  - local: protoc-gen-connect-go
+    out: core/internal/gen
+    opt:
+      - paths=source_relative

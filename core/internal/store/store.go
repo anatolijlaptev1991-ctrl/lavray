@@ -1,0 +1,146 @@
+// Package store — SQLite-хранилище LAVRay (modernc.org/sqlite, CGO-free;
+// core-port-plan §5). Режим WAL; одна операция UI — одна транзакция.
+//
+// Права (Р2-33): каталог данных 0700, lavray.db (и -wal/-shm) 0600 —
+// устанавливаются при создании; на Windows файловые права не применяются.
+package store
+
+import (
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime"
+	"time"
+
+	_ "modernc.org/sqlite" // регистрация драйвера (CGO_ENABLED=0)
+)
+
+const dbFileName = "lavray.db"
+
+// Ошибки хранилища (сопоставляются ошибкам ConnectRPC на слое API, W6).
+var (
+	ErrNotFound   = fmt.Errorf("store: not found")
+	ErrLastGroup  = fmt.Errorf("store: cannot delete the last group") // FR-UI-107
+	ErrConstraint = fmt.Errorf("store: constraint violation")
+)
+
+// Store — обёртка над SQLite-базой в каталоге dir.
+type Store struct {
+	db  *sql.DB
+	dir string
+}
+
+// Open открывает (или создаёт) хранилище в dir, применяет права и миграции.
+func Open(dir string) (*Store, error) {
+	if dir == "" {
+		return nil, fmt.Errorf("store: empty dir")
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("store: mkdir: %w", err)
+	}
+	s := &Store{dir: dir}
+
+	// foreign_keys/journal_mode должны действовать на КАЖДОМ соединении
+	// пула — задаём их в DSN (modernc.org/sqlite: _pragma=...).
+	dsn := "file:" + filepath.ToSlash(filepath.Join(dir, dbFileName)) +
+		"?_pragma=foreign_keys(1)" +
+		"&_pragma=journal_mode(WAL)" +
+		"&_pragma=synchronous(NORMAL)" +
+		"&_pragma=busy_timeout(10000)"
+	db, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		return nil, fmt.Errorf("store: open: %w", err)
+	}
+	// Ядро — однопользовательский процесс: одно соединение исключает
+	// SQLITE_BUSY между собственными горутинами (запись всё равно одна).
+	db.SetMaxOpenConns(1)
+	s.db = db
+
+	if err := migrate(db); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("store: migrate: %w", err)
+	}
+	if err := s.applyFileModes(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return s, nil
+}
+
+// Close закрывает базу. Перед закрытием — чекпойнт и выход из WAL-режима:
+// SQLite удаляет -wal/-shm синхронно на соединении, и на Windows каталог
+// данных можно сразу удалить/переместить (без гонки с отложенным удалением
+// файлов ядром). Следующий Open снова включает WAL (DSN).
+func (s *Store) Close() error {
+	_, _ = s.db.Exec(`PRAGMA wal_checkpoint(TRUNCATE)`)
+	_, _ = s.db.Exec(`PRAGMA journal_mode = DELETE`)
+	return s.db.Close()
+}
+
+// Dir возвращает каталог данных.
+func (s *Store) Dir() string { return s.dir }
+
+// DB открывает доступ к *sql.DB (бэкапы VACUUM INTO и служебные операции).
+func (s *Store) DB() *sql.DB { return s.db }
+
+func nowMs() int64 { return time.Now().UnixMilli() }
+
+// applyFileModes выставляет права 0700/0600 на unix (Р2-33).
+// На Windows права не применяются (файловая система без POSIX-режима).
+func (s *Store) applyFileModes() error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	if err := os.Chmod(s.dir, 0o700); err != nil {
+		return fmt.Errorf("store: chmod dir: %w", err)
+	}
+	dbPath := filepath.Join(s.dir, dbFileName)
+	if err := os.Chmod(dbPath, 0o600); err != nil {
+		return fmt.Errorf("store: chmod db: %w", err)
+	}
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if _, err := os.Stat(dbPath + suffix); err == nil {
+			if err := os.Chmod(dbPath+suffix, 0o600); err != nil {
+				return fmt.Errorf("store: chmod %s: %w", suffix, err)
+			}
+		}
+	}
+	return nil
+}
+
+// withTx выполняет fn в одной транзакции (rollback при ошибке).
+func (s *Store) withTx(fn func(tx *sql.Tx) error) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := fn(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+// ---- meta ----
+
+// GetMeta возвращает значение служебного ключа (false — ключа нет).
+func (s *Store) GetMeta(key string) (string, bool, error) {
+	var v string
+	err := s.db.QueryRow(`SELECT value FROM meta WHERE key = ?`, key).Scan(&v)
+	if err == sql.ErrNoRows {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	return v, true, nil
+}
+
+// SetMeta записывает служебный ключ.
+func (s *Store) SetMeta(key, value string) error {
+	_, err := s.db.Exec(
+		`INSERT INTO meta (key, value) VALUES (?, ?)
+		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	return err
+}

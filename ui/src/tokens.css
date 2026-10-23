@@ -1,0 +1,141 @@
+/* ============================================================
+   LAVRay — Design System v1.2 tokens
+   Values are copied verbatim from design/prototype.html (the
+   source of truth; docs/DESIGN-SYSTEM.md v1.2 describes them).
+   Themes:  html[data-theme="dark"|"light"]
+   Accents: html[data-accent="amber"|"sage"|"graphite"]
+   DESIGN_TOKENS_VERSION = 1.2 — change only via a DS revision.
+   ============================================================ */
+
+:root {
+  /* Fonts: DS §3 — system OS stack first (app mode), Inter for web,
+     CJK fallback per DS (--font-cjk); mono per DS. */
+  --font-cjk: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", "Noto Sans CJK SC";
+  --font-sans: Inter, system-ui, -apple-system, "Segoe UI", Roboto, var(--font-cjk), sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* Radii: DS §4 */
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 16px;
+  --r-full: 999px;
+
+  /* Motion: DS §11 */
+  --ease: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --e-in: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --e-out: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --t-micro: 120ms;
+  --t-std: 200ms;
+  --t-emph: 280ms;
+  --t-chor: 700ms;
+  --e-spring: linear(0, 0.006, 0.025 2.8%, 0.101 6.1%, 0.539 18.9%, 0.721 25.3%, 0.849 31.5%, 0.937 38.1%, 0.968 41.8%, 0.991 45.7%, 1.006 50.1%, 1.015 55%, 1.017 63.9%, 1.001 85.9%, 1);
+
+  /* Frame metrics: DS §4 */
+  --sidebar-w: 224px;
+  --tb-h: 42px;
+  --sb-h: 30px;
+
+  /* Spacing scale: DS §4 */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+}
+
+/* ---------- Theme: dark ("Graphite and the amber beam") ---------- */
+html[data-theme="dark"] {
+  --bg: #131316;
+  --surface: #1b1b1f;
+  --surface2: #232329;
+  --hover: #2a2a31;
+  --b-subtle: #2c2c33;
+  --b-strong: #3b3b45;
+  --t1: #ededef;
+  --t2: #a3a3ab;
+  --t3: #94949c;
+  --b-control: #70707a;
+  --accent: #e0a03a; /* amber default; overridden by data-accent */
+  --accent-h: #edb454;
+  --accent-soft: rgba(224, 160, 58, 0.13);
+  --accent-contrast: #1a1408;
+  --err-contrast: #2b0f15;
+  --ok: #4cc38a;
+  --ok-text: #4cc38a;
+  --warn: #e2b93b;
+  --warn-text: #e2b93b;
+  --err: #e5697a;
+  --err-text: #e5697a;
+  --info: #5ca8d8;
+  --info-text: #5ca8d8;
+  --ray-a: #f2b94b;
+  --ray-b: #e0813a;
+  --ray-rgb: 242, 185, 75;
+  --winbtn-bg: #232329;
+  --scrim: rgba(6, 6, 8, 0.62);
+  color-scheme: dark;
+}
+
+/* ---------- Theme: light ("Paper pastel") ---------- */
+html[data-theme="light"] {
+  --bg: #f5f2ec;
+  --surface: #fbf9f5;
+  --surface2: #efebe3;
+  --hover: #e8e3d9;
+  --b-subtle: #e0dad0;
+  --b-strong: #bdb8ae;
+  --t1: #262320;
+  --t2: #57534b;
+  --t3: #69645a;
+  --b-control: #857f73;
+  --accent: #86590f; /* amber in light theme */
+  --accent-h: #744c0c;
+  --accent-soft: rgba(134, 89, 15, 0.1);
+  --accent-contrast: #fff8ec;
+  --err-contrast: #fff6f7;
+  --ok: #14855a;
+  --ok-text: #0e6b48;
+  --warn: #a96a0d;
+  --warn-text: #8f5a0a;
+  --err: #c23a4e;
+  --err-text: #a92839;
+  --info: #1d7fb8;
+  --info-text: #176a99;
+  --ray-a: #d99a2b;
+  --ray-b: #b8661f;
+  --ray-rgb: 199, 132, 36;
+  --winbtn-bg: #efebe3;
+  --scrim: rgba(38, 35, 32, 0.36);
+  color-scheme: light;
+}
+
+/* ---------- Alternate accents (solid, no gradients); DS §2:
+   the default accent is theme-bound: dark → amber, light → sage.
+   "auto" resolves in lib/theme.ts and is written as a concrete value. ---------- */
+html[data-accent="sage"] {
+  --accent: #7fa08c;
+  --accent-h: #8fb29c;
+  --accent-soft: rgba(127, 160, 140, 0.14);
+  --accent-contrast: #16221b;
+}
+html[data-accent="sage"][data-theme="light"] {
+  --accent: #466f59;
+  --accent-h: #3b604c;
+  --accent-soft: rgba(70, 111, 89, 0.12);
+  --accent-contrast: #f2f7f4;
+}
+html[data-accent="graphite"] {
+  --accent: #ededef;
+  --accent-h: #ffffff;
+  --accent-soft: rgba(237, 237, 239, 0.1);
+  --accent-contrast: #131316;
+}
+html[data-accent="graphite"][data-theme="light"] {
+  --accent: #3b3b45;
+  --accent-h: #262320;
+  --accent-soft: rgba(59, 59, 69, 0.08);
+  --accent-contrast: #fbf9f5;
+}

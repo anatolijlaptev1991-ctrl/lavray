@@ -1,0 +1,44 @@
+:root {
+  color-scheme: dark;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #182030;
+  color: #e6edf3;
+}
+
+main {
+  max-width: 32rem;
+  padding: 2rem;
+}
+
+h1 {
+  margin-top: 0;
+}
+
+.note {
+  opacity: 0.85;
+  line-height: 1.5;
+}
+
+.status {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.4rem 1rem;
+  margin-top: 1.5rem;
+}
+
+dt {
+  opacity: 0.7;
+}
+
+dd {
+  margin: 0;
+  font-family: ui-monospace, Consolas, monospace;
+}

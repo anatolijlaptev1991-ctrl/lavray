@@ -1,0 +1,161 @@
+/* ============================================================
+   LAVRay — base reset & primitives (mirrors design/prototype.html)
+   ============================================================ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.45;
+  background: var(--bg);
+  color: var(--t1);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* DS §3: CJK — extra line-height, no letter-spacing */
+html[lang^="zh"] body {
+  line-height: 1.6;
+}
+html[lang^="zh"] * {
+  letter-spacing: 0 !important;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+}
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  color: var(--accent-h);
+  text-decoration: underline;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.cap {
+  font-size: 0.75rem;
+  color: var(--t3);
+  letter-spacing: 0.02em;
+}
+
+.t2 {
+  color: var(--t2);
+}
+.t3 {
+  color: var(--t3);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Scrollbars (prototype) */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--b-subtle);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--b-strong);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+}
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--b-subtle) transparent;
+}
+
+:focus {
+  outline: none;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+/* DS §12: single focus ring for everything interactive */
+:where(button, a, select, summary, [tabindex], [role="button"], [role="tab"], [role="menuitem"], [role="menuitemradio"], [role="radio"], [role="switch"]):focus-visible {
+  outline: 2px solid var(--accent) !important;
+  outline-offset: 2px !important;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--t1);
+}
+
+kbd,
+.kbd {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--t2);
+  background: var(--surface2);
+  border: 1px solid var(--b-subtle);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 2px 6px;
+  white-space: nowrap;
+}
+
+/* DS §11 / §12: reduced motion kills non-essential animation */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
+    scroll-behavior: auto !important;
+  }
+}

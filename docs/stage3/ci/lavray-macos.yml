@@ -1,0 +1,187 @@
+# ============================================================================
+# ci/lavray-macos.yml — сборка macOS: universal binary, .dmg, notarization
+# ============================================================================
+# ЧЕРНОВИК Этапа 3. Целевое место: репозиторий `lavray-macos` →
+# .github/workflows/build.yml.
+#
+# Артефакты релиза:
+#   LAVRay-<ver>-universal.dmg      — universal (aarch64 + x86_64)
+#   LAVRay-<ver>-universal.app.tar.gz + .sig — updater-артефакт (ОБЯЗАТЕЛЕН
+#                                     в манифесте и релизе — иначе 404, P1-18)
+#   manifest-<channel>.draft.json   — черновик манифеста TUF-lite (подпись — вне CI)
+#
+# СЕКРЕТЫ (ПОЛНОСТЬЮ PLACEHOLDER — до покупки Apple Developer-аккаунта всё
+# подписание/нотаризация отключены и помечены; сборка без них проходит):
+#   MACOS_CERTIFICATE_P12_B64   — Developer ID Application-сертификат (base64)
+#   MACOS_CERTIFICATE_PASSWORD  — пароль p12
+#   KEYCHAIN_PASSWORD           — пароль временного keychain
+#   APPLE_NOTARY_KEYCHAIN_PROFILE — профиль `notarytool` (креды App Store Connect API)
+#   TAURI_SIGNING_PRIVATE_KEY / _PASSWORD — ed25519 апдейтера (обязателен)
+# ============================================================================
+
+name: build-macos
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        type: choice
+        options: [stable, beta]
+        default: stable
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read # LNB-30; write — только в job attach-release ниже
+
+jobs:
+  build:
+    runs-on: macos-14 # ПИН раннера: macos-14 = arm64 (M1); универсальная сборка
+                      # крест-компиляцией обоих таргетов. Переход macos-15 — PR.
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # ---------- Toolchain ----------------------------------------------------
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin, x86_64-apple-darwin, universal-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shell
+
+      # P1-16: pnpm ДО setup-node (cache: pnpm иначе падает).
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ui/.nvmrc
+          cache: pnpm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      # ---------- 1. Go-ядро: два арха + lipo -----------------------------------
+      - name: Fetch pinned sources
+        run: core/libs/get_source.sh "$RUNNER_TEMP/deps"
+      - name: Build lavray-core (universal — aarch64 + x86_64, lipo)
+        working-directory: core
+        env:
+          NEKO_SOURCES_DIR: ${{ runner.temp }}/deps
+        run: |
+          VER=$(git describe --tags --always | sed 's/^v//')
+          CORE_VER=$(libs/core-version.sh) # P2-44: из пина форка, схема 1.14.1-lav.N;
+                                           # working-directory: core → путь libs/
+          CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 \
+            go build -trimpath -ldflags "-s -w -X main.version=$VER -X main.versionCore=$CORE_VER" \
+            -o /tmp/core-arm64 ./cmd/lavray-core
+          CGO_ENABLED=0 GOOS=darwin GOARCH=amd64 \
+            go build -trimpath -ldflags "-s -w -X main.version=$VER -X main.versionCore=$CORE_VER" \
+            -o /tmp/core-amd64 ./cmd/lavray-core
+          lipo -create -output ../shell/bin/lavray-core /tmp/core-arm64 /tmp/core-amd64
+          lipo -info ../shell/bin/lavray-core
+
+      # ---------- 2. [PLACEHOLDER] Импорт сертификата и keychain -----------------
+      # P1-18: флаг — REPO VARIABLE (vars.HAVE_SIGNING), не env: env нельзя
+      # использовать в `if` уровня шага без явного контекста.
+      # Включается установкой HAVE_SIGNING=true в Settings → Variables
+      # (Variables, не Secrets) при появлении сертификата.
+      - name: Import signing certificate (placeholder)
+        if: vars.HAVE_SIGNING == 'true'
+        env:
+          MACOS_CERTIFICATE_P12_B64: ${{ secrets.MACOS_CERTIFICATE_P12_B64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          CERTFILE=$(mktemp /tmp/certificate.XXXXXX.p12)
+          echo "$MACOS_CERTIFICATE_P12_B64" | base64 --decode > "$CERTFILE"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security import "$CERTFILE" -k build.keychain -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+
+      # ---------- 3. Tauri: universal + dmg ---------------------------------------
+      - name: Build Tauri (dmg + updater zip, universal)
+        working-directory: shell
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          # Tauri подписывает .app при наличии MC_SIGNING_IDENTITY:
+          # MC_SIGNING_IDENTITY: "Developer ID Application: <NAME> (TEAMID)"  # placeholder
+          APPLE_CI: "1"
+        run: |
+          pnpm --dir ../ui install --frozen-lockfile
+          pnpm --dir ../ui exec tauri build --target universal-apple-darwin --bundles dmg,updater
+          # tauri.conf.json > bundle.mac.minimumSystemVersion: "10.15" (пин ОС-флоор)
+
+      # ---------- 4. [PLACEHOLDER] Notarization ------------------------------------
+      # Включается вместе с подписанием; профиль notarytool создаётся заранее:
+      #   xcrun notarytool store-credentials lavray-notary --apple-id ... --team-id ...
+      # Креды кладутся в секрет и восстанавливаются в keychain CI.
+      - name: Notarize and staple (placeholder)
+        if: vars.HAVE_SIGNING == 'true'
+        run: |
+          find shell/target/universal-apple-darwin/release/bundle/dmg -name '*.dmg' | while read -r dmg; do
+            xcrun notarytool submit "$dmg" --keychain-profile "$APPLE_NOTARY_KEYCHAIN_PROFILE" --wait
+            xcrun stapler staple "$dmg"
+          done
+        env:
+          APPLE_NOTARY_KEYCHAIN_PROFILE: ${{ secrets.APPLE_NOTARY_KEYCHAIN_PROFILE }}
+
+      # ---------- 5. Манифест (TUF-lite v2.0) --------------------------------------
+      - name: Generate draft manifest + checksums
+        run: |
+          # Черновик manifest-<channel>.json; подпись — ВНЕ CI (UPDATE-SYSTEM
+          # v2.0 §4). ОБЯЗАТЕЛЬНО включает updater-артефакт (.app.tar.gz+.sig):
+          # манифест без него дал бы 404 клиенту апдейтера (P1-18).
+          node tools/gen-manifest.mjs \
+            --product lavray-macos \
+            --channel "${{ inputs.channel || 'stable' }}" \
+            --serial-from "$GITHUB_RUN_NUMBER" \
+            --asset-dmg "shell/target/universal-apple-darwin/release/bundle/dmg/*.dmg" \
+            --asset-updater "shell/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz*" \
+            --core-version "$(core/libs/core-version.sh)" \
+            --out "manifest-${{ inputs.channel || 'stable' }}.draft.json"
+          shopt -s nullglob
+          sha256sum shell/target/universal-apple-darwin/release/bundle/dmg/*.dmg \
+                    shell/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz \
+                    > checksums.sha256
+
+      # ---------- 6. Артефакты -------------------------------------------------------
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lavray-macos-${{ github.sha }}
+          path: |
+            shell/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            shell/target/universal-apple-darwin/release/bundle/macos/*
+            manifest-*.draft.json
+            checksums.sha256
+          if-no-files-found: error
+
+  # P1-18: к релизу крепим И updater-артефакты (.app.tar.gz + .sig), иначе
+  # манифест ссылается на несуществующие файлы. Узкие права — только здесь.
+  attach-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: macos-14
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lavray-macos-${{ github.sha }}
+      - name: Attach to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            shell/target/universal-apple-darwin/release/bundle/dmg/*.dmg \
+            shell/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz \
+            shell/target/universal-apple-darwin/release/bundle/macos/*.app.tar.gz.sig \
+            checksums.sha256 manifest-*.draft.json --clobber
+          # Подпись метаданных (root/timestamp/manifest/sources) — вне CI.

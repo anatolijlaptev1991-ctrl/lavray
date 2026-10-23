@@ -1,0 +1,214 @@
+# ============================================================================
+# ci/lavray-openwrt.yml — сборка OpenWrt: SDK-контейнер, матрица 2×2, feed
+# ============================================================================
+# ЧЕРНОВИК Этапа 3 (ревизия 2 по L2-ревью: P1-17, P2-39). Целевое место:
+# репозиторий `lavray-openwrt` → .github/workflows/build.yml.
+#
+# Артефакты (UPDATE-SYSTEM v2.0 §6, OPENWRT-GATEWAY):
+#   24.10: lavrayd_<ver>_<arch>.ipk, lavray-webui_..., luci-app-lavray_all.ipk
+#          + feed/<arch>/{Packages, Packages.gz} (ipk, usign-подпись — опц.)
+#   25.12+: те же пакеты в формате .apk + APKINDEX (подпись обязательна)
+#
+# Матрица: {24.10, 25.12} × {x86-64, armsr-armv8}. Расширение (cortex-a53/…
+# из OPENWRT-GATEWAY §1) — добавлением строк matrix.include.
+#
+# СЕКРЕТЫ: OPENWRT_USIGN_PRIV_KEY (подпись ipk-фида 24.10, опционально) и
+# OPENWRT_APK_KEY (25.12+, обязательна для фида) — placeholders с комментами.
+# ============================================================================
+
+name: build-openwrt
+
+on:
+  workflow_dispatch:
+    inputs:
+      owrt_version:
+        description: "Ветка OpenWrt"
+        type: choice
+        options: ["24.10", "25.12"]
+        default: "24.10"
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read # LNB-30; write — только в job publish-feed
+
+concurrency:
+  group: build-openwrt-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # --- 24.10: ipk + usign ---
+          - owrt: "24.10"
+            arch: x86-64
+            goarch: amd64
+            pkg: ipk
+          - owrt: "24.10"
+            arch: armsr-armv8
+            goarch: arm64
+            pkg: ipk
+          # --- 25.12+: apk с обязательной подписью (переход opkg→apk) ---
+          - owrt: "25.12"
+            arch: x86-64
+            goarch: amd64
+            pkg: apk
+          - owrt: "25.12"
+            arch: armsr-armv8
+            goarch: arm64
+            pkg: apk
+    container:
+      # ПИН SDK-образов: тег = ветка. При переносе в прод зафиксировать
+      # дайджесты (openwrt/sdk@sha256:...) и точный минор релиза SDK
+      # (hub.docker.com/r/openwrt/sdk, напр. x86-64-24.10.0 / …-25.12.0).
+      image: openwrt/sdk:${{ matrix.arch }}-${{ matrix.owrt }}
+    env:
+      # P1-17: Go ВСЕГДА linux-amd64 — это тулчейн ХОСТА (контейнер x86-64);
+      # целевая архитектура задаётся GOARCH при сборке. Дистрибутив под arch
+      # хоста качать нельзя (на arm64-хосте не запустится и наоборот).
+      GO_VERSION: "1.25.5" # ПИН: та же версия, что core/go.mod
+      GOARCH: ${{ matrix.goarch }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Go into container (host toolchain, linux-amd64)
+        run: |
+          curl -sL "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz" | tar -C /usr/local -xz
+          echo /usr/local/go/bin >> "$GITHUB_PATH"
+          # GOARCH/CGO_ENABLED выставлены в env джоба: CGO_ENABLED=0 — SDK-тулчейн
+          # ядру не нужен (core-port-plan §2); GOARCH — только флагом сборки.
+
+      - name: Fetch pinned sources (sing-box fork и пр.)
+        run: core/libs/get_source.sh "$RUNNER_TEMP/deps"
+
+      # ---------- 1. Go-ядро lavrayd (кросс) ----------------------------------
+      - name: Build lavrayd
+        working-directory: core
+        run: |
+          VER=$(git describe --tags --always | sed 's/^v//')
+          CORE_VER=$(libs/core-version.sh) # P2-44: из пина форка (1.14.1-lav.N); шаг в core/ → libs/
+          CGO_ENABLED=0 GOOS=linux \
+            go build -trimpath -ldflags "-s -w -X main.version=$VER -X main.versionCore=$CORE_VER" \
+            -tags without_webui \
+            -o /tmp/lavrayd ./cmd/lavray-core
+          # статику пакуем отдельным .ipk/.apk (lavray-webui): флеш-экономия
+          # (core-port-plan §10.2).
+
+      # ---------- 2. Веб-панель: фиксированный каталог + embed ----------------
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ui/.nvmrc
+      # P1-16/P2-39: pnpm до setup-node здесь не нужен (кэш не используем —
+      # контейнер без HOME-кэша), но порядок установки сохраняем.
+      - run: npm i -g pnpm@10
+      - name: Build webui bundle (fixed output dir)
+        working-directory: ui
+        run: |
+          pnpm install --frozen-lockfile
+          # P2-39: вывод — ФИКСИРОВАННЫЙ каталог ../ui/dist-web (embed читает
+          # его на этапе компиляции go:embed; никаких env-переменных путей).
+          pnpm build:web --outDir dist-web
+      - name: Build lavray-webui binary (embed dist-web)
+        working-directory: core
+        run: |
+          VER=$(git describe --tags --always | sed 's/^v//')
+          CORE_VER=$(libs/core-version.sh) # шаг в core/ → путь libs/
+          CGO_ENABLED=0 GOOS=linux \
+            go build -trimpath -ldflags "-s -w -X main.version=$VER -X main.versionCore=$CORE_VER" \
+            -o /tmp/lavray-webui ./cmd/lavray-core
+
+      # ---------- 3. Пакеты (ipk 24.10 / apk 25.12+) ---------------------------
+      - name: Pack ipk (24.10)
+        if: matrix.pkg == 'ipk'
+        run: |
+          VER=$(git describe --tags --always | sed 's/^v//')
+          ./openwrt/pack-ipk.sh lavrayd      "$VER" "${{ matrix.arch }}" /tmp/lavrayd \
+            openwrt/lavrayd/control openwrt/lavrayd/conffiles openwrt/lavrayd/postinst
+          ./openwrt/pack-ipk.sh lavray-webui "$VER" "${{ matrix.arch }}" /tmp/lavray-webui \
+            openwrt/lavray-webui/control
+          # control: Depends (libc не нужен при CGO_ENABLED=0), conffiles:
+          # /etc/config/lavray /etc/lavray/ (UPDATE-SYSTEM §6 — не затираются).
+
+      - name: Pack apk (25.12+, placeholder)
+        if: matrix.pkg == 'apk'
+        run: |
+          # 25.12 перешла на apk: пакеты собираются apk-mkpkg (или через SDK
+          # package/). PLACEHOLDER: реализовать вместе с первым SDK 25.12;
+          # подпись APKINDEX обязательна (ключ OPENWRT_APK_KEY).
+          echo "TODO: apk packaging for 25.12 (apk-mkpkg + APKINDEX)" >&2
+          exit 1 # закомментировать при реализации — матрица уже готова
+
+      # ---------- 4. luci-app-lavray в SDK (feeds!) ------------------------------
+      - name: Build luci-app-lavray (SDK, с feeds update/install)
+        run: |
+          # P2-39: LuCI-пакет требует feeds (luci-base и зависимые модули):
+          # без ./scripts/feeds сборка падает на отсутствующих зависимостях.
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          cp -r openwrt/luci/luci-app-lavray package/
+          make package/luci-app-lavray/compile -j"$(nproc)" V=s
+          mkdir -p /tmp/out
+          cp bin/packages/*/base/luci-app-lavray*.ipk /tmp/out/ 2>/dev/null || \
+            cp bin/targets/*/*/packages/luci-app-lavray*.ipk /tmp/out/
+          # LuCI: статус, «Шлюз: выкл/TProxy/TUN», обновления, откат через
+          # snapshot /etc/lavray/backup (OPENWRT-GATEWAY §5–6).
+
+      # ---------- 5. Feed-индекс (внутри feed/<arch>) ----------------------------
+      - name: Assemble feed + index
+        run: |
+          # Каталог feed/ может не существовать в чекауте — создаём сами
+          # (шаг без working-directory: корень репо).
+          mkdir -p "feed/${{ matrix.arch }}/${{ matrix.owrt }}"
+          cd "feed/${{ matrix.arch }}/${{ matrix.owrt }}"
+          cp "$GITHUB_WORKSPACE"/*.ipk /tmp/out/*.ipk . 2>/dev/null || true
+          cd "${{ matrix.arch }}/${{ matrix.owrt }}"
+          # P1-17: индекс собирается СТРОГО внутри каталога фида скриптом SDK
+          # ($STAGING_DIR_HOST задаётся образом); fallback ./scripts/ удалён.
+          "$STAGING_DIR_HOST/scripts/ipkg-make-index.sh" . > Packages
+          gzip -9k Packages
+          # [ОПЦИОНАЛЬНО, 24.10] usign-подпись индекса: раскомментировать при
+          # появлении секрета OPENWRT_USIGN_PRIV_KEY; отпечаток публичного
+          # ключа публикуется ВНЕ GitHub (сайт/README, UPDATE-SYSTEM §6).
+          # echo "$OPENWRT_USIGN_PRIV_KEY" > /tmp/usign.key
+          # usign -S -s /tmp/usign.key -m Packages -x Packages.sig
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lavray-openwrt-${{ matrix.owrt }}-${{ matrix.arch }}
+          path: feed/
+          if-no-files-found: error
+
+  # ---------- 6. Публикация Pages (ручной гейт) --------------------------------
+  publish-feed:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment: github-pages # защита веток/окружения
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: lavray-openwrt-*
+          merge-multiple: true
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: feed
+      - uses: actions/deploy-pages@v4
+        # Результат: https://<owner>.github.io/lavray-openwrt/feed/<arch>/<owrt>/Packages.gz
+        # Пользовательский конфиг (24.10): /etc/opkg/lavray.conf:
+        #   src/gz lavray https://<owner>.github.io/lavray-openwrt/feed/x86-64/24.10
+        # 25.12+: скрипт lavray-update выбирает apk-фид и переписывает URL
+        # (UPDATE-SYSTEM §6); ключ фида — до первого обновления, отпечаток
+        # вне GitHub. opkg/apk upgrade — только именованные пакеты LAVRay;
+        # snapshot + watchdog-откат — OPENWRT-GATEWAY §5.

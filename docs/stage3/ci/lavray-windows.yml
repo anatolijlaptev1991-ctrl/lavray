@@ -1,0 +1,189 @@
+# ============================================================================
+# ci/lavray-windows.yml — сборка Windows: Tauri NSIS + ZIP, подпись, манифест
+# ============================================================================
+# ЧЕРНОВИК Этапа 3 (ревизия 2 по L2-ревью: P0-1, P1-16, P2-36…38/44).
+# Целевое место: репозиторий `lavray-windows` → .github/workflows/build.yml.
+#
+# Артефакты релиза (UPDATE-SYSTEM v2.0 §3/§4):
+#   LAVRay-<ver>-x64-setup.exe       — NSIS-инсталлятор (Tauri bundler) + .sig
+#   LAVRay-<ver>-x64-windows.zip     — портативный ZIP
+#   manifest-<channel>.draft.json    — ЧЕРНОВИК манифеста TUF-lite (serial,
+#                                      product, assets sha256/length, presets/geo)
+#   checksums.sha256                 — чексуммы для ревью релиз-инженером
+#   ПОДПИСЬ метаданных (root/timestamp/manifest/sources) — ВНЕ CI (§4):
+#   релиз-инженер или защищённый Environment с ревью.
+#
+# СЕКРЕТЫ (настраиваются в lavray-windows → Settings → Secrets):
+#   TAURI_SIGNING_PRIVATE_KEY           — minisign/ed25519 приватный ключ апдейтера
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  — пароль ключа
+#   WINDOWS_CERTIFICATE_PFX_B64         — [ОПЦИОНАЛЬНО, Authenticode; закомментировано]
+#   WINDOWS_CERTIFICATE_PASSWORD        — [ОПЦИОНАЛЬНО]
+# ============================================================================
+
+name: build-windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: "Канал манифеста"
+        type: choice
+        options: [stable, beta]
+        default: stable
+  push:
+    tags: ["v*"] # релизный тег; nightly — по cron в main-репо (отдельный workflow)
+
+permissions:
+  contents: read # LNB-30; write — только в job attach-release ниже
+
+concurrency:
+  group: build-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Единая правда о версиях лежит в исходниках; сюда — только номера инструментов.
+  RUST_TOOLCHAIN: stable # точный тулчейн: shell/rust-toolchain.toml
+  NODE_VERSION_FILE: ui/.nvmrc
+  GO_VERSION_FILE: core/go.mod
+
+jobs:
+  build:
+    runs-on: windows-2022 # ПИН раннера: windows-2022 (ISO-стабильность NSIS-пути);
+                          # переход на windows-2025 — отдельным PR с прогоном e2e.
+    steps:
+      - name: "Checkout lavray (монорепо, без субмодулей)"
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # теги → semver для манифеста
+
+      # ---------- Toolchain (все пины продублированы комментами) -------------
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shell
+
+      # P1-16: pnpm ДО setup-node (cache: pnpm иначе падает).
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ${{ env.NODE_VERSION_FILE }}
+          cache: pnpm
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+          cache-dependency-path: core/go.sum
+
+      # ---------- 1. Go-ядро: lavray-core.exe --------------------------------
+      - name: Fetch pinned sources (sing-box fork 628a9ed, libneko, x/net)
+        run: core/libs/get_source.sh "$env:RUNNER_TEMP\deps"
+        shell: pwsh
+
+      - name: Build lavray-core.exe (CGO_ENABLED=0)
+        working-directory: core
+        env:
+          NEKO_SOURCES_DIR: ${{ runner.temp }}\deps
+        run: |
+          # P2-44: версия ядра генерируется из пина форка (схема 1.14.1-lav.N,
+          # UPDATE-SYSTEM §7): base — из libs/get_source_env.sh (COMMIT_SING_BOX),
+          # суффикс lav.N — из core/VERSION (инкремент релиз-инженером вместе с
+          # переносом neko-патчей). Хардкод версии в CI запрещён.
+          # (шаг имеет working-directory: core → путь от core/, не core/core/)
+          $coreVer = & libs/core-version.ps1
+          $ver = if ($env:GITHUB_REF -match 'refs/tags/v(.+)') { $Matches[1] } else { '0.0.0-dev' }
+          go build -trimpath -ldflags "-s -w -X main.version=$ver -X main.versionCore=$coreVer" -o ..\shell\bin\lavray-core.exe .\cmd\lavray-core
+
+      # ---------- 2. UI + Tauri-оболочка ------------------------------------
+      - name: Install UI deps
+        run: pnpm install --frozen-lockfile
+        working-directory: ui
+
+      - name: Build Tauri (NSIS)
+        working-directory: shell
+        env:
+          # Подпись АПДЕЙТЕРА (minisign/ed25519): Tauri сам подпишет .exe для
+          # updater-plugin, если заданы эти переменные.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm exec tauri build --bundles nsis
+        # Проверить в tauri.conf.json: createUpdaterArtifacts: true (v2) —
+        # рядом с .exe появится .sig (ed25519) для манифеста.
+
+      # ---------- 3. Портативный ZIP -----------------------------------------
+      - name: Compose portable ZIP
+        shell: pwsh
+        run: |
+          $ver = if ($env:GITHUB_REF -match 'refs/tags/v(.+)') { $Matches[1] } else { '0.0.0-dev' }
+          $staging = "stage/LAVRay-$ver-x64"
+          New-Item -ItemType Directory -Force -Path $staging
+          Copy-Item shell/bin/lavray-core.exe $staging
+          Copy-Item shell/target/x86_64-pc-windows-msvc/release/*.exe $staging -Exclude lavray-core.exe
+          # webview2-загрузчик и ресурсы — по составу из tauri bundler
+          Compress-Archive -Path $staging -DestinationPath "LAVRay-$ver-x64-windows.zip"
+
+      # ---------- 4. Манифест обновлений (UPDATE-SYSTEM v2.0, P0-1) ------------
+      # CI готовит НЕПОДПИСАННЫЙ черновик manifest-<channel>.json (serial,
+      # product, assets с sha256/length, presets/geo) + чексуммы артефактов.
+      # Подпись метаданных (root/timestamp/manifest/sources) — ВНЕ CI,
+      # релиз-инженером или защищённым Environment с ревью (UPDATE-SYSTEM §4);
+      # публикация манифеста — ручной гейт release-publish.
+      - name: Generate draft manifest + checksums (TUF-lite v2.0)
+        shell: pwsh
+        run: |
+          node tools/gen-manifest.mjs `
+            --product lavray-windows `
+            --channel "${{ inputs.channel || 'stable' }}" `
+            --serial-from "$env:GITHUB_RUN_NUMBER" `
+            --asset-setup "LAVRay-*-x64-setup.exe" `
+            --asset-zip    "LAVRay-*-x64-windows.zip" `
+            --core-version (& core/libs/core-version.ps1) `
+            --out "manifest-${{ inputs.channel || 'stable' }}.draft.json"
+          Get-FileHash LAVRay-*-x64-setup.exe, LAVRay-*-x64-windows.zip -Algorithm SHA256 | `
+            ForEach-Object { "$($_.Hash)  $(Split-Path -Leaf $_.Path)" } | `
+            Set-Content checksums.sha256
+
+      # ---------- 5. [ОПЦИОНАЛЬНО] Authenticode -------------------------------
+      # Раскомментировать после покупки сертификата; до тех пор распространение —
+      # SmartScreen-предупреждение + sha256 в манифесте (обязательный минимум).
+      # - name: Authenticode sign
+      #   env:
+      #     CERT_B64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_B64 }}
+      #     CERT_PASS: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+      #   run: tools/sign-windows.ps1
+
+      # ---------- 6. Артефакты -----------------------------------------------
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lavray-windows-${{ github.sha }}
+          path: |
+            LAVRay-*-x64-setup.exe
+            LAVRay-*-x64-setup.exe.sig
+            LAVRay-*-x64-windows.zip
+            manifest-*.draft.json
+            checksums.sha256
+          if-no-files-found: error
+
+  # Прикрепление к релизу — отдельный job с узкими правами (LNB-30),
+  # только на тегах.
+  attach-release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: build
+    runs-on: windows-2022
+    permissions:
+      contents: write # только здесь
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: lavray-windows-${{ github.sha }}
+      - name: Attach to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$env:GITHUB_REF_NAME" LAVRay-*-x64-setup.exe* LAVRay-*-x64-windows.zip checksums.sha256 manifest-*.draft.json --clobber
+        shell: pwsh
+        # Подпись манифеста (root/timestamp/manifest/sources) — ВНЕ CI;
+        # публикация подписанного манифеста на зеркала — ручной workflow
+        # release-publish с ревью чексумм (UPDATE-SYSTEM v2.0 §4).

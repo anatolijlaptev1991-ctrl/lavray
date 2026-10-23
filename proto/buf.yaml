@@ -1,0 +1,28 @@
+# buf.yaml — lint/breaking конфигурация контракта LAVRay (proto/lavray.proto).
+# Версия buf пинится экшеном bufbuild/buf-action в .github/workflows/ci.yml.
+#
+# Отключённые правила — ОСОЗНАННО (контракт прошёл 2 круга adversarial-ревью
+# до первого линта; переименовывать 182 сообщения ради стиля = бессмысленный
+# churn и ломка совместимости внутри ещё не выпущенного, но зафиксированного
+# контракта). Отключены ТОЛЬКО правила именования, не структурные:
+#   PACKAGE_DIRECTORY_MATCH — один файл контракта в корне proto/, а не lavray/v1/
+#   ENUM_VALUE_PREFIX / ENUM_ZERO_VALUE_SUFFIX — префиксы значений enum
+#   RPC_REQUEST_STANDARD_NAME / RPC_RESPONSE_STANDARD_NAME — «*Request/*Response»
+#   RPC_REQUEST_RESPONSE_UNIQUE — контракт переиспользует Empty/Profile/Group и
+#     потоковые события в нескольких RPC сознательно (компактность; 13 сервисов)
+version: v2
+modules:
+  - path: .
+lint:
+  use:
+    - STANDARD
+  except:
+    - PACKAGE_DIRECTORY_MATCH
+    - ENUM_VALUE_PREFIX
+    - ENUM_ZERO_VALUE_SUFFIX
+    - RPC_REQUEST_STANDARD_NAME
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
+breaking:
+  use:
+    - FILE

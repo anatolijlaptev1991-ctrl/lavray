@@ -1,0 +1,232 @@
+# ============================================================================
+# ci/lavray.yml — качество основного репозитория LAVRay (lint + test матрица)
+# ============================================================================
+# ЧЕРНОВИК Этапа 3. Целевое место: репозиторий `lavray` → .github/workflows/lavray.yml
+# Платформенные сборки живут отдельно (lavray-windows/-linux/-macos/-openwrt).
+#
+# Задания:
+#   proto    — генерация + buf lint + breaking-контракт (гейт Доктрины п.3)
+#   go       — матрица {vet, staticcheck, test -race, golden, fuzz-smoke} по core/
+#   rust     — shell/: fmt, clippy -D warnings, test
+#   node     — ui/: typecheck, lint, unit (vitest), i18n + контрасты (design/tools)
+#   presets  — валидация JSON-схемы пресетов + конвертация (через go-тест)
+#   summarize — агрегированный статус
+#
+# Секреты: НЕ требуются (только buf токен опционально для BSR, см. job proto).
+#
+# P2-37 (LNB-30): при переносе в прод ВСЕ actions пинить по SHA
+# (actions/checkout@<sha>, bufbuild/buf-action@<sha> и т.д.); сейчас —
+# теги для читаемости драфта, с комментами в местах пинов. digest-пины
+# контейнеров — в платформенных workflow.
+# ============================================================================
+
+name: lavray-ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: lavray-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read # LNB-30: минимальные права во всех workflow; расширение — только в релизных job платформенных репо
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # --------------------------------------------------------------------------
+  proto: контракт UI<->ядро (proto/lavray.proto)
+  # --------------------------------------------------------------------------
+  proto:
+    runs-on: ubuntu-24.04 # ПИН ОС раннера: обновлять сознательно (зеркало ci/*-*.yml)
+    steps:
+      - uses: actions/checkout@v4 # пин по коммиту при переходе в прод: actions/checkout@<sha>
+      - uses: bufbuild/buf-action@v1 # экшн buf: lint + breaking + generate; пин версии buf в buf.yaml
+        with:
+          lint: true
+          # Breaking против ветки main. Для BSR-хостинга добавить input `buf_api_token`
+          # (секрет BUF_TOKEN) — пока сравнение git-локальное, секретов нет.
+          breaking: true
+          breaking_against: "https://github.com/${{ github.repository }}.git#branch=main,subdir=proto"
+          format: true
+
+      # Генерация должна быть детерминированной и закоммиченной (или кэшированной):
+      # проверяем, что go/es-артефакты соответствуют .proto.
+      - name: Check generated code is up to date
+        run: |
+          buf generate
+          git diff --exit-code -- core/internal/gen ui/src/api \
+            || { echo "::error::Сгенерированный код устарел: запустите 'buf generate' и закоммитьте"; exit 1; }
+
+  # --------------------------------------------------------------------------
+  go: ядро core/ (матрица проверок)
+  # --------------------------------------------------------------------------
+  go:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - check: vet
+          - check: staticcheck
+          - check: test
+          - check: golden
+          - check: fuzz-smoke
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Полная история + теги для ldflags-версии и difftest золотых файлов.
+          fetch-depth: 0
+
+      # ПИН Go: берём ровно ту версию, что в core/go.mod (строка `go 1.25.x`).
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      # Форки sing-box/libneko/net подтягиваются скриптом пинов (те же, что в сборке):
+      # libs/get_source.sh ожидает переменную NEKO_SOURCES_DIR.
+      - name: Fetch pinned sources (sing-box fork 628a9ed, libneko, x/net)
+        run: core/libs/get_source.sh "$RUNNER_TEMP/deps"
+
+      - name: Run check (${{ matrix.check }})
+        working-directory: core
+        env:
+          NEKO_SOURCES_DIR: ${{ runner.temp }}/deps
+        run: |
+          case "${{ matrix.check }}" in
+            vet)
+              go vet ./... ;;
+            staticcheck)
+              # ПИН staticcheck: фиксировать мажор-минор, обновлять отдельным PR.
+              go install honnef.co/go/tools/cmd/staticcheck@2025.1.1
+              staticcheck ./... ;;
+            test)
+              go test -race -count=1 ./... ;;
+            golden)
+              # Golden-тесты конфигбилдера: CI всегда СРАВНИВАЕТ, никогда не обновляет.
+              go test -count=1 ./internal/config/ -run TestGolden -v
+              go test -count=1 ./internal/config/ -run TestGoldenValidates -v ;; # каждый .want.json стартует парсером форка (LNB-23)
+            fuzz-smoke)
+              # 60 с на таргет; полный часовой прогон — раскомментировать в nightly-расписании.
+              go test -run='^$' -fuzz=FuzzParseLink        -fuzztime=60s ./internal/model/link/
+              go test -run='^$' -fuzz=FuzzParseClash       -fuzztime=60s ./internal/subs/
+              go test -run='^$' -fuzz=FuzzDecodeB64        -fuzztime=60s ./internal/subs/
+              go test -run='^$' -fuzz=FuzzConvertNekoRayRoute -fuzztime=60s ./internal/presets/
+              go test -run='^$' -fuzz=FuzzMergeJson        -fuzztime=60s ./internal/config/ ;;
+          esac
+
+  # --------------------------------------------------------------------------
+  rust: оболочка shell/ (Tauri 2)
+  # --------------------------------------------------------------------------
+  rust:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # ПИН Rust: stable-канал; точный тулчейн фиксируется в shell/rust-toolchain.toml
+      # (этот файл — единственное место правды, здесь канал не дублируем).
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shell
+
+      - name: System deps (webkit2gtk для tauri)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev patchelf
+
+      - name: fmt
+        run: cargo fmt --all --check
+        working-directory: shell
+      - name: clippy (deny warnings)
+        run: cargo clippy --all-targets -- -D warnings
+        working-directory: shell
+      - name: tests
+        run: cargo test --all
+        working-directory: shell
+
+  # --------------------------------------------------------------------------
+  node: UI (ui/, единый React для приложения и веб-панели)
+  # --------------------------------------------------------------------------
+  node:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # ПИН Node: LTS; точная версия — в ui/package.json ("engines") + .nvmrc.
+      # P1-16: pnpm ставится ДО setup-node — иначе `cache: pnpm` падает
+      # (не может найти pnpm для расчёта хэша).
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10 # ПИН pnpm major (дублирует packageManager в ui/package.json)
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ui/.nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+        working-directory: ui
+      - name: Typecheck
+        run: pnpm exec tsc --noEmit
+        working-directory: ui
+      - name: Lint
+        run: pnpm exec eslint .
+        working-directory: ui
+      - name: Unit tests
+        run: pnpm exec vitest run
+        working-directory: ui
+
+      # Проверки качества из прототипа — переносим в CI (Доктрина п.4:
+      # «качество видно в CI»). Те же скрипты, что в design/tools/.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # ПИН python
+      - name: i18n (5 локалей, 0 ошибок)
+        run: python design/tools/i18n_check.py
+      - name: Контрасты токенов WCAG AA
+        run: python design/tools/token_contrast.py
+
+  # --------------------------------------------------------------------------
+  presets: встроенные пресеты маршрутизации
+  # --------------------------------------------------------------------------
+  presets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache: false # только маленький тест-пакет пресетов
+      - name: Fetch pinned sources
+        run: core/libs/get_source.sh "$RUNNER_TEMP/deps"
+      - name: Validate preset schema + golden convert
+        working-directory: core
+        env:
+          NEKO_SOURCES_DIR: ${{ runner.temp }}/deps
+        # Проверяет: presets/*.json валидны по схеме (version/revision/platform-
+        # scoped правила), конвертация каждого пресета в конфиг sing-box
+        # стабильна (golden), процессные правила OpenWrt опускаются с warning.
+        run: go test ./internal/presets/ -run "TestPresetSchema|TestPresetGolden" -count=1 -v
+
+  # --------------------------------------------------------------------------
+  summarize: единый статус для branch-protection
+  # --------------------------------------------------------------------------
+  summarize:
+    if: always()
+    needs: [proto, go, rust, node, presets]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Fail if any matrix leg failed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
+        # Подключить к branch protection: required check = "summarize".

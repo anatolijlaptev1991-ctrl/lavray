@@ -6,6 +6,8 @@
 
 Идентификаторы багов: `LNB-NN` (LAVRay / NekoBox Bug). Серьёзность: **critical** (утечка секретов / выполнение кода / потеря рабочей установки), **major** (отказ функциональности, гонки, обход защиты), **minor** (локальные дефекты, слабости защиты, UX-безопасность).
 
+> **Поправки аудита 2026-10** (`docs/AUDIT-CLAUDE-2026-10.md`, сырой отчёт `docs/audit-2026-10/raw/03`): все 24 записи перепроверены — вердикты и поправки серьёзности в колонке «Проверка 2026-10» сводной таблицы; добавлены записи **LNB-25…LNB-36** (раздел 2). Существующие формулировки не удалялись.
+
 ## 0. Состояние трекера задач (gh)
 
 `gh issue list -R anatolijlaptev1991-ctrl/nekoray --state open` → **ошибка: «the repository has disabled issues»**.
@@ -17,32 +19,34 @@ API: `has_issues: false`, `open_issues_count: 0`, Discussions тоже откл�
 
 ## 1. Сводная таблица
 
-| ID | Название | Серьёзность | Источник |
-|---|---|---|---|
-| LNB-01 | Секреты в логах: расшифрованная Happ-ссылка, URL подписки, тело ответа | critical | README («Что нельзя публиковать без проверки», «Открытые вопросы») + код: `sub/GroupUpdater.cpp:484, 538-543` |
-| LNB-02 | Обновление без проверки целостности/подписи; устаревая unzip-библиотека (zip-slip) | critical | README («Открытые вопросы») + код: `go/grpc_server/update.go:86-113`, `go/cmd/updater/updater.go:36-58`, `go/cmd/updater/go.mod` (extract v2.2.0) |
-| LNB-03 | Обновление без отката и без атомарности (удаление DLL до переноса, частичная установка) | major | README («Обновления из этого форка») + код: `go/cmd/updater/updater.go:60-73` |
-| LNB-04 | Все секреты хранятся на диске открытым текстом | major | README + код: `db/Database.cpp:271`, `main/NekoGui.cpp:231, 283` |
-| LNB-05 | SSRF / чтение локальных файлов через URL подписки (file://, приватные IP, без лимитов) | major | код: `main/HTTPRequestHelper.cpp:13-48`, `sub/GroupUpdater.cpp:537-548` |
-| LNB-06 | Отсутствие таймаутов gRPC (Start/Stop/Update/Test) + QMutex как «семафор» через потоки (UB) | major | код: `rpc/gRPC.cpp:161-194, 218, 232, 274, 287` |
-| LNB-07 | Ненадёжная загрузка обновления: нет таймаута, не проверяется HTTP-статус, битый zip остаётся | major | код: `go/grpc_server/update.go:92-113` |
-| LNB-08 | DNS-несовместимость: пользовательский `dns_object` старого формата вставляется как есть → профиль не стартует | major | README («Открытые вопросы») + код: `db/ConfigBuilder.cpp:655-657` |
-| LNB-09 | Windows VPN: остановка по имени образа `nekobox_core.exe` убивает посторонние процессы | major | код: `ui/mainwindow.cpp:1824-1828` |
-| LNB-10 | Гонки: cross-thread unlock QMutex, `running`, `trafficLooper->items`, `speedtesting_threads` | major | код: `ui/mainwindow_grpc.cpp:327-330, 351-392, 475`, `db/traffic/TrafficLooper.cpp:76-90` |
-| LNB-11 | Определение новой версии подстрокой + глобальное состояние Check/Download | major | код: `go/grpc_server/update.go:51, 65-84, 87` |
-| LNB-12 | Неограниченный размер ответа подписки (`readAll` в память) | major | код: `main/HTTPRequestHelper.cpp:72-73` |
-| LNB-13 | Паника happ-декриптора на теле длины 13–21 байт (`body[14:22]`) | minor | код: `go/cmd/nekobox_core/happ/happdecrypt.go:252-257` (противоречит AUDIT.md §2) |
-| LNB-14 | Инъекция JSON в VPN-конфиг через username/password без экранирования | minor | код: `db/ConfigBuilder.cpp:796-814` |
-| LNB-15 | TUIC: мёртвый дефолт порта 443, порт −1 проходит в конфиг | minor | код: `fmt/Link2Bean.cpp:265-266` |
-| LNB-16 | Детекция Clash-формата по подстроке `proxies:` | minor | код: `sub/GroupUpdater.cpp:46` |
-| LNB-17 | Слабая валидация полей ссылок (VMess port=0, произвольный SS-метод) | minor | код: `fmt/Link2Bean.cpp:157, 125-131` |
-| LNB-18 | Слабые секреты: mt19997 для core_token, пустой clash-api secret, non-constant-time compare, секрет в argv | minor | код: `ui/mainwindow.cpp:387`, `main/NekoGui_Utils.cpp:73-87`, `db/ConfigBuilder.cpp:762-768`, `go/grpc_server/auth/auth.go:24`, `main/HappLink.cpp:30` |
-| LNB-19 | Небезопасные/жёсткие параметры подписок: `sub_insecure` отключает проверку TLS, фиксированный таймаут 10 с | minor | код: `main/HTTPRequestHelper.cpp:42-46, 57-61` |
-| LNB-20 | MkPort: TOCTOU-гонка выбора порта gRPC-ядра | minor | код: `ui/mainwindow.cpp:385-386`, `main/NekoGui_Utils.cpp:146-152` |
-| LNB-21 | После «Core exits too frequently» UI-состояние не сбрасывается (профиль «висит» как активный) | minor | код: `sys/ExternalProcess.cpp:118-131` |
-| LNB-22 | Токен подписки светится в UI-диалогах (выбор «As Subscription», окно Happ) | minor | код: `sub/GroupUpdater.cpp:498-504` |
-| LNB-23 | «Не все протоколы протестированы» — нет контрактных тестов генерации конфигов по протоколам | major (процессный) | README («Открытые вопросы») + `AUDIT-SB.md §Валидация` (проверены только 2 конфига) |
-| LNB-24 | Правовой статус Happ-материалов (ключи/алгоритм из сторонних репозиториев) не проверен | minor (правовой) | README («Открытые вопросы») + `AUDIT.md §2` |
+Колонка «Проверка 2026-10» — вердикт повторной проверки (`docs/audit-2026-10/raw/03-security-updates.md`, §1): CONFIRMED / PARTIAL / OVERSTATED / NOT CONFIRMED; рядом — поправка серьёзности и уточнённые строки.
+
+| ID | Название | Серьёзность | Проверка 2026-10 | Источник |
+|---|---|---|---|---|
+| LNB-01 | Секреты в логах: расшифрованная Happ-ссылка, URL подписки, тело ответа | critical | CONFIRMED, неполно (остальные утечки — LNB-28); серьёзность для форка скорее P1: нужна передача лога | README + код: `sub/GroupUpdater.cpp:484, 498-500, 539, 543` |
+| LNB-02 | Обновление без проверки целостности/подписи; устаревая unzip-библиотека (zip-slip) | critical | CONFIRMED; `codeclysm/extract` v2.2.0 (2019-04-05): `path = filepath.Join(location, path)` без проверки, `safeJoin` с v3.1.0; архив целиком в памяти, симлинки с любой целью | README + код: `go/grpc_server/update.go:86-113`, `go/cmd/updater/updater.go:36-65`, `go.mod` (extract v2.2.0) |
+| LNB-03 | Обновление без отката и без атомарности (удаление DLL до переноса, частичная установка) | major | CONFIRMED (`*.dll` удаляются до `Mv`; ошибки `Copy` глотаются) | README + код: `updater.go:60-71`, `main.go:57-62` |
+| LNB-04 | Все секреты хранятся на диске открытым текстом | major | PARTIAL; шифрования нет, но DPAPI не защитит от ПО того же пользователя — выгода в 0600/ACL, multi-user Linux и бэкапах; файл настроек — `groups/nekobox.json` (не `nekoray.json`) | README + код: `main/NekoGui.cpp:184-199, 231, 283`, `db/Database.cpp:271` |
+| LNB-05 | SSRF / чтение локальных файлов через URL подписки (file://, приватные IP, без лимитов) | major | OVERSTATED для форка (URL вводит сам пользователь, SSRF слепой) — P2; P1 в LAVRay, где URL придёт по API | код: `main/HTTPRequestHelper.cpp:13-16, 39, 48`, `sub/GroupUpdater.cpp:537-548` |
+| LNB-06 | Отсутствие таймаутов gRPC (Start/Stop/Update/Test) + QMutex как «семафор» через потоки (UB) | major | CONFIRMED (`rpc/gRPC.cpp:172-183` unlock из чужого потока; без таймаута `:213-290`) | код: `rpc/gRPC.cpp:161-194, 218, 232, 274, 287` |
+| LNB-07 | Ненадёжная загрузка обновления: нет таймаута, не проверяется HTTP-статус, битый zip остаётся | major | CONFIRMED (обрубок `../nekoray.zip` остаётся и подхватывается `updater.go:26`) | код: `go/grpc_server/update.go:92-113` |
+| LNB-08 | DNS-несовместимость: пользовательский `dns_object` старого формата вставляется как есть → профиль не стартует | major | CONFIRMED (функциональный баг, не security) | README + код: `db/ConfigBuilder.cpp:655-657` |
+| LNB-09 | Windows VPN: остановка по имени образа `nekobox_core.exe` убивает посторонние процессы | major | CONFIRMED; уточнение строк: `ui/mainwindow.cpp:1826-1828`, `vpn_pid = 1; // TODO` на `:1790`; Linux: `pkexec killall -2` `:1837` | код: `ui/mainwindow.cpp:1790, 1824-1828, 1837` |
+| LNB-10 | Гонки: cross-thread unlock QMutex, `running`, `trafficLooper->items`, `speedtesting_threads` | major | CONFIRMED; уточнение строк: `TrafficLooper.cpp:106-116` (вместо 76-90), плюс `GroupUpdater.cpp:644` | код: `ui/mainwindow_grpc.cpp:327-328, 351-392, 452, 475`, `db/traffic/TrafficLooper.cpp:106-116` |
+| LNB-11 | Определение новой версии подстрокой + глобальное состояние Check/Download | major | CONFIRMED; сравнения «новее/старше» нет вовсе — будет предложен и более старый релиз | код: `go/grpc_server/update.go:17, 51, 65-89` |
+| LNB-12 | Неограниченный размер ответа подписки (`readAll` в память) | major | PARTIAL: таймер обрывает запрос на 10 с — потолок = скорость × 10 с | код: `main/HTTPRequestHelper.cpp:57-61, 72-73` |
+| LNB-13 | Паника happ-декриптора на теле длины 13–21 байт (`body[14:22]`) | minor | CONFIRMED; в CLI — minor, но **P1 в LAVRay**: паника в горутине ядра убьёт туннель | код: `go/cmd/nekobox_core/happ/happdecrypt.go:234, 250-269` |
+| LNB-14 | Инъекция JSON в VPN-конфиг через username/password без экранирования | minor | OVERSTATED: значения из собственных настроек пользователя — функциональный баг, не инъекция | код: `db/ConfigBuilder.cpp:796-814` |
+| LNB-15 | TUIC: мёртвый дефолт порта 443, порт −1 проходит в конфиг | minor | NOT CONFIRMED в исходной формулировке: мёртвое присвоение есть (`fmt/Link2Bean.cpp:265-266`), но `:257` (`url.port()==-1` → `return false`) отсекает ссылку без порта раньше; **реальный дефект**: ссылки tuic/hy2 без порта отвергаются, порта по умолчанию 443 нет; проходит лишь порт 0 | код: `fmt/Link2Bean.cpp:257, 263-266, 280` |
+| LNB-16 | Детекция Clash-формата по подстроке `proxies:` | minor | CONFIRMED; в связке с LNB-29 стирает группу | код: `sub/GroupUpdater.cpp:46` |
+| LNB-17 | Слабая валидация полей ссылок (VMess port=0, произвольный SS-метод) | minor | CONFIRMED | код: `fmt/Link2Bean.cpp:125-131, 157` |
+| LNB-18 | Слабые секреты: mt19937 для core_token, пустой clash-api secret, non-constant-time compare, секрет в argv | minor | CONFIRMED + поправки: (1) `mt19937(rd())` — сид 32 бита; (2) хуже описанного: при включении Clash API sing-box даёт CORS `*`, WS без проверки Origin, токен WS в query (`sing-box/experimental/clashapi/server.go:101-103, 196-205`) — его достаёт любая веб-страница; (3) `auth.go:24`; (4) `HappLink.cpp:30` | код: `ui/mainwindow.cpp:387`, `main/NekoGui_Utils.cpp:73-87`, `db/ConfigBuilder.cpp:762-768`, `go/grpc_server/auth/auth.go:24`, `main/HappLink.cpp:30` |
+| LNB-19 | Небезопасные/жёсткие параметры подписок: `sub_insecure` отключает проверку TLS, фиксированный таймаут 10 с | minor | CONFIRMED; «без предупреждения» неточно: при SSL-ошибке пишется `(Ignored)` (`HTTPRequestHelper.cpp:54`) | код: `main/HTTPRequestHelper.cpp:42-46, 54, 57-61` |
+| LNB-20 | MkPort: TOCTOU-гонка выбора порта gRPC-ядра | minor | CONFIRMED (захват порта = DoS; токен не утекает) | код: `ui/mainwindow.cpp:385-386`, `main/NekoGui_Utils.cpp:146-152` |
+| LNB-21 | После «Core exits too frequently» UI-состояние не сбрасывается (профиль «висит» как активный) | major | CONFIRMED (см. также сырой отчёт 02 §1: CoreCrashed всё же вызывает `neko_stop(true)` — частичная самокоррекция есть, состояние всё равно лжёт) | код: `sys/ExternalProcess.cpp:118-131`, `mainwindow.cpp:586-587` |
+| LNB-22 | Токен подписки светится в UI-диалогах (выбор «As Subscription», окно Happ) | minor | CONFIRMED (`GroupUpdater.cpp:498-500`) | код: `sub/GroupUpdater.cpp:498-504` |
+| LNB-23 | «Не все протоколы протестированы» — нет контрактных тестов генерации конфигов по протоколам | major (процессный) | CONFIRMED (тесты только в `happ/`; в `test/` — build-скрипты) | README + `AUDIT-SB.md §Валидация` |
+| LNB-24 | Правовой статус Happ-материалов (ключи/алгоритм из сторонних репозиториев) не проверен | minor (правовой) | PARTIAL: происхождение названо (`happdecrypt.go:3-7`, Apache-2.0 эталона), но LICENSE/NOTICE в дереве нет; `assets/*.json` — приватные RSA-ключи Happ; риск take-down репозитория | README + `AUDIT.md §2` |
 
 Регрессионный тест обязателен для каждого пункта — формулировки в деталях ниже.
 
@@ -259,6 +263,150 @@ README форка признаёт это («Известное ограниче
 
 **Регрессионный тест.** Процессный: CI-проверка наличия NOTICE и списка сторонних компонентов (SBOM) в релизе; тест, что сборка без компонента happ остаётся зелёной (изолируемость).
 
+### LNB-25 — Подписка → запись файлов → RCE (critical)
+
+**Серьёзность:** critical (P0). **Добавлено аудитом 2026-10** (сырой отчёт 03 §2, N-01).
+
+**Где.** `sub/GroupUpdater.cpp:61-69`; `fmt/AbstractBean.cpp:14-15`; `db/ConfigBuilder.cpp:32-70, 82-89`; `ui/mainwindow_grpc.cpp:162`; `sing-box/experimental/clashapi/server_resources.go:97-125`.
+
+**Сценарий.** `nekoray://`-ссылка из подписки загружает все поля профиля, включая `c_cfg` (custom config), `c_out` и `core=internal-full`; `MergeJson` не фильтрует ключи. При `experimental.clash_api.external_ui(+_download_url)` sing-box скачивает zip и распаковывает его без защиты от `..` (тег `with_clash_api`). Подписку выдаёт полудоверенная сторона; узел из подписки попадает в «Тест задержки» группы (`ui/mainwindow_grpc.cpp:162` — `c_cfg` мержится и в тестовый конфиг) → запись в автозагрузку = выполнение кода. Цепочка собрана по коду, не воспроизведена [проверь].
+
+**План в LAVRay.** Импортированным профилям игнорировать `c_cfg`, `c_out`, `core`, `cmd` (ручное включение — только с diff и подтверждением, FR-UI-257); allowlist ключей MergeJson (без `experimental`, `log.output`, чужих `inbounds`); патч форка sing-box: запрет `..`, абсолютных путей и симлинков + лимит размера в `downloadZIP`.
+
+**Регрессионный тест.** Подписка с `nekoray://`-профилем, содержащим `c_cfg` с `external_ui_download_url` → поля отброшены, предупреждение в предпросмотре; zip с записью `../../x` → распаковка отклонена; golden-тест allowlist.
+
+### LNB-26 — Повышение прав через файлы пользователя (major)
+
+**Серьёзность:** major (P1). **Добавлено аудитом 2026-10** (сырой отчёт 03 §2, N-02).
+
+**Где.** `ui/mainwindow.cpp:697-710, 1790-1813`; `db/ConfigBuilder.cpp:803-848`.
+
+**Сценарий.** root/администратор исполняет файлы из каталога пользователя: Linux/macOS — `pkexec bash config/vpn-run-root.sh` и `osascript` (шаблон можно переопределить файлом `config/vpn/vpn-run-root.sh`); Windows — `runProcessElevated(app\nekobox_core.exe run -c config\sing-box-vpn.json)`; для TUN GUI целиком перезапускается от администратора. Любое ПО того же пользователя подменяет файл и получает root/Admin на законном запросе пароля или UAC.
+
+**План в LAVRay.** Минимальный помощник с правами (служба Windows, systemd unit, SMAppService) в защищённом каталоге; конфиг — по аутентифицированному IPC + allowlist; GUI без прав не повышается (FR-UI-269).
+
+**Регрессионный тест.** Тест LPE: подмена `vpn-run-root.sh`/`sing-box-vpn.json` из сессии пользователя → помощник её отвергает (подпись/путь); аудит: ни один путь из пользовательского каталога не попадает в argv повышенного процесса.
+
+### LNB-27 — `pkexec setcap` из PATH пользователя; CAP_NET_ADMIN на переносимый бинарь (major)
+
+**Серьёзность:** major (P1). **Добавлено аудитом 2026-10** (сырой отчёт 03 §2, N-03).
+
+**Где.** `sys/linux/LinuxCap.cpp:21, 37-50`; `ui/mainwindow.cpp:751`.
+
+**Сценарий.** `pkexec <setcap>` берёт `setcap` из PATH пользователя (подмена `~/.local/bin/setcap`); `setcap cap_net_admin=ep` вешается на переносимый `nekobox_core` — CAP_NET_ADMIN получает любой, кто может его запустить. LPE и захват сети на многопользовательской машине.
+
+**План в LAVRay.** Абсолютные пути к системным утилитам; systemd unit с `AmbientCapabilities=CAP_NET_ADMIN`, доступ через сокет и группу.
+
+**Регрессионный тест.** Юнит: PATH с поддельным `setcap` → вызов не происходит; интеграция: у бинаря ядра нет file capabilities, TUN поднимает служба.
+
+### LNB-28 — Секреты в логах: core_config, env/argv внешних ядер, QR, URL с токенами (major)
+
+**Серьёзность:** major (P1). **Добавлено аудитом 2026-10** (сырой отчёт 03 §2, N-04); дополняет LNB-01.
+
+**Где.** `go/cmd/nekobox_core/grpc_box.go:41-43`; `sys/ExternalProcess.cpp:13, 52`; `ui/mainwindow.cpp:1340`; `go/cmd/nekobox_core/core_box.go:21`.
+
+**Сценарий.** При `-debug` в лог печатается весь `core_config`; в лог идут env и argv внешних ядер (`naive: --proxy=https://user:pass@…`); результат QR-распознавания; `config/neko.log` на диске; Go `*url.Error` и ошибки fetch печатают URL с токеном. Логи уходят в баг-репорты, в LAVRay — ещё и в веб-панель.
+
+**План в LAVRay.** Единый `redact()` на входе всех логов (query, userinfo, ссылки, JSON-поля секрементов); запрет логировать env, argv, конфиг; `without_url()` у ошибок; тест «секрета нет ни в одной строке лога» (FR-UI-260, DS v1.2 §8 «Журнал»).
+
+**Регрессионный тест.** Контрактный: прогон с паролем/токеном → `assert(logNotContains(secret))` по всем стокам (окно лога, файл, экспорт).
+
+### LNB-29 — Деструктивное обновление подписки (major)
+
+**Серьёзность:** major (P1). **Добавлено аудитом 2026-10** (сырой отчёт 03 §2, N-05; сырой отчёт 02 §2.2).
+
+**Где.** `sub/GroupUpdater.cpp:566-573, 610, 620-624`.
+
+**Сценарий.** Ответ 200 с мусором или пустой (captive-portal, DPI-заглушка, challenge, ложный `proxies:`) → `group->order.clear()` → cleanup удаляет все профили группы; при `sub_clear` — ещё до разбора. `deleted_index > 0` (возможно, должно быть `>= 0` [проверь]) — первый совпавший профиль заменяется новым и теряет статистику. Массовая потеря серверов именно там, где отдают заглушки (РФ/КНР).
+
+**План в LAVRay.** Разбор в промежуточной копии; пустой или подозрительный результат не применяется; удаление > 50 % — подтверждение; снапшот и «Откатить подписку» (FR-UI-258).
+
+**Регрессионный тест.** Мок-сервер: 200 + HTML-заглушка, 200 + пусто, 200 + один профиль вместо 100 → прежние профили сохранены, показано предупреждение; откат восстанавливает состояние до обновления.
+
+### LNB-30 — Цепочка поставки CI (major)
+
+**Серьёзность:** major (P1). **Добавлено аудитом 2026-10** (сырой отчёт 03 §2, N-06).
+
+**Где.** `libs/download_qtsdk_win.sh:4-6`; `.github/workflows/build-nekoray-cmake.yml:72, 164, 215`; `libs/get_source_env.sh:3`; `update-pkgbuild.yml:15-17`.
+
+**Сценарий.** Скрипт качает готовый Qt без хеша; workflow качает `ghr` и запускает с `github.token`; actions по тегам; `ACTIONS_ALLOW_UNSECURE_COMMANDS`; сторонний action по `@main` с `secrets.DEPLOY_KEY`; пины зависимостей короткими SHA; libneko и x/net через `replace` вне дерева; grpc 1.49. Закладка в стороннем артефакте попадает в релиз; релизы mutable и без подписей.
+
+**План в LAVRay.** Пины по SHA/digest; проверка хешей всех загрузок; минимальные `permissions`; подпись релиза вне CI; SBOM; immutable releases — весь план в `docs/UPDATE-SYSTEM.md` v2.0 §4.
+
+**Регрессионный тест.** CI-аудит: действие падает при (а) непинированном action, (б) скачивании без хеша, (в) `permissions` шире `read`; релиз без подписи не публикуется.
+
+### LNB-31 — Remote rule-set с изменяемой ветки, без хеша; `download_detour: direct` (minor)
+
+**Серьёзность:** minor (P2). **Добавлено аудитом 2026-10** (сырой отчёт 03 §2, N-07).
+
+**Где.** `db/ConfigBuilder.cpp:474-475`; `libs/build_public_res.sh:9-12`.
+
+**Сценарий.** rule-set тянется с изменяемой ветки стороннего репозитория без фиксации хеша, `download_detour: direct`; CI качает geoip/geosite `latest`. Подмена правил — тихий обход туннеля для выбранных доменов; при блокировке `raw.githubusercontent.com` старт без кэша может падать [проверь].
+
+**План в LAVRay.** Вендорить `.srs` в подписанный `geo.json` с sha256 (UPDATE-SYSTEM v2.0 §8); detour через прокси, когда туннель поднят; `cache_file` + встроенные наборы (FR-UI-266).
+
+**Регрессионный тест.** Подмена содержимого `.srs` на зеркале → клиент отверг по хешу; старт без сети → правило применилось из кэша/поставки.
+
+### LNB-32 — Секреты внешних ядер во временных файлах; `DBGHELP.DLL` по имени; nil-deref в Test (minor)
+
+**Серьёзность:** minor (P2). **Добавлено аудитом 2026-10** (сырой отчёт 03 §2, N-08).
+
+**Где.** `fmt/Bean2External.cpp:145, 213, 254`; `main/main.cpp:114`; `sys/windows/MiniDump.cpp:28`; `go/cmd/nekobox_core/grpc_box.go:126`.
+
+**Сценарий.** Конфиги внешних ядер с секретами пишутся в `config/temp/*.json` и чистятся только при старте; `LoadLibrary("DBGHELP.DLL")` по имени (подмена DLL в каталоге); `Test` без проверки `in.Config != nil` — nil-deref роняет ядро, recover-интерсептора нет.
+
+**План в LAVRay.** Внешних ядер нет (DROP REQUIREMENTS FR-UI-233–235) — секреты временных файлов исчезают с ними; для ядра: recover-интерсептор, валидация входа, путь к System32 для DBGHELP, права 0600 на все рабочие файлы.
+
+**Регрессионный тест.** Юнит: `Test` с пустым конфигом → структурная ошибка, процесс жив; grep-тест: в рабочем каталоге после выхода нет файлов с plaintext-секретами.
+
+### LNB-33 — «Allow LAN» = `::` без авторизации; VPN-шаблон пропускает мимо туннеля процесс с именем ядра (minor)
+
+**Серьёзность:** minor (P2). **Добавлено аудитом 2026-10** (сырой отчёт 03 §2, N-09).
+
+**Где.** `ui/mainwindow.cpp:319-322`; `db/ConfigBuilder.cpp:395-407`; `res/vpn/sing-box-vpn.json`.
+
+**Сценарий.** «Allow LAN» переключает listen на `::` без обязательной авторизации — открытый прокси в LAN; VPN-шаблон пускает мимо туннеля любой процесс с именем `nekobox_core`; `sub_use_proxy=false` по умолчанию — токен подписки и IP пользователя уходят напрямую (и блокируются в РФ/КНР).
+
+**План в LAVRay.** Пароль обязателен при доступе из LAN (FR-UI-279, DS v1.2 §8 «Сеть и прокси»); обход VPN — только по точному пути/PID; «через туннель, если поднят» — для подписок и обновлений.
+
+**Регрессионный тест.** Включение доступа из LAN без пароля → UI не даёт сохранить; процесс с именем ядра, но другим путём → идёт через туннель.
+
+### LNB-34 — `release_url` открывается без проверки схемы; заметки как AutoText (minor)
+
+**Серьёзность:** minor (P2). **Добавлено аудитом 2026-10** (сырой отчёт 03 §2, N-10).
+
+**Где.** `ui/mainwindow_grpc.cpp:518, 550`; `go/grpc_server/update.go:75-92`.
+
+**Сценарий.** `release_url` из JSON открывается `QDesktopServices::openUrl` без проверки схемы (годятся `file:` и кастомные схемы); заметки релиза показываются как AutoText (HTML-спуфинг); `browser_download_url` без allowlist.
+
+**План в LAVRay.** Только https + allowlist хостов из подписанного манифеста (UPDATE-SYSTEM v2.0 §3); заметки — plain text/санитизированный markdown без картинок.
+
+**Регрессионный тест.** Манифест с `release_url: file:///C:/x` и заметкой с `<img onerror>` → ссылка не открывается, разметка не исполняется.
+
+### LNB-35 — Hysteria2 port hopping: `hop_ports` и целый `hop_interval` вместо `server_ports` и строки длительности (major)
+
+**Серьёзность:** major. **Добавлено аудитом 2026-10** (сырой отчёт 02 §2.2).
+
+**Где.** `fmt/Bean2CoreObj_box.cpp:200-203`; эталон — `sing-box/option/hysteria2.go:205-206`, `option/options.go:41`, `sing/common/badoption/duration.go:20-30`.
+
+**Сценарий.** Билдер эмитит поле `hop_ports` и целочисленный `hop_interval`; в sing-box 1.14 поле называется `server_ports` (формат `a:b`), а интервал — Duration-строкой. Конфиг с `hop_ports` ядро отвергает → профиль Hysteria2 с port hopping не стартует. Golden-тест паритета «как есть» закрепил бы баг — обязателен прогон `sing-box check`.
+
+**План в LAVRay.** Генерация `server_ports` (`a:b`) и `hop_interval` строкой длительности (FR-UI-268); осознанное отклонение от oracle фиксируется в `testdata/deviations.yaml`.
+
+**Регрессионный тест.** Golden-конфиг профиля hy2 с hop-портами + `sing-box check` → exit 0; матрица значений (один порт, диапазон, интервал 30 с).
+
+### LNB-36 — Нет `experimental.cache_file`: rule-set качается на каждом старте, без сети старт падает (major)
+
+**Серьёзность:** major. **Добавлено аудитом 2026-10** (сырой отчёт 02 §3, п.8).
+
+**Где.** `db/ConfigBuilder.cpp:758-770` (grep по `cache_file` пуст); `sing-box/route/rule/rule_set_remote.go:132-136`.
+
+**Сценарий.** Удалённые `.srs` rule-set'ы скачиваются при каждом старте; сбой загрузки = отказ старта профиля. Утверждение AUDIT-SB «далее кэш» неверно. Без сети (или при блокировке raw.githubusercontent.com) пресеты LAVRay неработоспособны.
+
+**План в LAVRay.** `experimental.cache_file` включён всегда; наборы пресетов в поставке; старт без сети (FR-UI-266).
+
+**Регрессионный тест.** Интеграционный: старт профиля с geosite-правилом при выключенной сети → правило применилось из кэша/поставки; повторные старты не порождают сетевых запросов rule-set.
+
 ---
 
 ## 3. UX-боли текущего NekoBox
@@ -301,6 +449,11 @@ Issues в репозитории форка отключены (см. §0) — �
 10. **Управление процессами VPN** (LNB-09): Job Object/process group, точечный kill по PID, никаких убийств по имени образа.
 11. **Процесс релиза** (LNB-24, U-01, U-09): NOTICE/SBOM со списком заимствований и лицензий, включённые Issues или Discussions как канал отчётов, подпись сборок, автогенерация чексумм в релиз + их проверка апдейтером.
 12. **Тестируемость UI-состояний** (U-03, U-07, U-11): state-machine-тесты (старт/стоп/крах/обновление), password echo mode по умолчанию во всех полях секретов.
+13. **Allowlist ключей MergeJson** (LNB-25, аудит 2026-10): пользовательский `custom_config` мержится только по белому списку ключей; `experimental`, `log.output`, чужие `inbounds` и raw-поля форка — запрещены; для импортированных профилей мерж `c_cfg`/`c_out` отключён по умолчанию.
+14. **Запрет `c_cfg` у импортированных профилей** (LNB-25, FR-UI-257): подписка и share-ссылки не могут доставить собственную конфигурацию ядра; ручное включение — с показом diff и подтверждением.
+15. **Привилегированный помощник с правами** (LNB-26, LNB-27, FR-UI-269): маленькая служба Windows / systemd-unit / SMAppService; принимает только валидированный конфиг по аутентифицированному IPC; UI и парсеры работают без прав; никаких скриптов и конфигов из каталога пользователя в elevated-контексте.
+16. **Страж восстановления** (LNB-03/LNB-21, FR-UI-270): после краха ядра или UI следующий старт снимает TUN-адаптеры, маршруты, системный прокси и DNS-перехват; хранит «грязный» флаг на диске атомарно.
+17. **TUF-lite для обновлений** (LNB-02/03/07/11, LNB-30): подписанные метаданные `root`/`timestamp`/`manifest`/`sources`, монотонный serial, зеркала, обновление через туннель, откат силами старой версии — полная спецификация в `docs/UPDATE-SYSTEM.md` v2.0.
 
 ---
 

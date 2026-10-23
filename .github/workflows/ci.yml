@@ -1,0 +1,93 @@
+# ============================================================================
+# ci.yml — главный репозиторий lavray: контракт, дизайн, пресеты
+# ============================================================================
+# Подмножество черновика docs/stage3/ci/lavray.yml, исполнимое на текущем
+# состоянии (контракт + дизайн + пресеты). Джобы go/rust/node/ui подключаются
+# по мере появления кода W1–W8 (core-port-plan). Правила: permissions read
+# (LNB-30), пин ОС раннера, без секретов.
+name: lavray-ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  group: lavray-ci-${{ github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  # --------------------------------------------------------------------------
+  # proto: контракт UI<->ядро (proto/lavray.proto; buf.yaml — пин конфига)
+  # --------------------------------------------------------------------------
+  proto:
+    runs-on: ubuntu-24.04 # ПИН ОС раннера: обновлять сознательно
+    steps:
+      - uses: actions/checkout@v4 # при переходе в прод пинить по SHA
+      - uses: bufbuild/buf-setup-action@v1
+        with:
+          buf_version: "1.75.0" # пин версии buf
+      - name: buf lint
+        working-directory: proto
+        run: buf lint
+      - name: buf format (проверка, без записи)
+        working-directory: proto
+        run: buf format -d --exit-code lavray.proto
+      - name: buf build
+        working-directory: proto
+        run: buf build -o /dev/null
+      # breaking против main включается после первого мержа контракта
+      # (baseline) — отдельным коммитом, чтобы не блокировать начальный пуш.
+
+  # --------------------------------------------------------------------------
+  # design: приёмочные скрипты, не требующие браузера (полный a11y_sweep и
+  # kbd_probe с Playwright подключаются в W-пакетах с UI-кодом)
+  # --------------------------------------------------------------------------
+  design:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: i18n_check (0 ошибок / 0 предупреждений)
+        run: python design/tools/i18n_check.py
+      - name: token_contrast (все PASS)
+        run: python design/tools/token_contrast.py
+
+  # --------------------------------------------------------------------------
+  # presets: встроенные пресеты (дымовая проверка схемы; golden-тесты Go — W3)
+  # --------------------------------------------------------------------------
+  presets:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Пресеты: JSON валиден, обязательные поля, 5 языков
+        run: |
+          python - <<'EOF'
+          import json, glob, sys
+          langs = {"ru", "zh", "en", "es", "de"}
+          ok = True
+          files = [f for f in glob.glob("presets/*.json") if not f.endswith(".source.json")]
+          assert files, "встроенные пресеты не найдены"
+          for f in sorted(files):
+              d = json.load(open(f, encoding="utf-8"))
+              miss = {"$schema","id","name","builtin","revision","version","description","dns","routing"} - set(d)
+              if miss:
+                  print(f"FAIL {f}: нет полей {sorted(miss)}"); ok = False; continue
+              if d["builtin"] is not True:
+                  print(f"FAIL {f}: builtin != true"); ok = False
+              if not isinstance(d["revision"], int) or d["revision"] < 1:
+                  print(f"FAIL {f}: revision должен быть int >= 1"); ok = False
+              dl = set(d["description"])
+              if dl != langs:
+                  print(f"FAIL {f}: description: языки {sorted(dl)} != {sorted(langs)}"); ok = False
+              print(f"ok {f}: rev {d['revision']}")
+          sys.exit(0 if ok else 1)
+          EOF

@@ -29,6 +29,7 @@
 18. [Контракт UI ↔ ядро (gRPC/процессы)](#18-контракт-ui--ядро)
 19. [Таблица «фича → файл-источник»](#19-таблица-фича--файл-источник)
 20. [UX-проблемы текущего NekoBox](#20-ux-проблемы-текущего-nekobox-рекомендации-для-lavray)
+21. [Дополнения по аудиту 2026-10](#21-дополнения-по-аудиту-2026-10)
 
 ---
 
@@ -39,8 +40,8 @@
 | ID | Название | Поведение | Источник | Приоритет |
 |----|----------|-----------|----------|-----------|
 | FR-UI-001 | Панель инструментов | Слева направо: кнопки-меню «Program», «Preferences», «Server» (иконка+текст под иконкой, мгновенный popup), кнопки «Ads», «Document», «Update»; справа чекбоксы «Tun Mode» и «System Proxy»; поле поиска; кнопка «URL Test». | `ui/mainwindow.ui` | MUST |
-| FR-UI-002 | Кнопка Document | Открывает `https://matsuridayo.github.io/` во внешнем браузере. | `ui/mainwindow.cpp:104` | NICE |
-| FR-UI-003 | Кнопка Ads | Открывает `https://neko-box.pages.dev/喵` во внешнем браузере. | `ui/mainwindow.cpp:105` | NICE |
+| FR-UI-002 | Кнопка Document | Открывает `https://matsuridayo.github.io/` во внешнем браузере. | `ui/mainwindow.cpp:104` | DROP (аудит 2026-10): заглушка NekoBox, ведёт на чужую документацию |
+| FR-UI-003 | Кнопка Ads | Открывает `https://neko-box.pages.dev/喵` во внешнем браузере. | `ui/mainwindow.cpp:105` | DROP (аудит 2026-10): заглушка NekoBox |
 | FR-UI-004 | Кнопка Update | Запускает проверку обновлений в фоне (см. FR-UI-230). | `ui/mainwindow.cpp:106` | MUST |
 | FR-UI-005 | Кнопка URL Test | Запускает URL-тест всей текущей группы (`speedtest_current_group(1, true)`). | `ui/mainwindow.cpp:107` | MUST |
 | FR-UI-006 | Чекбокс Tun Mode | Вкл/выкл TUN (см. FR-UI-178–186). | `ui/mainwindow.cpp:324` | MUST |
@@ -61,7 +62,7 @@
 | FR-UI-016 | Active Server (подменю) | Динамически строится из профилей текущей группы (лимит 100 шт.), чекбокс у запущенного; клик = start, клик по запущенному = stop. | `mainwindow.cpp:258–293` | MUST |
 | FR-UI-017 | Active Routing (подменю) | Список сохранённых наборов маршрутов (файлы в `routes/`), текущий отмечен; выбор → подтверждение с превью правил → применение (+ рестарт прокси, если запущен). | `mainwindow.cpp:273–311`, `main/NekoGui.cpp:363–378` | MUST |
 | FR-UI-018 | System Proxy (подменю режима) | Три пункта-«радио»: Enable System Proxy / Enable Tun / Disable; состояние отражается при открытии. | `mainwindow.ui:477–484`, `mainwindow.cpp:326–336` | MUST |
-| FR-UI-019 | Preferences (подменю) | Дублирует меню Preferences (см. FR-UI-020). | `mainwindow.cpp:248` | NICE |
+| FR-UI-019 | Preferences (подменю) | Дублирует меню Preferences (см. FR-UI-020). | `mainwindow.cpp:248` | DROP (аудит 2026-10): Qt-механика вложенных подменю |
 | FR-UI-020 | Restart Proxy | Перезапуск текущего профиля (`neko_start(started_id)`), если что-то запущено. | `mainwindow.cpp:250` | MUST |
 | FR-UI-021 | Restart Program | Полный перезапуск приложения (сохранение состояния, повторный запуск процесса; поддержка launcher-режима). | `mainwindow.cpp:251, 651–711` | MUST |
 | FR-UI-022 | Exit | Корректный выход: снять системный прокси и TUN, сохранить datastore/менеджер, остановить ядро, скрыть трей, завершить процесс. | `mainwindow.cpp:651–711` | MUST |
@@ -76,7 +77,7 @@
 | FR-UI-026 | Tun Settings | Открывает настройки TUN (FR-UI-178). | `mainwindow.cpp:620` | MUST |
 | FR-UI-027 | Hotkey Settings | Открывает настройки горячих клавиш (FR-UI-187). | `mainwindow.cpp:624` | NICE |
 | FR-UI-028 | Open Config Folder | Открывает текущий рабочий каталог конфигурации в файловом менеджере ОС. | `mainwindow.cpp:247` | MUST |
-| FR-UI-029 | Защита от повторного открытия диалога | Одновременно может быть открыт только один экземпляр каждого диалога настроек (`USE_DIALOG`). | `mainwindow.cpp:596–606` | MUST |
+| FR-UI-029 | Защита от повторного открытия диалога | Одновременно может быть открыт только один экземпляр каждого диалога настроек (`USE_DIALOG`).<br>**Уточнение (аудит 2026-10):** на самом деле один общий флаг на 5 диалогов настроек; Edit Profile и Happ можно открыть дважды — `ui/mainwindow.cpp:596-606, 1091` | `mainwindow.cpp:596–606` | DROP (аудит 2026-10): Qt-механика `USE_DIALOG` |
 
 ### 1.4. Меню Server (контекстное меню таблицы профилей)
 
@@ -93,7 +94,7 @@
 | FR-UI-038 | Delete (Del) | Удаление выделенных профилей с подтверждением количества; запрещено удаление запущенного. | `mainwindow.cpp:1144–1154`, `db/Database.cpp:276–282` | MUST |
 | FR-UI-039 | Debug Info | Просмотр JSON выделенного профиля; кнопки OK / Edit (открыть `profiles/<id>.json` во внешнем редакторе) / Reload (перезагрузить БД с диска). | `mainwindow.cpp:1166–1177` | NICE (важно для поддержки) |
 | FR-UI-040 | Подменю Share | QR Code and link (Ctrl+Q), Export config (Ctrl+E), Copy links (Ctrl+C), Copy links Neko (Ctrl+N) — см. раздел 11. | `ui/mainwindow.ui:531–544` | MUST |
-| FR-UI-041 | Подменю Current Select / Current Group | Пункты тестирования (Tcp Ping/Url Test/Full Test/Stop Testing/Clear Test Result/Resolve Domain) «переезжают» между подменю «Текущее выделение» и «Текущая группа» в зависимости от того, какое подменю открыли. | `mainwindow.cpp:343–372` | MUST (поведение), NICE (механика переноса) |
+| FR-UI-041 | Подменю Current Select / Current Group | Пункты тестирования (Tcp Ping/Url Test/Full Test/Stop Testing/Clear Test Result/Resolve Domain) «переезжают» между подменю «Текущее выделение» и «Текущая группа» в зависимости от того, какое подменю открыли. | `mainwindow.cpp:343–372` | DROP (аудит 2026-10): механика переноса пунктов — Qt-специфика; семантика области действия (выделение/группа) сохраняется в LAVRay явным переключателем (прототип v1.2, «Серверы → Серверы») |
 | FR-UI-042 | Групповые операции Current Group | Remove Unavailable (Ctrl+Alt+R) — удалить профили с отрицательной латентностью; Remove Duplicates (Ctrl+Alt+D) — дедупликация по адресу+типу с подтверждением и списком (до 20 строк); Update subscription (Ctrl+U). | `mainwindow.cpp:1369–1430`, `db/ProfileFilter.cpp` | MUST |
 | FR-UI-043 | Resolve domain (Ctrl+Alt+I) | Резолв домена сервера в IP для выделения/группы: заменяет `serverAddress` на IP, переносит домен в SNI (TLS) и host (ws); пропускает chain/custom/naive и уже-IP. | `mainwindow.cpp:1432–1453`, `fmt/AbstractBean.cpp:44–78` | NICE |
 
@@ -104,7 +105,7 @@
 | FR-UI-044 | Статусная строка (низ окна) | Слева: состояние «Not Running» либо `[группа] имя профиля` (обрезка 30 симв.); по центру: `Mixed: адрес:порт` inbound; справа: скорости `Proxy: X↑X↓\nDirect: Y↑Y↓`. | `mainwindow.cpp:805–845` | MUST |
 | FR-UI-045 | Клик по метке статуса | ЛКМ по метке запущенного профиля = URL-тест текущего (результат показывается в метке «Test Result: N ms / Unavailable»). | `mainwindow.cpp:1626–1642` | NICE |
 | FR-UI-046 | Клик по метке inbound | ЛКМ открывает Basic Settings (удобный доступ к порту). | `mainwindow.cpp:1632–1635` | NICE |
-| FR-UI-047 | Композиция заголовка окна | `[Admin] [Select] [ошибка] [Tun]/[System Proxy]/[Tun+System Proxy] Имя (версия) [активный маршрут] [тип] имя@группа`. | `mainwindow.cpp:853–868` | MUST |
+| FR-UI-047 | Композиция заголовка окна | `[Admin] [Select] [ошибка] [Tun]/[System Proxy]/[Tun+System Proxy] Имя (версия) [активный маршрут] [тип] имя@группа`.<br>**Уточнение (аудит 2026-10):** плейсхолдер ошибки `title_error` нигде не присваивается — сегмент «[ошибка]» не работает — `ui/mainwindow.cpp:857` | `mainwindow.cpp:853–868` | MUST |
 | FR-UI-048 | Тултип трея | Многострочный аналог заголовка. | `mainwindow.cpp:887–889` | MUST |
 | FR-UI-049 | Индикация иконки трея | Угловой бейдж на иконке: зелёный (запущено), синий (System Proxy), красный (TUN); без бейджа — не запущено. Поддержка кастомной иконки `nekobox.png`. | `ui/Icon.cpp:10–45` | MUST |
 | FR-UI-050 | Клик по иконке трея | Показать/скрыть окно. | `mainwindow.cpp:236–244` | MUST |
@@ -117,13 +118,13 @@
 
 | ID | Название | Поведение | Источник | Приоритет |
 |----|----------|-----------|----------|-----------|
-| FR-UI-055 | Select mode | Специальный режим «выбор профиля» (используется редактором chain и front proxy группы): метка статуса «Select *», подсказка в тултипе, двойной клик/Enter = выбор, Esc = отмена; после выбора вызывается callback. | `mainwindow.cpp:1645–1651, 846–851` | MUST |
+| FR-UI-055 | Select mode | Специальный режим «выбор профиля» (используется редактором chain и front proxy группы): метка статуса «Select *», подсказка в тултипе, двойной клик/Enter = выбор, Esc = отмена; после выбора вызывается callback.<br>**Уточнение (аудит 2026-10):** Esc в режиме выбора очищает Front Proxy группы (см. FR-UI-111) — `ui/mainwindow.cpp:206-209` | `mainwindow.cpp:1645–1651, 846–851` | MUST |
 | FR-UI-056 | Второй запуск приложения | RunGuard: вторая инстанция подключается к локальному серверу первой и завершается; первая поднимает окно («Raise»). Флаг `-many` отключает защиту. | `main/main.cpp:120–146, 227–238` | MUST |
-| FR-UI-057 | Периодическое обновление UI | Таймер 2 сек — refresh_status; таймер 1 сек — сброс счётчика строк лога (антифлуд). | `mainwindow.cpp:426–432` | MUST |
+| FR-UI-057 | Периодическое обновление UI | Таймер 2 сек — refresh_status; таймер 1 сек — сброс счётчика строк лога (антифлуд). | `mainwindow.cpp:426–432` | DROP (аудит 2026-10): Qt-механика таймеров; в LAVRay — события/поток данных |
 | FR-UI-058 | Реакция на SIGTERM/SIGINT | Сохранение данных и выход. | `main/main.cpp:21–26, 223–225` | MUST |
-| FR-UI-059 | Обработка commitDataRequest (завершение сессии ОС) | Сохранение размера окна, сплиттера, remember_id, datastore, менеджера. | `mainwindow.cpp:628–649` | MUST |
-| FR-UI-060 | Каталог dashboard | При первом запуске создаётся `dashboard/index.html` (notice) для external_ui Clash API. | `mainwindow.cpp:94–97` | NICE |
-| FR-UI-061 | Диалоги сообщений | Единый механизм `MW_dialog_message(sender, info)` с командами: UpdateIcon, UpdateDataStore(+RouteChanged/NeedRestart/VPNChanged), RestartProgram, Raise, ClearConnectionList, accept/restart от редактора профиля, refresh от менеджера групп, finish/NewGroup от SubUpdater, Crashed/CoreCrashed/CoreStarted от процессов. | `mainwindow.cpp:519–592` | MUST (архитектура событий) |
+| FR-UI-059 | Обработка commitDataRequest (завершение сессии ОС) | Сохранение размера окна, сплиттера, remember_id, datastore, менеджера. | `mainwindow.cpp:628–649` | DROP (аудит 2026-10): Qt-сигнал сессии; в LAVRay — корректный выход и атомарное хранение (FR-UI-260) |
+| FR-UI-060 | Каталог dashboard | При первом запуске создаётся `dashboard/index.html` (notice) для external_ui Clash API. | `mainwindow.cpp:94–97` | DROP (аудит 2026-10): заглушка; external_ui Clash API в LAVRay не выставляется наружу (сырой отчёт 03 §4) |
+| FR-UI-061 | Диалоги сообщений | Единый механизм `MW_dialog_message(sender, info)` с командами: UpdateIcon, UpdateDataStore(+RouteChanged/NeedRestart/VPNChanged), RestartProgram, Raise, ClearConnectionList, accept/restart от редактора профиля, refresh от менеджера групп, finish/NewGroup от SubUpdater, Crashed/CoreCrashed/CoreStarted от процессов. | `mainwindow.cpp:519–592` | DROP (аудит 2026-10): Qt-механизм межпоточных сообщений; событийная модель LAVRay заменяет его целиком |
 | FR-UI-062 | Предложение перезапуска прокси | После изменения настроек/профиля, если прокси запущен, — вопрос «Settings changed, restart proxy?» (Yes → перезапуск). | `mainwindow.cpp:536–541, 560–568` | MUST |
 | FR-UI-063 | Предупреждение о настройках TUN | Изменение TUN-настроек при активном TUN → предупреждение «Restart Tun to take effect». | `mainwindow.cpp:534–536` | MUST |
 | FR-UI-064 | NeedRestart (смена языка/ядра) | Сообщение «Restart the program to take effect» с предложением перезапуска. | `mainwindow.cpp:543–549` | MUST |
@@ -141,11 +142,11 @@
 | FR-UI-069 | Контекстное меню таблицы | ПКМ по таблице = меню Server (FR-UI-030–043). | `mainwindow.cpp:1455–1457` | MUST |
 | FR-UI-070 | Двойной клик | Открыть редактор профиля (или выбрать в select mode). | `mainwindow.cpp:1083–1093` | MUST |
 | FR-UI-071 | Мультивыделение | Выделение строк (Ctrl/Shift), все операции применяются к выделению (`get_now_selected_list`). | `mainwindow.cpp:1459–1468` | MUST |
-| FR-UI-072 | Сортировка по заголовкам | Клик по заголовку Type/Address/Name/Test Result: сортировка строк (латентность: непротестированные = 100000, недоступные = 99999); повторный клик по тому же столбцу — обратный порядок; результат сортировки сохраняется в группе (`save_sort`). | `mainwindow.cpp:154–177, 940–1022` | MUST |
-| FR-UI-073 | Сброс порядка | Клик по угловой кнопке таблицы — сброс кастомного порядка к порядку id. | `mainwindow.cpp:150–153` | NICE |
+| FR-UI-072 | Сортировка по заголовкам | Клик по заголовку Type/Address/Name/Test Result: сортировка строк (латентность: непротестированные = 100000, недоступные = 99999); повторный клик по тому же столбцу — обратный порядок; результат сортировки сохраняется в группе (`save_sort`).<br>**Уточнение (аудит 2026-10):** при непустых полных отчётах теста сортировка нестрогая (строковый отчёт подменяет число) — `ui/mainwindow.cpp:988-1016` | `mainwindow.cpp:154–177, 940–1022` | MUST |
+| FR-UI-073 | Сброс порядка | Клик по угловой кнопке таблицы — сброс кастомного порядка к порядку id. | `mainwindow.cpp:150–153` | DROP (аудит 2026-10): Qt-механика угловой кнопки QTableWidget |
 | FR-UI-074 | Drag&Drop строк | Перетаскивание строк мышью; порядок сохраняется в `group->order` и на диск. | `ui/widget/MyTableWidget.h`, `mainwindow.cpp:144–148` | MUST |
 | FR-UI-075 | Самокоррекция порядка | Порядок чистится от удалённых профилей, новые профили добавляются без перемещения. | `ui/widget/MyTableWidget.h:update_order` | MUST |
-| FR-UI-076 | Ручная ширина колонок (per group) | Флаг группы `manually_column_width`: сохранённые ширины применяются при показе группы; иначе авторазмер (Type/Result/Traffic — по содержимому, Address/Name — Stretch). | `mainwindow.cpp:178–188, 493–507` | NICE |
+| FR-UI-076 | Ручная ширина колонок (per group) | Флаг группы `manually_column_width`: сохранённые ширины применяются при показе группы; иначе авторазмер (Type/Result/Traffic — по содержимому, Address/Name — Stretch). | `mainwindow.cpp:178–188, 493–507` | DROP (аудит 2026-10): Qt-механика колонок QTableWidget |
 | FR-UI-077 | Точечное обновление строк | Обновление данных одной строки по id (тесты, трафик) без перерисовки таблицы. | `mainwindow.cpp:1028–1032` | MUST |
 | FR-UI-078 | Вкладки групп | QTabWidget: одна вкладка на группу; переключение — показ группы (`show_group`); вкладки перемещаемые (drag), порядок сохраняется (`groupsTabOrder`). | `mainwindow.ui:228–235`, `mainwindow.cpp:71–78, 456–515` | MUST |
 | FR-UI-079 | Текущая группа | Запоминается последняя открытая группа (`current_group`), восстанавливается при старте. | `mainwindow.cpp:487–490`, `main/main.cpp` | MUST |
@@ -167,9 +168,9 @@
 | FR-UI-084 | Custom Outbound Settings | JSON-редактор (структурированный, с проверкой); содержимое глубокo мержится в исходящий outbound конкретного профиля. Кнопка-индикатор «Not set / Already set». | `dialog_edit_profile.cpp:235–250, 422–425`, `db/ConfigBuilder.cpp:363` | MUST |
 | FR-UI-085 | Custom Config Settings | JSON-редактор; мержится в корень всего конфига ядра (правила слияния массивов: ключи `+key`/`key+` = конкатенация). | `db/ConfigBuilder.cpp:32–68, 89`, `dialog_edit_profile.cpp:427–430` | MUST |
 | FR-UI-086 | Apply settings to this group | Кнопка включает режим: у полей multiplex, SNI, ALPN, Host, Path, uTLS, Allow insecure, Certificate, Custom Config, Custom Outbound появляются «плавающие» чекбоксы; подтверждение копирует отмеченные поля во все профили группы. | `dialog_edit_profile.cpp:441–523`, `ui/widget/FloatCheckBox.h` | NICE (мощно, но опционально) |
-| FR-UI-087 | Динамический размер диалога | Диалог подстраивает размер под выбранный тип; позиционируется относительно главного окна. | `dialog_edit_profile.cpp:21, 323` | NICE |
+| FR-UI-087 | Динамический размер диалога | Диалог подстраивает размер под выбранный тип; позиционируется относительно главного окна. | `dialog_edit_profile.cpp:21, 323` | DROP (аудит 2026-10): Qt-механика геометрии диалогов |
 | FR-UI-088 | Сохранение | Новый профиль → AddProfile в текущую группу; существующий → Save; если изменён запущенный профиль — предложение перезапуска. | `dialog_edit_profile.cpp:370–391` | MUST |
-| FR-UI-089 | Маркировка «продвинутых» полей | Поля с tooltip получают суффикс «*» (ADD_ASTERISK). | `main/GuiUtils.hpp:118–133` | NICE |
+| FR-UI-089 | Маркировка «продвинутых» полей | Поля с tooltip получают суффикс «*» (ADD_ASTERISK). | `main/GuiUtils.hpp:118–133` | DROP (аудит 2026-10): Qt-механика суффиксов; в LAVRay — секция «Дополнительно» (прототип v1.2) |
 
 ### 3.2. Настройки транспорта (V2Ray Stream Settings, правая часть редактора)
 
@@ -177,10 +178,10 @@
 
 | ID | Название | Поведение | Приоритет |
 |----|----------|-----------|-----------|
-| FR-UI-090a | Network | Комбо: tcp, http, ws, grpc, httpupgrade (видимость — только vmess/vless/trojan). Заголовок группы «Network Settings (%1)». | MUST |
+| FR-UI-090a | Network | Комбо: tcp, http, ws, grpc, httpupgrade (видимость — только vmess/vless/trojan). Заголовок группы «Network Settings (%1)».<br>**Уточнение (аудит 2026-10):** есть и шестая сеть `quic` — `ui/edit/dialog_edit_profile.ui:258-267` | MUST |
 | FR-UI-090b | Поля транспорта по сети | tcp: header_type (none/http) + path + host; grpc: path; ws/http/httpupgrade: path + host; прочие: ничего. | MUST |
 | FR-UI-090c | WS Early Data | Для ws: имя заголовка и длина early data (`ws_early_data_name/length`). | NICE |
-| FR-UI-090d | Security | Комбо: (пусто)/tls/reality — видимость для vmess/vless/trojan/http. При tls/reality показывается блок TLS. | MUST |
+| FR-UI-090d | Security | Комбо: (пусто)/tls/reality — видимость для vmess/vless/trojan/http. При tls/reality показывается блок TLS.<br>**Уточнение (аудит 2026-10):** REALITY фактически включается непустым `reality_pbk` (FR-UI-090i), а не пунктом списка — `ui/edit/dialog_edit_profile.cpp:89-98` | MUST |
 | FR-UI-090e | TLS: SNI, ALPN | SNI — «server name indication»; ALPN — через запятую. | MUST |
 | FR-UI-090f | Allow insecure | Не проверять сертификат сервера. | MUST |
 | FR-UI-090g | Certificate | Клиентский сертификат (многострочный ввод). | NICE |
@@ -198,11 +199,11 @@
 | FR-UI-092 | Shadowsocks | Encryption (пресет: 2022-blake3-* , none, aes-*-gcm/ctr/cfb, chacha20*, xchacha20*, rc4-md5), Password, Plugin (строка «plugin;arg=val;…»), Plugin Args, UDP over TCP (Off/версия 1/2). | `fmt/ShadowSocksBean.hpp`, `ui/edit/edit_shadowsocks.*`, `fmt/Preset.hpp` | MUST |
 | FR-UI-093 | VMess | UUID + кнопка Generate UUID, Alter Id, Security (auto/…). | `fmt/VMessBean.hpp`, `ui/edit/edit_vmess.*` | MUST |
 | FR-UI-094 | Trojan / VLESS | Password (у VLESS — UUID), Flow (xtls-rprx-vision). | `fmt/TrojanVLESSBean.hpp`, `ui/edit/edit_trojan_vless.*` | MUST |
-| FR-UI-095 | Naive (внешнее ядро) | Username, Password, Protocol (https/http), Extra headers, SNI, Certificate, Insecure concurrency, Disable logs («если соединение рвётся через время»). | `fmt/NaiveBean.hpp`, `ui/edit/edit_naive.*` | NICE |
-| FR-UI-096 | Hysteria2 | Password, Obfs Password, Upload/Download (Mbps), Hop Port (диапазон портов, меняет отображение адреса), Hop Interval (с), Force use external core, TLS: SNI, CA-сертификат, Allow Insecure, Disable SNI. (Поля uuid/congestion/udpRelayMode/zeroRtt/heartbeat/uos/alpn/disableMtuDiscovery/receive-windows скрыты для hy2.) | `fmt/QUICBean.hpp`, `ui/edit/edit_quic.*` | MUST |
-| FR-UI-097 | TUIC | UUID (+Generate), Password, Congestion Control (bbr/cubic/new_reno), UDP Relay Mode (native/quic), Zero Rtt Handshake, Heartbeat (напр. «10s»), TLS-блок как у hy2 (SNI/ALPN/CA/insecure/disableSni), Force use external core. Примечание: поле `uos` (udp-over-stream) существует в модели и импортируется из Clash, но в редакторе этого форка скрыто. | `fmt/QUICBean.hpp`, `ui/edit/edit_quic.*` | MUST |
+| FR-UI-095 | Naive (внешнее ядро) | Username, Password, Protocol (https/http), Extra headers, SNI, Certificate, Insecure concurrency, Disable logs («если соединение рвётся через время»). | `fmt/NaiveBean.hpp`, `ui/edit/edit_naive.*` | DROP (аудит 2026-10): внешние ядра не переносятся; Naive не поддерживается штатным sing-box [проверь build-tags] |
+| FR-UI-096 | Hysteria2 | Password, Obfs Password, Upload/Download (Mbps), Hop Port (диапазон портов, меняет отображение адреса), Hop Interval (с), Force use external core (DROP (аудит 2026-10): внешние ядра не переносятся), TLS: SNI, CA-сертификат, Allow Insecure, Disable SNI. (Поля uuid/congestion/udpRelayMode/zeroRtt/heartbeat/uos/alpn/disableMtuDiscovery/receive-windows скрыты для hy2.) Port hopping исправляется на `server_ports` + строка длительности — FR-UI-268/LNB-35. | `fmt/QUICBean.hpp`, `ui/edit/edit_quic.*` | MUST |
+| FR-UI-097 | TUIC | UUID (+Generate), Password, Congestion Control (bbr/cubic/new_reno), UDP Relay Mode (native/quic), Zero Rtt Handshake, Heartbeat (напр. «10s»), TLS-блок как у hy2 (SNI/ALPN/CA/insecure/disableSni), Force use external core (DROP (аудит 2026-10): внешние ядра не переносятся). Примечание: поле `uos` (udp-over-stream) существует в модели и импортируется из Clash, но в редакторе этого форка скрыто. | `fmt/QUICBean.hpp`, `ui/edit/edit_quic.*` | MUST |
 | FR-UI-098 | Chain Proxy | Упорядоченный список профилей (порядок сверху вниз = порядок трафика); «Select Profile» через select mode; у каждого элемента — замена (change) и удаление; запрет chain-in-chain (валидация при сборке); имя обязательно. | `fmt/ChainBean.hpp`, `ui/edit/edit_chain.*`, `db/ConfigBuilder.cpp:94–148` | MUST |
-| FR-UI-099 | Custom (Extra Core) | Core (комбо из ExtraCore-карты), Command (строка, разбивается по пробелам), Config Suffix, Config (текст; плейсхолдеры `%mapping_port%`, `%socks_port%`, `%server_addr%`, `%server_port%`; 0/пусто = случайный порт), Mapping Port, Socks Port, «as JSON» редактор, Preview (показ подстановок + итоговая команда и конфиг внешнего ядра, кнопка Copy). | `fmt/CustomBean.hpp`, `ui/edit/edit_custom.*` | NICE |
+| FR-UI-099 | Custom (Extra Core) | Core (комбо из ExtraCore-карты), Command (строка, разбивается по пробелам), Config Suffix, Config (текст; плейсхолдеры `%mapping_port%`, `%socks_port%`, `%server_addr%`, `%server_port%`; 0/пусто = случайный порт), Mapping Port, Socks Port, «as JSON» редактор, Preview (показ подстановок + итоговая команда и конфиг внешнего ядра, кнопка Copy). | `fmt/CustomBean.hpp`, `ui/edit/edit_custom.*` | DROP (аудит 2026-10): внешние ядра не переносятся (LPE/RCE-поверхность, сырой отчёт 03 §2); заменяется «Свой JSON» outbound (прототип v1.2) |
 | FR-UI-100a | Custom internal (sing-box outbound) | JSON одного outbound (тип определяется по полю `type`); адрес/порт читаются из JSON. | `fmt/CustomBean.hpp` | MUST |
 | FR-UI-100b | Custom internal-full (sing-box config) | Полный конфиг sing-box, используется «как есть» вместо сгенерированного. | `db/ConfigBuilder.cpp:81–84` | MUST |
 | FR-UI-101 | Валидации редактора | Имя обязательно для chain/custom; core обязателен для custom; порт — числовое поле. | `edit_chain.cpp:29`, `edit_custom.cpp:105–115` | MUST |
@@ -224,7 +225,7 @@
 | FR-UI-108 | Update all subscriptions | Подтверждение «Update all subscriptions?» → последовательное (serial) обновление всех групп-подписок, не помеченных skip_auto_update и archive. | `dialog_manage_groups.cpp:54–58`, `sub/GroupUpdater.cpp:644–686` | MUST |
 | FR-UI-109 | Редактор группы: тип | Комбо Basic / Subscription: переключает видимость блока подписки; после создания тип менять нельзя; при наличии URL поле URL обязательно. | `ui/edit/dialog_edit_group.cpp:15–26, 74–79` | MUST |
 | FR-UI-110 | Поля группы | Name; URL; Archive (заморозка: не тестируется, не обновляется, нельзя запускать профили); Skip automatic update; Manually column width. | `dialog_edit_group.cpp:80–86` | MUST |
-| FR-UI-111 | Front Proxy группы | Выбор профиля-«фронта» через select mode + Clear; отображается «None» либо `[тип] имя`; фронт добавляется в конец каждой цепочки профилей группы при сборке конфига. | `dialog_edit_group.cpp:40–45, 89–104`, `db/ConfigBuilder.cpp:127–135` | MUST |
+| FR-UI-111 | Front Proxy группы | Выбор профиля-«фронта» через select mode + Clear; отображается «None» либо `[тип] имя`; фронт добавляется в конец каждой цепочки профилей группы при сборке конфига.<br>**Уточнение (аудит 2026-10):** Esc в режиме выбора очищает Front Proxy — пользователь теряет настройку одним нажатием — `ui/mainwindow.cpp:206-209` | `dialog_edit_group.cpp:40–45, 89–104`, `db/ConfigBuilder.cpp:127–135` | MUST |
 | FR-UI-112 | Share группы | «Copy profile share links» / «(Neko Links)» — экспорт всех профилей группы в буфер. | `dialog_edit_group.cpp:47–64` | MUST |
 | FR-UI-113 | Отображение порядка | Порядок групп = порядок вкладок (drag вкладок главного окна). | `mainwindow.cpp:71–78` | MUST |
 
@@ -262,21 +263,21 @@
 | ID | Название | Поведение | Источник | Приоритет |
 |----|----------|-----------|----------|-----------|
 | FR-UI-130 | Диалог Routing Settings | Заголовок содержит активный набор: «Routes [Default]». Вкладки/блоки: Common, Simple Route, DNS, Custom Route. | `ui/dialog_manage_routes.ui/.cpp` | MUST |
-| FR-UI-131 | Common: Domain Strategy | Комбо: «», ipv4_only, ipv6_only, prefer_ipv4, prefer_ipv6 (стратегия разрешения доменов). | `dialog_manage_routes.cpp:26–28` | MUST |
-| FR-UI-132 | Common: Sniffing Mode | Комбо: Disable / Sniff result for routing / Sniff result for destination. | `dialog_manage_routes.ui`, `main/Const.hpp` | MUST |
+| FR-UI-131 | Common: Domain Strategy | Комбо: «», ipv4_only, ipv6_only, prefer_ipv4, prefer_ipv6 (стратегия разрешения доменов).<br>**Уточнение (аудит 2026-10):** настройка не влияет на генерируемый конфиг — `db/ConfigBuilder.cpp` ссылок не содержит; см. также FR-UI-148 — `ui/dialog_manage_routes.cpp:143-174` | `dialog_manage_routes.cpp:26–28` | DROP (аудит 2026-10): мёртвое поле без эффекта |
+| FR-UI-132 | Common: Sniffing Mode | Комбо: Disable / Sniff result for routing / Sniff result for destination.<br>**Уточнение (аудит 2026-10):** режимы «для маршрута» и «для назначения» дают одно и то же правило — `db/ConfigBuilder.cpp:734`; третий режим — DROP (аудит 2026-10): мёртвый (дублирует второй) | `dialog_manage_routes.ui`, `main/Const.hpp` | MUST (режимы Disable/для маршрута) |
 | FR-UI-133 | Common: Server Address Strategy | Outbound domain strategy (та же комбо) — применяется к исходящим. | `dialog_manage_routes.cpp:143–144` | MUST |
 | FR-UI-134 | Simple Route: 6 полей | Матрица Proxy/Direct/Block × Domain/IP — многострочные редакторы с автодополнением: domain-поля предлагают `geosite:*` из geosite.dat, IP-поля — `geoip:*` из geoip.dat. | `dialog_manage_routes.cpp:62–85` | MUST |
 | FR-UI-135 | Синтаксис правил | Построчно; `#` — комментарий; префиксы `geosite:`, `geoip:`, `domain:`, `full:`, `keyword:`, `regexp:`; без префикса — домен-суффикс; IP — CIDR. | `db/ConfigBuilder.cpp:481–531`, `NekoGui_Utils` | MUST |
 | FR-UI-136 | Пресеты | Кнопка-меню Preset: «Bypass LAN and China» (direct: geoip:cn+private, geosite:cn; block: geosite:category-ads-all + 3 домена) и «Global». | `dialog_manage_routes.cpp:113–124`, `NekoGui.cpp:312–326` | MUST |
 | FR-UI-137 | Custom Route (на набор) | JSON-редактор массива `rules` sing-box; добавляется к сгенерированным правилам. | `dialog_manage_routes.cpp:55–59`, `ConfigBuilder.cpp:730–732` | MUST |
 | FR-UI-138 | Custom Route (global) | Аналогичный JSON, применяется к любому активному набору (хранится в datastore). | `dialog_manage_routes.ui`, `ConfigBuilder.cpp:732` | MUST |
-| FR-UI-139 | Default Outbound | Комбо итогового outbound: proxy / direct / block (map на теги). | `dialog_manage_routes.cpp:137, 160` | MUST |
+| FR-UI-139 | Default Outbound | Комбо итогового outbound: proxy / direct / block (map на теги).<br>**Уточнение (аудит 2026-10):** в файлах наборов маршрутов значения исходов записываются как `proxy`/`bypass`/`block` — `ui/dialog_manage_routes.ui` | `dialog_manage_routes.cpp:137, 160` | MUST |
 | FR-UI-140 | Управление наборами маршрутов | Диалог Load/Save: список файлов `routes/*`, поле имени, кнопки Load / Save / Remove / Cancel; Load и Save — с подтверждением и текстовым превью правил (DisplayRouting); Remove недоступен для последнего набора; при удалении активного — активным становится первый. | `dialog_manage_routes.cpp:177–251` | MUST |
 | FR-UI-141 | Активный набор | `active_routing` в datastore; диалог сохраняет отредактированный набор под этим именем; смена набора (меню или диалог) генерирует RouteChanged → предложение перезапуска. | `dialog_manage_routes.cpp:96–109`, `mainwindow.cpp:294–311` | MUST |
 | FR-UI-142 | Отображение превью маршрута | `DisplayRouting()`: краткое перечисление Proxy/Direct/Block домены+IP, default outbound, режим DNS. | `NekoGui.cpp:351–361` | MUST |
 | FR-UI-143 | Rule-sets (geo) | `geoip:X`/`geosite:X` транслируются в удалённые `.srs` rule-set (MetaCubeX meta-rules-dat, download_detour=direct, формат binary, дедупликация тегов). | `ConfigBuilder.cpp:461–478` | MUST |
 | FR-UI-144 | Встроенные правила | Блок UDP-портов 135/137/138/139/5353; блок multicast (224.0.0.0/3, ff00::/8) по назначению и источнику; dns-hijack; sniff action для mixed-in/tun-in (timeout 3s). | `ConfigBuilder.cpp:663–699, 733–740` | MUST |
-| FR-UI-145 | Правила TUN-режима | Правила process_name и ip_cidr из настроек TUN (bypass/whitelist); автобайпас путей внешних ядер. | `ConfigBuilder.cpp:701–727` | MUST |
+| FR-UI-145 | Правила TUN-режима | Правила process_name и ip_cidr из настроек TUN (bypass/whitelist); автобайпас путей внешних ядер. | `ConfigBuilder.cpp:701–727` | DROP (аудит 2026-10): привязано к внешним ядрам/внешнему TUN; процессные правила LAVRay — FR-UI-270/271 и настройки TUN прототипа v1.2 |
 | FR-UI-146 | «Save as route» из лога | Контекстное меню лога: выделенный текст → редактирование → выбор категории (proxyIP/bypassIP/blockIP/proxyDomain/bypassDomain/blockDomain) → добавление в активный маршрут. | `mainwindow.cpp:1568–1611` | NICE |
 | FR-UI-147 | Примечание независимости | Подпись в диалоге: «Note: Other settings are independent for each route set.» | `ui/dialog_manage_routes.ui` | NICE |
 
@@ -286,7 +287,7 @@
 
 | ID | Название | Поведение | Источник | Приоритет |
 |----|----------|-----------|----------|-----------|
-| FR-UI-148 | Simple DNS Settings | Remote DNS (URL/строка, напр. `https://dns.google/dns-query`), Query Strategy (пусто/prefer_ipv4/prefer_ipv6/ipv4_only/ipv6_only); Direct DNS (напр. `https://doh.pub/dns-query`) + стратегия; Enable DNS Routing (чекбокс); Final DNS Out (proxy/direct). | `dialog_manage_routes.cpp:146–151, 166–174`, `NekoGui_DataStore.hpp:17–24` | MUST |
+| FR-UI-148 | Simple DNS Settings | Remote DNS (URL/строка, напр. `https://dns.google/dns-query`), Query Strategy (пусто/prefer_ipv4/prefer_ipv6/ipv4_only/ipv6_only); Direct DNS (напр. `https://doh.pub/dns-query`) + стратегия; Enable DNS Routing (чекбокс); Final DNS Out (proxy/direct).<br>**Уточнение (аудит 2026-10):** `domain_strategy`, `direct_dns_strategy` и `dns_final_out` не влияют на генерируемый конфиг (наследуется только remote-стратегия) — `db/ConfigBuilder.cpp`, `ui/dialog_manage_routes.cpp:143-174` | `dialog_manage_routes.cpp:146–151, 166–174`, `NekoGui_DataStore.hpp:17–24` | DROP (аудит 2026-10): мёртвые поля без эффекта (кроме Remote DNS и Query Strategy) |
 | FR-UI-149 | DNS Object Settings | Чекбокс «Use DNS Object»: отключает Simple-блок, включает текстовое поле полного JSON DNS sing-box + кнопки Format (форматирование/валидация) и Document (URL документации sing-box DNS); плейсхолдер-шаблон. | `dialog_manage_routes.cpp:37–53` | MUST |
 | FR-UI-150 | DNS Routing | Если включён — домены proxy-листа идут в remote DNS, direct-листа (и адреса серверов) — в direct DNS. | `ConfigBuilder.cpp:150–172, 617–625` | MUST |
 | FR-UI-151 | FakeDNS | Чекбокс в TUN-настройках: включает fakeip-сервер и правило для tun-in (диапазоны 198.18.0.0/15, fc00::/18). | `dialog_vpn_settings.cpp:14`, `ConfigBuilder.cpp:609–611, 641–648` | NICE |
@@ -311,10 +312,10 @@
 | FR-UI-161 | Concurrent | Число параллельных потоков тестирования (default 5). | MUST |
 | FR-UI-162 | Download Test URL / Timeout | URL и таймаут (сек) загрузки в Full Test (default cachefly 10mb / 30 c). | MUST |
 | FR-UI-163 | Include Pre-release | Учитывать pre-release при проверке обновлений. | NICE |
-| FR-UI-164 | Old Share Link Format | Формат VMess-ссылки (совместимость с v2rayN). | MUST |
+| FR-UI-164 | Old Share Link Format | Формат VMess-ссылки (совместимость с v2rayN).<br>**Уточнение (аудит 2026-10):** `old_share_link_format` не персистится в DataStore — настройка теряется при перезапуске — `main/NekoGui.cpp:229-286` | MUST |
 | FR-UI-165 | System proxy format (Windows) | Кнопка выбора формата строки системного прокси из пресетов (`{ip}:{http_port}`, `socks=…`, `http=…;https=…;ftp=…;socks=…`, `http=http://…`). | NICE |
-| FR-UI-166 | Секция Style: Theme | Комбо: System, 3 встроенных QSS (flatgray / lightblue / blacksoft), все стили QStyleFactory; смена применяется мгновенно и сохраняется. | NICE |
-| FR-UI-167 | Set custom icon | Выбор квадратного PNG (валидация) / сброс; иконка окна и трея. | NICE |
+| FR-UI-166 | Секция Style: Theme | Комбо: System, 3 встроенных QSS (flatgray / lightblue / blacksoft), все стили QStyleFactory; смена применяется мгновенно и сохраняется. | NICE → DROP (аудит 2026-10): Qt QSS-темы; заменяется тёмной/светлой темой и акцентами DS v1.2 |
+| FR-UI-167 | Set custom icon | Выбор квадратного PNG (валидация) / сброс; иконка окна и трея. | NICE → DROP (аудит 2026-10): Qt-механика кастомной PNG-иконки; знак LAVRay заменяет |
 | FR-UI-168 | Statistics refresh rate | Комбо: 500/1000/2000/3000/5000 мс / Off — интервал цикла статистики. | MUST |
 | FR-UI-169 | Connection statistics | Чекбокс включения списка соединений (в текущем форке визуально заблокирован — см. UX-14). | MUST |
 | FR-UI-170 | Hide dashboard at startup | Запуск свёрнутым в трей. | MUST |
@@ -322,7 +323,7 @@
 | FR-UI-172 | Language | Комбо: System / English / 简体中文 / فارسی / Русский; требует перезапуска. | MUST |
 | FR-UI-173 | Секция Subscription | Automatic update (вкл/выкл) + Interval (минуты, <30 невалиден); Use proxy when updating; Ignore TLS errors; Clear servers before updating; User Agent (плейсхолдер — дефолтный UA). | MUST |
 | FR-UI-174 | Секция Core (sing-box): Core Options | Диалог: Override underlying DNS; Enable Clash API + порт + secret (external_ui=dashboard). | NICE |
-| FR-UI-175 | Extra Core | Скролл-список внешних ядер (по умолчанию записи naive, hysteria2, tuic): имя + путь + выбор файла; кнопки Add (ввод имени) и Delete (выбор из списка). Используется редактором Custom и QUIC/Naive. | MUST |
+| FR-UI-175 | Extra Core | Скролл-список внешних ядер (по умолчанию записи naive, hysteria2, tuic): имя + путь + выбор файла; кнопки Add (ввод имени) и Delete (выбор из списка). Используется редактором Custom и QUIC/Naive. | MUST → DROP (аудит 2026-10): внешние ядра не переносятся |
 | FR-UI-176 | Секция Mux | Protocol (h2mux/smux/yamux), Padding, Concurrency, Default On. | MUST |
 | FR-UI-177 | Секция Security | Skip TLS certificate authentication by default (allowInsecure); Default uTLS Fingerprint (комбо пресетов). | MUST |
 
@@ -334,12 +335,12 @@
 
 | ID | Название | Поведение | Источник | Приоритет |
 |----|----------|-----------|----------|-----------|
-| FR-UI-178 | Tun Settings: поля | Tun Enable IPv6; Internal Tun (единый процесс sing-box); Hide Console (Windows); Strict Route; MTU (комбо 1000–10000, default 9000, клампится); Implementation (gvisor/system/mixed); Fake DNS (FR-UI-151); Whitelist mode; Bypass CIDR / Bypass Process Name (многострочные; в whitelist-режиме подписи меняются на «Proxy CIDR/Process Name»); Troubleshooting. | `dialog_vpn_settings.cpp:10–68` | MUST |
-| FR-UI-179 | Включение TUN (internal) | Требует прав: Windows — предложение «run as admin» → перезапуск с повышением (UAC, код выхода 3); Linux — pkexec setcap `cap_net_admin=ep` на nekobox_core → перезапуск; ошибка AppImage объясняется в логе; macOS — см. FR-UI-184. | `mainwindow.cpp:740–770` | MUST |
-| FR-UI-180 | Внешний TUN-режим (не internal) | Отдельный процесс nekobox_core с vpn-конфигом: Windows — runProcessElevated (hide/minimized console); Linux — pkexec bash script; macOS — osascript admin. Правила process/cidr из настроек проксируются в VPN-конфиг; атутентикация mixed-in прокидывается. | `mainwindow.cpp:1777–1819`, `ConfigBuilder.cpp:773–825` | NICE |
-| FR-UI-181 | Остановка внешнего TUN | Windows: elevated `taskkill /IM nekobox_core.exe /FI PID ne <core>`; Linux: pkexec killall/pkill; macOS: osascript pkill; ошибка → диалог. | `mainwindow.cpp:1821–1851` | NICE |
-| FR-UI-182 | Troubleshooting | Диалог: сброс зависшего nekobox_core (принудительный StopVPNProcess) + ссылка на документацию. | `dialog_vpn_settings.cpp:71–81` | NICE |
-| FR-UI-183 | Конфликт сервера с TUN | Если профиль требует внешний TUN-off (`need_keep_vpn_off`) — сообщение «Current server is incompatible with Tun…». | `mainwindow.cpp:772–775` | MUST |
+| FR-UI-178 | Tun Settings: поля | Tun Enable IPv6; Internal Tun (единый процесс sing-box); Hide Console (Windows); Strict Route; MTU (комбо 1000–10000, default 9000, клампится); Implementation (gvisor/system/mixed); Fake DNS (FR-UI-151); Whitelist mode; Bypass CIDR / Bypass Process Name (многострочные; в whitelist-режиме подписи меняются на «Proxy CIDR/Process Name»); Troubleshooting.<br>**Уточнение (аудит 2026-10):** подпись стека в UI не совпадает с реальным стеком (gvisor/system/mixed в конфиге против других подписей в диалоге), а MTU вне диапазона 1000..10000 молча сбрасывается в 9000 — `ui/dialog_vpn_settings.ui:40-56`; `fmt/Preset.hpp:5` | `dialog_vpn_settings.cpp:10–68` | MUST |
+| FR-UI-179 | Включение TUN (internal) | Требует прав: Windows — предложение «run as admin» → перезапуск с повышением (UAC, код выхода 3); Linux — pkexec setcap `cap_net_admin=ep` на nekobox_core → перезапуск; ошибка AppImage объясняется в логе; macOS — см. FR-UI-184.<br>**Уточнение (аудит 2026-10):** на macOS повышения прав нет вовсе и TUN молча не включается — `ui/mainwindow.cpp:744-770`. В LAVRay заменяется привилегированным помощником (FR-UI-269) | `mainwindow.cpp:740–770` | MUST (замена: FR-UI-269) |
+| FR-UI-180 | Внешний TUN-режим (не internal) | Отдельный процесс nekobox_core с vpn-конфигом: Windows — runProcessElevated (hide/minimized console); Linux — pkexec bash script; macOS — osascript admin. Правила process/cidr из настроек проксируются в VPN-конфиг; атутентикация mixed-in прокидывается. | `mainwindow.cpp:1777–1819`, `ConfigBuilder.cpp:773–825` | DROP (аудит 2026-10): внешний TUN двумя процессами — шаблон `res/vpn/sing-box-vpn.json` содержит удалённый outbound `dns` и не стартует на sing-box 1.14; LPE-поверхность (LNB-26); заменяется внутренним TUN + помощник (FR-UI-269) |
+| FR-UI-181 | Остановка внешнего TUN | Windows: elevated `taskkill /IM nekobox_core.exe /FI PID ne <core>`; Linux: pkexec killall/pkill; macOS: osascript pkill; ошибка → диалог. | `mainwindow.cpp:1821–1851` | DROP (аудит 2026-10): внешний TUN двумя процессами; taskkill по имени образа — LNB-09 |
+| FR-UI-182 | Troubleshooting | Диалог: сброс зависшего nekobox_core (принудительный StopVPNProcess) + ссылка на документацию. | `dialog_vpn_settings.cpp:71–81` | DROP (аудит 2026-10): внешний TUN двумя процессами; заменяется «Диагностикой → Проверки» (FR-UI-272) |
+| FR-UI-183 | Конфликт сервера с TUN | Если профиль требует внешний TUN-off (`need_keep_vpn_off`) — сообщение «Current server is incompatible with Tun…». | `mainwindow.cpp:772–775` | DROP (аудит 2026-10): внешний TUN двумя процессами; внутренних профилей, несовместимых с TUN, нет |
 | FR-UI-184 | Параметры tun-in | interface_name (neko-tun / utun9 на macOS), auto_route, endpoint_independent_nat, mtu, stack, strict_route, address 172.19.0.1/28 (+IPv6 fdfe:…/126). | `ConfigBuilder.cpp:414–428` | MUST (уровень ядра) |
 | FR-UI-185 | Перезапуск при смене Tun-настроек | VPNChanged → предупреждение «Restart Tun to take effect» при активном TUN; смена Internal Tun → NeedRestart программы. | `dialog_vpn_settings.cpp:55–67`, `mainwindow.cpp:534–536` | MUST |
 | FR-UI-186 | Remember spmode | При включённом «Remember last profile» запоминаются включённые режимы (system_proxy/vpn) и восстанавливаются при старте (в т.ч. через флаг `-flag_restart_tun_on` после перезапуска с повышением). | `mainwindow.cpp:414–422`, `main/main.cpp:92` | MUST |
@@ -353,7 +354,7 @@
 | ID | Название | Поведение | Источник | Приоритет |
 |----|----------|-----------|----------|-----------|
 | FR-UI-187 | Настраиваемые глобальные хоткеи | 4 слота: Trigger main window; Show groups; Show routes; System Proxy (открывает меню spmode у курсора). Редактор — key sequence edit; при открытии диалога хоткеи временно снимаются. | `ui/dialog_hotkey.ui/.cpp` | NICE |
-| FR-UI-188 | Проверка конфликтов | Дубликаты не регистрируются; невозможные к регистрации последовательности пропускаются молча. | `mainwindow.cpp:1730–1752` | MUST |
+| FR-UI-188 | Проверка конфликтов | Дубликаты не регистрируются; невозможные к регистрации последовательности пропускаются молча.<br>**Уточнение (аудит 2026-10):** при любом конфликте не регистрируется ни один из 4 хоткеев — `ui/mainwindow.cpp:1737-1740` | `mainwindow.cpp:1730–1752` | MUST |
 | FR-UI-189 | Локальные шорткаты таблицы | Return=Start; Ctrl+S=Stop; Ctrl+V=вставка; Del=удалить; Ctrl+A=выделить всё; Ctrl+M=move; Ctrl+D=clone; Ctrl+R=reset traffic; Ctrl+Q=QR; Ctrl+E=export config; Ctrl+C=copy links; Ctrl+N=copy Neko links; Ctrl+U=update subscription; Ctrl+F=search; Esc=отмена поиска/select mode; Ctrl+Alt+T/U/F/S/C/I/R/D — см. раздел 1.4/12. | `ui/mainwindow.ui:592–927` | MUST |
 
 ---
@@ -370,7 +371,7 @@
 | FR-UI-195 | Scan QR Code | Скрыть окно → пауза 1 с → снимок основного экрана → ZXing (QR, без поворота) → результат в лог + импорт; «QR Code not found» если не найдено. | `mainwindow.cpp:1317–1344` | NICE |
 | FR-UI-196 | Export config (Ctrl+E) | Для профиля на sing-box: копирование в буфер сгенерированного core-конфига; кнопки выбора «Copy core config» / «Copy test config» (конфиг для теста без inbounds/маршрутов пользователя). | `mainwindow.cpp:1205–1231` | MUST |
 | FR-UI-197 | Импорт из ссылки в редакторе | `TryParseLink` у каждого bean — разбор своей схемы (симметрично Bean2Link). | `fmt/Link2Bean.cpp` | MUST |
-| FR-UI-198 | Decrypt Happ link (диалог) | Поле ввода `happ://crypt5/…`; кнопка Decrypt (асинхронно, через подпроцесс `nekobox_core happ-decrypt <link>`, JSON-ответ {ok,result,error}); результат read-only; статус-подсказка «Looks like a subscription URL…» / «…proxy links»; кнопки: Add to NekoBox (импорт), Copy result (с фидбеком «Copied!»), Close. | `ui/dialog_happ_decrypt.cpp`, `main/HappLink.cpp`, `go/cmd/nekobox_core/happ/happdecrypt.go` | MUST (для RU) |
+| FR-UI-198 | Decrypt Happ link (диалог) | Поле ввода `happ://crypt5/…`; кнопка Decrypt (асинхронно, через подпроцесс `nekobox_core happ-decrypt <link>`, JSON-ответ {ok,result,error}); результат read-only; статус-подсказка «Looks like a subscription URL…» / «…proxy links»; кнопки: Add to NekoBox (импорт), Copy result (с фидбеком «Copied!»), Close.<br>**Уточнение (аудит 2026-10):** расшифровка фактически синхронна в GUI-потоке — окно замерзает до 13 с — `ui/dialog_happ_decrypt.cpp:73-78` | `ui/dialog_happ_decrypt.cpp`, `main/HappLink.cpp`, `go/cmd/nekobox_core/happ/happdecrypt.go` | MUST (для RU) |
 | FR-UI-199 | Расшифровка happ на стороне ядра | Ключи crypt5/native в активах Go-ядра; CLI `happ-decrypt` печатает однострочный JSON (используется и GUI, и подписчик). | `go/cmd/nekobox_core/happ/*` | MUST (уровень ядра) |
 
 ---
@@ -384,7 +385,7 @@
 | FR-UI-200 | Tcp Ping (Ctrl+Alt+T) | TCP-коннект до адреса профиля; мс или «Unavailable». | `mainwindow_grpc.cpp:196–198` | MUST |
 | FR-UI-201 | Url Test (Ctrl+Alt+U) | HTTP-запрос через тестовый конфиг профиля (URL из настроек; timeout 10 c). | `mainwindow_grpc.cpp:161–195` | MUST |
 | FR-UI-202 | Full Test (Ctrl+Alt+F) | Диалог опций: Latency / UDP latency / Download speed / In and Out IP (чекбоксы, минимум один); отчёт строкой в колонке Test Result (поле `full_test_report`, приоритетнее latency): «Latency: Xms; UDPLatency: …; Speed: …; IP: …». | `mainwindow_grpc.cpp:84–118`, `fulltest.go` | MUST |
-| FR-UI-203 | Stop Testing (Ctrl+Alt+S) | Остановка всех потоков тестирования (магический режим 114514). | `mainwindow_grpc.cpp:74–81` | MUST |
+| FR-UI-203 | Stop Testing (Ctrl+Alt+S) | Остановка всех потоков тестирования (магический режим 114514).<br>**Уточнение (аудит 2026-10):** «остановка» убивает потоки GUI (`t->exit()`), а воркеры тестирования в ядре продолжают работать — `ui/mainwindow_grpc.cpp:74-81` | `mainwindow_grpc.cpp:74–81` | MUST |
 | FR-UI-204 | Clear Test Result (Ctrl+Alt+C) | Сброс latency и full_test_report у выделения/группы. | `mainwindow.cpp:1352–1359` | MUST |
 | FR-UI-205 | Область применения | Тест применяется к выделенным профилям либо ко всей группе (в зависимости от подменю, FR-UI-041); кнопка URL Test всегда тестирует группу. | `mainwindow.cpp:1459–1480` | MUST |
 | FR-UI-206 | Параллельность | Пул из `test_concurrent` потоков; повторный запуск заблокирован, пока не завершился предыдущий (диалог-предупреждение). | `mainwindow_grpc.cpp:61–65, 119–131` | MUST |
@@ -429,13 +430,13 @@
 |----|----------|-----------|----------|-----------|
 | FR-UI-221 | Установка системного прокси | Windows: WinINET `InternetSetOption` (LAN + все RAS-соединения, SETTINGS_CHANGED+REFRESH), строка из настраиваемого формата (FR-UI-165); Linux GNOME: gsettings (http/https/ftp + socks, mode=manual), KDE: kwriteconfig5 + dbus reparse; macOS: networksetup -setwebproxy/-setsecurewebproxy/-setsocksfirewallproxy для каждого network service. | `3rdparty/qv2ray/v2/components/proxy/QvProxyConfigurator.cpp` | MUST |
 | FR-UI-222 | Снятие системного прокси | Симметричная очистка при выключении и при выходе (WinINET DIRECT, gsettings mode=none, networksetup off). | там же, `mainwindow.cpp:655` | MUST |
-| FR-UI-223 | Синхронизация состояния | Чекбоксы/меню всегда отражают datastore-состояние spmode_*; включение возможно только при Mixed-порту. | `mainwindow.cpp:326–336, 717–738` | MUST |
+| FR-UI-223 | Синхронизация состояния | Чекбоксы/меню всегда отражают datastore-состояние spmode_*; включение возможно только при Mixed-порту.<br>**Уточнение (аудит 2026-10):** защиты «только при Mixed-порту» нет — состояние включается при любом inbound — `ui/mainwindow.cpp:717-738` | `mainwindow.cpp:326–336, 717–738` | MUST |
 
 ### 15.2. Автозапуск
 
 | ID | Название | Поведение | Источник | Приоритет |
 |----|----------|-----------|----------|-----------|
-| FR-UI-224 | Автозапуск | Windows: HKCU\…\Run, значение `"путь" -tray`; macOS: LoginItems (LSSharedFileList); Linux: ~/.config/autostart/<app>.desktop (Exec с -tray, учёт AppImage и launcher). Проверка включённости — чтением реального состояния ОС. | `sys/AutoRun.cpp` | MUST |
+| FR-UI-224 | Автозапуск | Windows: HKCU\…\Run, значение `"путь" -tray`; macOS: LoginItems (LSSharedFileList); Linux: ~/.config/autostart/<app>.desktop (Exec с -tray, учёт AppImage и launcher). Проверка включённости — чтением реального состояния ОС. | `sys/AutoRun.cpp` | DROP (аудит 2026-10) для macOS-ветки: устаревший API `LSSharedFileList` (SMAppService вместо него); Windows/Linux-ветки переносятся. См. `docs/PLATFORM-MATRIX.md` |
 
 ### 15.3. Трей/окно/ОС-специфика
 
@@ -454,10 +455,10 @@
 |----|----------|-----------|----------|-----------|
 | FR-UI-231 | Запуск nekobox_core | Подпроцесс: `nekobox_core nekobox -port <случайный>` (+`-debug`); token (32 случайных символа) пишется в stdin; порт по умолчанию 19810; готовность ядра определяется по строке «grpc server listening» в stdout. | `mainwindow.cpp:386–412`, `sys/ExternalProcess.cpp:73–156` | MUST |
 | FR-UI-232 | Авторестарт ядра | При падении ядра (не по команде): попытка рестарта с тем же профилем; rate-limit 10 с («Core exits too frequently…»); при FailedToStart — без ретраев; CoreCrashed → остановка прокси. | `ExternalProcess.cpp:106–139` | MUST |
-| FR-UI-233 | Внешние ядра (managed processes) | naive/hysteria2/tuic/custom: запуск программы с аргументами/ENV, захват stdout/stderr (VT100) в лог с тагом; краш → остановка прокси и сообщение; корректное завершение при stop. | `ExternalProcess.cpp:11–67`, `mainwindow_grpc.cpp:20–34` | MUST |
-| FR-UI-234 | Автобайпас внешних ядер в TUN | Пути программ внешних ядер автоматически добавляются в process_name-bypass правила TUN. | `ConfigBuilder.cpp:14–22, 721–726` | MUST |
-| FR-UI-235 | Аргументы внешних ядер | Подстановка `%mapping_port%`, `%socks_port%`, `%server_addr%`, `%server_port%`; mapping inbound (direct, override_address/port) и socks-outbound на 127.0.0.1; статистика через таг. | `fmt/Bean2External.cpp`, `ConfigBuilder.cpp:248–327` | MUST |
-| FR-UI-236 | Диалог «долгого запуска» | Если Start/Stop не отвечает >5 с — диалог с предложением перезапустить программу (авто-отменяемый). | `mainwindow_grpc.cpp:376–379, 468–471` | MUST |
+| FR-UI-233 | Внешние ядра (managed processes) | naive/hysteria2/tuic/custom: запуск программы с аргументами/ENV, захват stdout/stderr (VT100) в лог с тагом; краш → остановка прокси и сообщение; корректное завершение при stop. | `ExternalProcess.cpp:11–67`, `mainwindow_grpc.cpp:20–34` | DROP (аудит 2026-10): внешние ядра не переносятся |
+| FR-UI-234 | Автобайпас внешних ядер в TUN | Пути программ внешних ядер автоматически добавляются в process_name-bypass правила TUN. | `ConfigBuilder.cpp:14–22, 721–726` | DROP (аудит 2026-10): внешние ядра не переносятся; к тому же в `process_name` кладутся полные пути, а sing-box сравнивает `filepath.Base` — автобайпас не срабатывает |
+| FR-UI-235 | Аргументы внешних ядер | Подстановка `%mapping_port%`, `%socks_port%`, `%server_addr%`, `%server_port%`; mapping inbound (direct, override_address/port) и socks-outbound на 127.0.0.1; статистика через таг. | `fmt/Bean2External.cpp`, `ConfigBuilder.cpp:248–327` | DROP (аудит 2026-10): внешние ядра не переносятся |
+| FR-UI-236 | Диалог «долгого запуска» | Если Start/Stop не отвечает >5 с — диалог с предложением перезапустить программу (авто-отменяемый). | `mainwindow_grpc.cpp:376–379, 468–471` | DROP (аудит 2026-10): мёртвый костыль безтаймаутного gRPC (LNB-06); заменяется дедлайнами RPC и конечным автоматом (FR-UI-261) |
 
 ---
 
@@ -466,10 +467,10 @@
 | ID | Название | Поведение | Источник | Приоритет |
 |----|----------|-----------|----------|-----------|
 | FR-UI-237 | Языки | Встроенные переводы: en (исходник), zh_CN, fa_IR, ru_RU (компилированные .qm в ресурсах); + внешние qtbase_*.qm; выбор: System/En/zh/fa/ru; смена требует рестарта. | `main/main.cpp:203–221`, `translations/` | MUST |
-| FR-UI-238 | Механизм перевода | Qt Linguist: контексты по классам диалогов/виджетов (MainWindow, DialogBasicSettings, DialogEditProfile, Edit*, GroupItem, ProxyItem, JsonEditor и др.); 410+ строк в ru_RU.ts. | `translations/ru_RU.ts` | MUST (для LAVRay — i18n-фреймворк React с тем же покрытием) |
-| FR-UI-239 | Принудительный LTR | Карточки групп/профилей и лог всегда LeftToRight (иначе ломается в RTL-локали fa_IR). | `GroupItem.cpp:16`, `ProxyItem.cpp:9` | NICE |
-| FR-UI-240 | Темы | System; 3 встроенных QSS; стили QStyleFactory; собственный neko.css поверх; кастомная иконка PNG. | `ui/ThemeManager.cpp`, `res/` | NICE |
-| FR-UI-241 | Иконки Material | Набор material SVG (cancel/history/swap-vertical/lock-*) для UI. | `ui/Icon.cpp:47–50`, `res/icon/material/` | NICE |
+| FR-UI-238 | Механизм перевода | Qt Linguist: контексты по классам диалогов/виджетов (MainWindow, DialogBasicSettings, DialogEditProfile, Edit*, GroupItem, ProxyItem, JsonEditor и др.); 410+ строк в ru_RU.ts. | `translations/ru_RU.ts` | DROP (аудит 2026-10): Qt Linguist; в LAVRay — i18n-фреймворк React с тем же покрытием ключей (`docs/I18N-GLOSSARY.md`) |
+| FR-UI-239 | Принудительный LTR | Карточки групп/профилей и лог всегда LeftToRight (иначе ломается в RTL-локали fa_IR). | `GroupItem.cpp:16`, `ProxyItem.cpp:9` | DROP (аудит 2026-10): Qt-костыль RTL; LAVRay не поддерживает fa и строится на логических свойствах (DS v1.2 §9) |
+| FR-UI-240 | Темы | System; 3 встроенных QSS; стили QStyleFactory; собственный neko.css поверх; кастомная иконка PNG. | `ui/ThemeManager.cpp`, `res/` | DROP (аудит 2026-10): Qt-темы 2019 года; заменяется DS v1.2 (тема + акцент) |
+| FR-UI-241 | Иконки Material | Набор material SVG (cancel/history/swap-vertical/lock-*) для UI. | `ui/Icon.cpp:47–50`, `res/icon/material/` | DROP (аудит 2026-10): набор Material заменён на Lucide (DS v1.2 §5) |
 
 ---
 
@@ -485,7 +486,7 @@
 | FR-UI-245 | Datastore | `groups/nekobox.json` — все настройки (см. `NekoGui_DataStore.hpp`); сохранение при каждом изменении; флаг no-save при выходе. | `main/NekoGui.cpp:229–286` | MUST |
 | FR-UI-246 | Наборы маршрутов | Каталог `routes/` — по файлу на набор (имя = имя файла). | `main/main.cpp:170–172`, `NekoGui.cpp:363–366` | MUST |
 | FR-UI-247 | Каталоги | Рабочий каталог = каталог exe, либо `-appdata [dir]` / AppConfigLocation; подкаталоги config/, profiles/, groups/, routes/, temp/ (чистится), dashboard/, vpn/ (оверрайды vpn-конфига/скрипта), nekobox.png. | `main/main.cpp:100–113, 161–176` | MUST |
-| FR-UI-248 | Миграция/сервисный режим | Флаг `-flag_reorder`: перенумерация id профилей и групп подряд (с сообщением). | `db/Database.cpp:85–135` | NICE |
+| FR-UI-248 | Миграция/сервисный режим | Флаг `-flag_reorder`: перенумерация id профилей и групп подряд (с сообщением). | `db/Database.cpp:85–135` | DROP (аудит 2026-10): мёртвый сервисный режим; перенумерация удаляет файлы профилей; миграция NekoBox — FR-UI-277 |
 | FR-UI-249 | Уникальные ключи дедупликации | Профиль-ключ = JSON bean (без custom_config/custom_outbound) + тип; либо адрес+тип. Используется в Remove Duplicates и diff подписок. | `db/ProfileFilter.cpp:3–8` | MUST |
 | FR-UI-250 | Изменяемость и сохранение | Save возвращает changed (сравнение последней записи) — на этом построены «restart proxy?» подсказки. | `NekoGui.cpp:184–199` | MUST |
 
@@ -546,33 +547,69 @@
 
 ## 20. UX-проблемы текущего NekoBox (рекомендации для LAVRay)
 
-Найдено при аудите кода; каждое — кандидат на исправление в редизайне.
+Найдено при аудите кода; каждое — кандидат на исправление в редизайне. Ссылки «Прототип v1.2» указывают экран `design/prototype.html` (перечень экранов — `docs/DESIGN-SYSTEM.md` §8), где проблема решена.
 
-1. **Перегруженное меню Server.** Одно контекстное меню обслуживает и выделение, и группу, и создание; пункты тестирования физически «переезжают» между подменю Current Select/Current Group в момент открытия (`mainwindow.cpp:343–372`) — пользователь не понимает, к чему применится действие. → В LAVRay: явный scope-переключатель (Selection / Group) или разделение действий.
-2. **Скрытые аффордансы.** Клик по метке статуса = тест текущего профиля, клик по метке inbound = настройки, двойной клик по сплиттеру = 50/50, угловая кнопка таблицы = сброс порядка. Ничего не подписано. → Кнопки/тултипы.
-3. **Сортировка без индикатора.** Повторный клик по тому же заголовку инвертирует порядок, но стрелки-индикатора нет; сброс сортировки — только угловой кнопкой. Комментарий в коде: «不正确的descending实现» («некорректная реализация убывания»).
-4. **Модальные диалоги-«матрёшки».** Core Options, Inbound Auth, Load/Save routes, Full Test options — вложенные модалки; часть действий подтверждается дважды (Save route → вопрос с превью). → Inline-панели/виртуальные экраны.
-5. **«Restart proxy?» после каждого чиха.** Любое сохранение настроек/профиля при запущенном прокси даёт вопрос о перезапуске (FR-UI-062). → Автоприменение живых настроек + единый индикатор «требуется перезапуск» с одной кнопкой.
-6. **Мёртвый UI.** Чекбокс «Connection statistics» в Basic Settings принудительно заблокирован (`dialog_basic_settings.cpp:96`), хотя функциональность существует. Либо включить, либо убрать.
-7. **Активные серверы в меню — до 100 пунктов.** `menuActive_Server` обрезается на 100; без поиска и прокрутки в трее это неюзабельно для больших подписках. → Поиск/избранное/последние.
-8. **Select mode — необычная механика.** Редактор chain и front proxy скрывают диалог и переводят главное окно в «режим выбора» (FR-UI-055); Esc отменяет всё. Пользователь теряет контекст. → Встроенный пикер профиля в диалоге (с поиском).
-9. **QR-скан только по всему главному экрану**, без выбора области и камеры, с паузой в 1 с и миганием окна (`mainwindow.cpp:1317–1344`). → Выбор области/окна/камера.
-10. **Латентность и Full Test в одной колонке.** `full_test_report` (строка) подменяет цветную латентность; цветовая индикация при этом теряется. → Отдельная колонка/детали по клику.
-11. **Логи без уровней/фильтров во времени.** Фильтр только по статическим ключевых словам (log_ignore) и лимиту строк; нет паузы/поиска/копирования всей истории в файл. VT100-чистка только для внешних ядер.
-12. **Список соединений почти без действий.** Нет закрытия соединения, нет деталей (правило, inbound, время жизни), нет фильтра по outbound.
-13. **Move через текстовый список «0 Default».** Диалог переноса профилей показывает `"<id> <name>"` (`mainwindow.cpp:1132`) — сырой id виден пользователю.
-14. **Скрытые настройки-кнопки.** System proxy format (Win), Inbound Auth, Core Options — кнопки без пояснений; Extra Core (пути к бинарникам) — в «Basic Settings», хотя это advanced.
-15. **Зависимость happ-расшифровки от бинарника nekobox_core.** GUI вызывает подпроцесс `nekobox_core happ-decrypt`; при отсутствии/битом ядре — техническая ошибка «Could not run the decryptor». → Встроенная реализация в LAVRay-ядре + человекочитаемые ошибки.
-16. **Язык только с перезапуском** (NeedRestart), RTL-локаль частично ломала UI (костыль setLayoutDirection LTR).
-17. **Темы устарели.** 3 QSS-темы 2019-го года + системный стиль; тёмной темы по умолчанию нет; кастомная иконка — только квадратный PNG рядом с exe.
-18. **Профили без метаданных.** Нет тегов, заметок, дат, ручной сортировки «в избранное»; сортировка по умолчанию — порядок добавления.
-19. **Данные — сотни мелких JSON-файлов** (`profiles/<id>.json`); «коррупция» обрабатывается тихим удалением профиля (`LoadManager` → delProfile). → Единая БД (SQLite) + бэкапы.
-20. **Тест UDP/скорости в «Full Test» без прогресса.** Остановить можно только пунктом меню «Stop Testing»; нет прогресс-бара и счётчика оставшихся.
-21. **Архивные группы всё ещё в UI.** Archive-группы показываются вкладками, но профили нельзя запускать — состояние неочевидно (нет значка на вкладке).
-22. **Двойная семантика Mixed-порта.** Настройка называется «Mixed (SOCKS+HTTP)», а системный прокси Windows использует формат с отдельными http/socks подстановками — путаница при диагностике.
-23. **Незадокументированные флаги запуска** (`-many`, `-tray`, `-appdata`, `-debug`, `-flag_reorder`, `-flag_restart_tun_on`) — нужны для пакетов/поддержки, но нигде в UI не описаны.
-24. **Ошибки как messagebox-стопки.** Многие ошибки ядра (LoadConfig return error, BuildConfig error) показываются системным messagebox без контекста профиля и без копирования текста.
-25. **Группы без статистики.** Трафик считается на профиль; сводки по группе/подписке нет, хотя Subscription-UserInfo уже парсится.
+1. **Перегруженное меню Server.** Одно контекстное меню обслуживает и выделение, и группу, и создание; пункты тестирования физически «переезжают» между подменю Current Select/Current Group в момент открытия (`mainwindow.cpp:343–372`) — пользователь не понимает, к чему применится действие. → В LAVRay: явный scope-переключатель (Selection / Group) или разделение действий. *Прототип v1.2: «Серверы → Серверы» — панель действий появляется только при выделении; групповые действия вынесены в шапку списка («Проверить все», меню групп).*
+2. **Скрытые аффордансы.** Клик по метке статуса = тест текущего профиля, клик по метке inbound = настройки, двойной клик по сплиттеру = 50/50, угловая кнопка таблицы = сброс порядка. Ничего не подписано. → Кнопки/тултипы. *Прототип v1.2: все действия — именованные кнопки с тултипами; «Качество связи» и «Проверка утечек» на «Подключении» — явные карточки с кнопкой «Проверить».*
+3. **Сортировка без индикатора.** Повторный клик по тому же заголовку инвертирует порядок, но стрелки-индикатора нет; сброс сортировки — только угловой кнопкой. Комментарий в коде: «不正确的descending实现» («некорректная реализация убывания»). *Прототип v1.2: «Серверы → Серверы» — сортировка меню с индикатором направления; порядок по умолчанию восстанавливается пунктом меню.*
+4. **Модальные диалоги-«матрёшки».** Core Options, Inbound Auth, Load/Save routes, Full Test options — вложенные модалки; часть действий подтверждается дважды (Save route → вопрос с превью). → Inline-панели/виртуальные экраны. *Прототип v1.2: настройки — страницы с оглавлением (SettingsTOC); Load/Save маршрутов — сама страница «Маршрутизация»; параметры полного теста — в меню кнопки, не в диалоге.*
+5. **«Restart proxy?» после каждого чиха.** Любое сохранение настроек/профиля при запущенном прокси даёт вопрос о перезапуске (FR-UI-062). → Автоприменение живых настроек + единый индикатор «требуется перезапуск» с одной кнопкой. *Прототип v1.2: «Настройки → Параметры» — индикатор применённого состояния; перезапуск предлагается один раз из статус-карточки «Подключение».*
+6. **Мёртвый UI.** Чекбокс «Connection statistics» в Basic Settings принудительно заблокирован (`dialog_basic_settings.cpp:96`), хотя функциональность существует. Либо включить, либо убрать. *Прототип v1.2: «Диагностика → Соединения» — список работает и доступен без флага (FR-UI-274).*
+7. **Активные серверы в меню — до 100 пунктов.** `menuActive_Server` обрезается на 100; без поиска и прокрутки в трее это неюзабельно для больших подписках. → Поиск/избранное/последние. *Прототип v1.2: трей — текущий сервер, поиск по серверам и «последние 5» (DS v1.2 §7).*
+8. **Select mode — необычная механика.** Редактор chain и front proxy скрывают диалог и переводят главное окно в «режим выбора» (FR-UI-055); Esc отменяет всё. Пользователь теряет контекст. → Встроенный пикер профиля в диалоге (с поиском). *Прототип v1.2: редактор — выбор узлов цепочки внутри диалога (`ed.chainNodes`, поиск); select mode отсутствует.*
+9. **QR-скан только по всему главному экрану**, без выбора области и камеры, с паузой в 1 с и миганием окна (`mainwindow.cpp:1317–1344`). → Выбор области/окна/камера. *Прототип v1.2: «Добавить сервер → QR-код» — вкладка с выбором области экрана и вставкой картинки (`imp.qrRegion`, `imp.qrPaste`).*
+10. **Латентность и Full Test в одной колонке.** `full_test_report` (строка) подменяет цветную латентность; цветовая индикация при этом теряется. → Отдельная колонка/детали по клику. *Прототип v1.2: ListItem сервера — задержка отдельным элементом с цветом и временем проверки; полный отчёт — в панели профиля.*
+11. **Логи без уровней/фильтров во времени.** Фильтр только по статическим ключевых словам (log_ignore) и лимиту строк; нет паузы/поиска/копирования всей истории в файл. VT100-чистка только для внешних ядер. *Прототип v1.2: «Диагностика → Журнал» — фильтры уровня (INFO/WARN/ERROR), поиск, пауза, «↓ Новых строк: N», экспорт с маскированием секретов.*
+12. **Список соединений почти без действий.** Нет закрытия соединения, нет деталей (правило, inbound, время жизни), нет фильтра по outbound. *Прототип v1.2: «Диагностика → Соединения» — колонки «Правило» и «Исходящий», фильтры, меню строки: закрыть, создать правило, копировать.*
+13. **Move через текстовый список «0 Default».** Диалог переноса профилей показывает `"<id> <name>"` (`mainwindow.cpp:1132`) — сырой id виден пользователю. *Прототип v1.2: «Переместить в группу…» — меню с именами групп и счётчиками серверов; идентификаторы пользователю не показываются.*
+14. **Скрытые настройки-кнопки.** System proxy format (Win), Inbound Auth, Core Options — кнопки без пояснений; Extra Core (пути к бинарникам) — в «Basic Settings», хотя это advanced. *Прототип v1.2: «Настройки → Параметры» — оглавление секций (SettingsTOC); «Сеть и прокси» раскрывает адрес/порт/пароль прямо на странице; расширенное — в свёрнутом блоке «Дополнительно».*
+15. **Зависимость happ-расшифровки от бинарника nekobox_core.** GUI вызывает подпроцесс `nekobox_core happ-decrypt`; при отсутствии/битом ядре — техническая ошибка «Could not run the decryptor». → Встроенная реализация в LAVRay-ядре + человекочитаемые ошибки. *Прототип v1.2: «Добавить сервер → Ссылка» — happ-ссылки распознаются в том же поле, ошибки — человекочитаемыми карточками; отдельного диалога расшифровки нет.*
+16. **Язык только с перезапуском** (NeedRestart), RTL-локаль частично ломала UI (костыль setLayoutDirection LTR). *Прототип v1.2: переключение языка в стенде без перезагрузки; `applyLang` перерисовывает всё (DS v1.2 §9).*
+17. **Темы устарели.** 3 QSS-темы 2019-го года + системный стиль; тёмной темы по умолчанию нет; кастомная иконка — только квадратный PNG рядом с exe. *Прототип v1.2: тёмная/светлая темы по ОС + три акцента, «Настройки → Внешний вид» (DS v1.2 §2).*
+18. **Профили без метаданных.** Нет тегов, заметок, дат, ручной сортировки «в избранное»; сортировка по умолчанию — порядок добавления. *Прототип v1.2: ListItem — теги и «избранное» (фильтр «Избранные»), поле «Заметка» в редакторе (`ed.remarkPh`).*
+19. **Данные — сотни мелких JSON-файлов** (`profiles/<id>.json`); «коррупция» обрабатывается тихим удалением профиля (`LoadManager` → delProfile). → Единая БД (SQLite) + бэкапы. *Прототип v1.2 (уровень требований): FR-UI-260 — атомарная запись и понятная ошибка битого файла; «Настройки → Резервная копия» — экспорт/восстановление.*
+20. **Тест UDP/скорости в «Full Test» без прогресса.** Остановить можно только пунктом меню «Stop Testing»; нет прогресс-бара и счётчика оставшихся. *Прототип v1.2: «Серверы → Серверы» — полный тест с прогресс-строкой «Проверено {done} из {total}» (`test.progress`) и кнопкой «Остановить».*
+21. **Архивные группы всё ещё в UI.** Archive-группы показываются вкладками, но профили нельзя запускать — состояние неочевидно (нет значка на вкладке). *Прототип v1.2: подписки — карточки с явными состояниями и настройками (`sub.settings`); архивное состояние видно в карточке и отключает действия.*
+22. **Двойная семантика Mixed-порта.** Настройка называется «Mixed (SOCKS+HTTP)», а системный прокси Windows использует формат с отдельными http/socks подстановками — путаница при диагностике. *Прототип v1.2: «Настройки → Сеть и прокси» — единый «Локальный прокси (HTTP + SOCKS)» с адресом/портом/паролем и предупреждением о доступе из LAN (`set.lanWarn`).*
+23. **Незадокументированные флаги запуска** (`-many`, `-tray`, `-appdata`, `-debug`, `-flag_reorder`, `-flag_restart_tun_on`) — нужны для пакетов/поддержки, но нигде в UI не описаны. *Решение вне экранов прототипа: флаги описываются в документации пакетов и поддержки; UI-доступ не требуется (см. Приложение Б этого документа).*
+24. **Ошибки как messagebox-стопки.** Многие ошибки ядра (LoadConfig return error, BuildConfig error) показываются системным messagebox без контекста профиля и без копирования текста. *Прототип v1.2: баннеры с иконкой, текстом и действиями (Banner, `role="alert"`); ошибка ядра на «Подключении» — с кнопками «Повторить» и «Открыть диагностику».*
+25. **Группы без статистики.** Трафик считается на профиль; сводки по группе/подписке нет, хотя Subscription-UserInfo уже парсится. *Прототип v1.2: «Серверы → Подписки» — GroupHeader с числом серверов, трафиком и сроком; значения «Без лимита»/«Бессрочно» через Intl.*
+
+---
+
+## 21. Дополнения по аудиту 2026-10
+
+> Раздел добавлен по результатам аудита `docs/AUDIT-CLAUDE-2026-10.md` (2026-10-23) и сырых отчётов `docs/audit-2026-10/raw/`. Номера продолжают сквозную нумерацию FR. Источник — `файл:строка` в форке `nekoray/` или номер раздела сырого отчёта; «Решение владельца» — требуется продуктовое решение до реализации. Часть требований уже отражена в прототипе v1.2 (см. `docs/DESIGN-SYSTEM.md` §8) и в `docs/BUGS.md` (LNB-25…36).
+
+| ID | Название | Поведение (кратко) | Источник | Приоритет |
+|---|---|---|---|---|
+| FR-UI-257 | Безопасный импорт профиля | Профили из подписок и ссылок не принимают поля `c_cfg`, `c_out`, `core`, `cmd`; ручное включение — с показом diff и подтверждением | `sub/GroupUpdater.cpp`:61-73; `db/ConfigBuilder.cpp`:32-70 | MUST |
+| FR-UI-258 | Обновление подписки без потерь | Разбор в промежуточной копии; 0 серверов или удаление > 50 % — не применять без подтверждения; снапшот и «Откатить подписку» | `sub/GroupUpdater.cpp`:566-624 | MUST |
+| FR-UI-259 | Снимок и восстановление прокси ОС | Перед включением системного прокси сохранять прежние настройки (включая PAC/WPAD) и восстанавливать их при выключении и после краха | `3rdparty/qv2ray/v2/components/proxy/QvProxyConfigurator.cpp`:152, 186-189 | MUST |
+| FR-UI-260 | Атомарное хранение | Запись через временный файл, fsync и rename; резервная копия; битый файл — понятная ошибка, не тихий сброс | `main/NekoGui.cpp`:172-198 | MUST |
+| FR-UI-261 | Конечный автомат подключения | Состояния Idle, Starting, Running, Stopping, Failed, RateLimited; переходы и тексты состояний | `ui/mainwindow_grpc.cpp`:351-386 | MUST |
+| FR-UI-262 | Заголовки подписки | `subscription-userinfo`, `profile-update-interval`, `profile-title` (`base64:`), `content-disposition`, `profile-web-page-url`, `support-url`, `announce`, `routing`, строки `#key: value` в теле; «Без лимита», «Бессрочно» | `sub/GroupUpdater.cpp`:548; `ui/widget/GroupItem.cpp`:19-39 | MUST |
+| FR-UI-263 | Настройки на подписку | Интервал, User-Agent (пресеты + свой), свои заголовки, HTTP Basic, обновление через туннель, «последний рабочий» при сбое | `main/NekoGui.cpp`:299-309 | MUST |
+| FR-UI-264 | Свой User-Agent и согласование формата | UA `LAVRay/<версия>`; автопроба формата sing-box JSON; регистрация UA в панелях Marzban, Remnawave, PasarGuard | сырой отчёт 04 | SHOULD |
+| FR-UI-265 | HWID по согласию | Заголовки `x-hwid`, `x-device-os`, `x-ver-os`, `x-device-model` — только после явного включения; идентификатор случайный на установку | сырой отчёт 04 | SHOULD |
+| FR-UI-266 | Кэш rule-set и встроенные наборы | `experimental.cache_file` включён; наборы пресетов в поставке; старт без сети | `db/ConfigBuilder.cpp`:758-770 | MUST |
+| FR-UI-267 | Протоколы ядра | AnyTLS, ShadowTLS, WireGuard, SSH, Hysteria v1 — модели, ссылки, Clash-импорт, редактор; TLS fragment, ECH; `reality_spx`, несколько `short_id` | `sing-box/include/registry.go`:83-102 | SHOULD |
+| FR-UI-268 | Port hopping Hysteria2 | Генерация `server_ports` (`a:b`) и `hop_interval` строкой длительности; golden-тест с `sing-box check` | `fmt/Bean2CoreObj_box.cpp`:200-203 | MUST |
+| FR-UI-269 | Привилегированный помощник | Служба Windows / systemd-unit / SMAppService; принимает только валидированный конфиг по аутентифицированному IPC; UI и парсеры без прав | `ui/mainwindow.cpp`:697-710, 1790-1813 | MUST |
+| FR-UI-270 | Страж восстановления | После краха ядра или UI при следующем старте снимает TUN, маршруты, системный прокси и DNS | сырой отчёт 04 (уроки Verge Rev, Throne) | MUST |
+| FR-UI-271 | Проверка маршрута | «Куда пойдёт адрес/приложение»: сработавшее правило и исход | отчёт 5.3 | MUST |
+| FR-UI-272 | Диагностика «Почему не работает?» | 8 проверок (ядро, сервер, DNS, прокси/TUN, часы, подписка, порт, IPv6) с исправлениями | отчёт 5.3 | MUST |
+| FR-UI-273 | Проверка утечек | IP через туннель, прямой IP, DNS, IPv6 | отчёт 5.3 | MUST |
+| FR-UI-274 | Соединения | Список активных соединений с правилом и процессом; закрыть, создать правило | FR-UI-213 (в форке заглушка) | MUST |
+| FR-UI-275 | Kill switch | В TUN при падении туннеля трафик блокируется; выключено по умолчанию | отчёт 5.3 | SHOULD |
+| FR-UI-276 | Региональные пресеты | RU, CN, Глобальный; предвыбор по языку и часовому поясу | отчёт 3.6 | MUST |
+| FR-UI-277 | Перенос из NekoBox | Импорт `config/groups/*.json`, `profiles/*.json`, `routes_box/*` с отчётом о потерях; идемпотентно | сырой отчёт 02, §2.4 | MUST |
+| FR-UI-278 | Веб-панель: вход | Пароль (Argon2id), сессия `HttpOnly; SameSite=Strict; Secure`, CSRF-токен, лимит попыток, выход | сырой отчёт 03, §4 | MUST |
+| FR-UI-279 | Локальный прокси без открытого доступа | Случайный или заданный порт, пароль обязателен при доступе из LAN; в TUN — без слушателей на loopback | сырой отчёт 04 (уязвимость апреля 2026) | MUST |
+| FR-UI-280 | Deep link импорта | Только `lavray://import?url=…`; всегда предпросмотр и подтверждение | сырой отчёт 03, §4 | SHOULD |
+| FR-UI-281 | XHTTP | **Решение владельца 2026-10-23: поддержать.** Транспорт XHTTP для VLESS: опция «Транспорт» в редакторе (наряду с tcp/ws/grpc/httpupgrade); реализация — в нашем форке sing-box через полный аудит-гейт (правила как для обновлений ядра), внешние ядра не привлекаются. Этап 3, после базовых транспортов; в прототипе v1.2 отсутствует — добавить в реальный UI | сырой отчёт 04 | MUST — решение принято |
+
+Ссылки по темам: безопасность импорта и подписок — `docs/BUGS.md` (LNB-25, LNB-29), `docs/THREAT-MODEL.md`; помощник и страж — FR-UI-269/270 и `docs/PLATFORM-MATRIX.md`; веб-панель — `docs/OPENWRT-GATEWAY.md`; обновления — `docs/UPDATE-SYSTEM.md` v2.0.
 
 ---
 

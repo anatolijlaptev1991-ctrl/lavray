@@ -4,6 +4,15 @@
 
 ## Состав
 
+Встроенные (зашиты в сборки; `builtin: true`, схема — `SCHEMA.md`, версия формата `version`, ревизия данных `revision`):
+
+- `lav-ru.json` — «LAV Preset RU» (конвертация из исходника ниже; rev 1)
+- `lav-cn.json` — «LAV Preset CN» (rev 2, с ads-блоком)
+- `global.json` — «Глобальный» (rev 1)
+- `all-proxy.json` — «Всё через прокси» (rev 1); `all-direct.json` — «Всё напрямую» (rev 1)
+
+Исходники:
+
 - `lav-ru.source.json` — исходник пресета «LAV Preset RU» (копия файла `RU-bypass + Games`
   из репозитория `nekobox-ru-bypass-games`, формат NekoRay 4.x). В сборку попадает
   сконвертированный `lav-ru.json` (формат LAVRay) — см. `../docs/PRESET-LAV-RU.md`:

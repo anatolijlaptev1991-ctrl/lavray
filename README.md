@@ -1,5 +1,7 @@
 # LAVRay
 
+[![CI](https://github.com/anatolijlaptev1991-ctrl/lavray/actions/workflows/ci.yml/badge.svg)](https://github.com/anatolijlaptev1991-ctrl/lavray/actions/workflows/ci.yml)
+
 **LAVRay** — кроссплатформенный наследник NekoBox/NekoRay: спокойный, профессиональный
 контроль соединения. Windows / Linux / macOS / OpenWrt.
 
@@ -24,9 +26,10 @@ core/      Go-ядро: порт nekoray/go + ConfigBuilder; NEKO_PATCHES.md —
            (sing-box: форк anatolijlaptev1991-ctrl/sing-box, пин 628a9ed = 1.14.1-neko.1)
 shell/     Rust/Tauri 2 оболочка: окно, трей, жизненный цикл ядра
 ui/        React+TS: единый UI двух режимов; токены из DESIGN-SYSTEM
-presets/   встроенные маршрутные пресеты (lav-ru.source.json + формат LAVRay)
-design/    интерактивный прототип (prototype.html) + 32 эталонных скриншота (shots/)
-docs/      требования, аудит, баги, дизайн-система, система обновлений, пресет LAV RU
+presets/   встроенные маршрутные пресеты: lav-ru/lav-cn/global/all-proxy/all-direct (.json, формат LAVRay) + SCHEMA.md + исходник lav-ru.source.json
+design/    интерактивный прототип v1.2 (prototype.html) + приёмочные скрипты (tools/) + 23 эталонных скриншота приёмки (shots/)
+docs/      требования (281 FR), аудит, баги, дизайн-система v1.2, обновления TUF-lite v2.0, threat-model, security, test-plan, fix-plan аудита Claude, отчёты
+docs/stage3/ контракты и планы Этапа 3: proto-контракт (13 сервисов/85 RPC), core-port-plan W1–W8, shell-lifecycle, CI-черновики
 ```
 
 ## Статус
@@ -40,9 +43,13 @@ docs/      требования, аудит, баги, дизайн-систем
 - [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) — каталог функциональных требований UI (реверс-инжиниринг NekoBox, MUST/NICE).
 - [`docs/AUDIT.md`](docs/AUDIT.md) — аудит Go-ядра NekoBox и связки с UI.
 - [`docs/BUGS.md`](docs/BUGS.md) — каталог багов и проблем качества NekoBox (LNB-NN).
-- [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) — дизайн-система v1.1: токены, компоненты, экраны, i18n, доступность.
-- [`docs/UPDATE-SYSTEM.md`](docs/UPDATE-SYSTEM.md) — система обновлений: приложение/ядро/пресеты/geo, каналы, откат.
+- [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) — дизайн-система v1.2: знак «Отражение», палитры, компоненты, экраны, i18n, доступность.
+- [`docs/UPDATE-SYSTEM.md`](docs/UPDATE-SYSTEM.md) — система обновлений TUF-lite v2.0: root 2-из-3 (фаза 1 — 1 ключ), timestamp/manifest/sources, откат.
 - [`docs/PRESET-LAV-RU.md`](docs/PRESET-LAV-RU.md) — анализ и план интеграции пресета «LAV Preset RU».
+- [`docs/REQUIREMENTS.md`](docs/REQUIREMENTS.md) — 281 FR + DROP-каталог; решения владельца 2026-10-23 (XHTTP, внешние ядра, Happ, неподписанные сборки) — в тексте.
+- [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md), [`docs/SECURITY.md`](docs/SECURITY.md), [`docs/OPENWRT-GATEWAY.md`](docs/OPENWRT-GATEWAY.md), [`docs/TEST-PLAN.md`](docs/TEST-PLAN.md), [`docs/LICENSES.md`](docs/LICENSES.md), [`docs/PLATFORM-MATRIX.md`](docs/PLATFORM-MATRIX.md), [`docs/RELEASE-CHECKLIST.md`](docs/RELEASE-CHECKLIST.md).
+- [`docs/FIX-REPORT.md`](docs/FIX-REPORT.md) — исполнение и приёмка fix-plan аудита Claude (A1–A22/B/C1–C10, выводы скриптов).
+- [`docs/stage3/`](docs/stage3/) — планы Этапа 3: core-port-plan (W1–W8), shell-lifecycle, CI-черновики; ревью — `docs/REVIEW-STAGE3-DRAFTS.md`.
 
 ## Принципы Доктрины качества
 

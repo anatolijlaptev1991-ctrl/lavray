@@ -68,7 +68,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - name: Пресеты: JSON валиден, обязательные поля, 5 языков
+      - name: "Пресеты: JSON валиден, обязательные поля, 5 языков"
         run: |
           python - <<'EOF'
           import json, glob, sys

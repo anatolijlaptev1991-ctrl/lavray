@@ -12,9 +12,7 @@
   },
   "outbounds": [
     {
-      "dialer_options": {
-        "domain_resolver": "dns-local"
-      },
+      "domain_resolver": "dns-local",
       "server": "198.51.100.17",
       "server_port": 1080,
       "tag": "proxy",

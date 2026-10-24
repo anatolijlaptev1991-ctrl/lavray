@@ -153,7 +153,7 @@ func TestAllowlistAllowedKeys(t *testing.T) {
 		},
 		{
 			"outbounds собственный тег (мерж по тегу)",
-			`{"outbounds": [{"tag": "proxy", "dialer_options": {"domain_resolver": "dns-local"}}]}`,
+			`{"outbounds": [{"tag": "proxy", "domain_resolver": "dns-local"}]}`,
 			func(t *testing.T, cfg map[string]any) {
 				outs := cfg["outbounds"].([]any)
 				if len(outs) != 2 {
@@ -163,7 +163,7 @@ func TestAllowlistAllowedKeys(t *testing.T) {
 				if proxy["type"] != "socks" {
 					t.Fatalf("мерж по тегу не сохранил type: %v", proxy)
 				}
-				if _, ok := proxy["dialer_options"]; !ok {
+				if _, ok := proxy["domain_resolver"]; !ok {
 					t.Fatalf("мерж по тегу не добавил поле: %v", proxy)
 				}
 			},

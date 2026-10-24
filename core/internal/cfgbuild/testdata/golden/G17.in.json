@@ -9,7 +9,7 @@
       "core": "internal",
       "outbound_json": "{\"type\":\"socks\",\"server\":\"198.51.100.17\",\"server_port\":1080}"
     },
-    "custom_outbound_json": "{\"dialer_options\": {\"domain_resolver\": \"dns-local\"}}",
+    "custom_outbound_json": "{\"domain_resolver\": \"dns-local\"}",
     "custom_fields_confirmed": true
   }
 }

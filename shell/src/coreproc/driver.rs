@@ -335,10 +335,16 @@ impl CoreProcess for RealCoreProcess {
                 .and_then(|()| stdin.write_all(b"\n"))
                 .and_then(|()| stdin.flush());
             if let Err(err) = written {
-                abort_child(child);
-                return Err(CoreProcessError::Spawn(format!(
-                    "auth token -> stdin: {err}"
-                )));
+                // EPIPE: ядро умерло, не прочитав stdin (падение на старте —
+                // обычный сценарий, не ошибка spawn). Продолжаем: wait_ready
+                // зафиксирует exit и вернёт причину. Любая другая ошибка
+                // записи — фатальна (протокол §3.2 нарушен).
+                if err.kind() != std::io::ErrorKind::BrokenPipe {
+                    abort_child(child);
+                    return Err(CoreProcessError::Spawn(format!(
+                        "auth token -> stdin: {err}"
+                    )));
+                }
             }
         }
 

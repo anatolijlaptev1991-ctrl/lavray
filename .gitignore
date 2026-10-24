@@ -29,3 +29,4 @@ dist-ssr/
 # --- macOS / системный мусор ---
 .DS_Store
 Thumbs.db
+core/internal/cfgbuild/geo/

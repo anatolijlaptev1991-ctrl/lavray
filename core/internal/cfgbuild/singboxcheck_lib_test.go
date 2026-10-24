@@ -14,6 +14,7 @@ package cfgbuild
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -22,10 +23,87 @@ import (
 	"testing"
 
 	box "github.com/sagernet/sing-box"
+	"github.com/sagernet/sing-box/common/srs"
+	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing/service"
 )
+
+// TestMain — перед прогонами генерирует минимальные валидные .srs для
+// каждого rule-set-тега из golden-эталонов: конфиги ссылаются на локальные
+// «geo/<kind>/<name>.srs» из поставки (LNB-31/36), и sing-box check честно
+// открывает файлы. Каталог geo/ создаётся внутри пакета на время теста
+// (в .gitignore) и удаляется после.
+func TestMain(m *testing.M) {
+	if err := generateGoldenGeo(); err != nil {
+		fmt.Fprintln(os.Stderr, "geo fixtures:", err)
+		os.Exit(1)
+	}
+	code := m.Run()
+	_ = os.RemoveAll("geo")
+	os.Exit(code)
+}
+
+// generateGoldenGeo — собирает теги (route.rule_set[].tag = "<kind>-<name>")
+// из всех G*.want.json и пишет по одному минимальному .srs (SRS v1 — читается
+// всеми версиями 1.14): geosite — domain_suffix, geoip — ip_cidr.
+func generateGoldenGeo() error {
+	tags := map[string]bool{}
+	paths, err := filepath.Glob(filepath.Join("testdata", "golden", "G*.want.json"))
+	if err != nil {
+		return err
+	}
+	for _, p := range paths {
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		var cfg struct {
+			Route struct {
+				RuleSet []struct {
+					Tag string `json:"tag"`
+				} `json:"rule_set"`
+			} `json:"route"`
+		}
+		if err := json.Unmarshal(raw, &cfg); err != nil {
+			continue // не-JSON эталона не бывает, но не падаем на регенерации
+		}
+		for _, rsDef := range cfg.Route.RuleSet {
+			if rsDef.Tag != "" {
+				tags[rsDef.Tag] = true
+			}
+		}
+	}
+	for tag := range tags {
+		kind, name, ok := strings.Cut(tag, "-")
+		if !ok || (kind != "geosite" && kind != "geoip") {
+			return fmt.Errorf("неожидаемый rule-set тег %q", tag)
+		}
+		ruleJSON := `{"domain_suffix":["example.com"]}`
+		if kind == "geoip" {
+			ruleJSON = `{"ip_cidr":["192.0.2.0/24"]}`
+		}
+		var plain option.PlainRuleSet
+		if err := json.Unmarshal([]byte(`{"rules":[`+ruleJSON+`]}`), &plain); err != nil {
+			return err
+		}
+		dir := filepath.Join("geo", kind)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+		f, err := os.Create(filepath.Join(dir, name+".srs"))
+		if err != nil {
+			return err
+		}
+		err = srs.Write(f, plain, C.RuleSetVersion1)
+		f.Close()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // ErrFeatureTagMissing — outbound требует сборочного тега (например
 // with_quic для hysteria2/tuic): конфиг распарсен, полная инициализация

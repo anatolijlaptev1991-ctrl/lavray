@@ -1,0 +1,43 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ]
+  },
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "password": "trojan-pass",
+      "server": "tj1.example.org",
+      "server_port": 443,
+      "tag": "proxy",
+      "tls": {
+        "certificate": "-----BEGIN CERTIFICATE-----\nMIIBvzCCAYWgAwIBAgIUX+example=\n-----END CERTIFICATE-----",
+        "enabled": true,
+        "insecure": true,
+        "server_name": "tj1.example.org"
+      },
+      "type": "trojan"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "bypass",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    }
+  ],
+  "route": {
+    "rules": []
+  }
+}

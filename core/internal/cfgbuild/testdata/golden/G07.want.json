@@ -1,0 +1,52 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ]
+  },
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "alter_id": 0,
+      "multiplex": {
+        "enabled": true,
+        "max_streams": 8,
+        "padding": false,
+        "protocol": "h2mux"
+      },
+      "security": "chacha20-poly1305",
+      "server": "vm2.example.org",
+      "server_port": 443,
+      "tag": "proxy",
+      "tls": {
+        "enabled": true
+      },
+      "transport": {
+        "service_name": "grpcSvc",
+        "type": "grpc"
+      },
+      "type": "vmess",
+      "uuid": "b831381d-6324-4d53-ad4f-8cda48b30812"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "bypass",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    }
+  ],
+  "route": {
+    "rules": []
+  }
+}

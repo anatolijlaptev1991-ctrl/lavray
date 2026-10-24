@@ -1,0 +1,41 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ]
+  },
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "method": "aes-128-gcm",
+      "password": "secret",
+      "plugin": "obfs-local",
+      "plugin_opts": "obfs=http;obfs-host=example.org",
+      "server": "ss3.example.org",
+      "server_port": 8388,
+      "tag": "proxy",
+      "type": "shadowsocks",
+      "udp_over_tcp": false
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "bypass",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    }
+  ],
+  "route": {
+    "rules": []
+  }
+}

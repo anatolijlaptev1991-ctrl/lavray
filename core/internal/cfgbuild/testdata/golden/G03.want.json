@@ -1,0 +1,39 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ]
+  },
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "method": "aes-256-gcm",
+      "password": "p@ssw0rd",
+      "server": "ss1.example.org",
+      "server_port": 8388,
+      "tag": "proxy",
+      "type": "shadowsocks",
+      "udp_over_tcp": false
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "bypass",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    }
+  ],
+  "route": {
+    "rules": []
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ]
+  },
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "alter_id": 0,
+      "server": "vm5.example.org",
+      "server_port": 80,
+      "tag": "proxy",
+      "transport": {
+        "headers": {
+          "Host": [
+            "a.example.org",
+            "b.example.org"
+          ]
+        },
+        "method": "GET",
+        "path": "/",
+        "type": "http"
+      },
+      "type": "vmess",
+      "uuid": "b831381d-6324-4d53-ad4f-8cda48b30815"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "bypass",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    }
+  ],
+  "route": {
+    "rules": []
+  }
+}

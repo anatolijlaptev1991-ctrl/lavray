@@ -1,0 +1,63 @@
+# deviations.yaml — задокументированные отклонения конфигбилдера от
+# C++-оракула NekoBox (db/ConfigBuilder.cpp + fmt/Bean2CoreObj_box.cpp).
+# Обязательное приложение к golden-тестам (core-port-plan §3.3).
+# Каждая запись: причина (баг-фикс / DROP / расширение) и ссылки.
+
+- id: hy2-hop-ports
+  where: outbounds.go / buildHysteria2
+  what: server_ports + hop_interval (Duration-строка) вместо hop_ports + int
+  why: "баг LNB-35 оракула; sing-box 1.14 ожидает server_ports/hop_interval"
+  refs: [FR-UI-268, BUGS.md LNB-35]
+
+- id: omitempty-policy
+  where: все билдеры outbounds
+  what: опциональные поля (security, alpn, plugin_opts, up/down mbps, tuic-опции) — omitempty; оракул эмитит всегда
+  why: канонические golden без шумовых нулей; семантика идентична
+  refs: [§3.3]
+
+- id: socks-ss-stream-drop
+  where: outbounds.go
+  what: stream-настройки на socks/shadowsocks отбрасываются (http — tls-only); оракул применял (мёртвый код для sing-box)
+  why: sing-box не поддерживает transport на этих outbound
+  refs: []
+
+- id: mux-concurrency-gate
+  where: builder.go / needMuxFor
+  what: per-profile multiplex=1 при глобальном Concurrency<=0 — НЕ применяется (оракул эмитил бы max_streams<=0)
+  why: нет валидной concurrency; отрицательный max_streams — невалидный конфиг
+  refs: [TestMuxRules concurrency=-1]
+
+- id: mux-no-shadowsocks
+  where: builder.go / needMuxFor
+  what: mux не применяется к shadowsocks, хотя спек §3.1.10 упоминает ss
+  why: "оракул (ConfigBuilder.cpp:328) тоже не применяет; расширение — после появления реальной потребности (sing-box ss multiplex поддерживает)"
+  refs: [§3.1.10]
+
+- id: group-optional
+  where: builder.go
+  what: Group==nil — сборка без front_proxy (оракул ошибается, cpp:96-99)
+  why: Group опционален в API (профиль вне групп); W6 всегда передаёт группу при наличии
+  refs: []
+
+- id: server-domains-dedup
+  where: builder.go
+  what: ServerDomains дедуплицируются (оракул аппендит дубликаты)
+  why: безвредное улучшение; detour-серверы уникальны по смыслу
+  refs: []
+
+- id: trojan-password-required
+  where: outbounds.go / buildTrojanVless
+  what: пустой password — INVALID_ARGUMENT (оракул эмитил пустой)
+  why: ужесточённая валидация на границе данных
+  refs: []
+
+- id: http-proto-source
+  where: outbounds.go / buildSocksHTTP
+  what: "type: socks|http выбирается по Detail.Proto; Type=http с Proto='' эмитил бы socks — W6 обязан заполнять Proto при создании"
+  why: контракт с W6/W3-парсером (синхронизировать)
+  refs: [ревью N4]
+
+- id: custom-outbound-tag-guard
+  where: builder.go
+  what: custom_outbound может переопределить tag/detour цепочечного outbound (как в оракуле); broken-link возможность задокументирована, запрет — кандидат W5
+  refs: [ревью N6]

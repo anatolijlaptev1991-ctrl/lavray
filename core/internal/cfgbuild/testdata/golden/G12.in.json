@@ -1,0 +1,19 @@
+{
+  "profile": {
+    "id": 1201,
+    "type": "trojan",
+    "name": "G12 trojan tls insecure cert",
+    "address": "tj1.example.org",
+    "port": 443,
+    "detail": {
+      "password": "trojan-pass"
+    },
+    "stream": {
+      "network": "tcp",
+      "security": "tls",
+      "sni": "tj1.example.org",
+      "allow_insecure": true,
+      "certificate": "-----BEGIN CERTIFICATE-----\nMIIBvzCCAYWgAwIBAgIUX+example=\n-----END CERTIFICATE-----"
+    }
+  }
+}

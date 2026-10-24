@@ -1,0 +1,58 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ]
+  },
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "alter_id": 0,
+      "detour": "g-802",
+      "server": "vm4.example.org",
+      "server_port": 443,
+      "tag": "proxy",
+      "transport": {
+        "early_data_header_name": "Sec-WebSocket-Protocol",
+        "max_early_data": 4096,
+        "path": "/ed",
+        "type": "ws"
+      },
+      "type": "vmess",
+      "uuid": "b831381d-6324-4d53-ad4f-8cda48b30814"
+    },
+    {
+      "alter_id": 0,
+      "server": "vm3.example.org",
+      "server_port": 443,
+      "tag": "g-802",
+      "transport": {
+        "host": "hu.example.org",
+        "path": "/up",
+        "type": "httpupgrade"
+      },
+      "type": "vmess",
+      "uuid": "b831381d-6324-4d53-ad4f-8cda48b30813"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "bypass",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    }
+  ],
+  "route": {
+    "rules": []
+  }
+}

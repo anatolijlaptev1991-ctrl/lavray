@@ -1,0 +1,48 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ]
+  },
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "packet_encoding": "xudp",
+      "server": "vl2.example.org",
+      "server_port": 443,
+      "tag": "proxy",
+      "tls": {
+        "enabled": true
+      },
+      "transport": {
+        "headers": {
+          "Host": "vl2.example.org"
+        },
+        "path": "/vl",
+        "type": "ws"
+      },
+      "type": "vless",
+      "uuid": "b831381d-6324-4d53-ad4f-8cda48b30817"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "bypass",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    }
+  ],
+  "route": {
+    "rules": []
+  }
+}

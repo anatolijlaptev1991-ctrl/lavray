@@ -1,0 +1,65 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ]
+  },
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "detour": "c-0-1603",
+      "server": "198.51.100.2",
+      "server_port": 1080,
+      "tag": "proxy",
+      "type": "socks"
+    },
+    {
+      "detour": "c-0-1604",
+      "password": "mid-pass",
+      "server": "chain-mid.example.org",
+      "server_port": 443,
+      "tag": "c-0-1603",
+      "tls": {
+        "enabled": true,
+        "server_name": "mid.example.org"
+      },
+      "type": "trojan"
+    },
+    {
+      "alter_id": 0,
+      "detour": "g-1605",
+      "security": "auto",
+      "server": "chain-exit.example.org",
+      "server_port": 443,
+      "tag": "c-0-1604",
+      "type": "vmess",
+      "uuid": "b831381d-6324-4d53-ad4f-8cda48b30819"
+    },
+    {
+      "server": "198.51.100.5",
+      "server_port": 1080,
+      "tag": "g-1605",
+      "type": "socks"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "bypass",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    }
+  ],
+  "route": {
+    "rules": []
+  }
+}

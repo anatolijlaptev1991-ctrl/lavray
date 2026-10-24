@@ -1,0 +1,44 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ]
+  },
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "password": "trojan-pass-2",
+      "server": "tj2.example.org",
+      "server_port": 80,
+      "tag": "proxy",
+      "transport": {
+        "headers": {
+          "Host": "tj2.example.org"
+        },
+        "path": "/tj",
+        "type": "ws"
+      },
+      "type": "trojan"
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "bypass",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    }
+  ],
+  "route": {
+    "rules": []
+  }
+}

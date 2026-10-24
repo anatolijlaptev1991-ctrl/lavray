@@ -1,0 +1,52 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ]
+  },
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "congestion_control": "bbr",
+      "heartbeat": "10s",
+      "password": "tuic-pass",
+      "server": "tuic.example.org",
+      "server_port": 443,
+      "tag": "proxy",
+      "tls": {
+        "alpn": [
+          "h3"
+        ],
+        "certificate": "-----BEGIN CERTIFICATE-----\nMIIBvzCCAYWgAwIBAgIUX+tuic=\n-----END CERTIFICATE-----",
+        "disable_sni": false,
+        "enabled": true,
+        "insecure": false,
+        "server_name": "tuic.example.org"
+      },
+      "type": "tuic",
+      "udp_relay_mode": "native",
+      "uuid": "b831381d-6324-4d53-ad4f-8cda48b30818",
+      "zero_rtt_handshake": true
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "bypass",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    }
+  ],
+  "route": {
+    "rules": []
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "profile": {
+    "id": 1501,
+    "type": "tuic",
+    "name": "G15 tuic v5 bbr native",
+    "address": "tuic.example.org",
+    "port": 443,
+    "detail": {
+      "uuid": "b831381d-6324-4d53-ad4f-8cda48b30818",
+      "password": "tuic-pass",
+      "congestion_control": "bbr",
+      "udp_relay_mode": "native",
+      "zero_rtt_handshake": true,
+      "heartbeat": "10s",
+      "sni": "tuic.example.org",
+      "alpn": "h3",
+      "ca": "-----BEGIN CERTIFICATE-----\nMIIBvzCCAYWgAwIBAgIUX+tuic=\n-----END CERTIFICATE-----"
+    }
+  }
+}

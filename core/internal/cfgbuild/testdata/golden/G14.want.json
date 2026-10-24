@@ -1,0 +1,52 @@
+{
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-local",
+        "type": "local"
+      }
+    ]
+  },
+  "log": {
+    "level": "info"
+  },
+  "outbounds": [
+    {
+      "down_mbps": 500,
+      "hop_interval": "30s",
+      "obfs": {
+        "password": "obfs-pass",
+        "type": "salamander"
+      },
+      "password": "hy2-pass",
+      "server": "hy2.example.org",
+      "server_port": 8443,
+      "server_ports": "1000:2000",
+      "tag": "proxy",
+      "tls": {
+        "alpn": "h3",
+        "disable_sni": false,
+        "enabled": true,
+        "insecure": false,
+        "server_name": "hy2.example.org"
+      },
+      "type": "hysteria2",
+      "up_mbps": 100
+    },
+    {
+      "tag": "direct",
+      "type": "direct"
+    },
+    {
+      "tag": "bypass",
+      "type": "direct"
+    },
+    {
+      "tag": "block",
+      "type": "block"
+    }
+  ],
+  "route": {
+    "rules": []
+  }
+}

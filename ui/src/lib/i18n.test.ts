@@ -23,11 +23,40 @@ describe('i18n dictionaries', () => {
     expect(Object.keys(DICTIONARIES).sort()).toEqual([...LANGUAGES].sort());
   });
 
-  it('has the same key set in every language', () => {
-    const reference = Object.keys(DICTIONARIES.en).sort();
+  it('has the same non-plural key set in every language', () => {
+    // Полные словари из прототипа: non-plural ключи идентичны; plural-формы
+    // различны по языку (ru one/few/many, en/es/de one/other, zh other) —
+    // как в design/tools/i18n_check.py и docs/fix-plan/03-i18n.md (F2).
+    const nonPlural = (lang: string): string[] =>
+      Object.keys(DICTIONARIES[lang as never])
+        .filter((k) => !k.startsWith('pl.'))
+        .sort();
+    const reference = nonPlural('en');
     for (const lang of LANGUAGES) {
-      expect(Object.keys(DICTIONARIES[lang]).sort(), `dictionary ${lang}`).toEqual(reference);
+      expect(nonPlural(lang), `dictionary ${lang} (non-plural)`).toEqual(reference);
     }
+  });
+
+  it('has complete plural forms per language', () => {
+    const expectForms = (lang: string, forms: readonly string[]): void => {
+      const pluralKeys = Object.keys(DICTIONARIES[lang as never]).filter((k) =>
+        k.startsWith('pl.'),
+      );
+      const bases = new Set(pluralKeys.map((k) => k.slice(0, k.lastIndexOf('.'))));
+      for (const base of bases) {
+        for (const form of forms) {
+          expect(
+            DICTIONARIES[lang as never][`${base}.${form}`],
+            `${lang}: ${base}.${form}`,
+          ).toBeTruthy();
+        }
+      }
+    };
+    expectForms('ru', ['one', 'few', 'many']);
+    expectForms('en', ['one', 'other']);
+    expectForms('es', ['one', 'other']);
+    expectForms('de', ['one', 'other']);
+    expectForms('zh', ['other']);
   });
 
   it('has no empty translations', () => {

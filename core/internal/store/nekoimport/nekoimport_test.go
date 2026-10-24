@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
@@ -13,12 +14,44 @@ import (
 
 func openStore(t *testing.T) *store.Store {
 	t.Helper()
-	s, err := store.Open(t.TempDir())
+	// Не t.TempDir(): на Windows RemoveAll гоняется с освобождением
+	// хэндлов -wal/-shm (см. store_test.go mkTempDir).
+	dir, err := os.MkdirTemp("", "lavray-nekoimport-test-*")
+	if err != nil {
+		t.Fatalf("mkdir temp: %v", err)
+	}
+	s, err := store.Open(dir)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	t.Cleanup(func() {
+		_ = s.Close()
+		for i := 0; i < 50; i++ {
+			if err := os.RemoveAll(dir); err == nil {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
 	return s
+}
+
+// mkTempDir — каталог с ретрай-удалением (гонка -wal/-shm на Windows).
+func mkTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "lavray-nekoimport-test-*")
+	if err != nil {
+		t.Fatalf("mkdir temp: %v", err)
+	}
+	t.Cleanup(func() {
+		for i := 0; i < 50; i++ {
+			if err := os.RemoveAll(dir); err == nil {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
+	return dir
 }
 
 func write(t *testing.T, path, content string) {
@@ -290,7 +323,7 @@ func TestImportIdempotent(t *testing.T) {
 // TestImportBrokenFile — битый JSON одного файла: остальные импортируются,
 // файл попадает в отчёт (FR-UI-260).
 func TestImportBrokenFile(t *testing.T) {
-	dir := t.TempDir()
+	dir := mkTempDir(t)
 	write(t, filepath.Join(dir, "groups", "pm.json"), `{"groups":[0]}`)
 	write(t, filepath.Join(dir, "groups", "0.json"), `{"id":0,"name":"G","order":[0],"front_proxy_id":-1}`)
 	write(t, filepath.Join(dir, "profiles", "0.json"),
@@ -319,7 +352,7 @@ func TestImportBrokenFile(t *testing.T) {
 // TestImportOldFormatGroup — группа старого формата: profiles/<id>.json с
 // type=group; профиль ссылается на неё по gid.
 func TestImportOldFormatGroup(t *testing.T) {
-	dir := t.TempDir()
+	dir := mkTempDir(t)
 	write(t, filepath.Join(dir, "profiles", "5.json"),
 		`{"type":"group","id":5,"gid":-1,"bean":{"_v":0,"name":"OldSub","url":"https://old.example.com/sub",
 		  "order":[6],"lastup":42,"front_proxy_id":-1}}`)
@@ -351,7 +384,7 @@ func TestImportOldFormatGroup(t *testing.T) {
 // TestImportOrphanProfile — профиль с несуществующей группой не теряется:
 // импортируется в первую группу с предупреждением.
 func TestImportOrphanProfile(t *testing.T) {
-	dir := t.TempDir()
+	dir := mkTempDir(t)
 	write(t, filepath.Join(dir, "groups", "pm.json"), `{"groups":[0]}`)
 	write(t, filepath.Join(dir, "groups", "0.json"), `{"id":0,"name":"G","order":[],"front_proxy_id":-1}`)
 	write(t, filepath.Join(dir, "profiles", "0.json"),

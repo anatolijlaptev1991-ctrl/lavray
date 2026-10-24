@@ -6,19 +6,52 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 )
 
 func openTemp(t *testing.T) *Store {
 	t.Helper()
-	dir := t.TempDir()
+	// Не t.TempDir(): на Windows его RemoveAll гоняется с асинхронным
+	// освобождением хэндлов -wal/-shm (modernc/sqlite) — флейк «directory
+	// is not empty». Свой каталог + ретрай-удаление после Close.
+	dir, err := os.MkdirTemp("", "lavray-store-test-*")
+	if err != nil {
+		t.Fatalf("mkdir temp: %v", err)
+	}
 	s, err := Open(dir)
 	if err != nil {
 		t.Fatalf("open store: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	t.Cleanup(func() {
+		_ = s.Close()
+		for i := 0; i < 50; i++ {
+			if err := os.RemoveAll(dir); err == nil {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
 	return s
+}
+
+// mkTempDir — каталог с ретрай-удалением (см. openTemp: гонка -wal/-shm на Windows).
+func mkTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "lavray-store-test-*")
+	if err != nil {
+		t.Fatalf("mkdir temp: %v", err)
+	}
+	t.Cleanup(func() {
+		for i := 0; i < 50; i++ {
+			if err := os.RemoveAll(dir); err == nil {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
+	return dir
 }
 
 func newGroup(name string, kind model.GroupKind) *model.Group {
@@ -43,7 +76,7 @@ func detailFor(typ model.ProfileType) model.Detail {
 }
 
 func TestStoreMigrationsIdempotent(t *testing.T) {
-	dir := t.TempDir()
+	dir := mkTempDir(t)
 	s1, err := Open(dir)
 	if err != nil {
 		t.Fatalf("first open: %v", err)
@@ -77,7 +110,7 @@ func TestFileModes(t *testing.T) {
 		// на unix (см. store.applyFileModes).
 		t.Skip("POSIX file modes are not applicable on windows")
 	}
-	dir := t.TempDir()
+	dir := mkTempDir(t)
 	s, err := Open(dir)
 	if err != nil {
 		t.Fatalf("open: %v", err)

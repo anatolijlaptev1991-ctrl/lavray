@@ -2,11 +2,13 @@
 //!
 //! Спек: `docs/stage3/shell-lifecycle.md` §2 (диаграмма, состояния, тайминги),
 //! §3 (spawn/токен/ready-протокол), §5 (graceful shutdown), §6
-//! (teardown-детекторы — [`teardown`]). Реальный запуск бинарника будет
-//! через трейт [`CoreProcess`]; пока интеграция покрыта моком
-//! [`MockCoreProcess`], поэтому каркас не зависит от Go-ядра.
+//! (teardown-детекторы — [`teardown`]). Реальный запуск бинарника —
+//! рантайм-драйвер [`driver::RealCoreProcess`] (реализация [`CoreProcess`] на
+//! `std::process` + Job Object/`PDEATHSIG`); юнит-тесты каркаса используют мок
+//! [`MockCoreProcess`], поэтому FSM не зависит от Go-ядра.
 
 pub mod backoff;
+pub mod driver;
 pub mod logs;
 pub mod teardown;
 
@@ -202,9 +204,8 @@ pub struct InvalidAuthToken(
 /// пишет значение (через [`SecretToken::expose`]) в **stdin** ядра + `\n` и
 /// держит stdin открытым (закрытие = смерть родителя — страховка).
 ///
-/// Генерация (32 байта CSPRNG → base64url) выполняется в рантайм-драйвере
-/// при врезке реального spawn'а; здесь — валидирующий конструктор и
-/// редактирующее хранение.
+/// Генерация (32 байта CSPRNG → base64url) — [`driver::generate_auth_token`];
+/// здесь — валидирующий конструктор и редактирующее хранение.
 #[derive(Clone, PartialEq, Eq)]
 pub struct SecretToken(String);
 
@@ -256,6 +257,11 @@ pub struct CoreSpawnConfig {
     /// Передаётся ТОЛЬКО в stdin ядра + `\n`; НИКОГДА в argv/env/логи/события
     /// (LNB-18) — обёртка [`SecretToken`] редактирует Debug/Display.
     pub auth_token: SecretToken,
+    /// Дополнительный argv. Пусто — стандартный набор §3.3
+    /// `serve --listen-socket <listen_socket>`; непустое значение ПОЛНОСТЬЮ
+    /// заменяет argv (будущие режимы `--config` §8.1 / `--port 0` §3.1 и
+    /// тестовые фейк-ядра драйвера — интерпретатор + скрипт).
+    pub extra_args: Vec<String>,
 }
 
 /// Ошибки драйвера процесса ядра.
@@ -276,7 +282,8 @@ pub enum CoreProcessError {
 }
 
 /// Точка интеграции с реальным процессом `lavray-core` (трейт; продакшн-реализация —
-/// `std::process`/tokio + Job Object/setsid — на следующих итерациях §3).
+/// [`driver::RealCoreProcess`]: `std::process` + Job Object (Windows) /
+/// process-группа+`PDEATHSIG` (Unix), §3/§5).
 pub trait CoreProcess {
     /// Запустить `lavray-core serve`. Контракт токена §3.2: значение
     /// `config.auth_token` (через `expose()`) пишется в **stdin** ядра + `\n`
@@ -834,6 +841,7 @@ mod tests {
             listen_socket: PathBuf::from("/tmp/lavray-XXXX/ctrl.sock"),
             data_dir: PathBuf::from("/tmp/lavray-data"),
             auth_token: SecretToken::from_base64url("A".repeat(AUTH_TOKEN_B64_LEN)).unwrap(),
+            extra_args: Vec::new(),
         }
     }
 

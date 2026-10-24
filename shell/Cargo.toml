@@ -14,6 +14,25 @@ tauri = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
+# CSPRNG для auth-токена §3.2 (32 байта). getrandom 0.3.4 УЖЕ в дереве
+# (транзитивно через tauri) — прямая зависимость не добавляет пакетов в lock.
+getrandom = "0.3"
+
+[target.'cfg(unix)'.dependencies]
+# PDEATHSIG SIGKILL и kill(2) по pgid (§3.3, LNB-09); process-группа — std
+# `CommandExt::process_group`. libc 0.2.191 УЖЕ в дереве (транзитивно).
+libc = "0.2"
+
+[target.'cfg(windows)'.dependencies]
+# Job Object KILL_ON_JOB_CLOSE + TerminateProcess по хэндлу (§3.3/§5).
+# windows-sys 0.61.2 УЖЕ в дереве (транзитивно через tauri) — новая прямая
+# зависимость не добавляет пакетов в lock, только активирует фичи.
+windows-sys = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_JobObjects",
+  "Win32_System_Threading",
+] }
 
 [build-dependencies]
 tauri-build = "2"

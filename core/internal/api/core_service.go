@@ -1,0 +1,357 @@
+package api
+
+// core_service.go — CoreService (W6): Connect/Disconnect/RestartProfile/
+// GetStatus/SubscribeEvents/GetRuntimeConfig/Shutdown. Конфиг sing-box ядро
+// собирает само (cfgbuild); UI передаёт только идентификатор профиля и режим.
+//
+// Валидаторы Connect: FR-UI-279 (inbound из LAN требует авторизации),
+// GATEWAY_*-режимы на десктопе → INVALID_ARGUMENT (шлюз — OpenWrt, W8),
+// naive/custom-external — за флагом enable_external_cores (решение №5).
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"connectrpc.com/connect"
+
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/cfgbuild"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
+)
+
+// ============================================================================
+// Connect / Disconnect / Restart
+// ============================================================================
+
+// startRun — общая логика запуска Connect и RestartProfile: сборка конфига,
+// валидаторы, старт менеджера. Возвращает статус и предупреждения сборки.
+func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavrayv1.ConnectMode) (*lavrayv1.CoreStatus, []string, error) {
+	// Гейт внешних ядер (решение №5): naive/custom-external off по умолчанию.
+	if profile.Type == model.TypeNaive || profile.Type == model.TypeCustomExternal {
+		if !s.settingBool("enable_external_cores") {
+			return nil, nil, failedPrecondition("тип %s требует внешнего ядра: включите настройку enable_external_cores (риск — THREAT-MODEL)", profile.Type)
+		}
+	}
+
+	// Режим: UNSPECIFIED → последний запомненный (remember.modes; W6 —
+	// системный прокси как безопасный дефолт), GATEWAY_* — только OpenWrt.
+	if mode == lavrayv1.ConnectMode_CONNECT_MODE_UNSPECIFIED {
+		if remembered := s.rememberedMode(); remembered != lavrayv1.ConnectMode_CONNECT_MODE_UNSPECIFIED {
+			mode = remembered
+		} else {
+			mode = lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY
+		}
+	}
+	switch mode {
+	case lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TPROXY, lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TUN:
+		return nil, nil, invalidArg("режимы шлюза (GATEWAY_*) доступны только в сборке OpenWrt (W8); на десктопе — SYSTEM_PROXY/TUN")
+	}
+
+	st := s.buildSettings(mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN)
+	var warnings []string
+	if mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN {
+		// FR-UI-279: в TUN слушателей на loopback нет вообще — mixed
+		// отключает конфигбилдер; предупреждение для пользователя.
+		warnings = append(warnings, "tun_mixed_disabled: в режиме TUN mixed-слушатель отключён (слушателей на loopback нет)")
+	} else {
+		if err := s.validateInboundLAN(st.Inbound); err != nil {
+			return nil, nil, err
+		}
+	}
+
+	var group *model.Group
+	if profile.GroupID != 0 {
+		g, err := s.st.GetGroup(profile.GroupID)
+		if err != nil {
+			return nil, nil, err
+		}
+		group = g
+	}
+	preset, err := s.activePreset()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	result, err := cfgbuild.Build(cfgbuild.BuildRequest{
+		Profile:  profile,
+		Group:    group,
+		Settings: st,
+		Lookup:   s.st.GetProfile,
+		Preset:   preset,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	configJSON, err := cfgbuild.MarshalIndent(result.Config)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	modeStr := "system_proxy"
+	if mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN {
+		modeStr = "tun"
+	}
+	startCtx, cancel := context.WithTimeout(ctx, inst.StartTimeout) // LNB-06
+	defer cancel()
+	err = s.inst.Start(startCtx, inst.RunInfo{
+		ProfileID:   profile.ID,
+		GroupID:     profile.GroupID,
+		ProfileName: profile.Name,
+		Mode:        modeStr,
+		ConfigJSON:  configJSON,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	// Секреты конфига никогда не логируются (LNB-01/28): журнал получает
+	// только факт запуска; полный конфиг — GetRuntimeConfig (redacted).
+	s.logs.Logf(logs.LevelInfo, logs.SourceCore, "инстанс запущен: профиль %d (%s), режим %s", profile.ID, profile.Type, modeStr)
+	return s.coreStatus(), warnings, nil
+}
+
+// rememberedMode — последний режим профиля (remember.modes, перенос §5.4;
+// формат NekoBox — список "system_proxy"/"tun"; пусто = не запомнен).
+func (s *Server) rememberedMode() lavrayv1.ConnectMode {
+	for _, v := range s.settingStringList("remember.modes") {
+		switch strings.TrimSpace(v) {
+		case "tun", "vpn":
+			return lavrayv1.ConnectMode_CONNECT_MODE_TUN
+		case "system_proxy", "proxy":
+			return lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY
+		}
+	}
+	return lavrayv1.ConnectMode_CONNECT_MODE_UNSPECIFIED
+}
+
+// Connect — FR-UI-032. Ровно один источник профиля: profile_id или inline.
+func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.ConnectRequest]) (*connect.Response[lavrayv1.ConnectResponse], error) {
+	in := req.Msg
+	if in.ProfileId != nil && in.InlineProfile != nil {
+		return nil, invalidArg("задан и profile_id, и inline_profile — ровно один источник")
+	}
+	var profile *model.Profile
+	if in.ProfileId != nil {
+		p, err := s.st.GetProfile(in.GetProfileId())
+		if err != nil {
+			return nil, err
+		}
+		profile = p
+	} else if in.InlineProfile != nil {
+		p, err := profileToModel(in.InlineProfile)
+		if err != nil {
+			return nil, err
+		}
+		// inline: подключение без сохранения — группа может быть не указана
+		profile = p
+	} else {
+		return nil, invalidArg("не задан ни profile_id, ни inline_profile")
+	}
+
+	if in.GetValidateOnly() {
+		// dry-run: собрать и провалидировать, не стартуя (редактор/диагностика)
+		if _, err := s.dryRunBuild(profile, in.GetMode()); err != nil {
+			return nil, err
+		}
+		warnings := []string{"validate_only: конфиг собран и валиден, инстанс не запущен"}
+		if in.GetMode() == lavrayv1.ConnectMode_CONNECT_MODE_TUN {
+			warnings = append(warnings, "tun_mixed_disabled: в режиме TUN mixed-слушатель отключён")
+		}
+		return connect.NewResponse(&lavrayv1.ConnectResponse{
+			Status:   s.coreStatus(),
+			Warnings: warnings,
+		}), nil
+	}
+
+	status, warnings, err := s.startRun(ctx, profile, in.GetMode())
+	if err != nil {
+		if errors.Is(err, inst.ErrAlreadyRunning) {
+			return nil, failedPrecondition("соединение уже активно: используйте Disconnect или RestartProfile")
+		}
+		return nil, err
+	}
+	return connect.NewResponse(&lavrayv1.ConnectResponse{Status: status, Warnings: warnings}), nil
+}
+
+// dryRunBuild — сборка без запуска (валидация профиля/настроек).
+func (s *Server) dryRunBuild(profile *model.Profile, mode lavrayv1.ConnectMode) (*cfgbuild.BuildResult, error) {
+	if profile.Type == model.TypeNaive || profile.Type == model.TypeCustomExternal {
+		if !s.settingBool("enable_external_cores") {
+			return nil, failedPrecondition("тип %s требует внешнего ядра (enable_external_cores)", profile.Type)
+		}
+	}
+	if mode == lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TPROXY || mode == lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TUN {
+		return nil, invalidArg("режимы шлюза доступны только в сборке OpenWrt (W8)")
+	}
+	st := s.buildSettings(mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN)
+	if mode != lavrayv1.ConnectMode_CONNECT_MODE_TUN {
+		if err := s.validateInboundLAN(st.Inbound); err != nil {
+			return nil, err
+		}
+	}
+	var group *model.Group
+	if profile.GroupID != 0 {
+		g, err := s.st.GetGroup(profile.GroupID)
+		if err != nil {
+			return nil, err
+		}
+		group = g
+	}
+	preset, err := s.activePreset()
+	if err != nil {
+		return nil, err
+	}
+	return cfgbuild.Build(cfgbuild.BuildRequest{
+		Profile: profile, Group: group, Settings: st, Lookup: s.st.GetProfile, Preset: preset,
+	})
+}
+
+// Disconnect — FR-UI-033. Финальная статистика (final_stats) заполняет W7
+// (clash-api/tracker); здесь — остановка с таймаутом LNB-06.
+func (s *Server) Disconnect(ctx context.Context, req *connect.Request[lavrayv1.DisconnectRequest]) (*connect.Response[lavrayv1.DisconnectResponse], error) {
+	stopCtx, cancel := context.WithTimeout(ctx, inst.StopTimeout)
+	defer cancel()
+	if err := s.inst.Stop(stopCtx); err != nil {
+		return nil, err
+	}
+	s.logs.Logf(logs.LevelInfo, logs.SourceCore, "инстанс остановлен")
+	return connect.NewResponse(&lavrayv1.DisconnectResponse{}), nil
+}
+
+// RestartProfile — FR-UI-020: тот же профиль и режим, конфиг пересобирается.
+func (s *Server) RestartProfile(ctx context.Context, req *connect.Request[lavrayv1.RestartProfileRequest]) (*connect.Response[lavrayv1.ConnectResponse], error) {
+	st := s.inst.Status()
+	if st.Run == nil {
+		return nil, failedPrecondition("перезапуск требует активного соединения (инстанс не запущен)")
+	}
+	profileID := st.Run.ProfileID
+	if profileID == 0 {
+		return nil, failedPrecondition("перезапуск inline-профиля невозможен: инстанс запущен без сохранённого профиля")
+	}
+	profile, err := s.st.GetProfile(profileID)
+	if err != nil {
+		return nil, err
+	}
+	mode := connectModeOf(st.Run.Mode)
+
+	stopCtx, cancel := context.WithTimeout(ctx, inst.StopTimeout)
+	defer cancel()
+	if err := s.inst.Stop(stopCtx); err != nil {
+		return nil, err
+	}
+	status, warnings, err := s.startRun(ctx, profile, mode)
+	if err != nil {
+		return nil, err
+	}
+	return connect.NewResponse(&lavrayv1.ConnectResponse{Status: status, Warnings: warnings}), nil
+}
+
+// ============================================================================
+// Статус и события
+// ============================================================================
+
+func (s *Server) GetStatus(ctx context.Context, req *connect.Request[lavrayv1.GetStatusRequest]) (*connect.Response[lavrayv1.CoreStatus], error) {
+	return connect.NewResponse(s.coreStatus()), nil
+}
+
+// SubscribeEvents — поток CoreEvent. Первый кадр — снимок (контракт);
+// далее — каждое изменение состояния FSM. Фильтр event_kinds: пока
+// поддерживается только "state_changed" (W6); неизвестные фильтры — все.
+func (s *Server) SubscribeEvents(ctx context.Context, req *connect.Request[lavrayv1.SubscribeEventsRequest], stream *connect.ServerStream[lavrayv1.CoreEvent]) error {
+	// первый кадр — полный CoreStatus
+	if err := stream.Send(&lavrayv1.CoreEvent{
+		TsMs: nowMs(),
+		Kind: &lavrayv1.CoreEvent_StateChanged{StateChanged: s.coreStatus()},
+	}); err != nil {
+		return err
+	}
+	ch, cancel := s.inst.Subscribe()
+	defer cancel()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil // клиент ушёл — тихое завершение стрима
+		case ev, ok := <-ch:
+			if !ok {
+				// Shutdown — сообщаем о скором завершении ядра
+				_ = stream.Send(&lavrayv1.CoreEvent{
+					TsMs: nowMs(),
+					Kind: &lavrayv1.CoreEvent_ShutdownImminent{ShutdownImminent: "shutdown"},
+				})
+				return nil
+			}
+			cs := s.statusFromInst(ev.Status)
+			if err := stream.Send(&lavrayv1.CoreEvent{
+				TsMs: nowMs(),
+				Kind: &lavrayv1.CoreEvent_StateChanged{StateChanged: cs},
+			}); err != nil {
+				return err
+			}
+		}
+	}
+}
+
+// statusFromInst — CoreStatus из снимка менеджера (без перечитывания
+// настроек — их снимок может меняться независимо от FSM).
+func (s *Server) statusFromInst(st inst.Status) *lavrayv1.CoreStatus {
+	cs := s.coreStatus()
+	cs.State = coreStateOf(st.State)
+	cs.ActiveProfileId = nil
+	cs.ActiveGroupId = nil
+	cs.ActiveProfileName = nil
+	cs.StartedAtMs = nil
+	cs.Mode = connectModeOf("")
+	if st.Run != nil {
+		if st.Run.ProfileID != 0 {
+			cs.ActiveProfileId = int64p(st.Run.ProfileID)
+		}
+		if st.Run.GroupID != 0 {
+			cs.ActiveGroupId = int64p(st.Run.GroupID)
+		}
+		if st.Run.ProfileName != "" {
+			cs.ActiveProfileName = strp(st.Run.ProfileName)
+		}
+		cs.Mode = connectModeOf(st.Run.Mode)
+		if st.Run.StartedAtMs != 0 {
+			cs.StartedAtMs = int64p(st.Run.StartedAtMs)
+		}
+	}
+	if st.LastError != "" {
+		cs.LastError = strp(st.LastError)
+	} else {
+		cs.LastError = nil
+	}
+	return cs
+}
+
+// GetRuntimeConfig — конфиг текущего/последнего запуска, redacted (LNB-28:
+// без паролей/uuid/токенов; в логи конфиг не пишется никогда — LNB-01).
+func (s *Server) GetRuntimeConfig(ctx context.Context, req *connect.Request[lavrayv1.GetRuntimeConfigRequest]) (*connect.Response[lavrayv1.GetRuntimeConfigResponse], error) {
+	st := s.inst.Status()
+	if len(st.LastConfig) == 0 {
+		return nil, notFound("конфиг ещё не собирался (инстанс ни разу не запускался)")
+	}
+	resp := &lavrayv1.GetRuntimeConfigResponse{SingBoxJson: logs.Redact(string(st.LastConfig))}
+	if st.Run != nil && st.Run.ProfileID != 0 {
+		resp.ProfileId = int64p(st.Run.ProfileID)
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// Shutdown — AUDIT §7.1.2: graceful instance.Close() ДО выхода; сам выход из
+// процесса — вызывающая сторона (OnShutdown; headless W8).
+func (s *Server) Shutdown(ctx context.Context, req *connect.Request[lavrayv1.ShutdownRequest]) (*connect.Response[lavrayv1.Empty], error) {
+	s.logs.Logf(logs.LevelInfo, logs.SourceCore, "Shutdown: graceful-остановка (reason=%d)", int(req.Msg.GetReason()))
+	stopCtx, cancel := context.WithTimeout(ctx, inst.StopTimeout)
+	defer cancel()
+	if err := s.inst.Shutdown(stopCtx); err != nil {
+		s.logs.Logf(logs.LevelError, logs.SourceCore, "Shutdown: остановка инстанса: %v", err)
+		return nil, err
+	}
+	if s.OnShutdown != nil {
+		s.OnShutdown(ctx)
+	}
+	return connect.NewResponse(&lavrayv1.Empty{}), nil
+}

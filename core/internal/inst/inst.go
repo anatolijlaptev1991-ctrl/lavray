@@ -1,0 +1,287 @@
+// Package inst — менеджер инстанса sing-box (W6, core-port-plan §6.1):
+// ОДИН активный инстанс под мьютексом (fix AUDIT §7.1.1), FSM состояний
+// (FR-UI-261), таймауты Connect 15 с / Disconnect 10 с (LNB-06), Start поверх
+// бегущего → FAILED_PRECONDITION.
+//
+// Сам sing-box НЕ запускается здесь: Runner — интерфейс. Реальный раннер
+// (box.New форка sing-box) — в singbox.go ЗА BUILD-ТЕГОМ //go:build
+// singbox_run (локальная сборка без сети не тянет модуль форка); базовая
+// сборка использует NopRunner (внятная ошибка), тесты — FakeRunner.
+package inst
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+)
+
+// Таймауты FSM (LNB-06).
+const (
+	StartTimeout = 15 * time.Second
+	StopTimeout  = 10 * time.Second
+)
+
+// CoreVersion — версия ядра (core_version в CoreStatus). Схема UPDATE-SYSTEM
+// §7 — «1.14.1-lav.N»; до сборочного штампа (W8, пин форка из
+// libs/get_source_env.sh) — плейсхолдер этапа портирования.
+const CoreVersion = "0.1.0-w6"
+
+// State — FSM инстанса (FR-UI-261; тексты для UI даёт CoreState контракта).
+type State int
+
+const (
+	StateIdle     State = iota // инстанс не запущен
+	StateStarting              // сборка конфига + старт
+	StateReady                 // работает
+	StateStopping              // graceful-остановка в процессе
+	StateCrashed               // старт/остановка не удалась (детали в LastError)
+)
+
+func (s State) String() string {
+	switch s {
+	case StateIdle:
+		return "idle"
+	case StateStarting:
+		return "starting"
+	case StateReady:
+		return "ready"
+	case StateStopping:
+		return "stopping"
+	case StateCrashed:
+		return "crashed"
+	}
+	return fmt.Sprintf("state(%d)", int(s))
+}
+
+// Ошибки менеджера (API-слой маппит их в Connect-коды).
+var (
+	// ErrAlreadyRunning — Start поверх бегущего (FAILED_PRECONDITION).
+	ErrAlreadyRunning = errors.New("inst: соединение уже активно (нужен Disconnect/RestartProfile)")
+	// ErrNotRunning — Restart/Disconnect без активного соединения.
+	ErrNotRunning = errors.New("inst: активного соединения нет")
+)
+
+// RunInfo — параметры запуска (что и как запущено; конфиг собирает слой API).
+type RunInfo struct {
+	ProfileID   int64
+	GroupID     int64
+	ProfileName string
+	Mode        string // "system_proxy" | "tun" | "gateway_tproxy" | "gateway_tun"
+	ConfigJSON  []byte // конфиг sing-box текущего запуска
+	StartedAtMs int64
+}
+
+// Status — снимок менеджера (безопасно копируется).
+type Status struct {
+	State      State
+	Run        *RunInfo // nil = idle
+	LastError  string
+	LastConfig []byte // конфиг текущего/ПОСЛЕДНЕГО запуска (redact — слой API)
+}
+
+// CoreStateIDLE-совместимость: CoreVersion отдаётся отдельно (константа).
+func (s Status) ActiveProfileID() int64 {
+	if s.Run == nil {
+		return 0
+	}
+	return s.Run.ProfileID
+}
+
+// Runner — интерфейс запуска инстанса sing-box. Реализации: SingBoxRunner
+// (тег singbox_run), FakeRunner (тесты), NopRunner (сборка без тега).
+//
+// Контракт: Start возвращается после успешного старта (или с ошибкой);
+// повторный Start на том же Runner без Stop между — ошибка. Stop — graceful:
+// закрыть TUN/маршруты/инбаунды и дождаться остановки. Реализации должны
+// быть готовы к Stop после НЕУДАВШЕГОСЯ Start (no-op).
+type Runner interface {
+	Start(ctx context.Context, configJSON []byte) error
+	Stop(ctx context.Context) error
+}
+
+// NopRunner — раннер по умолчанию в сборке без тега singbox_run: внятная
+// ошибка вместо падения (десктоп-оболочка собирается с тегом; CI собирает
+// оба варианта).
+type NopRunner struct{}
+
+// Start всегда объясняет, почему инстанс не стартует.
+func (NopRunner) Start(ctx context.Context, configJSON []byte) error {
+	return errors.New("inst: sing-box не встроен в эту сборку (пересоберите с тегом singbox_run)")
+}
+
+// Stop — no-op.
+func (NopRunner) Stop(ctx context.Context) error { return nil }
+
+// Manager — единственный активный инстанс. Все методы можно звать из любых
+// горутин; события состояний рассылаются подписчикам (SubscribeEvents W6+).
+type Manager struct {
+	mu     sync.Mutex
+	runner Runner
+
+	state      State
+	run        *RunInfo
+	lastError  string
+	lastConfig []byte
+
+	subMu  sync.Mutex
+	subs   map[chan Event]struct{}
+	closed bool // Shutdown отработал
+}
+
+// Event — уведомление об изменении состояния (полный снимок — headless-режим
+// контракта: событие несёт состояние, а не дельту).
+type Event struct {
+	Status Status
+}
+
+// NewManager создаёт менеджера поверх runner (nil → NopRunner).
+func NewManager(runner Runner) *Manager {
+	if runner == nil {
+		runner = NopRunner{}
+	}
+	return &Manager{runner: runner, subs: map[chan Event]struct{}{}}
+}
+
+// Start запускает инстанс с готовым конфигом: Idle/Crashed → Starting →
+// Ready; ошибка старта → Crashed + LastError. Start поверх Ready/Starting/
+// Stopping → ErrAlreadyRunning. ctx ограничивает время старта (вызывающий
+// даёт ≤ StartTimeout; сверх него — DeadlineExceeded, состояние Crashed).
+func (m *Manager) Start(ctx context.Context, info RunInfo) error {
+	m.mu.Lock()
+	switch m.state {
+	case StateReady, StateStarting, StateStopping:
+		m.mu.Unlock()
+		return ErrAlreadyRunning
+	}
+	if info.StartedAtMs == 0 {
+		info.StartedAtMs = time.Now().UnixMilli()
+	}
+	m.state = StateStarting
+	m.run = &info
+	m.lastError = ""
+	m.mu.Unlock()
+	m.notifySnapshot()
+
+	err := m.runner.Start(ctx, info.ConfigJSON)
+	m.mu.Lock()
+	if err != nil {
+		m.state = StateCrashed
+		m.lastError = err.Error()
+		m.mu.Unlock()
+		m.notifySnapshot()
+		return fmt.Errorf("inst: старт инстанса: %w", err)
+	}
+	m.state = StateReady
+	m.lastConfig = append([]byte(nil), info.ConfigJSON...)
+	m.mu.Unlock()
+	m.notifySnapshot()
+	return nil
+}
+
+// Stop останавливает инстанс: Ready → Stopping → Idle. Неактивный
+// (Idle/Crashed) Stop — no-op (идемпотентность Disconnect). ctx ограничивает
+// graceful-ожидание (≤ StopTimeout); таймаут → Crashed + ошибка (раннер может
+// ещё дорывать TUN в фоне — перезапуск в этом состоянии небезопасен, о чём и
+// говорит состояние).
+func (m *Manager) Stop(ctx context.Context) error {
+	m.mu.Lock()
+	switch m.state {
+	case StateIdle, StateCrashed:
+		m.mu.Unlock()
+		return nil
+	case StateStarting:
+		m.mu.Unlock()
+		return ErrNotRunning // старт в полёте: Stop бессмысленен (Runner.Start ещё не вернулся)
+	}
+	m.state = StateStopping
+	m.mu.Unlock()
+	m.notifySnapshot()
+
+	err := m.runner.Stop(ctx)
+
+	m.mu.Lock()
+	if err != nil {
+		m.state = StateCrashed
+		m.lastError = err.Error()
+		m.mu.Unlock()
+		m.notifySnapshot()
+		return fmt.Errorf("inst: остановка инстанса: %w", err)
+	}
+	m.state = StateIdle
+	m.run = nil
+	m.mu.Unlock()
+	m.notifySnapshot()
+	return nil
+}
+
+// Status возвращает снимок менеджера.
+func (m *Manager) Status() Status {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	st := Status{State: m.state, LastError: m.lastError}
+	if m.run != nil {
+		r := *m.run
+		st.Run = &r
+	}
+	if m.lastConfig != nil {
+		st.LastConfig = append([]byte(nil), m.lastConfig...)
+	}
+	return st
+}
+
+// Subscribe — поток событий состояний. Первый кадр подписчик получает сам
+// (снимок Status() до подписки — контракт SubscribeEvents), далее — каждый
+// переход. Возврат: канал, отписка.
+func (m *Manager) Subscribe() (<-chan Event, func()) {
+	ch := make(chan Event, 8)
+	m.subMu.Lock()
+	if m.closed {
+		m.subMu.Unlock()
+		close(ch)
+		return ch, func() {}
+	}
+	m.subs[ch] = struct{}{}
+	m.subMu.Unlock()
+	return ch, func() {
+		m.subMu.Lock()
+		delete(m.subs, ch)
+		m.subMu.Unlock()
+	}
+}
+
+// notifySnapshot рассылает снимок подписчикам (неблокирующе).
+func (m *Manager) notifySnapshot() {
+	st := m.Status()
+	m.subMu.Lock()
+	defer m.subMu.Unlock()
+	if m.closed {
+		return
+	}
+	for ch := range m.subs {
+		select {
+		case ch <- Event{Status: st}:
+		default: // переполнение: подписчик отстанет — пропускаем кадр
+		}
+	}
+}
+
+// Shutdown — финальное закрытие (CoreService.Shutdown): остановка инстанса
+// (graceful, AUDIT §7.1.2 — Close до выхода, никакого зависшего TUN) и
+// закрытие подписок. Повторный вызов — no-op.
+func (m *Manager) Shutdown(ctx context.Context) error {
+	m.subMu.Lock()
+	if m.closed {
+		m.subMu.Unlock()
+		return nil
+	}
+	m.closed = true
+	subs := m.subs
+	m.subs = map[chan Event]struct{}{}
+	m.subMu.Unlock()
+	for ch := range subs {
+		close(ch)
+	}
+	return m.Stop(ctx)
+}

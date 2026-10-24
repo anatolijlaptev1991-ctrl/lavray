@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -19,11 +20,25 @@ const testSubBody = "trojan://pass@example.org:443#A\ntrojan://pass2@example.org
 
 func newTestStore(t *testing.T) *store.Store {
 	t.Helper()
-	st, err := store.Open(t.TempDir())
+	// Не t.TempDir(): на Windows его RemoveAll гоняется с освобождением
+	// хэндлов -wal/-shm — флейк «directory is not empty» (см. store_test.go).
+	dir, err := os.MkdirTemp("", "lavray-subs-test-*")
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { st.Close() })
+	st, err := store.Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = st.Close()
+		for i := 0; i < 50; i++ {
+			if err := os.RemoveAll(dir); err == nil {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	})
 	return st
 }
 

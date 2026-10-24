@@ -1,7 +1,8 @@
-// Package cfgbuild — конфигбилдер LAVRay (W4: §3.4 шаги 1–3 плана
-// core-port-plan.md): allowlist-мерж custom_config, outbounds из профилей
-// всех типов модели, цепочки с тегами proxy/g-/c-, каркас конфига
-// (log + outbounds-минимум + dns/route-заглушки под W5).
+// Package cfgbuild — конфигбилдер LAVRay (W4: §3.4 шаги 1–3; W5: шаги 4–7
+// плана core-port-plan.md): allowlist-мерж custom_config, outbounds из
+// профилей всех типов модели, цепочки с тегами proxy/g-/c-, inbounds
+// (mixed + TUN), DNS из пресета (simple/advanced), route-правила пресета с
+// rule-set из поставки .srs, cache_file, kill-switch.
 //
 // Оракул порта: nekoray/db/ConfigBuilder.cpp + fmt/Bean2CoreObj_box.cpp.
 package cfgbuild
@@ -13,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/presets"
 )
 
 // ProfileLookup — разрешение id → профиль (store.GetProfile, W6 подставит
@@ -28,12 +30,56 @@ type MuxSettings struct {
 	DefaultOn   bool   `json:"default_on"` // multiplex_status == 0 (default) → включён?
 }
 
+// InboundSettings — слушатель mixed (inbound.* из §5.4; mixed обслуживает
+// socks и http одновременно — «mixed/socks/http по настройкам» оракула).
+type InboundSettings struct {
+	Address           string `json:"address"`             // default 127.0.0.1 (не-loopback требует auth — FR-UI-279)
+	Port              int    `json:"port"`                // default 2080; <=0 — слушатель выключен
+	AuthUser          string `json:"auth_user,omitempty"` // оба поля — иначе auth не применяется (оракул NeedAuth)
+	AuthPass          string `json:"auth_pass,omitempty"`
+	CustomInboundJSON string `json:"custom_inbound,omitempty"` // {"inbounds":[...]} — добавка к сгенерированным
+}
+
+// TunSettings — внутренний TUN (tun.* из §5.4; FR-UI-178/184, kill-switch
+// FR-UI-275).
+type TunSettings struct {
+	Enabled       bool   `json:"enabled"`
+	InterfaceName string `json:"interface_name,omitempty"` // default lavray-tun (darwin: utun9 — THREAT-MODEL «детект VPN», имя настраиваемое)
+	MTU           int    `json:"mtu,omitempty"`            // default 9000
+	Stack         string `json:"stack,omitempty"`          // gvisor | system | mixed; default gvisor
+	StrictRoute   bool   `json:"strict_route,omitempty"`
+	IPv6          bool   `json:"ipv6,omitempty"`           // +fdfe:dcba:9876::1/126
+	FakeDNS       bool   `json:"fake_dns,omitempty"`       // FR-UI-151
+	BypassProcess string `json:"bypass_process,omitempty"` // многострочник имён процессов
+	BypassCIDR    string `json:"bypass_cidr,omitempty"`    // многострочник CIDR
+	Whitelist     bool   `json:"whitelist,omitempty"`      // инвертирует ТОЛЬКО tun-списки (поправка №28)
+	KillSwitch    bool   `json:"kill_switch,omitempty"`    // FR-UI-275: форсирует strict_route
+}
+
 // BuildSettings — параметры сборки, влияющие на конфиг (подмножество карты
 // настроек; W6 заполняет из settings-хранилища).
 type BuildSettings struct {
 	LogLevel             string      `json:"log_level"`              // log.level (default "info")
 	AllowInsecureDefault bool        `json:"allow_insecure_default"` // security.allow_insecure_default (skip_cert)
 	Mux                  MuxSettings `json:"mux"`
+
+	Inbound InboundSettings `json:"inbound"`
+	Tun     TunSettings     `json:"tun"`
+
+	// UnderlyingDNS — core.underlying_dns (dns-local); "" → пресет → "local".
+	UnderlyingDNS string `json:"underlying_dns,omitempty"`
+	// CustomRouteGlobalJSON — routing.custom_global ({"rules":[...]}) —
+	// пользовательские глобальные правила поверх пресета.
+	CustomRouteGlobalJSON string `json:"custom_route_global,omitempty"`
+	// GeoDir — каталог поставки .srs (rule-set type=local, FR-UI-266/LNB-31);
+	// "" → относительный "geo" (рабочий каталог процесса, W6 подставит абсолютный).
+	GeoDir string `json:"geo_dir,omitempty"`
+	// CacheFilePath — experimental.cache_file.path; "" → путь по умолчанию sing-box.
+	CacheFilePath string `json:"cache_file_path,omitempty"`
+	// GOOS — платформа для процессных правил пресета ("" → runtime.GOOS).
+	GOOS string `json:"goos,omitempty"`
+	// OpenWRT — сборка шлюза: процессные правила опускаются (SCHEMA §2.1).
+	OpenWRT bool `json:"openwrt,omitempty"`
 }
 
 // DefaultSettings — значения по умолчанию (model.SettingDescriptors).
@@ -41,17 +87,20 @@ func DefaultSettings() *BuildSettings {
 	return &BuildSettings{
 		LogLevel: "info",
 		Mux:      MuxSettings{Protocol: "h2mux", Concurrency: -1},
+		Inbound:  InboundSettings{Address: "127.0.0.1", Port: 2080},
+		Tun:      TunSettings{MTU: 9000, Stack: "gvisor"},
 	}
 }
 
 // BuildRequest — вход сборки конфига.
 type BuildRequest struct {
-	Profile   *model.Profile // целевой профиль (в т.ч. chain / custom)
-	Group     *model.Group   // группа профиля (front_proxy_id), может быть nil
-	Settings  *BuildSettings // nil → DefaultSettings
-	Lookup    ProfileLookup  // обязательна для chain/front proxy
-	ForTest   bool           // §3.1.9: режим теста (W5 влияет на inbounds/правила)
-	ForExport bool           // §3.1.9: экспорт (W5 убирает auto_detect_interface)
+	Profile   *model.Profile  // целевой профиль (в т.ч. chain / custom)
+	Group     *model.Group    // группа профиля (front_proxy_id), может быть nil
+	Settings  *BuildSettings  // nil → DefaultSettings
+	Lookup    ProfileLookup   // обязательна для chain/front proxy
+	Preset    *presets.Preset // активный маршрутный пресет; nil → нейтральный (см. neutralPreset)
+	ForTest   bool            // §3.1.9: режим теста (пустые inbounds, без user-правил)
+	ForExport bool            // §3.1.9: экспорт (без auto_detect_interface)
 }
 
 // BuildResult — результат сборки.
@@ -128,10 +177,47 @@ func Build(req BuildRequest) (*BuildResult, error) {
 	return res, nil
 }
 
-// buildSingBoxConfig — каркас + outbounds (W4); inbounds/DNS/route — W5.
+// neutralPreset — пресет по умолчанию при Preset==nil (W6 всегда передаёт
+// routing.active_preset; дефолты настройки — "lav-global", здесь —
+// эквивалент global: proxy final, sniffing для маршрутизации, раздельный
+// DNS google-DoH/local с dns_routing).
+func neutralPreset() *presets.Preset {
+	return &presets.Preset{
+		Routing: presets.Routing{
+			DefOutbound:  "proxy",
+			SniffingMode: 1,
+		},
+		DNS: presets.DNSBlock{
+			Mode:           "simple",
+			RemoteDNS:      "https://dns.google/dns-query",
+			DirectDNS:      "local",
+			RoutingEnabled: true,
+		},
+	}
+}
+
+// buildSingBoxConfig — каркас + outbounds (W4) + inbounds/DNS/route/
+// experimental (W5, порт BuildConfigSingBox ConfigBuilder.cpp:389–771).
 func buildSingBoxConfig(req BuildRequest, st *BuildSettings, res *BuildResult) (map[string]any, error) {
+	// Частичные настройки (W6 может передать подмножество полей): пустой
+	// уровень лога — как дефолт "info" (SettingDescriptors log.level).
+	logLevel := st.LogLevel
+	if logLevel == "" {
+		logLevel = "info"
+	}
 	cfg := map[string]any{
-		"log": map[string]any{"level": st.LogLevel},
+		"log": map[string]any{"level": logLevel},
+	}
+
+	// Inbounds: mixed (+custom) и TUN (FR-UI-279: в режиме TUN mixed-слушатель
+	// не эмитится вовсе; forTest — без inbounds, но секция присутствует —
+	// пустой массив, как в оракуле).
+	inbounds, err := buildInbounds(st, req.ForTest)
+	if err != nil {
+		return nil, err
+	}
+	if inbounds == nil {
+		inbounds = []any{}
 	}
 
 	// Цепочка (или одиночный профиль) → outbounds с тегами proxy/g-/c-.
@@ -150,15 +236,35 @@ func buildSingBoxConfig(req BuildRequest, st *BuildSettings, res *BuildResult) (
 		map[string]any{"type": "direct", "tag": "bypass"},
 		map[string]any{"type": "block", "tag": "block"},
 	)
+	cfg["inbounds"] = inbounds
 	cfg["outbounds"] = outbounds
 
-	// Заглушки W5: полноценные typed-DNS (§3.1.4) и route (§3.1.5) — W5.
-	// Форма валидна для sing-box 1.14 и нейтральна (dns-local — сервер
-	// «underlying DNS» оракула; route без правил).
-	cfg["dns"] = map[string]any{
-		"servers": []any{map[string]any{"tag": "dns-local", "type": "local"}},
+	preset := req.Preset
+	if preset == nil {
+		preset = neutralPreset()
 	}
-	cfg["route"] = map[string]any{"rules": []any{}}
+
+	// DNS строится ПЕРВЫМ (как в оракуле): rule-set-определения geosite:
+	// из dns-правил собираются раньше маршрутных — порядок route.rule_set
+	// детерминирован порядком встречи.
+	rs := newRuleSetCollector(st)
+	dnsObj, err := buildDNS(preset, st, res, req.ForTest, rs)
+	if err != nil {
+		return nil, err
+	}
+	cfg["dns"] = dnsObj
+
+	routeObj, err := buildRoute(preset, st, res, req.ForTest, req.ForExport, rs)
+	if err != nil {
+		return nil, err
+	}
+	cfg["route"] = routeObj
+
+	// experimental.cache_file — включён всегда в рабочих конфигах (LNB-36,
+	// FR-UI-266: rule-set кэш + старт без сети).
+	if !req.ForTest {
+		cfg["experimental"] = buildExperimental(st)
+	}
 	return cfg, nil
 }
 

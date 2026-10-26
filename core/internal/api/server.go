@@ -47,9 +47,13 @@ type Server struct {
 	OnShutdown func(ctx context.Context)
 
 	// appVersion — версия приложения (оболочка сообщает при старте);
-	// updater — TUF-lite клиент (nil до конфигурации обвязкой W8-релиза).
+	// updater — TUF-lite клиент (nil до конфигурации обвязкой W8-релиза);
+	// traffic — источник мгновенной статистики (clash-api — W8-релиз);
+	// conns — трекер соединений (clash-api — W8-релиз).
 	appVersion string
 	updater    *updates.Client
+	traffic    TrafficSource
+	conns      ConnectionTracker
 
 	// ---- подписки: прогресс-мультиплексирование по group_id ----
 	subsMu      sync.Mutex
@@ -113,13 +117,13 @@ func (s *Server) Register(mux *http.ServeMux) {
 	path, h = lavrayv1connect.NewSettingsServiceHandler(s, opts...)
 	mount(path, h)
 	// W7/W8: заглушки — контракт доступен, методы отвечают UNIMPLEMENTED.
-	path, h = lavrayv1connect.NewLogServiceHandler(lavrayv1connect.UnimplementedLogServiceHandler{}, opts...)
+	path, h = lavrayv1connect.NewLogServiceHandler(s, opts...)
 	mount(path, h)
-	path, h = lavrayv1connect.NewStatsServiceHandler(lavrayv1connect.UnimplementedStatsServiceHandler{}, opts...)
+	path, h = lavrayv1connect.NewStatsServiceHandler(statsSvc{s}, opts...)
 	mount(path, h)
-	path, h = lavrayv1connect.NewConnectionServiceHandler(lavrayv1connect.UnimplementedConnectionServiceHandler{}, opts...)
+	path, h = lavrayv1connect.NewConnectionServiceHandler(s, opts...)
 	mount(path, h)
-	path, h = lavrayv1connect.NewDiagnosticsServiceHandler(lavrayv1connect.UnimplementedDiagnosticsServiceHandler{}, opts...)
+	path, h = lavrayv1connect.NewDiagnosticsServiceHandler(s, opts...)
 	mount(path, h)
 	path, h = lavrayv1connect.NewGatewayServiceHandler(lavrayv1connect.UnimplementedGatewayServiceHandler{}, opts...)
 	mount(path, h)

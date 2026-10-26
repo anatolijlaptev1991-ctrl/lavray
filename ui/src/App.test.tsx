@@ -97,10 +97,10 @@ describe('App scaffold smoke render', () => {
 
   it('shows a toast with an interpolated name (серверы, демо-тост)', () => {
     renderApp();
-    // Экран «Подключение» теперь боевой (RPC); демо-тост живёт на заглушке
-    // «Серверы» — переключаемся туда (Ctrl+2).
+    // «Подключение» и «Серверы» — боевые (RPC); демо-тост живёт на
+    // заглушке «Настройки» — переключаемся туда (Ctrl+5).
     act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: '2', ctrlKey: true }));
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '5', ctrlKey: true }));
     });
     const connect = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) =>
       b.textContent?.includes('Подключиться'),

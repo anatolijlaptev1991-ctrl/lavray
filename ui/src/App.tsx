@@ -13,6 +13,7 @@ import { SECTIONS, type Section, type SectionTab } from './app/sections';
 import { useI18n } from './hooks/useI18n';
 import { CoreContext, useCoreClients } from './hooks/useCore';
 import { ConnectionScreen } from './screens/screen_connection';
+import { ServersScreen } from './screens/screen_servers';
 import { applyDocumentLanguage, detectLanguage, setLanguage } from './lib/i18n';
 import {
   applyTheme,
@@ -142,6 +143,8 @@ function AppInner(): JSX.Element {
         <main id="main" className="content" aria-label={t(section.navKey)}>
           {section.id === 'connection' ? (
             <ConnectionScreen key="connection" />
+          ) : section.id === 'servers' ? (
+            <ServersScreen key="servers" />
           ) : (
             <ScreenStub
               key={`${section.id}/${tab.id}`}

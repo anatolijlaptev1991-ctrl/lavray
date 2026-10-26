@@ -318,3 +318,20 @@
 .conn-row { display: flex; justify-content: space-between; gap: var(--sp-3); padding: 8px 12px; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--b-subtle); font-size: .875rem; }
 .muted { color: var(--t3); }
 .toast-err { color: var(--danger, #c25050); font-size: .875rem; }
+
+/* ---------- Экран «Серверы» ---------- */
+.srv { display: flex; flex-direction: column; gap: var(--sp-3); }
+.srv-tools { display: flex; gap: var(--sp-2); align-items: center; flex-wrap: wrap; }
+.input { background: var(--surface); border: 1px solid var(--b-control); border-radius: var(--r-md); color: var(--t1); padding: 8px 12px; font: inherit; }
+.input.narrow { width: 72px; text-align: center; }
+.btn { background: var(--surface); border: 1px solid var(--b-control); border-radius: var(--r-md); color: var(--t1); padding: 8px 12px; font: inherit; cursor: pointer; }
+.btn.ghost { border: 0; background: transparent; color: var(--t3); padding: 4px 8px; }
+.btn.ghost:hover { color: var(--t1); }
+.srv-import { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--b-subtle); border-radius: var(--r-md); background: var(--surface); }
+.srv-import-row { display: flex; gap: var(--sp-2); align-items: center; }
+.srv-preview { margin: 0; padding-inline-start: 18px; color: var(--t2); font-size: .875rem; }
+.srv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.srv-row { display: grid; grid-template-columns: 92px 1fr auto auto; gap: var(--sp-3); align-items: center; padding: 8px 12px; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--b-subtle); font-size: .875rem; }
+.srv-type { color: var(--accent); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .02em; }
+.srv-name { color: var(--t1); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.toast-ok { color: var(--accent); font-size: .875rem; }

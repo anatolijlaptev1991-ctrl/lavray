@@ -1,7 +1,7 @@
 {
   "$schema": "preset.schema.v1.json",
   "version": 1,
-  "revision": 1,
+  "revision": 2,
   "id": "lav-ru",
   "builtin": true,
   "name": {
@@ -127,7 +127,8 @@
       "geosite:steam",
       "domain:exitgames.com",
       "domain:photonengine.io",
-      "domain:photonengine.com"
+      "domain:photonengine.com",
+      "domain:platipomiru.com"
     ],
     "block_domain": [
       "geosite:category-ads-all"
@@ -195,7 +196,8 @@
           "UnityCrashHandler64.exe"
         ]
       }
-    ]
+    ],
+    "custom_rules": "{\"rules\":[{\"domain_suffix\":[\"riotgames.com\",\"riotcdn.net\",\"rgpub.io\",\"leagueoflegends.com\"],\"outbound\":\"proxy\"}]}"
   },
   "dns": {
     "mode": "simple",

@@ -57,6 +57,11 @@
   why: контракт с W6/W3-парсером (синхронизировать)
   refs: [ревью N4]
 
+- id: custom-rules-first
+  where: route.go
+  what: custom-правила пресета применяются ПЕРЕД сгенерированными списками (как в C++-оракуле); отклонение «в конце» отменено обновлением пресета bd56088 (2026-10-26): пин Riot→proxy обязан иметь приоритет над geosite:riot в direct-списке
+  refs: [nekobox-ru-bypass-games bd56088]
+
 - id: custom-outbound-tag-guard
   where: builder.go
   what: custom_outbound может переопределить tag/detour цепочечного outbound (как в оракуле); broken-link возможность задокументирована, запрет — кандидат W5

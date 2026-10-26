@@ -109,7 +109,8 @@
         "domain_suffix": [
           "exitgames.com",
           "photonengine.io",
-          "photonengine.com"
+          "photonengine.com",
+          "platipomiru.com"
         ],
         "rule_set": [
           "geosite-category-ru",
@@ -307,6 +308,15 @@
         "protocol": "dns"
       },
       {
+        "domain_suffix": [
+          "riotgames.com",
+          "riotcdn.net",
+          "rgpub.io",
+          "leagueoflegends.com"
+        ],
+        "outbound": "proxy"
+      },
+      {
         "outbound": "block",
         "rule_set": [
           "geosite-category-ads-all"
@@ -418,7 +428,8 @@
         "domain_suffix": [
           "exitgames.com",
           "photonengine.io",
-          "photonengine.com"
+          "photonengine.com",
+          "platipomiru.com"
         ],
         "outbound": "bypass",
         "rule_set": [

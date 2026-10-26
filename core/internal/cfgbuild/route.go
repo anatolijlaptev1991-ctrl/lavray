@@ -1,7 +1,8 @@
 // route.go — route-секция из пресета (порт Routing-части BuildConfigSingBox,
 // ConfigBuilder.cpp:660–757) + experimental.cache_file. Порядок правил —
-// план §3.1.5: sniff → dns-hijack → block → proxy → direct (domain, затем ip)
-// → процессные правила пресета (платформы, SCHEMA §2.1) → tun-bypass
+// (обновление bd56088): sniff → dns-hijack → CUSTOM пресета (пины
+// имеют приоритет над списками — Riot→proxy выше geosite:riot) → block →
+// proxy → direct (domain, затем ip) → процессные правила (SCHEMA §2.1) → tun-bypass
 // (cidr/process, whitelist-инверсия ТОЛЬКО tun-списков — поправка ревью №28)
 // → built-in блокировки → custom (пресет custom_rules + custom_route_global).
 //
@@ -174,6 +175,23 @@ func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTe
 		})
 	}
 
+	// Custom-правила пресета — ПЕРВЫМИ (обновление пресета bd56088
+	// 2026-10-26: пин Riot→proxy обязан иметь приоритет над geosite:riot
+	// в direct-списке; соответствует и C++-оракулу, ставившему custom до
+	// сгенерированных списков). Custom-правила уже в формате sing-box.
+	if !forTest {
+		presetRules, err := parseCustomRules(preset.Routing.CustomRules, "preset.routing.custom_rules")
+		if err != nil {
+			return nil, err
+		}
+		rules = append(rules, presetRules...)
+		globalRules, err := parseCustomRules(st.CustomRouteGlobalJSON, "routing.custom_global")
+		if err != nil {
+			return nil, err
+		}
+		rules = append(rules, globalRules...)
+	}
+
 	// Списки пресета (§3.1.5): block → proxy → direct; домены, затем IP.
 	// Приоритет proxy перед direct-geosite — семантика google.ru
 	// (PRESET-LAV-RU §3.3). Выход proxy — тег цепочки ("proxy").
@@ -244,22 +262,6 @@ func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTe
 			"outbound":       "block",
 		},
 	)
-
-	// Custom-правила (§3.1.5 — последними): пресет custom_rules (JSON
-	// {"rules":[...]}) + глобальный custom_route_global настроек. Эмитируются
-	// «как есть» — уже в формате sing-box rules.
-	if !forTest {
-		presetRules, err := parseCustomRules(preset.Routing.CustomRules, "preset.routing.custom_rules")
-		if err != nil {
-			return nil, err
-		}
-		rules = append(rules, presetRules...)
-		globalRules, err := parseCustomRules(st.CustomRouteGlobalJSON, "routing.custom_global")
-		if err != nil {
-			return nil, err
-		}
-		rules = append(rules, globalRules...)
-	}
 
 	route["rules"] = rules
 	if defs := rs.list(); len(defs) > 0 {

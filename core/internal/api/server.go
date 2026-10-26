@@ -22,6 +22,7 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/presets"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
 )
 
 // Deps — зависимости сервера (все внедряются: cmd/lavray-core в W8, тесты —
@@ -44,6 +45,11 @@ type Server struct {
 	// OnShutdown вызывается после остановки инстанса при CoreService.Shutdown
 	// (W8 headless подставит выход из процесса; здесь — только остановка).
 	OnShutdown func(ctx context.Context)
+
+	// appVersion — версия приложения (оболочка сообщает при старте);
+	// updater — TUF-lite клиент (nil до конфигурации обвязкой W8-релиза).
+	appVersion string
+	updater    *updates.Client
 
 	// ---- подписки: прогресс-мультиплексирование по group_id ----
 	subsMu      sync.Mutex

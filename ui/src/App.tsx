@@ -11,6 +11,8 @@ import { Sidebar } from './components/Sidebar';
 import { Toast, type ToastState } from './components/Toast';
 import { SECTIONS, type Section, type SectionTab } from './app/sections';
 import { useI18n } from './hooks/useI18n';
+import { CoreContext, useCoreClients } from './hooks/useCore';
+import { ConnectionScreen } from './screens/screen_connection';
 import { applyDocumentLanguage, detectLanguage, setLanguage } from './lib/i18n';
 import {
   applyTheme,
@@ -35,6 +37,15 @@ function requireTab(section: Section, tabId: string): SectionTab {
 }
 
 export default function App(): JSX.Element {
+  const clients = useCoreClients();
+  return (
+    <CoreContext.Provider value={clients}>
+      <AppInner />
+    </CoreContext.Provider>
+  );
+}
+
+function AppInner(): JSX.Element {
   const { t, tf, lang } = useI18n();
 
   // Initial language from the environment (DS §9: OS language by default).
@@ -129,13 +140,17 @@ export default function App(): JSX.Element {
           }}
         />
         <main id="main" className="content" aria-label={t(section.navKey)}>
-          <ScreenStub
-            key={`${section.id}/${tab.id}`}
-            section={section}
-            tab={tab}
-            onTab={setTabId}
-            onConnectDemo={onConnectDemo}
-          />
+          {section.id === 'connection' ? (
+            <ConnectionScreen key="connection" />
+          ) : (
+            <ScreenStub
+              key={`${section.id}/${tab.id}`}
+              section={section}
+              tab={tab}
+              onTab={setTabId}
+              onConnectDemo={onConnectDemo}
+            />
+          )}
         </main>
       </div>
       <Toast toast={toast} onClose={closeToast} />

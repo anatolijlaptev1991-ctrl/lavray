@@ -68,9 +68,9 @@ describe('App scaffold smoke render', () => {
       'Диагностика',
       'Настройки',
     ]);
-    // First screen title + subtitle present, theme applied to <html>.
-    expect(document.querySelector('.scr-head h1')?.textContent).toBe('Подключение');
-    expect(document.querySelector('.scr-head .sub')?.textContent).toContain('Состояние');
+    // First screen — реальный экран «Подключение» (h2 + live-регион статуса).
+    expect(document.querySelector('.conn h2')?.textContent).toBe('Подключение');
+    expect(document.querySelector('#connState')).not.toBeNull();
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(document.documentElement.dataset.accent).toBe('amber');
   });
@@ -95,9 +95,13 @@ describe('App scaffold smoke render', () => {
     ]);
   });
 
-  it('shows a toast with an interpolated name', () => {
+  it('shows a toast with an interpolated name (серверы, демо-тост)', () => {
     renderApp();
-
+    // Экран «Подключение» теперь боевой (RPC); демо-тост живёт на заглушке
+    // «Серверы» — переключаемся туда (Ctrl+2).
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: '2', ctrlKey: true }));
+    });
     const connect = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) =>
       b.textContent?.includes('Подключиться'),
     );

@@ -182,6 +182,11 @@ jobs:
           cache-dependency-path: ui/package-lock.json
       - name: npm ci
         run: npm ci
+      - name: Проверка сгенерированного контракта (buf + protoc-gen-es)
+        run: |
+          npx buf generate proto
+          git diff --exit-code -- src/gen || {
+            echo "::error::src/gen устарел: запустите 'npx buf generate proto' и закоммитьте"; exit 1; }
       - name: tsc --noEmit
         run: npx tsc --noEmit
       - name: eslint

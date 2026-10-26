@@ -1,0 +1,7 @@
+# buf.gen.yaml — генерация TS-кода контракта для ui (connect-es).
+version: v2
+plugins:
+  - local: protoc-gen-es
+    out: src/gen
+    opt: target=ts
+    include_imports: true

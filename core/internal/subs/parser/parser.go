@@ -15,8 +15,7 @@
 // а не «0 профилей»; ошибки отдельных строк собираются в Result.Errors и не
 // валят весь пакет. Паник нет (инвариант FuzzParseContent).
 //
-// Clash YAML отложен: требует yaml-зависимость, решение за владельцем;
-// JSON-путь (sing-box outbounds) полностью поддержан.
+// Clash / Clash.Meta YAML — см. clash.go (proxies:-список в профили).
 package parser
 
 import (
@@ -47,6 +46,7 @@ const (
 	FormatBase64     = "base64"       // верхний уровень — base64-блоб
 	FormatSingBox    = "singbox-json" // sing-box JSON
 	FormatHapp       = "happ"         // расшифрованный happ://
+	FormatClash      = "clash-yaml"   // Clash / Clash.Meta YAML (FR-UI-119/121)
 	ErrEmptyContent  = "пустой ответ подписки"
 	ErrHTMLStubMsg   = "ответ похож на HTML-заглушку (captive portal / DPI)"
 	ErrTooLargeMsg   = "содержимое подписки превышает лимит"
@@ -137,7 +137,18 @@ func Parse(content []byte, opts Options) (*Result, error) {
 		}
 		// Валидный JSON без outbounds — не пробуем дальше (LNB-16: явная
 		// ошибка вместо молчаливых 0 профилей).
-		return nil, &Error{Msg: errUnrecognized + " (JSON без массива outbounds; Clash YAML не поддерживается)"}
+		return nil, &Error{Msg: errUnrecognized + " (JSON без массива outbounds)"}
+	}
+
+	// 1b) Clash / Clash.Meta YAML (FR-UI-119/121): большинство панелей
+	// отдают именно этот формат. Детектор дешёвый (строка «proxies:»),
+	// полный YAML-разбор — только после него.
+	if looksLikeClash(s) {
+		res, err := parseClash([]byte(s), opts)
+		if err != nil {
+			return nil, err
+		}
+		return res, nil
 	}
 
 	// 2) base64-блоб → рекурсия.

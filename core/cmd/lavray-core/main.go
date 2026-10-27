@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/api"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/headless"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
@@ -184,17 +185,14 @@ func authMiddleware(next http.Handler, token string, mux *logs.Mux) http.Handler
 	})
 }
 
+// runHeadless — сервисный режим (F19): автозапуск запомненного профиля и
+// авторестарт после падения через internal/headless.
 func runHeadless(ctx context.Context, server *api.Server, mux *logs.Mux) {
-	loop := headlessLoop{server: server, mux: mux}
-	_ = loop
-	// Полная интеграция с internal/headless — обвязка релизных сборок
-	// (нужен ConnectLast через хранилище remember_id; каркас ниже).
+	err := headless.Loop(ctx, server, headless.Options{})
+	if err != nil && !errors.Is(err, api.ErrNoRememberedProfile) {
+		mux.Logf("warn", "core", "headless-цикл завершён: %v", err)
+	}
 	<-ctx.Done()
-}
-
-type headlessLoop struct {
-	server *api.Server
-	mux    *logs.Mux
 }
 
 func defaultDataDir() string {

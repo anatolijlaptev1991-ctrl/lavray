@@ -1,7 +1,7 @@
 // screen_servers.tsx — «Серверы» (DS §8, FR-UI-081…099/257): список,
 // поиск, выбор, импорт контента (ссылка/список/QR-строка) с двухфазным
 // подтверждением custom-полей, экспорт ссылок.
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { ProfileType } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
@@ -32,7 +32,27 @@ export function ServersScreen(): JSX.Element {
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const [preview, setPreview] = useState<Profile[]>([]);
-  const [targetGroup, setTargetGroup] = useState('1');
+  const [groups, setGroups] = useState<{ id: bigint; name: string }[]>([]);
+  const [targetGroup, setTargetGroup] = useState('');
+
+  // Реальные группы из ядра (A2 аудита №4: хардкод '1' → NOT_FOUND,
+  // потому что встроенная группа живёт в резервном id-диапазоне).
+  useEffect(() => {
+    void (async (): Promise<void> => {
+      try {
+        const res = await core.profiles.listGroups({});
+        const list = res.groups.map((g) => ({ id: g.id, name: g.name }));
+        setGroups(list);
+        setTargetGroup((cur) => {
+          if (cur !== '') return cur;
+          const first = list[0];
+          return first === undefined ? cur : String(first.id);
+        });
+      } catch {
+        /* ядро недоступно — импорт останется выключенным до следующего рендера */
+      }
+    })();
+  }, [core]);
 
   const doPreview = useCallback(async (): Promise<void> => {
     setErr('');
@@ -54,7 +74,7 @@ export function ServersScreen(): JSX.Element {
     try {
       const res = await core.profiles.importContent({
         content: link,
-        targetGroupId: BigInt(targetGroup),
+        targetGroupId: targetGroup === '' ? 0n : BigInt(targetGroup),
       });
       setMsg(`${t('imp.do')}: ${String(res.addedProfileIds.length)}`);
       setPreview([]);
@@ -69,7 +89,9 @@ export function ServersScreen(): JSX.Element {
   const doExport = useCallback(async (): Promise<void> => {
     setErr('');
     try {
-      const res = await core.profiles.exportLinks({ groupId: BigInt(targetGroup) });
+      const res = await core.profiles.exportLinks({
+        groupId: targetGroup === '' ? 0n : BigInt(targetGroup),
+      });
       await navigator.clipboard.writeText(res.links.join('\n'));
       setMsg(t('toast.copied'));
     } catch (e) {
@@ -121,16 +143,27 @@ export function ServersScreen(): JSX.Element {
             aria-label={t('imp.drop')}
           />
           <div className="srv-import-row">
-            <input
+            <select
               className="input narrow"
               value={targetGroup}
-              onChange={(e) => { setTargetGroup(e.target.value.replace(/\D/g, '') || '1'); }}
+              onChange={(e) => { setTargetGroup(e.target.value); }}
               aria-label={t('srv.current')}
-            />
+            >
+              {groups.length === 0 && <option value="">—</option>}
+              {groups.map((g) => (
+                <option key={String(g.id)} value={String(g.id)}>
+                  {g.name}
+                </option>
+              ))}
+            </select>
             <button className="btn" onClick={() => void doPreview()} disabled={link.trim() === ''}>
               {t('imp.decrypting')}
             </button>
-            <button className="btn primary" onClick={() => void doCommit()} disabled={link.trim() === ''}>
+            <button
+              className="btn primary"
+              onClick={() => void doCommit()}
+              disabled={link.trim() === '' || targetGroup === ''}
+            >
               {t('imp.do')}
             </button>
           </div>

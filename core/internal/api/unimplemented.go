@@ -44,26 +44,6 @@ func (s *Server) ResolveDomains(ctx context.Context, req *connect.Request[lavray
 	return nil, errNotYetW6
 }
 
-func (s *Server) ListGroups(ctx context.Context, req *connect.Request[lavrayv1.ListGroupsRequest]) (*connect.Response[lavrayv1.ListGroupsResponse], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) CreateGroup(ctx context.Context, req *connect.Request[lavrayv1.CreateGroupRequest]) (*connect.Response[lavrayv1.Group], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) UpdateGroup(ctx context.Context, req *connect.Request[lavrayv1.UpdateGroupRequest]) (*connect.Response[lavrayv1.Group], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) DeleteGroup(ctx context.Context, req *connect.Request[lavrayv1.DeleteGroupRequest]) (*connect.Response[lavrayv1.Empty], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) ReorderGroups(ctx context.Context, req *connect.Request[lavrayv1.ReorderGroupsRequest]) (*connect.Response[lavrayv1.Empty], error) {
-	return nil, errNotYetW6
-}
-
 func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.TestLatencyRequest], stream *connect.ServerStream[lavrayv1.LatencyResult]) error {
 	return errNotYetW6
 }

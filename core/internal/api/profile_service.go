@@ -85,6 +85,11 @@ func pageOf(p *lavrayv1.Page, total int64) (offset, limit int64) {
 		offset = 0
 	}
 	limit = int64(p.Limit)
+	// A10 (аудит №4): контракт Page.limit = «0 → 100»; пустой список на
+	// limit=0 ломал первых клиентов (они передают дефолт 0).
+	if limit == 0 {
+		limit = 100
+	}
 	if limit < 0 {
 		limit = -1
 	}

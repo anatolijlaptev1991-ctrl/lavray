@@ -227,7 +227,10 @@ func (s *Server) GetSettings(ctx context.Context, req *connect.Request[lavrayv1.
 		if len(want) > 0 && !want[k] {
 			continue
 		}
-		out.Values[k] = &lavrayv1.SettingValue{Value: &lavrayv1.SettingValue_StringValue{StringValue: all[k]}}
+		// A4 (аудит №4): тип значения — из дескриптора. Сырой JSON в
+		// stringValue приводил к тому, что клиент видел "\"192.168.1.5\""
+		// и молча сбрасывал int/bool в дефолты.
+		out.Values[k] = typedSettingValue(k, all[k])
 	}
 	return connect.NewResponse(out), nil
 }
@@ -325,4 +328,44 @@ func hostOf(raw string) string {
 		h = h[:i]
 	}
 	return h
+}
+
+// typedSettingValue — JSON-хранилище → типизированный oneof по дескриптору.
+func typedSettingValue(key, raw string) *lavrayv1.SettingValue {
+	typ := lavrayv1.SettingType_SETTING_TYPE_STRING
+	for _, d := range model.SettingDescriptors() {
+		if d.Key == key {
+			typ = settingTypeToProto(d.Type)
+			break
+		}
+	}
+	switch typ {
+	case lavrayv1.SettingType_SETTING_TYPE_BOOL:
+		var b bool
+		if json.Unmarshal([]byte(raw), &b) == nil {
+			return &lavrayv1.SettingValue{Value: &lavrayv1.SettingValue_BoolValue{BoolValue: b}}
+		}
+	case lavrayv1.SettingType_SETTING_TYPE_INT:
+		var n int64
+		if json.Unmarshal([]byte(raw), &n) == nil {
+			return &lavrayv1.SettingValue{Value: &lavrayv1.SettingValue_IntValue{IntValue: n}}
+		}
+	case lavrayv1.SettingType_SETTING_TYPE_DOUBLE:
+		var f float64
+		if json.Unmarshal([]byte(raw), &f) == nil {
+			return &lavrayv1.SettingValue{Value: &lavrayv1.SettingValue_DoubleValue{DoubleValue: f}}
+		}
+	case lavrayv1.SettingType_SETTING_TYPE_STRING_LIST:
+		var list []string
+		if json.Unmarshal([]byte(raw), &list) == nil {
+			return &lavrayv1.SettingValue{Value: &lavrayv1.SettingValue_StringListValue{StringListValue: &lavrayv1.StringList{Items: list}}}
+		}
+	case lavrayv1.SettingType_SETTING_TYPE_JSON:
+		return &lavrayv1.SettingValue{Value: &lavrayv1.SettingValue_JsonValue{JsonValue: raw}}
+	}
+	var sv string
+	if json.Unmarshal([]byte(raw), &sv) == nil {
+		return &lavrayv1.SettingValue{Value: &lavrayv1.SettingValue_StringValue{StringValue: sv}}
+	}
+	return &lavrayv1.SettingValue{Value: &lavrayv1.SettingValue_StringValue{StringValue: raw}}
 }

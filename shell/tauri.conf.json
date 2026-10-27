@@ -8,7 +8,7 @@
     "beforeDevCommand": ""
   },
   "app": {
-    "withGlobalTauri": true,
+    "withGlobalTauri": false,
     "windows": [
       {
         "title": "LAVRay",

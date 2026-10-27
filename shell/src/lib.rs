@@ -20,6 +20,7 @@
 //! `src/ipc.rs` по дереву §10, реализация при врезке реального ядра.
 
 pub mod coreproc;
+pub mod sysproxy;
 pub mod tray;
 pub mod uiprotocol;
 pub mod updater;

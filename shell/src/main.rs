@@ -9,6 +9,7 @@
 
 use lavray_shell::coreproc::driver::{generate_auth_token, RealCoreProcess};
 use lavray_shell::coreproc::{CoreProcess, CoreSpawnConfig, CoreState, SecretToken};
+use lavray_shell::sysproxy::SysProxy;
 use lavray_shell::uiprotocol::IPC_PROTOCOL_VERSION;
 use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem};
@@ -26,6 +27,13 @@ fn protocol_version() -> u32 {
 struct RuntimeState {
     core_url: String,
     core_token: String,
+    /// Последняя известная причина отказа (показывается UI/логом).
+    last_error: String,
+    /// D3: ядро живо (обновляется потоком-надзирателем).
+    core_alive: bool,
+    /// Запрос на остановку ядра при выходе (надзиратель завершает его сам:
+    /// RealCoreProcess содержит сырые handle и не Send).
+    shutdown: bool,
 }
 
 /// Адрес ConnectRPC-ядра для UI (вызывается фронтендом при старте).
@@ -39,15 +47,97 @@ fn core_endpoint(state: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> (String, 
 fn core_state(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> CoreState {
     let s = shared.lock().unwrap_or_else(|e| e.into_inner());
     if s.core_url.is_empty() {
-        CoreState::Idle
-    } else {
+        if s.last_error.is_empty() {
+            CoreState::Idle
+        } else {
+            CoreState::SpawnErr
+        }
+    } else if s.core_alive {
         CoreState::Ready
+    } else {
+        CoreState::Crashed
     }
+}
+
+/// set_system_proxy — включить/выключить системный прокси (F5, FR-UI-221/222).
+/// Включение сохраняет снимок прежних настроек; выключение — восстанавливает.
+/// Прокси указывает на mixed-инбаунд ядра (127.0.0.1:<port>).
+#[tauri::command]
+fn set_system_proxy(
+    shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>,
+    enabled: bool,
+    port: u16,
+) -> Result<String, String> {
+    let data = {
+        let s = shared.lock().map_err(|_| "state poisoned".to_string())?;
+        if s.core_url.is_empty() {
+            return Err("ядро не запущено".to_string());
+        }
+        data_dir()
+    };
+    let sp = SysProxy::new(&data);
+    if enabled {
+        if port == 0 {
+            return Err("порт mixed-инбаунда не задан".to_string());
+        }
+        let applied = sp.enable("127.0.0.1", port)?;
+        Ok(format!("{}:{}", applied.host, applied.port))
+    } else {
+        sp.disable()?;
+        Ok(String::new())
+    }
+}
+
+/// recover_system_proxy — откат незакрытого снимка после падения прошлой
+/// сессии (FR-UI-259: «система не остаётся с прокси на мёртвый порт»).
+#[tauri::command]
+fn recover_system_proxy() -> Result<bool, String> {
+    SysProxy::new(&data_dir()).recover_if_needed()
+}
+
+/// request_quit — попросить надзирателя остановить ядро перед выходом (D2).
+#[tauri::command]
+fn request_quit(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) {
+    if let Ok(mut s) = shared.lock() {
+        s.shutdown = true;
+    }
+}
+
+/// shell_error — причина отказа запуска ядра для UI (D15).
+#[tauri::command]
+fn shell_error(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> String {
+    shared.lock().unwrap_or_else(|e| e.into_inner()).last_error.clone()
 }
 
 /// spawn_core — запуск lavray-core (рядом с shell-бинарником) по спеке §3:
 /// токен в stdin, ждём LAVRAY_CORE_READY, адрес отдаём UI.
-fn spawn_core() -> Option<(String, String)> {
+/// data_dir — пользовательский каталог данных на всех ОС (D5): Windows —
+/// %APPDATA%\LAVRay, macOS — ~/Library/Application Support/LAVRay,
+/// Linux — $XDG_DATA_HOME/lavray (по умолчанию ~/.local/share/lavray).
+fn data_dir() -> std::path::PathBuf {
+    if cfg!(windows) {
+        if let Some(appdata) = std::env::var_os("APPDATA") {
+            return std::path::PathBuf::from(appdata).join("LAVRay");
+        }
+    } else if cfg!(target_os = "macos") {
+        if let Some(home) = std::env::var_os("HOME") {
+            return std::path::PathBuf::from(home)
+                .join("Library")
+                .join("Application Support")
+                .join("LAVRay");
+        }
+    } else if let Some(xdg) = std::env::var_os("XDG_DATA_HOME") {
+        return std::path::PathBuf::from(xdg).join("lavray");
+    } else if let Some(home) = std::env::var_os("HOME") {
+        return std::path::PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("lavray");
+    }
+    std::env::temp_dir().join("lavray")
+}
+
+fn spawn_core() -> Option<((String, String), RealCoreProcess)> {
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?.to_path_buf();
     let core_name = if cfg!(windows) {
@@ -55,21 +145,21 @@ fn spawn_core() -> Option<(String, String)> {
     } else {
         "lavray-core"
     };
-    // Tauri сохраняет resources, зеркаля относительный путь: установка кладёт
-    // ядро в <exe_dir>/binaries/. Порядок: рядом, binaries/, resources/.
+    // D6/D7 (аудит round 2): ядро ищется ТОЛЬКО в установленных ресурсах.
+    // Раньше первым шёл каталог рядом с exe — в portable-режиме это позволяло
+    // подменить lavray-core.exe без каких-либо проверок. .is_file() вместо
+    // .exists() (каталог с таким именем больше не считается бинарником).
     let core_bin = [
-        dir.join(core_name),
         dir.join("binaries").join(core_name),
+        dir.join("resources").join("binaries").join(core_name),
         dir.join("resources").join(core_name),
     ]
     .into_iter()
-    .find(|p| p.exists())?;
-    // Данные — в пользовательском каталоге: perMachine-установка в Program
-    // Files не даёт писать не-админу (LNB-класс: «данные рядом с exe» ломается).
-    let data_dir = std::env::var_os("APPDATA")
-        .map(std::path::PathBuf::from)
-        .map(|p| p.join("LAVRay"))
-        .unwrap_or_else(|| dir.join("data"));
+    .find(|p| p.is_file())?;
+    // D5: данные — в пользовательском каталоге на всех ОС. APPDATA есть
+    // только на Windows; на macOS/Linux каталог рядом с .app//opt был бы
+    // read-only, а create_dir_all тихо возвращал None.
+    let data_dir = data_dir();
     std::fs::create_dir_all(&data_dir).ok()?;
 
     let token = generate_auth_token().ok()?;
@@ -82,17 +172,16 @@ fn spawn_core() -> Option<(String, String)> {
         extra_args: vec![],
     };
     let mut proc = RealCoreProcess::new();
-    if proc.spawn(&cfg).is_err() {
+    if let Err(e) = proc.spawn(&cfg) {
+        eprintln!("LAVRay: не удалось запустить ядро: {e}");
         return None;
     }
     match proc.wait_ready(std::time::Duration::from_secs(10)) {
-        Ok(endpoint) => {
-            // Процесс должен жить всё время работы приложения: утечка
-            // намеренная (Box::leak), kill — по смерти родителя (PDEATHSIG/Job).
-            std::mem::forget(proc);
-            Some((endpoint.transport_url, token.expose().to_string()))
+        Ok(endpoint) => Some(((endpoint.transport_url, token.expose().to_string()), proc)),
+        Err(e) => {
+            eprintln!("LAVRay: ядро не сообщило готовность: {e}");
+            None
         }
-        Err(_) => None,
     }
 }
 
@@ -109,12 +198,67 @@ fn main() {
         }))
         .manage(Arc::clone(&runtime))
         .setup(move |app| {
-            if let Some((url, tok)) = spawn_core() {
-                if let Ok(mut s) = rt_for_setup.lock() {
-                    s.core_url = url;
-                    s.core_token = tok;
-                }
+            // F5/FR-UI-259: если прошлая сессия упала с включённым прокси,
+            // возвращаем системные настройки ДО запуска нового ядра.
+            match SysProxy::new(&data_dir()).recover_if_needed() {
+                Ok(true) => eprintln!("LAVRay: восстановлены системные настройки прокси"),
+                Ok(false) => {}
+                Err(e) => eprintln!("LAVRay: не удалось восстановить прокси: {e}"),
             }
+
+            // D3 (аудит round 2): надзор. Процесс живёт в отдельном потоке
+            // (сырые handle не Send) и перезапускается с backoff, если ядро
+            // умерло не по команде.
+            let supervisor_state = Arc::clone(&rt_for_setup);
+            std::thread::spawn(move || {
+                let mut backoff = std::time::Duration::from_secs(1);
+                loop {
+                    let spawned = spawn_core();
+                    match spawned {
+                        Some(((url, tok), mut proc)) => {
+                            backoff = std::time::Duration::from_secs(1);
+                            if let Ok(mut s) = supervisor_state.lock() {
+                                s.core_url = url;
+                                s.core_token = tok;
+                                s.core_alive = true;
+                                s.last_error.clear();
+                            }
+                            // Наблюдение: спим и проверяем живость + флаг выхода.
+                            loop {
+                                std::thread::sleep(std::time::Duration::from_millis(500));
+                                let quitting = supervisor_state
+                                    .lock()
+                                    .map(|s| s.shutdown)
+                                    .unwrap_or(true);
+                                if quitting {
+                                    let _ = proc.kill(std::time::Duration::from_secs(5));
+                                    return;
+                                }
+                                if !proc.is_running() {
+                                    break; // ядро умерло само
+                                }
+                            }
+                            if let Ok(mut s) = supervisor_state.lock() {
+                                s.core_alive = false;
+                                s.last_error = "ядро неожиданно завершилось — перезапуск".to_string();
+                            }
+                            std::thread::sleep(backoff);
+                            backoff = (backoff * 2).min(std::time::Duration::from_secs(30));
+                        }
+                        None => {
+                            if let Ok(mut s) = supervisor_state.lock() {
+                                s.last_error =
+                                    "ядро lavray-core не найдено или не стартовало".to_string();
+                                if s.shutdown {
+                                    return;
+                                }
+                            }
+                            std::thread::sleep(backoff);
+                            backoff = (backoff * 2).min(std::time::Duration::from_secs(30));
+                        }
+                    }
+                }
+            });
             // Трей (DS §10): показать окно / выйти; закрытие окна — в трей.
             let show = MenuItem::with_id(app, "show", "Открыть LAVRay", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
@@ -123,7 +267,18 @@ fn main() {
                 .menu(&menu)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
-                    "quit" => app.exit(0),
+                    "quit" => {
+                        // D2: перед выходом останавливаем ядро (graceful-стоп),
+                        // иначе оно убивалось вместе с процессом мимо лестницы §5.
+                        if let Some(state) = app.try_state::<Arc<Mutex<RuntimeState>>>() {
+                            if let Ok(mut s) = state.lock() {
+                                s.shutdown = true;
+                            }
+                        }
+                        // Надзиратель гасит ядро через graceful-лестницу §5.
+                        std::thread::sleep(std::time::Duration::from_millis(1200));
+                        app.exit(0);
+                    }
                     "show" => {
                         if let Some(w) = app.get_webview_window("main") {
                             let _ = w.show();
@@ -152,10 +307,23 @@ fn main() {
             tray.build(app)?;
             Ok(())
         })
+        .on_window_event(|window, event| {
+            // D1 (аудит round 2): клик по X прячет окно в трей, а не убивает
+            // приложение — иначе трей оставался без окна, а ядро гасилось
+            // без graceful-teardown.
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             protocol_version,
             core_state,
-            core_endpoint
+            core_endpoint,
+            shell_error,
+            request_quit,
+            set_system_proxy,
+            recover_system_proxy
         ])
         .run(tauri::generate_context!())
         .expect("LAVRay shell: failed to run tauri application");

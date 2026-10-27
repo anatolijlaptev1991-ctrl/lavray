@@ -106,7 +106,11 @@ fn request_quit(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) {
 /// shell_error — причина отказа запуска ядра для UI (D15).
 #[tauri::command]
 fn shell_error(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> String {
-    shared.lock().unwrap_or_else(|e| e.into_inner()).last_error.clone()
+    shared
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .last_error
+        .clone()
 }
 
 /// spawn_core — запуск lavray-core (рядом с shell-бинарником) по спеке §3:
@@ -226,10 +230,8 @@ fn main() {
                             // Наблюдение: спим и проверяем живость + флаг выхода.
                             loop {
                                 std::thread::sleep(std::time::Duration::from_millis(500));
-                                let quitting = supervisor_state
-                                    .lock()
-                                    .map(|s| s.shutdown)
-                                    .unwrap_or(true);
+                                let quitting =
+                                    supervisor_state.lock().map(|s| s.shutdown).unwrap_or(true);
                                 if quitting {
                                     let _ = proc.kill(std::time::Duration::from_secs(5));
                                     return;
@@ -240,7 +242,8 @@ fn main() {
                             }
                             if let Ok(mut s) = supervisor_state.lock() {
                                 s.core_alive = false;
-                                s.last_error = "ядро неожиданно завершилось — перезапуск".to_string();
+                                s.last_error =
+                                    "ядро неожиданно завершилось — перезапуск".to_string();
                             }
                             std::thread::sleep(backoff);
                             backoff = (backoff * 2).min(std::time::Duration::from_secs(30));

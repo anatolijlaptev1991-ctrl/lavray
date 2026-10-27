@@ -160,7 +160,10 @@ mod imp {
     }
 
     fn set_sz(name: &str, value: &str) -> Result<(), String> {
-        reg(&["add", REG_KEY, "/v", name, "/t", "REG_SZ", "/d", value, "/f"]).map(|_| ())
+        reg(&[
+            "add", REG_KEY, "/v", name, "/t", "REG_SZ", "/d", value, "/f",
+        ])
+        .map(|_| ())
     }
 
     fn delete(name: &str) -> Result<(), String> {
@@ -172,7 +175,7 @@ mod imp {
     /// Уведомить WinINET об изменении (без этого Chrome видит старый прокси).
     fn notify() {
         use windows_sys::Win32::Networking::WinInet::{
-            InternetSetOptionW, INTERNET_OPTION_SETTINGS_CHANGED, INTERNET_OPTION_REFRESH,
+            InternetSetOptionW, INTERNET_OPTION_REFRESH, INTERNET_OPTION_SETTINGS_CHANGED,
         };
         // SAFETY: вызов без параметров (hInternet = null), документирован
         // WinINet: уведомляет систему о смене настроек прокси в реестре.
@@ -216,11 +219,7 @@ mod imp {
             d.get(k)
                 .and_then(|v| v.as_str())
                 .and_then(|s| s.trim_start_matches("0x").parse::<u32>().ok())
-                .or_else(|| {
-                    d.get(k)
-                        .and_then(|v| v.as_u64())
-                        .map(|n| n as u32)
-                })
+                .or_else(|| d.get(k).and_then(|v| v.as_u64()).map(|n| n as u32))
         };
         match str_of("ProxyServer") {
             Some(v) if !v.is_empty() => set_sz("ProxyServer", &v)?,

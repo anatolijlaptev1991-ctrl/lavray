@@ -9,10 +9,15 @@ npm ci
 npm run build
 Pop-Location
 
-Write-Host '== Ядро: сборка lavray-core.exe' -ForegroundColor Cyan
+Write-Host '== Ядро: сборка lavray-core.exe (реальный sing-box)' -ForegroundColor Cyan
 Push-Location "$root/core"
 $env:CGO_ENABLED = '0'
-go build -trimpath -ldflags '-s -w' -o "$root/shell/binaries/lavray-core.exe" ./cmd/lavray-core/
+# -tags singbox_run включает настоящий раннер sing-box; with_quic — QUIC-транспорты
+# (hysteria2/TUIC), with_gvisor — userspace-стек для TUN.
+go build -tags 'singbox_run with_quic with_gvisor' -trimpath -ldflags '-s -w' -o "$root/shell/binaries/lavray-core.exe" ./cmd/lavray-core/
+if ($LASTEXITCODE -ne 0) { throw 'ядро не собралось' }
+$size = [math]::Round((Get-Item "$root/shell/binaries/lavray-core.exe").Length / 1MB, 1)
+Write-Host "   lavray-core.exe: $size MB" -ForegroundColor DarkGray
 Pop-Location
 
 Write-Host '== Оболочка: установщик NSIS' -ForegroundColor Cyan

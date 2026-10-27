@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/sagernet/sing-box/box"
+	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/option"
 )
 
@@ -49,7 +49,9 @@ func (r *SingBoxRunner) Start(ctx context.Context, configJSON []byte) error {
 	}
 	// Рабочий каталог процесса — каталог данных (rule-set кэш, cache_file
 	// с относительными путями); подставляет вызывающая сторона (serve).
-	instance, err := box.New(ctx, options)
+	// box.New(box.Options{Context, Options}) — см. box.go форка: контекст
+	// несёт реестр сервисов/инбаундов; JSON — option.Options.
+	instance, err := box.New(box.Options{Context: ctx, Options: options})
 	if err != nil {
 		return fmt.Errorf("singbox: box.New: %w", err)
 	}

@@ -162,6 +162,12 @@ func authMiddleware(next http.Handler, tokenCh <-chan string, mux *logs.Mux) htt
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		// CORS preflight не несёт Authorization (браузер шлёт его до запроса) —
+		// отвечает corsWrap; здесь пропускаем без проверки токена.
+		if r.Method == http.MethodOptions {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if token != "" {
 			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 			if got != token {

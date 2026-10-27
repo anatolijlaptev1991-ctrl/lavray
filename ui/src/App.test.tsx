@@ -69,9 +69,11 @@ describe('App scaffold smoke render', () => {
       'Диагностика',
       'Настройки',
     ]);
-    // First screen — реальный экран «Подключение» (h2 + live-регион статуса).
-    expect(document.querySelector('.conn h2')?.textContent).toBe('Подключение');
+    // Заголовок раздела даёт каркас (#ghTitle прототипа); на экране — только
+    // live-регион статуса, дублей заголовка нет.
+    expect(document.querySelector('#ghTitle')?.textContent).toBe('Подключение');
     expect(document.querySelector('#connState')).not.toBeNull();
+    expect(document.querySelectorAll('h2').length).toBe(0);
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(document.documentElement.dataset.accent).toBe('amber');
   });
@@ -90,7 +92,7 @@ describe('App scaffold smoke render', () => {
     expect(items[2]?.classList.contains('on')).toBe(true);
 
     press('5'); // Настройки — боевой экран (.set), заглушек-табов больше нет
-    expect(document.querySelector('.set h2')?.textContent).toBe('Настройки');
+    expect(document.querySelector('#ghTitle')?.textContent).toBe('Настройки');
     expect(document.querySelector('[role="radiogroup"][aria-label="Язык интерфейса"]')).not.toBeNull();
   });
 

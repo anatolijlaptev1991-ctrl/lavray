@@ -79,5 +79,18 @@ declare global {
 }
 
 export function coreUrlFromEnv(): string {
-  return window.__LAVRAY_CORE_URL ?? 'http://127.0.0.1:0';
+  // Нативно: оболочка выставила адрес (main.tsx → core_endpoint).
+  // Веб: тот же origin (панель за одним хостом с ядром).
+  if (window.__LAVRAY_CORE_URL !== undefined) return window.__LAVRAY_CORE_URL;
+  if (window.location.protocol.startsWith('http')) return window.location.origin;
+  return 'http://127.0.0.1:0';
+}
+
+/** Человекочитаемая причина недоступности ядра (вместо «Failed to fetch»). */
+export function friendlyCoreError(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
+    return 'Ядро недоступно — приложение не запущено или ядро не поднялось';
+  }
+  return msg;
 }

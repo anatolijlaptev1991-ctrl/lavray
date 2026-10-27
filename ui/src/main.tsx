@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import './tokens.css';
+import './prototype.css';
 import './base.css';
 import './app.css';
 import App from './App';
@@ -23,6 +23,10 @@ async function bootstrap(): Promise<void> {
     }
   }
 
+  // data-shell на <html> (прототип): native в окне Tauri, browser в вебе.
+  document.documentElement.dataset.shell = tauri !== undefined ? 'native' : 'browser';
+  document.documentElement.dataset.os = adapterOS();
+
   const container = document.getElementById('root');
   if (container === null) {
     throw new Error('LAVRay: #root container not found');
@@ -32,6 +36,13 @@ async function bootstrap(): Promise<void> {
       <App />
     </StrictMode>,
   );
+}
+
+function adapterOS(): string {
+  const ua = navigator.userAgent;
+  if (ua.includes('Mac')) return 'mac';
+  if (ua.includes('Windows')) return 'win';
+  return 'linux';
 }
 
 void bootstrap();

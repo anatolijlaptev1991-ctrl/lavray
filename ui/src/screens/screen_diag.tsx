@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import type { LogLine, SelfCheckResult } from '../gen/lavray_pb';
 import { SelfCheckResult_Status } from '../gen/lavray_pb';
+import { friendlyCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 
@@ -23,7 +24,7 @@ export function DiagScreen(): JSX.Element {
         const tail = await core.logs.getTail({ lines: 50 });
         setLog(tail.lines);
       } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
+        setErr(friendlyCoreError(e));
       }
     })();
   }, [core]);
@@ -34,7 +35,7 @@ export function DiagScreen(): JSX.Element {
       const res = await core.diagnostics.runSelfCheck({});
       setChecks(res.results);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(friendlyCoreError(e));
     }
   }, [core]);
 
@@ -44,7 +45,7 @@ export function DiagScreen(): JSX.Element {
       const res = await core.diagnostics.checkRoute({ address: addr });
       setRouteOut(String(res.outbound));
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(friendlyCoreError(e));
     }
   }, [core, addr]);
 
@@ -54,13 +55,12 @@ export function DiagScreen(): JSX.Element {
       const res = await core.diagnostics.getPublicIp({});
       setIp(res.ip ?? '—');
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(friendlyCoreError(e));
     }
   }, [core]);
 
   return (
     <div className="diag">
-      <h2>{t('nav.diag')}</h2>
       {err !== '' && <div className="toast-err" role="alert">{err}</div>}
 
       <section className="diag-block">

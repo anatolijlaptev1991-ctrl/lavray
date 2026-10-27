@@ -7,6 +7,7 @@ import { ProfileType } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 import { useCore, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { friendlyCoreError } from '../lib/core';
 
 const TYPE_LABEL: Record<number, string> = {
   [ProfileType.SOCKS]: 'SOCKS',
@@ -43,7 +44,7 @@ export function ServersScreen(): JSX.Element {
       setPreview(res.parsedProfiles);
       setMsg(t('imp.do'));
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(friendlyCoreError(e));
     }
   }, [core, link, t]);
 
@@ -60,7 +61,7 @@ export function ServersScreen(): JSX.Element {
       setImporting(false);
       refresh();
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(friendlyCoreError(e));
     }
   }, [core, link, targetGroup, t, refresh]);
 
@@ -71,7 +72,7 @@ export function ServersScreen(): JSX.Element {
       await navigator.clipboard.writeText(res.links.join('\n'));
       setMsg(t('toast.copied'));
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(friendlyCoreError(e));
     }
   }, [core, targetGroup, t]);
 
@@ -82,7 +83,7 @@ export function ServersScreen(): JSX.Element {
         await core.profiles.deleteProfile({ ids: [id] });
         refresh();
       } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
+        setErr(friendlyCoreError(e));
       }
     },
     [core, refresh],
@@ -90,7 +91,6 @@ export function ServersScreen(): JSX.Element {
 
   return (
     <div className="srv">
-      <h2>{t('nav.servers')}</h2>
 
       <div className="srv-tools">
         <input

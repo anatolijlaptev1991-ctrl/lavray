@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import type { RoutingPreset } from '../gen/lavray_pb';
+import { friendlyCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 
@@ -22,7 +23,7 @@ export function RulesScreen(): JSX.Element {
         setPresets(res.presets);
         setActiveId(res.activePresetId);
       } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
+        setErr(friendlyCoreError(e));
       }
     })();
   }, [core]);
@@ -36,7 +37,7 @@ export function RulesScreen(): JSX.Element {
         setActiveId(id);
         setOk(res.needsProfileRestart ? t('toast.coreRestarted') : t('toast.connected'));
       } catch (e) {
-        setErr(e instanceof Error ? e.message : String(e));
+        setErr(friendlyCoreError(e));
       }
     },
     [core, t],
@@ -44,7 +45,6 @@ export function RulesScreen(): JSX.Element {
 
   return (
     <div className="rules">
-      <h2>{t('nav.rules')}</h2>
       {err !== '' && <div className="toast-err" role="alert">{err}</div>}
       {ok !== '' && <div className="toast-ok">{ok}</div>}
       <ul className="preset-grid">

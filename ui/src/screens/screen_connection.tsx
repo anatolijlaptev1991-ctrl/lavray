@@ -65,7 +65,6 @@ export function ConnectionScreen(): JSX.Element {
 
   return (
     <div className="conn">
-      <h2>{t('nav.connection')}</h2>
       <div className="conn-card" data-state={status.state}>
         <div className="conn-mark" aria-hidden="true" />
         <div className="conn-text">

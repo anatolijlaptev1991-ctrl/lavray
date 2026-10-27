@@ -15,7 +15,14 @@ export type IconName =
   | 'moon'
   | 'search'
   | 'check'
-  | 'info';
+  | 'info'
+  | 'menu'
+  | 'plus'
+  | 'refresh'
+  | 'trash'
+  | 'plug'
+  | 'shield'
+  | 'chevron-down';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
@@ -63,6 +70,45 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
     </>
   ),
   check: <polyline points="20 6 9 17 4 12" />,
+  menu: (
+    <>
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </>
+  ),
+  plus: (
+    <>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </>
+  ),
+  refresh: (
+    <>
+      <path d="M21 12a9 9 0 1 1-3-6.7" />
+      <polyline points="21 3 21 9 15 9" />
+    </>
+  ),
+  trash: (
+    <>
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </>
+  ),
+  plug: (
+    <>
+      <path d="M12 22v-5" />
+      <path d="M9 7V2" />
+      <path d="M15 7V2" />
+      <path d="M6 7h12v4a6 6 0 0 1-12 0z" />
+    </>
+  ),
+  shield: (
+    <>
+      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+    </>
+  ),
+  'chevron-down': <polyline points="6 9 12 15 18 9" />,
   info: (
     <>
       <circle cx="12" cy="12" r="10" />
@@ -94,6 +140,26 @@ export function Icon({ name, size = 18, className }: IconProps): JSX.Element {
       aria-hidden="true"
     >
       {PATHS[name]}
+    </svg>
+  );
+}
+
+/** BrandMark — знак «Отражение» (DS v1.2): L-луч, зеркало 45°, фотон.
+ *  Геометрия скопирована из прототипа (design/prototype.html, .lgA). */
+export function BrandMark({ size = 24 }: { readonly size?: number }): JSX.Element {
+  return (
+    <svg
+      className="lgA lgA-sm"
+      viewBox="0 0 64 64"
+      width={size}
+      height={size}
+      aria-hidden="true"
+      focusable="false"
+    >
+      <g transform="translate(-4.5 1.5)">
+        <path className="a-beam" d="M23 13V43H45" strokeWidth="10" />
+        <circle className="a-photon" cx="56.5" cy="43" r="5" />
+      </g>
     </svg>
   );
 }

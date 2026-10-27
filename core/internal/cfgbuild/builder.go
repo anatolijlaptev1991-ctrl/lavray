@@ -177,6 +177,10 @@ func Build(req BuildRequest) (*BuildResult, error) {
 	return res, nil
 }
 
+// NeutralPreset — экспорт neutralPreset для слоя API (DNS-настройки должны
+// применяться и когда активный пресет не найден, A5 аудита round 1).
+func NeutralPreset() *presets.Preset { return neutralPreset() }
+
 // neutralPreset — пресет по умолчанию при Preset==nil (W6 всегда передаёт
 // routing.active_preset; дефолты настройки — "lav-global", здесь —
 // эквивалент global: proxy final, sniffing для маршрутизации, раздельный

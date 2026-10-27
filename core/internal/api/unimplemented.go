@@ -68,10 +68,6 @@ func (s *Server) ImportNekoRayRoute(ctx context.Context, req *connect.Request[la
 	return nil, errNotYetW6
 }
 
-func (s *Server) ValidateDnsJson(ctx context.Context, req *connect.Request[lavrayv1.ValidateDnsJsonRequest]) (*connect.Response[lavrayv1.ValidateDnsJsonResponse], error) {
-	return nil, errNotYetW6
-}
-
 func (s *Server) ResetSettings(ctx context.Context, req *connect.Request[lavrayv1.ResetSettingsRequest]) (*connect.Response[lavrayv1.SetSettingsResponse], error) {
 	return nil, errNotYetW6
 }

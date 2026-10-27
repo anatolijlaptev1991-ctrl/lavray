@@ -151,6 +151,20 @@ func (s *Server) UpdateProfile(ctx context.Context, req *connect.Request[lavrayv
 }
 
 func (s *Server) DeleteProfile(ctx context.Context, req *connect.Request[lavrayv1.DeleteProfileRequest]) (*connect.Response[lavrayv1.Empty], error) {
+	if len(req.Msg.Ids) == 0 {
+		return nil, invalidArg("ids не заданы")
+	}
+	// A9 (аудит round 1): профиль активного соединения удалять нельзя —
+	// иначе Restart/RestartProfile падают с NotFound, а инстанс остаётся
+	// с «висящей» ссылкой на профиль. Сначала Disconnect.
+	if run := s.inst.Status().Run; run != nil && run.ProfileID != 0 {
+		for _, id := range req.Msg.Ids {
+			if id == run.ProfileID {
+				return nil, failedPrecondition(
+					"профиль %d активен — сначала отключитесь или переключитесь на другой", id)
+			}
+		}
+	}
 	for _, id := range req.Msg.Ids {
 		if err := s.st.DeleteProfile(id); err != nil {
 			return nil, mapErr(err)

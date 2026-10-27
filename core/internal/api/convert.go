@@ -773,35 +773,7 @@ func groupToProto(m *model.Group) *lavrayv1.Group {
 		g.FrontProxyId = int64p(*m.FrontProxyID)
 	}
 	if m.SubscriptionInfo != nil {
-		si := &lavrayv1.SubscriptionInfo{Title: strpIf(m.SubscriptionInfo.Title)}
-		if m.SubscriptionInfo.UploadBytes != nil {
-			si.UploadBytes = int64p(*m.SubscriptionInfo.UploadBytes)
-		}
-		if m.SubscriptionInfo.DownloadBytes != nil {
-			si.DownloadBytes = int64p(*m.SubscriptionInfo.DownloadBytes)
-		}
-		if m.SubscriptionInfo.TotalBytes != nil {
-			si.TotalBytes = int64p(*m.SubscriptionInfo.TotalBytes)
-		}
-		if m.SubscriptionInfo.ExpireMs != nil {
-			si.ExpireMs = int64p(*m.SubscriptionInfo.ExpireMs)
-		}
-		if m.SubscriptionInfo.UpdateIntervalHours != nil {
-			si.UpdateIntervalHours = int32p(*m.SubscriptionInfo.UpdateIntervalHours)
-		}
-		if m.SubscriptionInfo.WebPageURL != "" {
-			si.WebPageUrl = strp(m.SubscriptionInfo.WebPageURL)
-		}
-		if m.SubscriptionInfo.SupportURL != "" {
-			si.SupportUrl = strp(m.SubscriptionInfo.SupportURL)
-		}
-		if m.SubscriptionInfo.Announce != "" {
-			si.Announce = strp(m.SubscriptionInfo.Announce)
-		}
-		if m.SubscriptionInfo.Routing != "" {
-			si.Routing = strp(m.SubscriptionInfo.Routing)
-		}
-		g.SubscriptionInfo = si
+		g.SubscriptionInfo = subscriptionInfoToProto(m.SubscriptionInfo)
 	}
 	if m.LastUpdateMs != 0 {
 		g.LastUpdateMs = int64p(m.LastUpdateMs)
@@ -989,4 +961,41 @@ func dnsBlockFromProto(d *lavrayv1.DnsSettings) *presets.DNSBlock {
 		out.Mode = "advanced"
 	}
 	return out
+}
+
+// subscriptionInfoToProto — модель подписки → proto (используется и в
+// Group, и в SubscriptionProgress.user_info, A15).
+func subscriptionInfoToProto(m *model.SubscriptionInfo) *lavrayv1.SubscriptionInfo {
+	if m == nil {
+		return nil
+	}
+	si := &lavrayv1.SubscriptionInfo{Title: strpIf(m.Title)}
+	if m.UploadBytes != nil {
+		si.UploadBytes = int64p(*m.UploadBytes)
+	}
+	if m.DownloadBytes != nil {
+		si.DownloadBytes = int64p(*m.DownloadBytes)
+	}
+	if m.TotalBytes != nil {
+		si.TotalBytes = int64p(*m.TotalBytes)
+	}
+	if m.ExpireMs != nil {
+		si.ExpireMs = int64p(*m.ExpireMs)
+	}
+	if m.UpdateIntervalHours != nil {
+		si.UpdateIntervalHours = int32p(*m.UpdateIntervalHours)
+	}
+	if m.WebPageURL != "" {
+		si.WebPageUrl = strp(m.WebPageURL)
+	}
+	if m.SupportURL != "" {
+		si.SupportUrl = strp(m.SupportURL)
+	}
+	if m.Announce != "" {
+		si.Announce = strp(m.Announce)
+	}
+	if m.Routing != "" {
+		si.Routing = strp(m.Routing)
+	}
+	return si
 }

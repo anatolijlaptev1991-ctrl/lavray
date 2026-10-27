@@ -163,6 +163,10 @@ type UpdateResult struct {
 	Order   []int64 // фактический порядок группы после применения
 	UsedURL string
 	Info    *model.SubscriptionInfo
+	// Snapshot — состояние группы ДО применения (для честного отката через
+	// RollbackSubscription; A15 аудита round 1: API снимал снапшот после
+	// apply, поэтому «откат» возвращал ровно то же состояние).
+	Snapshot *Snapshot
 }
 
 // ApplyParams — вход применения обновления.
@@ -202,6 +206,12 @@ func Apply(st StoreAPI, snap *Snapshot, params ApplyParams) (*UpdateResult, erro
 	var order []int64
 	err := func() error {
 		for _, p := range next {
+			// A17 (аудит round 1): подписки — главный источник «ключей по
+			// странам»; без DetectGeo здесь группировка по странам работала
+			// только для ручного импорта.
+			if p.Geo == "" {
+				p.Geo = model.DetectGeo(p.Name, p.Address)
+			}
 			if old, ok := existing[keyOf(p)]; ok {
 				merged := *p
 				merged.ID = old.ID
@@ -276,7 +286,7 @@ func Apply(st StoreAPI, snap *Snapshot, params ApplyParams) (*UpdateResult, erro
 		}
 		return nil, fmt.Errorf("применение: группа: %w", err)
 	}
-	return &UpdateResult{Diff: diff, Order: order, UsedURL: params.UsedURL, Info: params.Info}, nil
+	return &UpdateResult{Diff: diff, Order: order, UsedURL: params.UsedURL, Info: params.Info, Snapshot: snap}, nil
 }
 
 // Rollback восстанавливает группу из снапшота («Откатить подписку», FR-UI-258):

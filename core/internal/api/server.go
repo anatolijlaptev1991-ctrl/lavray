@@ -347,10 +347,11 @@ func (s *Server) activePreset() (*presets.Preset, error) {
 	}
 	if !found {
 		// настройка указывает на удалённый пресет — конфигбилдер подставит
-		// нейтральный (nil)
-		return nil, nil
+		// нейтральный (nil); но DNS-настройки пользователя обязаны применяться
+		// и в этом случае (A5 аудита round 1).
+		p = nil
 	}
-	return p, nil
+	return s.applyDNSOverride(p), nil
 }
 
 // dnsOverride — DNS-переопределение для builtin-активного пресета
@@ -365,6 +366,82 @@ func (s *Server) dnsOverride() (*presets.DNSBlock, error) {
 		return nil, fmt.Errorf("api: чтение DNS-переопределения: %w", err)
 	}
 	return &d, nil
+}
+
+// dnsSettingStr — строковое значение dns.* (JSON-строка; совместимость с
+// ранними сборками, писавшими сырой текст).
+func (s *Server) dnsSettingStr(key string) string {
+	raw, ok, err := s.st.GetSetting(key)
+	if err != nil || !ok {
+		return ""
+	}
+	var v string
+	if json.Unmarshal([]byte(raw), &v) == nil {
+		return v
+	}
+	return raw
+}
+
+func (s *Server) dnsSettingBool(key string) bool {
+	raw, ok, err := s.st.GetSetting(key)
+	if err != nil || !ok {
+		return false
+	}
+	switch raw {
+	case "1", "true":
+		return true
+	}
+	var b bool
+	if json.Unmarshal([]byte(raw), &b) == nil {
+		return b
+	}
+	return false
+}
+
+// dnsSettingsPresent — задан ли пользовательский DNS хоть одним ключом.
+func (s *Server) dnsSettingsPresent() bool {
+	for _, k := range []string{setDNSMode, setDNSRemote, setDNSDirect, setDNSAdvJSON, setDNSRouting} {
+		if _, ok, err := s.st.GetSetting(k); err == nil && ok {
+			return true
+		}
+	}
+	return false
+}
+
+// applyDNSOverride — копия пресета с DNS из настроек (A5/A6/A7 аудита:
+// SetDns писал dns.* в settings, а конфигбилдер читал только пресет —
+// настройки DNS молча не применялись). p == nil (пресет не найден) —
+// берём нейтральный, чтобы пользовательский DNS всё равно доехал до конфига.
+func (s *Server) applyDNSOverride(p *presets.Preset) *presets.Preset {
+	if !s.dnsSettingsPresent() {
+		return p
+	}
+	if p == nil {
+		p = cfgbuild.NeutralPreset()
+	}
+	cp := *p
+	dns := p.DNS
+	switch s.dnsSettingStr(setDNSMode) {
+	case "advanced":
+		dns.Mode = "advanced"
+	case "simple":
+		dns.Mode = "simple"
+	}
+	if v := s.dnsSettingStr(setDNSRemote); v != "" {
+		dns.RemoteDNS = v
+	}
+	if v := s.dnsSettingStr(setDNSDirect); v != "" {
+		dns.DirectDNS = v
+	}
+	if v := s.dnsSettingStr(setDNSAdvJSON); v != "" {
+		dns.AdvancedJSON = v
+	}
+	if v := s.dnsSettingStr(setDNSStrategy); v != "" {
+		dns.RemoteQueryStrategy = v
+	}
+	dns.RoutingEnabled = s.dnsSettingBool(setDNSRouting)
+	cp.DNS = dns
+	return &cp
 }
 
 // ============================================================================

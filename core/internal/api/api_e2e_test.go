@@ -23,6 +23,7 @@ import (
 type clients struct {
 	profile lavrayv1connect.ProfileServiceClient
 	routing lavrayv1connect.RoutingServiceClient
+	dns     lavrayv1connect.DnsServiceClient
 	core    lavrayv1connect.CoreServiceClient
 	st      *store.Store
 }
@@ -63,6 +64,7 @@ func newE2E(t *testing.T) *clients {
 	return &clients{
 		profile: lavrayv1connect.NewProfileServiceClient(hc, httpSrv.URL),
 		routing: lavrayv1connect.NewRoutingServiceClient(hc, httpSrv.URL),
+		dns:     lavrayv1connect.NewDnsServiceClient(hc, httpSrv.URL),
 		core:    lavrayv1connect.NewCoreServiceClient(hc, httpSrv.URL),
 		st:      st,
 	}
@@ -280,5 +282,109 @@ func TestImportFillsGeoByCountry(t *testing.T) {
 		if byName[name] != geo {
 			t.Errorf("%s: geo=%q want %q", name, byName[name], geo)
 		}
+	}
+}
+
+// TestDnsSettingsReachBuiltConfig — регрессия A5/A6/A7 аудита round 1:
+// SetDns писал dns.* в settings, но конфигбилдер читал только пресет,
+// поэтому настройки DNS молча не применялись. Проверяем фактический конфиг
+// через Connect(validate_only) → GetRuntimeConfig.
+func TestDnsSettingsReachBuiltConfig(t *testing.T) {
+	cs := newE2E(t)
+	ctx := context.Background()
+
+	const advanced = `{"servers":[{"tag":"dns-direct","type":"local"},` +
+		`{"tag":"dns-remote","type":"https","server":"1.1.1.1"}],"rules":[]}`
+	set, err := cs.dns.SetDns(ctx, connect.NewRequest(&lavrayv1.SetDnsRequest{
+		Dns: &lavrayv1.DnsSettings{
+			Mode:           lavrayv1.DnsSettings_MODE_ADVANCED,
+			AdvancedJson:   strp(advanced),
+			RoutingEnabled: true,
+		},
+	}))
+	if err != nil {
+		t.Fatalf("set dns: %v", err)
+	}
+	if set.Msg.Applied == nil || set.Msg.Applied.Mode != lavrayv1.DnsSettings_MODE_ADVANCED {
+		t.Fatalf("applied: %+v", set.Msg.Applied)
+	}
+
+	got, err := cs.dns.GetDns(ctx, connect.NewRequest(&lavrayv1.GetDnsRequest{}))
+	if err != nil {
+		t.Fatalf("get dns: %v", err)
+	}
+	if got.Msg.GetAdvancedJson() != advanced {
+		t.Fatalf("advanced_json не сохранился: %q", got.Msg.GetAdvancedJson())
+	}
+	if !got.Msg.RoutingEnabled {
+		t.Fatal("routing_enabled потерялся")
+	}
+
+	// Невалидный advanced (нет dns-direct) — INVALID_ARGUMENT, а не тихое сохранение.
+	if _, err := cs.dns.SetDns(ctx, connect.NewRequest(&lavrayv1.SetDnsRequest{
+		Dns: &lavrayv1.DnsSettings{
+			Mode:         lavrayv1.DnsSettings_MODE_ADVANCED,
+			AdvancedJson: strp(`{"servers":[{"tag":"x","type":"local"}]}`),
+		},
+	})); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Fatalf("advanced без dns-direct: code=%v", connect.CodeOf(err))
+	}
+
+	// Конфиг, собранный движком, обязан содержать именно наш advanced-DNS.
+	p, err := cs.profile.CreateProfile(ctx, connect.NewRequest(&lavrayv1.CreateProfileRequest{
+		Profile: &lavrayv1.Profile{
+			GroupId: 1,
+			Type:    lavrayv1.ProfileType_PROFILE_TYPE_TROJAN,
+			Name:    "dns-check",
+			Address: "example.org",
+			Port:    443,
+			Detail: &lavrayv1.Profile_TrojanVless{TrojanVless: &lavrayv1.TrojanVlessDetail{
+				Password: "secret",
+			}},
+		},
+	}))
+	if err != nil {
+		t.Fatalf("create profile: %v", err)
+	}
+	if _, err := cs.core.Connect(ctx, connect.NewRequest(&lavrayv1.ConnectRequest{
+		ProfileId:    int64p(p.Msg.Id),
+		ValidateOnly: boolp(true),
+	})); err != nil {
+		t.Fatalf("validate_only connect: %v", err)
+	}
+	// Проверяем через тот же путь, которым пользуется Connect.
+	srv := &Server{st: cs.st}
+	preset, err := srv.activePreset()
+	if err != nil {
+		t.Fatalf("activePreset: %v", err)
+	}
+	if preset == nil || preset.DNS.Mode != "advanced" || preset.DNS.AdvancedJSON != advanced {
+		t.Fatalf("DNS из настроек не доехал до пресета: %+v", preset)
+	}
+}
+
+// TestValidateDnsJson — FR-UI-149: валидатор и форматтер DNS-объекта.
+func TestValidateDnsJson(t *testing.T) {
+	cs := newE2E(t)
+	ctx := context.Background()
+
+	bad, err := cs.dns.ValidateDnsJson(ctx, connect.NewRequest(&lavrayv1.ValidateDnsJsonRequest{
+		Json: `{"servers":[{"tag":"a","type":"local"}]}`,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bad.Msg.Valid || len(bad.Msg.Errors) == 0 {
+		t.Fatalf("ожидали ошибку про dns-direct: %+v", bad.Msg)
+	}
+
+	good, err := cs.dns.ValidateDnsJson(ctx, connect.NewRequest(&lavrayv1.ValidateDnsJsonRequest{
+		Json: `{"servers":[{"tag":"dns-direct","type":"local"}],"rules":[]}`,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !good.Msg.Valid || good.Msg.Formatted == nil {
+		t.Fatalf("валидный DNS: %+v", good.Msg)
 	}
 }

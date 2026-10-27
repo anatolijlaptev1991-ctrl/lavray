@@ -19,6 +19,8 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs/parser"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
 )
 
 // mapErr — единый маппинг ошибок домена → Connect-коды. Хендлеры возвращают
@@ -61,6 +63,20 @@ func mapErr(err error) error {
 	if errors.As(err, &confirm) {
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	}
+	// A13 (аудит round 1): ошибки парсера подписок и подсистемы обновлений
+	// уходили как INTERNAL с сырым текстом — UI показывал «internal error»
+	// вместо причины. Разложены по смыслу:
+	var pe *parser.Error
+	if errors.As(err, &pe) {
+		code := connect.CodeInvalidArgument
+		if pe.Msg == parser.ErrTooLargeMsg {
+			code = connect.CodeResourceExhausted
+		}
+		return connect.NewError(code, err)
+	}
+	if isUpdateClientError(err) {
+		return connect.NewError(connect.CodeFailedPrecondition, err)
+	}
 	if errors.Is(err, context.DeadlineExceeded) {
 		return connect.NewError(connect.CodeDeadlineExceeded, err)
 	}
@@ -78,6 +94,35 @@ func invalidArg(format string, args ...any) error {
 // failedPrecondition — FAILED_PRECONDITION.
 func failedPrecondition(format string, args ...any) error {
 	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(format, args...))
+}
+
+// isUpdateClientError — ошибки подсистемы обновлений (проверка/скачивание/
+// верификация): это не «внутренняя поломка», а состояние, которое клиент
+// должен показать пользователем (подпись не сошлась, serial откатился и т.п.).
+func isUpdateClientError(err error) bool {
+	return errors.Is(err, updates.ErrBadSignature) ||
+		errors.Is(err, updates.ErrInsufficientSignatures) ||
+		errors.Is(err, updates.ErrBadRole) ||
+		errors.Is(err, updates.ErrExpired) ||
+		errors.Is(err, updates.ErrTimestampHorizon) ||
+		errors.Is(err, updates.ErrRootNotAdvanced) ||
+		errors.Is(err, updates.ErrWrongProduct) ||
+		errors.Is(err, updates.ErrWrongChannel) ||
+		errors.Is(err, updates.ErrSerialRollback) ||
+		errors.Is(err, updates.ErrHashMismatch) ||
+		errors.Is(err, updates.ErrLengthMismatch) ||
+		errors.Is(err, updates.ErrUnsafePath) ||
+		errors.Is(err, updates.ErrBadURL) ||
+		errors.Is(err, updates.ErrNotConfigured) ||
+		errors.Is(err, updates.ErrNoCheck) ||
+		errors.Is(err, updates.ErrNotStaged) ||
+		errors.Is(err, updates.ErrActiveSession) ||
+		errors.Is(err, updates.ErrAppTooOld) ||
+		errors.Is(err, updates.ErrNetwork) ||
+		errors.Is(err, updates.ErrBadJSON) ||
+		errors.Is(err, updates.ErrMissingField) ||
+		errors.Is(err, updates.ErrBadValue) ||
+		errors.Is(err, updates.ErrWrongType)
 }
 
 // notFound — NOT_FOUND.

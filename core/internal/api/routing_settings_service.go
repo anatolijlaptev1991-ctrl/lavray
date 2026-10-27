@@ -95,35 +95,79 @@ func (s *Server) GetActivePreset(ctx context.Context, req *connect.Request[lavra
 // SetDns применяет «живые» поля без перезапуска (FR-UI-148).
 
 const (
-	setDNSMode    = "dns.mode"
-	setDNSRemote  = "dns.remote"
-	setDNSDirect  = "dns.direct"
-	setDNSRouting = "dns.routing_enabled"
-	setDNSAdvJSON = "dns.advanced_json"
+	setDNSMode     = "dns.mode"
+	setDNSRemote   = "dns.remote"
+	setDNSDirect   = "dns.direct"
+	setDNSRouting  = "dns.routing_enabled"
+	setDNSAdvJSON  = "dns.advanced_json"
+	setDNSStrategy = "dns.remote_query_strategy"
 )
 
+// domainStrategyStr/Of — мост между proto-энумом и строками sing-box.
+func domainStrategyStr(s lavrayv1.DomainStrategy) string {
+	switch s {
+	case lavrayv1.DomainStrategy_DOMAIN_STRATEGY_PREFER_IPV4:
+		return "prefer_ipv4"
+	case lavrayv1.DomainStrategy_DOMAIN_STRATEGY_PREFER_IPV6:
+		return "prefer_ipv6"
+	case lavrayv1.DomainStrategy_DOMAIN_STRATEGY_IPV4_ONLY:
+		return "ipv4_only"
+	case lavrayv1.DomainStrategy_DOMAIN_STRATEGY_IPV6_ONLY:
+		return "ipv6_only"
+	}
+	return ""
+}
+
+func domainStrategyOf(v string) (lavrayv1.DomainStrategy, bool) {
+	switch v {
+	case "prefer_ipv4":
+		return lavrayv1.DomainStrategy_DOMAIN_STRATEGY_PREFER_IPV4, true
+	case "prefer_ipv6":
+		return lavrayv1.DomainStrategy_DOMAIN_STRATEGY_PREFER_IPV6, true
+	case "ipv4_only":
+		return lavrayv1.DomainStrategy_DOMAIN_STRATEGY_IPV4_ONLY, true
+	case "ipv6_only":
+		return lavrayv1.DomainStrategy_DOMAIN_STRATEGY_IPV6_ONLY, true
+	}
+	return lavrayv1.DomainStrategy_DOMAIN_STRATEGY_UNSPECIFIED, false
+}
+
 func (s *Server) GetDns(ctx context.Context, req *connect.Request[lavrayv1.GetDnsRequest]) (*connect.Response[lavrayv1.DnsSettings], error) {
-	get := func(k string) string { v, _, _ := s.st.GetSetting(k); return v }
-	out := &lavrayv1.DnsSettings{}
-	switch get(setDNSMode) {
-	case "advanced":
-		out.Mode = lavrayv1.DnsSettings_MODE_ADVANCED
-	default:
-		out.Mode = lavrayv1.DnsSettings_MODE_SIMPLE
-	}
-	if v := get(setDNSRemote); v != "" {
-		out.RemoteDns = strp(v)
-	}
-	if v := get(setDNSDirect); v != "" {
-		out.DirectDns = strp(v)
-	}
-	if v, _, _ := s.st.GetSetting(setDNSRouting); v == "1" {
-		out.RoutingEnabled = true
-	}
-	if v := get(setDNSAdvJSON); v != "" {
-		out.AdvancedJson = strp(v)
-	}
+	out := s.currentDNS()
 	return connect.NewResponse(out), nil
+}
+
+// currentDNS — снимок действующего DNS: настройки пользователя поверх
+// активного пресета (A7 аудита: UI показывал пустые поля, потому что
+// GetDns читал только dns.*-ключи, которые никто не заполнял).
+func (s *Server) currentDNS() *lavrayv1.DnsSettings {
+	out := &lavrayv1.DnsSettings{Mode: lavrayv1.DnsSettings_MODE_SIMPLE}
+	dns := presets.DNSBlock{Mode: "simple", RemoteDNS: "https://dns.google/dns-query", DirectDNS: "local"}
+	if p, err := s.activePreset(); err == nil && p != nil {
+		dns = p.DNS
+	}
+	if s.dnsSettingStr(setDNSMode) == "advanced" {
+		out.Mode = lavrayv1.DnsSettings_MODE_ADVANCED
+	}
+	out.RemoteDns = strp(dns.RemoteDNS)
+	out.DirectDns = strp(dns.DirectDNS)
+	out.RoutingEnabled = dns.RoutingEnabled
+	if dns.AdvancedJSON != "" {
+		out.AdvancedJson = strp(dns.AdvancedJSON)
+	}
+	if st, ok := domainStrategyOf(dns.RemoteQueryStrategy); ok {
+		out.RemoteQueryStrategy = &st
+	}
+	if v := s.dnsSettingStr(setDNSStrategy); v != "" {
+		if st, ok := domainStrategyOf(v); ok {
+			out.RemoteQueryStrategy = &st
+		}
+	}
+	if v := s.settingStr("core.underlying_dns"); v != "" {
+		out.UnderlyingDns = strp(v)
+	}
+	out.FakeDnsEnabled = boolp(s.settingBool("tun.fake_dns"))
+	return out
 }
 
 func (s *Server) SetDns(ctx context.Context, req *connect.Request[lavrayv1.SetDnsRequest]) (*connect.Response[lavrayv1.SetDnsResponse], error) {
@@ -132,33 +176,45 @@ func (s *Server) SetDns(ctx context.Context, req *connect.Request[lavrayv1.SetDn
 		return nil, invalidArg("dns обязателен")
 	}
 	if m.Mode == lavrayv1.DnsSettings_MODE_ADVANCED && optStr(m.AdvancedJson) != "" {
-		if !json.Valid([]byte(*m.AdvancedJson)) {
-			return nil, invalidArg("advanced_json: невалидный JSON")
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(*m.AdvancedJson), &obj); err != nil {
+			return nil, invalidArg("advanced_json: невалидный JSON: %v", err)
+		}
+		if !dnsObjectHasDirect(obj) {
+			return nil, invalidArg("advanced_json: нужен сервер с tag \"dns-direct\" " +
+				"(на него ссылается route.default_domain_resolver, LNB-08)")
 		}
 	}
-	set := func(k, v string) error {
-		if err := s.st.SetSetting(k, v); err != nil {
+	set := func(k, v string) error { return mapErr(s.st.SetSetting(k, v)) }
+	setJSONStr := func(k, v string) error {
+		b, err := json.Marshal(v)
+		if err != nil {
 			return mapErr(err)
 		}
-		return nil
+		return mapErr(s.st.SetSetting(k, string(b)))
 	}
 	switch m.Mode {
 	case lavrayv1.DnsSettings_MODE_ADVANCED:
-		if err := set(setDNSMode, "advanced"); err != nil {
+		if err := setJSONStr(setDNSMode, "advanced"); err != nil {
 			return nil, err
 		}
 	default:
-		if err := set(setDNSMode, "simple"); err != nil {
+		if err := setJSONStr(setDNSMode, "simple"); err != nil {
 			return nil, err
 		}
 	}
 	if m.RemoteDns != nil {
-		if err := set(setDNSRemote, *m.RemoteDns); err != nil {
+		if err := setJSONStr(setDNSRemote, *m.RemoteDns); err != nil {
 			return nil, err
 		}
 	}
 	if m.DirectDns != nil {
-		if err := set(setDNSDirect, *m.DirectDns); err != nil {
+		if err := setJSONStr(setDNSDirect, *m.DirectDns); err != nil {
+			return nil, err
+		}
+	}
+	if m.RemoteQueryStrategy != nil {
+		if err := setJSONStr(setDNSStrategy, domainStrategyStr(*m.RemoteQueryStrategy)); err != nil {
 			return nil, err
 		}
 	}
@@ -170,12 +226,59 @@ func (s *Server) SetDns(ctx context.Context, req *connect.Request[lavrayv1.SetDn
 		return nil, err
 	}
 	if m.AdvancedJson != nil {
-		if err := set(setDNSAdvJSON, *m.AdvancedJson); err != nil {
+		if err := setJSONStr(setDNSAdvJSON, *m.AdvancedJson); err != nil {
 			return nil, err
 		}
 	}
 	needsRestart := s.inst.Status().State != instStateIdle
-	return connect.NewResponse(&lavrayv1.SetDnsResponse{NeedsProfileRestart: needsRestart}), nil
+	return connect.NewResponse(&lavrayv1.SetDnsResponse{
+		NeedsProfileRestart: needsRestart,
+		Applied:             s.currentDNS(),
+	}), nil
+}
+
+// dnsObjectHasDirect — advanced-DNS обязан содержать tag dns-direct.
+func dnsObjectHasDirect(obj map[string]any) bool {
+	servers, ok := obj["servers"].([]any)
+	if !ok {
+		return false
+	}
+	for _, srv := range servers {
+		if m, ok := srv.(map[string]any); ok {
+			if tag, _ := m["tag"].(string); tag == "dns-direct" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ValidateDnsJson — FR-UI-149 «Format/Validate» в редакторе DNS-объекта.
+func (s *Server) ValidateDnsJson(ctx context.Context, req *connect.Request[lavrayv1.ValidateDnsJsonRequest]) (*connect.Response[lavrayv1.ValidateDnsJsonResponse], error) {
+	raw := strings.TrimSpace(req.Msg.Json)
+	if raw == "" {
+		return connect.NewResponse(&lavrayv1.ValidateDnsJsonResponse{
+			Valid: false, Errors: []string{"json: пустой ввод"},
+		}), nil
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(raw), &obj); err != nil {
+		return connect.NewResponse(&lavrayv1.ValidateDnsJsonResponse{
+			Valid: false, Errors: []string{"json: " + err.Error()},
+		}), nil
+	}
+	var errs []string
+	if _, ok := obj["servers"]; !ok {
+		errs = append(errs, "servers: обязательное поле")
+	}
+	if !dnsObjectHasDirect(obj) {
+		errs = append(errs, "servers: нужен сервер с tag \"dns-direct\"")
+	}
+	resp := &lavrayv1.ValidateDnsJsonResponse{Valid: len(errs) == 0, Errors: errs}
+	if b, err := json.MarshalIndent(obj, "", "  "); err == nil {
+		resp.Formatted = strp(string(b))
+	}
+	return connect.NewResponse(resp), nil
 }
 
 // ---- SettingsService ----------------------------------------------------------

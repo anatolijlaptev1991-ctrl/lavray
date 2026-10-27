@@ -17,6 +17,22 @@ import (
 
 // subscriberFor — Subscriber с настройками из settings (UA/HWID/лимиты).
 func (s *Server) subscriberFor() *subs.Subscriber {
+	return s.subscriberWith(subRequest{})
+}
+
+// subRequest — разовые переопределения из UpdateSubscriptionRequest (A16
+// аудита round 1: поля use_proxy/insecure_tls/user_agent/clear_before/
+// allow_private_urls/таймауты раньше игнорировались).
+type subRequest struct {
+	userAgent          string
+	insecureTLS        *bool
+	allowPrivate       *bool
+	connectTimeout     time.Duration
+	overallTimeout     time.Duration
+	confirmDestructive bool
+}
+
+func (s *Server) subscriberWith(r subRequest) *subs.Subscriber {
 	opts := subs.Options{
 		MaxBodyBytes:    64 << 20,
 		AllowPrivateURL: s.settingBool("sub.allow_private_urls"),
@@ -26,7 +42,21 @@ func (s *Server) subscriberFor() *subs.Subscriber {
 			s.logs.Logf("warn", "subs", format, args...)
 		},
 	}
-	if ua := s.settingStr("sub.user_agent"); ua != "" {
+	if r.allowPrivate != nil {
+		opts.AllowPrivateURL = *r.allowPrivate
+	}
+	if r.insecureTLS != nil {
+		opts.InsecureTLS = *r.insecureTLS
+	}
+	if r.connectTimeout > 0 {
+		opts.ConnectTimeout = r.connectTimeout
+	}
+	if r.overallTimeout > 0 {
+		opts.OverallTimeout = r.overallTimeout
+	}
+	if ua := r.userAgent; ua != "" {
+		opts.UserAgent = ua
+	} else if ua := s.settingStr("sub.user_agent"); ua != "" {
 		opts.UserAgent = ua
 	}
 	return subs.NewSubscriber(s.http, opts)
@@ -57,7 +87,20 @@ func (s *Server) DeleteSubscription(ctx context.Context, req *connect.Request[la
 // UpdateSubscription — стрим прогресса обновления одной подписки.
 func (s *Server) UpdateSubscription(ctx context.Context, req *connect.Request[lavrayv1.UpdateSubscriptionRequest], stream *connect.ServerStream[lavrayv1.SubscriptionProgress]) error {
 	ctx = context.WithValue(ctx, confirmCtxKey{}, req.Header().Get("X-LAVRay-Confirm"))
-	return s.updateOne(ctx, req.Msg.GroupId, stream, true)
+	m := req.Msg
+	r := subRequest{
+		userAgent:          m.GetUserAgent(),
+		insecureTLS:        m.InsecureTls,
+		allowPrivate:       m.AllowPrivateUrls,
+		confirmDestructive: m.GetConfirmDestructive(),
+	}
+	if m.ConnectTimeoutMs != nil && m.GetConnectTimeoutMs() > 0 {
+		r.connectTimeout = time.Duration(m.GetConnectTimeoutMs()) * time.Millisecond
+	}
+	if m.OverallTimeoutMs != nil && m.GetOverallTimeoutMs() > 0 {
+		r.overallTimeout = time.Duration(m.GetOverallTimeoutMs()) * time.Millisecond
+	}
+	return s.updateOne(ctx, m.GroupId, stream, true, r)
 }
 
 // UpdateAllSubscriptions — все неархивные подписки без skip_auto_update.
@@ -67,10 +110,20 @@ func (s *Server) UpdateAllSubscriptions(ctx context.Context, req *connect.Reques
 		return mapErr(err)
 	}
 	for _, g := range groups {
-		if g.Kind != model.GroupSubscription || g.Archive || g.SkipAutoUpdate {
+		if g.Kind != model.GroupSubscription {
 			continue
 		}
-		if err := s.updateOne(ctx, g.ID, stream, false); err != nil {
+		if g.Archive || g.SkipAutoUpdate {
+			// FR-UI-108: пропуск виден в стриме, а не молча.
+			_ = stream.Send(&lavrayv1.SubscriptionProgress{
+				GroupId: g.ID,
+				TsMs:    time.Now().UnixMilli(),
+				Phase:   lavrayv1.SubscriptionProgress_PHASE_SKIPPED,
+				Detail:  strpIf(skipReason(g)),
+			})
+			continue
+		}
+		if err := s.updateOne(ctx, g.ID, stream, false, subRequest{}); err != nil {
 			// одна упавшая подписка не останавливает остальные
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -80,17 +133,24 @@ func (s *Server) UpdateAllSubscriptions(ctx context.Context, req *connect.Reques
 	return nil
 }
 
-func (s *Server) updateOne(ctx context.Context, groupID int64, stream *connect.ServerStream[lavrayv1.SubscriptionProgress], emit bool) error {
-	send := func(phase lavrayv1.SubscriptionProgress_Phase, detail string) {
-		if !emit && phase != lavrayv1.SubscriptionProgress_PHASE_FAILED {
+func skipReason(g *model.Group) string {
+	if g.Archive {
+		return "группа в архиве"
+	}
+	return "skip_auto_update"
+}
+
+func (s *Server) updateOne(ctx context.Context, groupID int64, stream *connect.ServerStream[lavrayv1.SubscriptionProgress], emit bool, r subRequest) error {
+	send := func(p *lavrayv1.SubscriptionProgress) {
+		if !emit && p.Phase != lavrayv1.SubscriptionProgress_PHASE_FAILED {
 			return
 		}
-		_ = stream.Send(&lavrayv1.SubscriptionProgress{
-			GroupId: groupID,
-			TsMs:    time.Now().UnixMilli(),
-			Phase:   phase,
-			Detail:  strpIf(detail),
-		})
+		p.GroupId = groupID
+		p.TsMs = time.Now().UnixMilli()
+		_ = stream.Send(p)
+	}
+	sendPhase := func(phase lavrayv1.SubscriptionProgress_Phase, detail string) {
+		send(&lavrayv1.SubscriptionProgress{Phase: phase, Detail: strpIf(detail)})
 	}
 
 	// Защита от параллельного обновления одной подписки (иначе два apply
@@ -101,7 +161,7 @@ func (s *Server) updateOne(ctx context.Context, groupID int64, stream *connect.S
 	}
 	if s.subsRunning[groupID] {
 		s.subsMu.Unlock()
-		send(lavrayv1.SubscriptionProgress_PHASE_FAILED, "обновление уже идёт")
+		sendPhase(lavrayv1.SubscriptionProgress_PHASE_FAILED, "обновление уже идёт")
 		return connect.NewError(connect.CodeAlreadyExists, errors.New("обновление подписки уже выполняется"))
 	}
 	s.subsRunning[groupID] = true
@@ -114,12 +174,16 @@ func (s *Server) updateOne(ctx context.Context, groupID int64, stream *connect.S
 
 	g, err := s.st.GetGroup(groupID)
 	if err != nil {
-		send(lavrayv1.SubscriptionProgress_PHASE_FAILED, err.Error())
+		sendPhase(lavrayv1.SubscriptionProgress_PHASE_FAILED, err.Error())
 		return mapErr(err)
 	}
-	send(lavrayv1.SubscriptionProgress_PHASE_REQUESTING, g.SubscriptionURL)
+	send(&lavrayv1.SubscriptionProgress{
+		Phase:  lavrayv1.SubscriptionProgress_PHASE_STARTED,
+		Detail: strpIf(g.Name),
+	})
+	sendPhase(lavrayv1.SubscriptionProgress_PHASE_REQUESTING, g.SubscriptionURL)
 
-	sub := s.subscriberFor()
+	sub := s.subscriberWith(r)
 	var res *subs.UpdateResult
 	var confirmErr *subs.ConfirmRequiredError
 	for attempt := 0; attempt < 2; attempt++ {
@@ -128,33 +192,61 @@ func (s *Server) updateOne(ctx context.Context, groupID int64, stream *connect.S
 			break
 		}
 		if errors.As(err, &confirmErr) {
-			// Деструктивное изменение: сообщаем UI и, если клиент прислал
-			// confirm=true в исходном запросе — повторяем с подтверждением.
-			send(lavrayv1.SubscriptionProgress_PHASE_FAILED, confirmErr.Error())
-			if !subscriptionConfirmed(ctx) {
+			// Деструктивное изменение (A15 аудита round 1): раньше уходил
+			// PHASE_FAILED, и UI не мог показать «удалить N из M?». Теперь —
+			// PHASE_CONFIRM_REQUIRED с числами; продолжаем только по явному
+			// confirm_destructive (заголовок или поле запроса).
+			diff := confirmErr.Diff
+			resp := &lavrayv1.SubscriptionProgress{
+				Phase:  lavrayv1.SubscriptionProgress_PHASE_CONFIRM_REQUIRED,
+				Detail: strpIf(confirmErr.Reason),
+			}
+			if diff != nil {
+				resp.WouldRemoveCount = int32p(int32(len(diff.Deleted)))
+				resp.AddedCount = int32p(int32(len(diff.Added)))
+				resp.RemovedCount = int32p(int32(len(diff.Deleted)))
+				resp.TotalCount = int32p(int32(diff.Kept + diff.Updated + len(diff.Added)))
+			}
+			send(resp)
+			if !(r.confirmDestructive || subscriptionConfirmed(ctx)) {
 				return connect.NewError(connect.CodeFailedPrecondition, err)
 			}
 			continue
 		}
-		send(lavrayv1.SubscriptionProgress_PHASE_FAILED, err.Error())
+		sendPhase(lavrayv1.SubscriptionProgress_PHASE_FAILED, err.Error())
 		return mapErr(err)
 	}
 	if err != nil {
 		return mapErr(err)
 	}
 	if res != nil {
-		s.subsMu.Lock()
-		if s.subsSnap == nil {
-			s.subsSnap = map[int64]*subs.Snapshot{}
+		// A15 (аудит round 1): снапшот «до» берётся внутри Apply и
+		// возвращается в UpdateResult — раньше API снимал снимок ПОСЛЕ
+		// применения, и «Откатить подписку» не откатывал ничего.
+		if res.Snapshot != nil {
+			s.subsMu.Lock()
+			if s.subsSnap == nil {
+				s.subsSnap = map[int64]*subs.Snapshot{}
+			}
+			s.subsSnap[groupID] = res.Snapshot
+			s.subsMu.Unlock()
 		}
-		if snap, snapErr := subs.TakeSnapshot(s.st, groupID); snapErr == nil {
-			s.subsSnap[groupID] = snap
+		send(&lavrayv1.SubscriptionProgress{
+			Phase:        lavrayv1.SubscriptionProgress_PHASE_DIFFING,
+			AddedCount:   int32p(int32(len(res.Diff.Added))),
+			RemovedCount: int32p(int32(len(res.Diff.Deleted))),
+			TotalCount:   int32p(int32(res.Diff.Kept + res.Diff.Updated + len(res.Diff.Added))),
+		})
+		sendPhase(lavrayv1.SubscriptionProgress_PHASE_SAVING, "")
+		if res.Info != nil {
+			send(&lavrayv1.SubscriptionProgress{
+				Phase:    lavrayv1.SubscriptionProgress_PHASE_DONE,
+				UserInfo: subscriptionInfoToProto(res.Info),
+			})
+			return nil
 		}
-		s.subsMu.Unlock()
-		send(lavrayv1.SubscriptionProgress_PHASE_PARSING, "")
-		send(lavrayv1.SubscriptionProgress_PHASE_SAVING, "")
 	}
-	send(lavrayv1.SubscriptionProgress_PHASE_DONE, "")
+	sendPhase(lavrayv1.SubscriptionProgress_PHASE_DONE, "")
 	return nil
 }
 

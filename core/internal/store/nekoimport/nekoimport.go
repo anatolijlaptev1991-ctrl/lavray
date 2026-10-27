@@ -251,6 +251,11 @@ func Import(s *store.Store, configDir string) (*Report, error) {
 // импорт не дублирует).
 func (r *Report) insert(s *store.Store, p *model.Profile, gid, fallbackGID int64) {
 	p.GroupID = gid
+	// A17: страна профиля нужна и для мигрированных профилей NekoBox,
+	// иначе группировка «по странам» работала бы только для новых импортов.
+	if p.Geo == "" {
+		p.Geo = model.DetectGeo(p.Name, p.Address)
+	}
 	switch _, err := s.GetProfile(p.ID); {
 	case err == nil:
 		r.AlreadyPresent++

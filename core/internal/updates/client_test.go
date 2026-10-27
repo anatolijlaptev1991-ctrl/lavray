@@ -64,6 +64,25 @@ func (s signer) signEnv(signed json.RawMessage, keyid string) []byte {
 	return b
 }
 
+// dualSign — конверт с двумя подписями (ротация root: старый+новый порог).
+func dualSign(t *testing.T, signed json.RawMessage, s1 signer, k1 string, s2 signer, k2 string) []byte {
+	t.Helper()
+	sig1 := ed25519.Sign(s1.priv, signed)
+	sig2 := ed25519.Sign(s2.priv, signed)
+	env := map[string]any{
+		"signed": json.RawMessage(signed),
+		"signatures": []any{
+			map[string]any{"keyid": k1, "sig": base64.StdEncoding.EncodeToString(sig1)},
+			map[string]any{"keyid": k2, "sig": base64.StdEncoding.EncodeToString(sig2)},
+		},
+	}
+	b, err := json.Marshal(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
 func b64pub(t *testing.T, s signer) string {
 	t.Helper()
 	pub := s.priv.Public().(ed25519.PublicKey)
@@ -287,7 +306,9 @@ func TestRootRotationByOldThreshold(t *testing.T) {
 		},
 	}
 	b2, _ := json.Marshal(root2)
-	m.put("root.json", f.rootS.signEnv(b2, "k1")) // подпись СТАРЫМ k1
+	// TUF §5.3: новый root подписывается СТАРЫМ порогом и НОВЫМ порогом.
+	// Одной подписи старым ключом недостаточно (см. M1 аудита round 2).
+	m.put("root.json", dualSign(t, b2, f.rootS, "k1", newRootSigner, "k2"))
 
 	res, err := c.Check(context.Background())
 	if err != nil {
@@ -295,6 +316,17 @@ func TestRootRotationByOldThreshold(t *testing.T) {
 	}
 	if res.Trust.Root().Version != 2 {
 		t.Fatalf("root остался v%d", res.Trust.Root().Version)
+	}
+
+	// Негативный случай: подпись только старым ключом НЕ переключает доверие
+	// (ошибка ротации не фейлит проверку — старый root остаётся валидным).
+	m.put("root.json", f.rootS.signEnv(b2, "k1"))
+	res2, err := newClient(t, f, m, &State{}).Check(context.Background())
+	if err != nil {
+		t.Fatalf("проверка со старым root: %v", err)
+	}
+	if res2.Trust.Root().Version != 1 {
+		t.Fatalf("ротация без подписи новыми ключами принята: root v%d", res2.Trust.Root().Version)
 	}
 }
 

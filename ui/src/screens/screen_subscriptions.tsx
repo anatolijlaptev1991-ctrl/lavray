@@ -87,7 +87,17 @@ export function SubscriptionsScreen(): JSX.Element {
     }
     setBusy('add');
     try {
-      const g = await core.subscriptions.createSubscription({ name: name.trim(), url: clean });
+      const autoName = ((): string => {
+        try {
+          return new URL(clean).host;
+        } catch {
+          return '';
+        }
+      })();
+      const g = await core.subscriptions.createSubscription({
+        name: name.trim() === '' ? autoName : name.trim(),
+        url: clean,
+      });
       setOk(tf('toast.subUpdated', { name: g.name }));
       setUrl('');
       setName('');
@@ -107,27 +117,55 @@ export function SubscriptionsScreen(): JSX.Element {
       setProgress(t('scr.subs.sub'));
       setBusy(String(id));
       try {
-        const stream = core.subscriptions.updateSubscription({ groupId: id });
-        for await (const ev of stream) {
-          if (ev.phase === SubscriptionProgress_Phase.CONFIRM_REQUIRED) {
-            setErr(
-              `${ev.detail ?? ''}: ${String(ev.wouldRemoveCount ?? 0)} / ${String(ev.totalCount ?? 0)}`,
+        // D4 (аудит round 2): успех показываем ТОЛЬКО при PHASE_DONE. При
+        // CONFIRM_REQUIRED раньше всё равно висел тост «обновлено», а
+        // деструктивное обновление нельзя было подтвердить из UI.
+        const attempt = async (confirm: boolean): Promise<{ done: boolean; needConfirm: boolean }> => {
+          let done = false;
+          let needConfirm = false;
+          let wouldRemove = 0;
+          let total = 0;
+          const stream = core.subscriptions.updateSubscription({
+            groupId: id,
+            confirmDestructive: confirm,
+          });
+          for await (const ev of stream) {
+            if (ev.phase === SubscriptionProgress_Phase.CONFIRM_REQUIRED) {
+              needConfirm = true;
+              wouldRemove = ev.wouldRemoveCount ?? 0;
+              total = ev.totalCount ?? 0;
+            } else if (ev.phase === SubscriptionProgress_Phase.FAILED) {
+              setErrors((m) => ({ ...m, [String(id)]: ev.detail ?? 'error' }));
+            } else if (ev.phase === SubscriptionProgress_Phase.DONE) {
+              done = true;
+            } else {
+              setProgress(ev.detail ?? '');
+            }
+          }
+          if (needConfirm && !confirm) {
+            const okConfirm = window.confirm(
+              `${t('sub.err.badge')}: ${String(wouldRemove)} / ${String(total)}`,
             );
-          } else if (ev.phase === SubscriptionProgress_Phase.FAILED) {
-            setErrors((m) => ({ ...m, [String(id)]: ev.detail ?? 'error' }));
-          } else {
-            setProgress(ev.detail ?? '');
+            if (okConfirm) {
+              return attempt(true);
+            }
           }
+          return { done, needConfirm };
+        };
+        const res = await attempt(false);
+        if (res.done) {
+          setErrors((m) => {
+            const next: Record<string, string> = {};
+            for (const [k, v] of Object.entries(m)) {
+              if (k !== String(id)) next[k] = v;
+            }
+            return next;
+          });
+          setOk(tf('toast.subUpdated', { name: gname }));
+          await reload();
+        } else if (!res.needConfirm) {
+          setErr(t('sub.err.badge'));
         }
-        setErrors((m) => {
-          const next: Record<string, string> = {};
-          for (const [k, v] of Object.entries(m)) {
-            if (k !== String(id)) next[k] = v;
-          }
-          return next;
-        });
-        setOk(tf('toast.subUpdated', { name: gname }));
-        await reload();
       } catch (e) {
         const msg = friendlyCoreError(e);
         setErrors((m) => ({ ...m, [String(id)]: msg }));
@@ -143,13 +181,11 @@ export function SubscriptionsScreen(): JSX.Element {
   const toggleAuto = useCallback(
     async (g: Group): Promise<void> => {
       try {
+        // D5 (аудит round 2): UpdateGroup — полная замена; отправляем
+        // исходную группу с изменённым флагом, иначе терялись URL, UA,
+        // заголовки и интервал подписки.
         await core.profiles.updateGroup({
-          group: {
-            id: g.id,
-            name: g.name,
-            kind: g.kind,
-            skipAutoUpdate: !g.skipAutoUpdate,
-          },
+          group: { ...g, skipAutoUpdate: !g.skipAutoUpdate },
         });
         await reload();
       } catch (e) {

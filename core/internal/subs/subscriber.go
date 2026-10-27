@@ -95,6 +95,11 @@ func (o Options) withDefaults() Options {
 	if o.OverallTimeout <= 0 {
 		o.OverallTimeout = DefaultOverallTimeout
 	}
+	// SB1 (аудит round 2): ноль — это «не задано», а не «без ретраев».
+	// Контракт §4.1: 2 ретрая с докачкой; отключение — явным отрицательным.
+	if o.Retries == 0 {
+		o.Retries = DefaultRetries
+	}
 	if o.Retries < 0 {
 		o.Retries = 0
 	}

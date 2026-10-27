@@ -30,6 +30,9 @@ type SingBoxRunner struct {
 	// shutdownCh — канал graceful-лестницы: Close может занять время
 	// (TUN/маршруты/QUIC-соединения); ждём его здесь же в Stop.
 	shutdownCh chan struct{}
+	// closing — Close уже идёт (I3): новый Start запрещён, пока инстанс не
+	// освободит ресурсы.
+	closing bool
 }
 
 // NewSingBoxRunner создаёт раннер (инстанс создаётся в Start).
@@ -73,30 +76,44 @@ func (r *SingBoxRunner) Stop(ctx context.Context) error {
 	r.mu.Lock()
 	instance := r.instance
 	ch := r.shutdownCh
-	r.instance = nil
-	r.shutdownCh = nil
-	r.mu.Unlock()
 	if instance == nil {
+		r.mu.Unlock()
 		return nil // Stop после неудачного Start — no-op
 	}
+	// I3 (аудит round 2): instance НЕ обнуляется до успешного Close. Раньше
+	// при таймауте дескриптор терялся навсегда (утечка TUN), а следующий
+	// Start поднимал второй инстанс поверх неубитого.
+	r.closing = true
+	r.mu.Unlock()
+
 	done := make(chan error, 1)
 	go func() {
 		done <- instance.Close()
 	}()
+	var err error
 	select {
-	case err := <-done:
-		if ch != nil {
-			close(ch)
-		}
-		if err != nil {
-			return fmt.Errorf("singbox: закрытие: %w", err)
-		}
-		return nil
+	case err = <-done:
 	case <-ctx.Done():
-		// Close продолжает дорывать ресурсы в фоне; повторный старт небезопасен
-		// — менеджер пометит инстанс Crashed (сообщение это объясняет).
+		// Close продолжает дорывать ресурсы в фоне; instance остаётся в
+		// r.instance, чтобы повторный Stop мог дождаться его завершения.
+		r.mu.Lock()
+		r.closing = false
+		r.mu.Unlock()
 		return fmt.Errorf("singbox: закрытие не уложилось в таймаут (%w); инстанс считается упавшим", ctx.Err())
 	}
+
+	r.mu.Lock()
+	r.instance = nil
+	r.shutdownCh = nil
+	r.closing = false
+	r.mu.Unlock()
+	if ch != nil {
+		close(ch)
+	}
+	if err != nil {
+		return fmt.Errorf("singbox: закрытие: %w", err)
+	}
+	return nil
 }
 
 var _ Runner = (*SingBoxRunner)(nil)

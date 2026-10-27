@@ -69,23 +69,35 @@ func (s *Server) saveUpdateState(st *updates.State) {
 	_ = s.st.SetSetting(setUpdLastURL, st.LastWorkingURL)
 }
 
-// newUpdaterFor — апдейтер, ограниченный запрошенным каналом.
+// newUpdaterFor — ЛОКАЛЬНАЯ копия апдейтера под запрошенный канал
+// (A1 аудита round 2: общий *updates.Client мутировался из параллельных
+// запросов — Trust/State/Channel гонялись между Check/Download/Verify).
 func (s *Server) newUpdaterFor(ch lavrayv1.UpdateChannel) (*updates.Client, error) {
-	c, err := s.newUpdater()
+	s.updMu.Lock()
+	defer s.updMu.Unlock()
+	c, err := s.newUpdaterLocked()
 	if err != nil {
 		return nil, err
 	}
-	c.Channel = channelOf(ch)
-	return c, nil
+	local := *c
+	local.Channel = channelOf(ch)
+	return &local, nil
 }
 
 func (s *Server) newUpdater() (*updates.Client, error) {
+	s.updMu.Lock()
+	defer s.updMu.Unlock()
+	return s.newUpdaterLocked()
+}
+
+func (s *Server) newUpdaterLocked() (*updates.Client, error) {
 	if s.updater == nil {
 		return nil, failedPrecondition("обновления не сконфигурированы (root/источники задаёт оболочка при старте)")
 	}
 	st := s.loadUpdateState()
-	s.updater.State = &st
-	return s.updater, nil
+	local := *s.updater
+	local.State = &st
+	return &local, nil
 }
 
 func channelOf(c lavrayv1.UpdateChannel) string {

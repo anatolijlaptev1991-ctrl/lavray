@@ -2,10 +2,11 @@
 // статуса/профилей. Один контекст на приложение (источник — window env или
 // адаптер оболочки).
 import { createContext, useContext, useEffect, useState } from 'react';
+import { create } from '@bufbuild/protobuf';
 import type { CoreClients } from '../lib/core';
-import { createCoreClients, coreUrlFromEnv } from '../lib/core';
-import type { Profile } from '../gen/lavray_pb';
-import { CoreState } from '../gen/lavray_pb';
+import { createCoreClients, coreUrlFromEnv, friendlyCoreError } from '../lib/core';
+import type { CoreStatus, Profile } from '../gen/lavray_pb';
+import { CoreState, CoreStatusSchema } from '../gen/lavray_pb';
 
 export const CoreContext = createContext<CoreClients | null>(null);
 
@@ -24,31 +25,34 @@ export function useCoreClients(): CoreClients {
   return clients;
 }
 
-export interface CoreStatus {
-  state: CoreState;
-  activeProfileId: bigint;
-  lastError: string;
+// Полный снимок статуса ядра (proto CoreStatus): нужен UI для таймера
+// сессии (started_at_ms), режима, имени активного профиля и версии.
+export type { CoreStatus };
+
+function initialStatus(): CoreStatus {
+  return create(CoreStatusSchema, {
+    state: CoreState.IDLE,
+    activeProfileId: 0n,
+    lastError: '',
+  });
 }
 
 /** Опрос статуса ядра раз в секунду (дешёвый unary RPC). */
 export function useCoreStatus(): CoreStatus {
   const core = useCore();
-  const [status, setStatus] = useState<CoreStatus>({
-    state: CoreState.IDLE,
-    activeProfileId: 0n,
-    lastError: '',
-  });
+  const [status, setStatus] = useState<CoreStatus>(initialStatus);
   useEffect(() => {
     const tick = async (): Promise<void> => {
       try {
         const st = await core.core.getStatus({});
-        setStatus({
-          state: st.state,
-          activeProfileId: st.activeProfileId ?? 0n,
-          lastError: st.lastError ?? '',
-        });
-      } catch {
-        /* ядро недоступно — оставляем прежнее состояние */
+        // D9/D15 (аудит round 2): раньше хук выкидывал started_at_ms, mode,
+        // имя профиля и версию ядра — таймер сессии сбрасывался, а причина
+        // падения нигде не показывалась. Теперь статус передаётся целиком.
+        setStatus(st);
+      } catch (e) {
+        setStatus((prev) =>
+          create(CoreStatusSchema, { ...prev, lastError: friendlyCoreError(e) }),
+        );
       }
     };
     void tick();

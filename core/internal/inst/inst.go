@@ -126,6 +126,7 @@ type Manager struct {
 	lastConfig []byte
 
 	startCancel context.CancelFunc // отмена текущего Start (L13)
+	startDone   chan struct{}      // завершение текущего Start (I1)
 
 	subMu  sync.Mutex
 	subs   map[chan Event]struct{}
@@ -166,6 +167,8 @@ func (m *Manager) Start(ctx context.Context, info RunInfo) error {
 	}
 	startCtx, cancel := context.WithCancel(ctx)
 	m.startCancel = cancel
+	startDone := make(chan struct{})
+	m.startDone = startDone
 	m.state = StateStarting
 	m.run = &info
 	m.lastError = ""
@@ -174,11 +177,17 @@ func (m *Manager) Start(ctx context.Context, info RunInfo) error {
 
 	err := m.runner.Start(startCtx, info.ConfigJSON)
 	cancel()
+	close(startDone)
 	m.mu.Lock()
 	m.startCancel = nil
+	m.startDone = nil
 	if err != nil {
+		// I2 (аудит round 2): при падении старта run не должен оставаться —
+		// иначе Status показывает активный профиль в состоянии Crashed.
 		m.state = StateCrashed
 		m.lastError = err.Error()
+		m.run = nil
+		m.lastConfig = nil
 		m.mu.Unlock()
 		m.notifySnapshot()
 		return fmt.Errorf("inst: старт инстанса: %w", err)
@@ -202,14 +211,21 @@ func (m *Manager) Stop(ctx context.Context) error {
 		m.mu.Unlock()
 		return nil
 	case StateStarting:
-		// L13 аудита №1: раньше Stop во время Start возвращал ErrNotRunning и
-		// ничего не отменял — через мгновение инстанс переходил в Ready, а
-		// пользователь считал себя отключённым. Теперь отменяем старт и
-		// дожидаемся его завершения под тем же мьютексом.
+		// L13/I1: отменяем старт и ЖДЁМ, пока Start завершится — иначе
+		// раннер, игнорирующий ctx, успевал перевести инстанс в Ready уже
+		// после «успешного» Disconnect.
 		cancel := m.startCancel
+		done := m.startDone
 		m.mu.Unlock()
 		if cancel != nil {
 			cancel()
+		}
+		if done != nil {
+			select {
+			case <-done:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 		}
 		return nil
 	}

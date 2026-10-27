@@ -108,6 +108,13 @@ func (c *Client) Check(ctx context.Context) (*Result, error) {
 	}
 	now := c.now()
 
+	// U1/W-09 (аудит round 2): срок действия root реально проверяется.
+	// Раньше expires только парсился — просроченный корень оставался
+	// доверенным бессрочно, а значит freeze/replay не ограничивался.
+	if exp := c.Trust.Root().Expires; !exp.IsZero() && !now.Before(exp) {
+		return nil, fmt.Errorf("%w: root.json истёк (%s)", ErrExpired, exp.UTC().Format(time.RFC3339))
+	}
+
 	// 0) Подписанные sources (параллельно с bootstrap; подписанные приоритетны).
 	srcs, signedSources, err := c.fetchSources(ctx, now)
 	if err != nil {
@@ -143,7 +150,13 @@ func (c *Client) Check(ctx context.Context) (*Result, error) {
 			return nil, err
 		}
 		if expires(ts.Expires, now) {
-			return nil, errors.New("updates: timestamp истёк (expires)")
+			return nil, fmt.Errorf("%w: timestamp истёк", ErrExpired)
+		}
+		// U2/W-09: окно свежести ≤ 7 суток (§3.2) — иначе подписанный
+		// timestamp с expires через годы открывает freeze-атаку.
+		if ts.Expires.After(now.Add(maxTimestampHorizon)) {
+			return nil, fmt.Errorf("%w: timestamp.expires=%s", ErrTimestampHorizon,
+				ts.Expires.UTC().Format(time.RFC3339))
 		}
 		return ts, nil
 	})
@@ -398,6 +411,9 @@ func (c *Client) now() time.Time {
 	}
 	return time.Now()
 }
+
+// maxTimestampHorizon — максимальное окно свежести timestamp (§3.2).
+const maxTimestampHorizon = 7 * 24 * time.Hour
 
 func expires(t time.Time, now time.Time) bool {
 	return !now.Before(t) // zero time = истёкший (строгость)

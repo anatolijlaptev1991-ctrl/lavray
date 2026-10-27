@@ -103,6 +103,26 @@ func IsPrivateIP(ip net.IP) bool {
 		"fe80::/10",          // link-local v6
 		"ff00::/8",           // multicast v6
 		"::/128",             // unspecified v6
+		// W-06 (аудит round 2): ранее не покрытые диапазоны, через которые
+		// SSRF достаёт служебные сервисы хостера/трансляторы.
+		"240.0.0.0/4",        // reserved (class E)
+		"198.18.0.0/15",      // benchmarking (часто занят провайдером)
+		"192.0.0.0/24",       // IETF protocol assignments
+		"192.88.99.0/24",     // 6to4 relay anycast
+		"192.0.2.0/24",       // TEST-NET-1
+		"198.51.100.0/24",    // TEST-NET-2
+		"203.0.113.0/24",     // TEST-NET-3
+		"64:ff9b::/96",       // NAT64 (позволяет дотянуться до v4-loopback)
+		"2002::/16",          // 6to4
+		"fec0::/10",          // site-local (устаревший, но живой)
+		// ::ffff:0:0/96 НЕ в списке: после To4() адрес нормализуется в
+		// 4-байтный, и Contains по этой сети ложно матчил бы ЛЮБОЙ IPv4.
+		// Mapped-адреса покрываются самой нормализацией ниже.
+	}
+	// IPv4-mapped IPv6 (::ffff:127.0.0.1) приводим к v4 — иначе Contains по
+	// v4-сетям не совпадёт.
+	if v4 := ip.To4(); v4 != nil {
+		ip = v4
 	}
 	for _, cidr := range privateNets {
 		if _, network, err := net.ParseCIDR(cidr); err == nil {

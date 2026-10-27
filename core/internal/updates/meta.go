@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"path"
 	"strings"
 	"time"
 )
@@ -619,6 +620,16 @@ func (t *Trust) VerifyRootUpdate(raw []byte) (*Trust, error) {
 	if err := VerifyEnvelope(env, RoleRoot, t.root); err != nil {
 		return nil, fmt.Errorf("ротация root: %w", err)
 	}
+	// M1 (аудит round 2): TUF требует, чтобы новый root был подписан и
+	// НОВЫМИ ключами самого документа — иначе один скомпрометированный
+	// старый ключ переписывает всю базу доверия.
+	if err := VerifyEnvelope(env, RoleRoot, newRoot); err != nil {
+		return nil, fmt.Errorf("ротация root: не подписан новыми ключами: %w", err)
+	}
+	// Срок действия нового корня тоже обязан быть в будущем.
+	if newRoot.Expires.IsZero() || !time.Now().Before(newRoot.Expires) {
+		return nil, fmt.Errorf("%w: новый root просрочен или без expires", ErrExpired)
+	}
 	return &Trust{raw: append([]byte(nil), raw...), root: newRoot}, nil
 }
 
@@ -691,9 +702,30 @@ func checkRelativePath(p string) error {
 	if strings.HasPrefix(p, "/") {
 		return fmt.Errorf("%w: абсолютный путь %q", ErrUnsafePath, p)
 	}
+	// W-10 (аудит round 2): Windows-специфика. «C:evil» — drive-relative путь,
+	// «a.exe:stream» — альтернативный поток данных NTFS; «CON»/«NUL» —
+	// зарезервированные имена устройств; хвостовые пробелы/точки Windows
+	// молча отбрасывает, что позволяет обойти проверку расширения.
+	if strings.ContainsRune(p, 0) {
+		return fmt.Errorf("%w: NUL-байт в пути", ErrUnsafePath)
+	}
+	if strings.Contains(p, ":") {
+		return fmt.Errorf("%w: двоеточие в пути %q (ADS/диск)", ErrUnsafePath, p)
+	}
 	for _, seg := range strings.Split(p, "/") {
 		if seg == "" || seg == "." || seg == ".." {
 			return fmt.Errorf("%w: сегмент %q в пути %q", ErrUnsafePath, seg, p)
+		}
+		trimmed := strings.TrimRight(seg, " .")
+		if trimmed != seg {
+			return fmt.Errorf("%w: сегмент %q оканчивается пробелом/точкой", ErrUnsafePath, seg)
+		}
+		base := strings.ToUpper(strings.TrimSuffix(trimmed, path.Ext(trimmed)))
+		switch base {
+		case "CON", "PRN", "AUX", "NUL",
+			"COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+			"LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9":
+			return fmt.Errorf("%w: зарезервированное имя %q", ErrUnsafePath, seg)
 		}
 	}
 	return nil

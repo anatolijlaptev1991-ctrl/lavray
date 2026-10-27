@@ -124,6 +124,7 @@ func ComputeDiff(existing, next []*model.Profile) *Diff {
 	}
 	matched := make(map[profileKey]bool)
 	// Мягкие совпадения: сервер тот же, креденшелы сменились.
+	// Значение «свободно» (false) означает, что endpoint уже израсходован.
 	softMatched := make(map[profileKey]bool)
 	var softOld []*model.Profile
 	var dupes []*model.Profile
@@ -151,7 +152,11 @@ func ComputeDiff(existing, next []*model.Profile) *Diff {
 		}
 		ek := endpointKey(p)
 		if softMatched[ek] {
-			continue // уже учтён как обновление
+			// S1 (аудит round 2): «мягкое» совпадение засчитывается 1:1.
+			// Раньше второй новый профиль с тем же host:port молча
+			// пропускался — не попадал ни в Added, ни в группу.
+			softMatched[ek] = false
+			continue
 		}
 		// Точного совпадения нет — ищем «тот же сервер с новым паролем».
 		soft := false
@@ -173,7 +178,9 @@ func ComputeDiff(existing, next []*model.Profile) *Diff {
 			d.Deleted = append(d.Deleted, item(e))
 		}
 	}
-	d.Kept = d.Updated
+	// S2 (аудит round 2): Updated и Kept — разные счётчики. Раньше Kept
+	// дублировал Updated, и API считал TotalCount дважды.
+	d.Kept = 0
 	if len(existing) > 0 {
 		d.DeletionFraction = float64(len(d.Deleted)) / float64(len(existing))
 	}

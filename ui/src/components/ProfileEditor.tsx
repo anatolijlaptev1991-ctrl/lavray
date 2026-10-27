@@ -352,7 +352,20 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
       if (profile === null) {
         await core.profiles.createProfile({ profile: model });
       } else {
-        await core.profiles.updateProfile({ profile: model });
+        // D1 (аудит round 2): UpdateProfile — ПОЛНАЯ замена. Переносим
+        // серверные/пользовательские метаданные из исходного профиля, иначе
+        // пропадали избранное, теги, custom-поля и профиль уезжал в чужую
+        // группу.
+        const merged = create(ProfileSchema, {
+          ...model,
+          groupId: profile.groupId,
+          favorite: profile.favorite,
+          tags: profile.tags,
+          customOutboundJson: profile.customOutboundJson,
+          customConfigJson: profile.customConfigJson,
+          customFieldsConfirmed: profile.customFieldsConfirmed,
+        });
+        await core.profiles.updateProfile({ profile: merged });
       }
       onSaved();
       onClose();

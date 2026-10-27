@@ -39,6 +39,9 @@ type Verifier interface {
 // Panel — HTTP-обвязка: login/logout/healthz + защита API-мутаций.
 type Panel struct {
 	verifier Verifier
+	// allowRemote — панель слушает не только loopback (W-01): включает
+	// Secure-cookie; без TLS такой режим администратор включает осознанно.
+	allowRemote bool
 
 	mu       sync.Mutex
 	sessions map[string]session // token → session
@@ -161,26 +164,41 @@ func (p *Panel) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if password == "" || !p.verifier.Verify(password) {
 		p.mu.Lock()
 		at.fails++
+		// W-02 (аудит round 2): счётчик НЕ сбрасывается — иначе каждая
+		// блокировка снова длилась 2 с и лимит был ~150 попыток/час.
+		// Экспонента: 2,4,8… до blockMax, сбрасывается только успехом.
 		if at.fails >= maxFails {
-			d := time.Duration(at.fails-maxFails+1) * blockStep
-			if d > blockMax {
+			exp := at.fails - maxFails
+			if exp > 16 {
+				exp = 16
+			}
+			d := blockStep << exp
+			if d > blockMax || d <= 0 {
 				d = blockMax
 			}
 			at.blockedTill = time.Now().Add(d)
-			at.fails = 0
 		}
 		p.mu.Unlock()
 		http.Error(w, `{"code":"bad_credentials"}`, http.StatusUnauthorized)
 		return
 	}
+	tok, csrf := newToken(), newToken()
+	if tok == "" || csrf == "" {
+		// W-05: CSPRNG недоступен — fail-closed, сессия не создаётся.
+		http.Error(w, `{"code":"entropy_unavailable"}`, http.StatusInternalServerError)
+		return
+	}
 	p.mu.Lock()
 	delete(p.attempts, ip)
-	tok, csrf := newToken(), newToken()
 	p.sessions[tok] = session{csrf: csrf, expires: time.Now().Add(sessionTTL)}
 	p.mu.Unlock()
+	// W-01 (аудит round 2): при доступе из LAN cookie без Secure уходила
+	// открытым текстом. В панели с AllowRemote ставим Secure и требуем
+	// HTTPS-обвязку (см. Config.TLS).
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookie, Value: tok, Path: "/",
 		HttpOnly: true, SameSite: http.SameSiteStrictMode,
+		Secure: p.allowRemote,
 		MaxAge: int(sessionTTL.Seconds()),
 	})
 	w.Header().Set("Content-Type", "application/json")
@@ -219,9 +237,14 @@ func (p *Panel) sessionCSRF(tok string) string {
 	return ""
 }
 
+// newToken — CSPRNG-токен. W-05 (аудит round 2): ошибка rand больше не
+// игнорируется — при сбое источника энтропии токен был бы нулевым
+// (предсказуемая сессия). Возвращаем пустую строку, и вызывающий отказывает.
 func newToken() string {
 	b := make([]byte, 32)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
@@ -234,6 +257,9 @@ func (p *Panel) Serve(ctx context.Context, cfg Config) (string, func(), error) {
 	if err := CheckBind(bind, cfg.AllowRemote); err != nil {
 		return "", nil, err
 	}
+	// W-01: режим «снаружи» включает Secure-cookie (нужен TLS-терминатор
+	// впереди — реверс-прокси OpenWrt или cfg.TLS в будущем).
+	p.allowRemote = cfg.AllowRemote
 	ln, err := net.Listen("tcp", bind)
 	if err != nil {
 		return "", nil, err

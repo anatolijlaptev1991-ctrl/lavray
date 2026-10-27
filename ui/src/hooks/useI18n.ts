@@ -33,6 +33,12 @@ export function useI18n(): I18nApi {
   const setLanguage = useCallback((next: Language): void => {
     setLang(next);
     applyDocumentLanguage(document);
+    // D3 (аудит round 2): выбор языка переживает перезапуск.
+    try {
+      window.localStorage.setItem('lavray.lang', next);
+    } catch {
+      /* приватный режим */
+    }
   }, []);
 
   return { lang, t, tf, setLanguage };

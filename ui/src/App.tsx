@@ -2,7 +2,7 @@
 // титлбар по ОС, сайдбар со знаком «Отражение», шапка с вкладками, фоновое
 // поле с анимацией, статус-бар. Разметка/классы — из утверждённого прототипа;
 // стили — src/prototype.css (перенесён дословно).
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { BrandMark, Icon, type IconName } from './components/Icon';
 import { SECTIONS, type Section, type SectionTab } from './app/sections';
@@ -69,16 +69,26 @@ function AppInner(): JSX.Element {
     applyDocumentLanguage(document, lang);
   }, [lang]);
 
-  useEffect(() => {
-    applyTheme({ theme: prefs.theme, accent: prefs.accent, doc: document, win: window, storage: window.localStorage });
-    return watchSystemTheme(window, () => {
-      applyTheme({ theme: prefs.theme, accent: prefs.accent, doc: document, win: window, storage: window.localStorage });
-    });
-  }, [prefs]);
+  // D2 (аудит round 2): колбэк системной темы обязан читать АКТУАЛЬНЫЕ
+  // настройки, иначе смена темы ОС откатывала выбор пользователя.
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
 
   useEffect(() => {
-    if (!localStorage.getItem('lavray.lang')) {
-      setLanguage(detectLanguage([...navigator.languages]));
+    const apply = (): void => {
+      applyTheme({ theme: prefsRef.current.theme, accent: prefsRef.current.accent, doc: document, win: window, storage: window.localStorage });
+    };
+    apply();
+    return watchSystemTheme(window, apply);
+  }, []);
+
+  useEffect(() => {
+    // D3: выбор языка сохраняется; при первом запуске — из navigator.
+    const saved = localStorage.getItem('lavray.lang');
+    if (saved === null) {
+      const detected = detectLanguage([...navigator.languages]);
+      setLanguage(detected);
+      localStorage.setItem('lavray.lang', detected);
     }
   }, []);
 

@@ -35,18 +35,24 @@ export function ConnectionScreen(): JSX.Element {
     return profiles[0];
   }, [profiles, pickedId, status.activeProfileId]);
 
+  // D9 (аудит round 2): таймер считается от started_at_ms ядра, а не от
+  // монтирования экрана — иначе при переходе между разделами время
+  // обнулялось.
   useEffect(() => {
     if (!ready) {
       setSessionSec(0);
       return undefined;
     }
-    const id = setInterval(() => {
-      setSessionSec((s) => s + 1);
-    }, 1000);
+    const started = Number(status.startedAtMs ?? 0n);
+    const tick = (): void => {
+      setSessionSec(started > 0 ? Math.max(0, Math.floor((Date.now() - started) / 1000)) : 0);
+    };
+    tick();
+    const id = setInterval(tick, 1000);
     return (): void => {
       clearInterval(id);
     };
-  }, [ready]);
+  }, [ready, status.startedAtMs]);
 
   const toggle = useCallback(async (): Promise<void> => {
     setBusy(true);

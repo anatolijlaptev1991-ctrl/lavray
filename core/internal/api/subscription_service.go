@@ -141,17 +141,26 @@ func skipReason(g *model.Group) string {
 }
 
 func (s *Server) updateOne(ctx context.Context, groupID int64, stream *connect.ServerStream[lavrayv1.SubscriptionProgress], emit bool, r subRequest) error {
+	// B2 (аудит round 2): ошибка отправки прекращает работу. Раньше после
+	// отключения клиента fetch+Apply всё равно выполнялись до конца.
+	var sendErr error
 	send := func(p *lavrayv1.SubscriptionProgress) {
+		if sendErr != nil {
+			return
+		}
 		if !emit && p.Phase != lavrayv1.SubscriptionProgress_PHASE_FAILED {
 			return
 		}
 		p.GroupId = groupID
 		p.TsMs = time.Now().UnixMilli()
-		_ = stream.Send(p)
+		if err := stream.Send(p); err != nil {
+			sendErr = err
+		}
 	}
 	sendPhase := func(phase lavrayv1.SubscriptionProgress_Phase, detail string) {
 		send(&lavrayv1.SubscriptionProgress{Phase: phase, Detail: strpIf(detail)})
 	}
+	defer func() { _ = sendErr }()
 
 	// Защита от параллельного обновления одной подписки (иначе два apply
 	// гоняют одни и те же профили).
@@ -266,14 +275,36 @@ type confirmCtxKey struct{}
 
 // RollbackSubscription — откат последнего успешного обновления к снапшоту.
 func (s *Server) RollbackSubscription(ctx context.Context, req *connect.Request[lavrayv1.RollbackSubscriptionRequest]) (*connect.Response[lavrayv1.RollbackSubscriptionResponse], error) {
+	// B1 (аудит round 2): откат идёт под тем же per-group флагом, что и
+	// обновление, — иначе apply и rollback удаляют профили друг у друга.
 	s.subsMu.Lock()
+	if s.subsRunning == nil {
+		s.subsRunning = map[int64]bool{}
+	}
+	if s.subsRunning[req.Msg.GroupId] {
+		s.subsMu.Unlock()
+		return nil, failedPrecondition("обновление этой подписки ещё идёт — откат невозможен")
+	}
 	snap := s.subsSnap[req.Msg.GroupId]
-	s.subsMu.Unlock()
 	if snap == nil {
+		s.subsMu.Unlock()
 		return nil, failedPrecondition("нет снапшота для отката этой подписки")
 	}
+	s.subsRunning[req.Msg.GroupId] = true
+	s.subsMu.Unlock()
+	defer func() {
+		s.subsMu.Lock()
+		delete(s.subsRunning, req.Msg.GroupId)
+		s.subsMu.Unlock()
+	}()
+
 	if err := subs.Rollback(s.st, snap); err != nil {
 		return nil, mapErr(err)
 	}
+	// Снапшот израсходован: повторный откат к тому же состоянию бессмыслен
+	// и воскрешал бы давно устаревший набор.
+	s.subsMu.Lock()
+	delete(s.subsSnap, req.Msg.GroupId)
+	s.subsMu.Unlock()
 	return connect.NewResponse(&lavrayv1.RollbackSubscriptionResponse{}), nil
 }

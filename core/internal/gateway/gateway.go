@@ -76,6 +76,11 @@ func (NftRenderer) Render(cfg Config, policies []DevicePolicy, selfUser string) 
 		sort.Slice(sorted, func(i, j int) bool { return strings.ToLower(sorted[i].MAC) < strings.ToLower(sorted[j].MAC) })
 		for _, p := range sorted {
 			mac := strings.ToLower(strings.TrimSpace(p.MAC))
+			// W-11: MAC валидируется строго — «aa:..\nadd rule …» иначе
+			// дописывает произвольные правила в nft (root на роутере).
+			if !validMAC(mac) {
+				continue
+			}
 			switch p.Policy {
 			case "direct":
 				fmt.Fprintf(&b, "\t\tether saddr %s return\n", mac)
@@ -88,6 +93,40 @@ func (NftRenderer) Render(cfg Config, policies []DevicePolicy, selfUser string) 
 		b.WriteString("\t}\n")
 	}
 	b.WriteString("}\n")
+	return b.String()
+}
+
+// validMAC — строгий формат xx:xx:xx:xx:xx:xx.
+func validMAC(mac string) bool {
+	if len(mac) != 17 {
+		return false
+	}
+	for i, r := range mac {
+		if (i+1)%3 == 0 {
+			if r != ':' {
+				return false
+			}
+			continue
+		}
+		if !((r >= '0' && r <= '9') || (r >= 'a' && r <= 'f')) {
+			return false
+		}
+	}
+	return true
+}
+
+// safeUser — только [a-z0-9_-] (uid/имя пользователя lavrayd).
+func safeUser(u string) string {
+	var b strings.Builder
+	for _, r := range u {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '_' || r == '-' {
+			b.WriteRune(r)
+		}
+	}
+	if b.Len() == 0 {
+		return "lavray"
+	}
 	return b.String()
 }
 
@@ -125,10 +164,14 @@ func (w *Watchdog) Beat(now time.Time) {
 	w.lastBeat = now
 	w.armed = true
 	if !w.rulesUp { // правила сняты failover-ом — восстановление
-		// Восстановление: правила обратно.
-		w.rulesUp = true
-		if err := w.Applier.Apply(w.Renderer.Render(w.Config, w.Policies(), "lavray")); err == nil && w.OnFailover != nil {
-			w.OnFailover(false)
+		// L41 (аудит round 2): rulesUp выставляется по РЕЗУЛЬТАТУ Apply.
+		// Раньше флаг поднимался до вызова, и при ошибке fw4 правила
+		// считались установленными — ретрая не было вовсе.
+		if err := w.Applier.Apply(w.Renderer.Render(w.Config, w.Policies(), "lavray")); err == nil {
+			w.rulesUp = true
+			if w.OnFailover != nil {
+				w.OnFailover(false)
+			}
 		}
 	}
 }

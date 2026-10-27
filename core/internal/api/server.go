@@ -67,6 +67,9 @@ type Server struct {
 	// ---- тесты задержки: один батч на процесс (StopTests) ----
 	testsMu      sync.Mutex
 	testsRunning *testRun
+
+	// ---- обновления: доступ к общему клиенту сериализуется ----
+	updMu sync.Mutex
 }
 
 // NewServer создаёт сервер зависимостями (Deps.Store обязателен).

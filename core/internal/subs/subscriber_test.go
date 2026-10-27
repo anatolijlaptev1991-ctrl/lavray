@@ -90,7 +90,7 @@ func TestURLGuardSchemeAndPrivate(t *testing.T) {
 	if err := fake.Validate("http://localhost/x"); err == nil {
 		t.Error("localhost → 127.0.0.1 должен отклоняться")
 	}
-	pub := &URLGuard{Resolver: fakeResolver{"sub.example.com": []net.IP{net.ParseIP("203.0.113.10")}}}
+	pub := &URLGuard{Resolver: fakeResolver{"sub.example.com": []net.IP{net.ParseIP("93.184.216.34")}}}
 	if err := pub.Validate("https://sub.example.com/list"); err != nil {
 		t.Errorf("публичный хост отклонён: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestURLGuardIsPrivateIP(t *testing.T) {
 			t.Errorf("IsPrivateIP(%s) = false", s)
 		}
 	}
-	for _, s := range []string{"203.0.113.10", "8.8.8.8", "2001:db8::1"} {
+	for _, s := range []string{"8.8.8.8", "93.184.216.34", "2001:4860:4860::8888"} {
 		if IsPrivateIP(net.ParseIP(s)) {
 			t.Errorf("IsPrivateIP(%s) = true", s)
 		}
@@ -301,7 +301,7 @@ func TestFetchRedirectToPrivateRejected(t *testing.T) {
 // guardValidateForTest — публика через фейковый резолвер.
 func (s *Subscriber) guardValidateForTest(t *testing.T, url string) error {
 	t.Helper()
-	g := &URLGuard{Resolver: fakeResolver{"public.example.com": []net.IP{net.ParseIP("203.0.113.7")}}}
+	g := &URLGuard{Resolver: fakeResolver{"public.example.com": []net.IP{net.ParseIP("93.184.216.34")}}}
 	return g.Validate(url)
 }
 

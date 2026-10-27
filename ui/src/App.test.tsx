@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode, act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import App from './App';
+import { Toast } from './components/Toast';
 
 /** jsdom lacks matchMedia — install a minimal stub. */
 function stubMatchMedia(): void {
@@ -88,28 +89,26 @@ describe('App scaffold smoke render', () => {
     const items = Array.from(document.querySelectorAll<HTMLElement>('.sb-item'));
     expect(items[2]?.classList.contains('on')).toBe(true);
 
-    press('5'); // Настройки → tabs: Параметры/Обновления
-    expect(Array.from(document.querySelectorAll('[role="tab"]')).map((x) => x.textContent)).toEqual([
-      'Параметры',
-      'Обновления',
-    ]);
+    press('5'); // Настройки — боевой экран (.set), заглушек-табов больше нет
+    expect(document.querySelector('.set h2')?.textContent).toBe('Настройки');
+    expect(document.querySelector('[role="radiogroup"][aria-label="Язык интерфейса"]')).not.toBeNull();
   });
 
-  it('shows a toast with an interpolated name (серверы, демо-тост)', () => {
+  it('renders the toast component with an interpolated name', () => {
+    // Все 5 экранов боевые (RPC), демо-кнопок нет — проверяем сам Toast
+    // (компонент из DS; интерполяция tf-плейсхолдеров).
     renderApp();
-    // «Подключение» и «Серверы» — боевые (RPC); демо-тост живёт на
-    // заглушке «Настройки» — переключаемся туда (Ctrl+5).
-    act(() => {
-      window.dispatchEvent(new KeyboardEvent('keydown', { key: '5', ctrlKey: true }));
-    });
-    const connect = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) =>
-      b.textContent?.includes('Подключиться'),
-    );
-    expect(connect).toBeDefined();
-    act(() => {
-      connect?.click();
-    });
 
+    act(() => {
+      root?.render(
+        <StrictMode>
+          <Toast
+            toast={{ id: 1, message: 'Подключено · example.lavray.net' }}
+            onClose={() => undefined}
+          />
+        </StrictMode>,
+      );
+    });
     const toast = document.querySelector<HTMLElement>('.toast');
     expect(toast?.textContent).toContain('Подключено · example.lavray.net');
     expect(toast?.getAttribute('role')).toBe('status');

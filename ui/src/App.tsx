@@ -14,6 +14,9 @@ import { useI18n } from './hooks/useI18n';
 import { CoreContext, useCoreClients } from './hooks/useCore';
 import { ConnectionScreen } from './screens/screen_connection';
 import { ServersScreen } from './screens/screen_servers';
+import { RulesScreen } from './screens/screen_rules';
+import { DiagScreen } from './screens/screen_diag';
+import { SettingsScreen } from './screens/screen_settings';
 import { applyDocumentLanguage, detectLanguage, setLanguage } from './lib/i18n';
 import {
   applyTheme,
@@ -145,6 +148,12 @@ function AppInner(): JSX.Element {
             <ConnectionScreen key="connection" />
           ) : section.id === 'servers' ? (
             <ServersScreen key="servers" />
+          ) : section.id === 'rules' ? (
+            <RulesScreen key="rules" />
+          ) : section.id === 'diag' ? (
+            <DiagScreen key="diag" />
+          ) : section.id === 'settings' ? (
+            <SettingsScreen key="settings" />
           ) : (
             <ScreenStub
               key={`${section.id}/${tab.id}`}

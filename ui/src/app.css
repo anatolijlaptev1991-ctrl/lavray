@@ -335,3 +335,14 @@
 .srv-type { color: var(--accent); font-weight: 600; font-size: .75rem; text-transform: uppercase; letter-spacing: .02em; }
 .srv-name { color: var(--t1); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .toast-ok { color: var(--accent); font-size: .875rem; }
+
+/* ---------- Правила / Диагностика / Настройки ---------- */
+.rules, .diag, .set { display: flex; flex-direction: column; gap: var(--sp-4); }
+.preset-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: var(--sp-3); }
+.preset { width: 100%; text-align: start; display: flex; flex-direction: column; gap: 4px; padding: var(--sp-3); border-radius: var(--r-md); background: var(--surface); border: 1px solid var(--b-subtle); color: var(--t1); font: inherit; cursor: pointer; }
+.preset.on { border-color: var(--accent); background: var(--accent-soft); }
+.preset-name { font-weight: 600; }
+.diag-block { display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-3); border: 1px solid var(--b-subtle); border-radius: var(--r-md); background: var(--surface); }
+.diag-block h3 { font-size: .875rem; color: var(--t2); margin: 0; }
+.diag-list { margin: 0; padding-inline-start: 18px; font-size: .875rem; }
+.diag-log { max-height: 220px; overflow: auto; margin: 0; font-size: .75rem; color: var(--t2); background: var(--bg); padding: var(--sp-2); border-radius: var(--r-sm); }

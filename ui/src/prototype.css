@@ -978,8 +978,9 @@ html[data-shell="browser"]{--font-sans:Inter,system-ui,-apple-system,"Segoe UI",
 /* Титлбар: в браузере/веб-панели скрыт (прототип: html[data-shell=browser]) —
    окно Tauri рисует свой хром. Здесь data-shell не ставится, поэтому прячем
    пустую полосу, если окно не нативное. */
-html:not([data-shell="native"]) .titlebar { display: none; }
-html:not([data-shell="native"]) #app { grid-template-rows: minmax(0, 1fr) var(--sb-h); }
+/* В веб-панели нативного титлбара нет — убираем и строку сетки. */
+html[data-shell="browser"] #titlebar { display: none; }
+html[data-shell="browser"] #app { grid-template-rows: minmax(0, 1fr) var(--sb-h); }
 
 /* ---------- Группы серверов по странам (FR-UI-008) ---------- */
 .srv-groups { display: flex; flex-direction: column; gap: 14px; }

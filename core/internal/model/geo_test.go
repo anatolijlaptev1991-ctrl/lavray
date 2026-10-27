@@ -16,9 +16,9 @@ func TestDetectGeo(t *testing.T) {
 		{"Нидерланды резерв", "x.com", "nl"},
 		{"Франкфурт 2", "x.com", "de"},
 		{"США восток", "x.com", "us"},
-		{"Фины", "x.com", ""},          // «фины» не алиас (только «финляндия»)
+		{"Фины", "x.com", ""}, // «фины» не алиас (только «финляндия»)
 		{"Finland edge", "x.com", "fi"},
-		{"New Zealand", "x.com", "nz"}, // длинный алиас важнее короткого
+		{"New Zealand", "x.com", "nz"},          // длинный алиас важнее короткого
 		{"server-1", "node.ru.example.org", ""}, // TLD=org: страна не выводится
 		{"server-2", "example.com", ""},
 		{"server-3", "site.io", ""}, // служебные TLD не страна

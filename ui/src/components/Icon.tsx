@@ -22,7 +22,9 @@ export type IconName =
   | 'trash'
   | 'plug'
   | 'shield'
-  | 'chevron-down';
+  | 'chevron-down'
+  | 'gauge'
+  | 'rss';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
@@ -109,6 +111,19 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
     </>
   ),
   'chevron-down': <polyline points="6 9 12 15 18 9" />,
+  gauge: (
+    <>
+      <path d="M12 15l3.5-3.5" />
+      <path d="M20.3 18a10 10 0 1 0-16.6 0" />
+    </>
+  ),
+  rss: (
+    <>
+      <path d="M4 11a9 9 0 0 1 9 9" />
+      <path d="M4 4a16 16 0 0 1 16 16" />
+      <circle cx="5" cy="19" r="1" />
+    </>
+  ),
   info: (
     <>
       <circle cx="12" cy="12" r="10" />
@@ -128,7 +143,7 @@ export interface IconProps {
 export function Icon({ name, size = 18, className }: IconProps): JSX.Element {
   return (
     <svg
-      className={className}
+      className={className === undefined ? 'ic' : `ic ${className}`}
       width={size}
       height={size}
       viewBox="0 0 24 24"
@@ -156,6 +171,19 @@ export function BrandMark({ size = 24 }: { readonly size?: number }): JSX.Elemen
       aria-hidden="true"
       focusable="false"
     >
+      {/* Градиент луча «Отражение» (прототип, design/prototype.html:975-984):
+          единственное место, где градиенты разрешены (DS §2). */}
+      <defs>
+        <linearGradient id="lavRay" gradientUnits="userSpaceOnUse" x1="23" y1="9" x2="49" y2="43">
+          <stop offset="0" className="lr-a" stopOpacity=".3" />
+          <stop offset=".5" className="lr-a" />
+          <stop offset="1" className="lr-b" />
+        </linearGradient>
+        <linearGradient id="lavRaySolid" gradientUnits="userSpaceOnUse" x1="23" y1="9" x2="49" y2="43">
+          <stop offset="0" className="lr-a" />
+          <stop offset="1" className="lr-b" />
+        </linearGradient>
+      </defs>
       <g transform="translate(-4.5 1.5)">
         <path className="a-beam" d="M23 13V43H45" strokeWidth="10" />
         <circle className="a-photon" cx="56.5" cy="43" r="5" />

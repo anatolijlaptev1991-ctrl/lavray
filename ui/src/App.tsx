@@ -103,8 +103,11 @@ function AppInner(): JSX.Element {
   const connOn = status.state === CoreState.CONNECTED;
 
   return (
-    <div id="app" data-mode="native">
-      <header className="titlebar">
+    <div id="app" data-mode="native" tabIndex={-1}>
+      <a className="skip-link" href="#main">
+        {t('a11y.skip')}
+      </a>
+      <header id="titlebar">
         <div className="tb-left">
           {adapter.os === 'macos' && (
             <span className="tb-traffic" aria-hidden="true">
@@ -142,7 +145,7 @@ function AppInner(): JSX.Element {
             <BrandMark size={24} />
             <span className="lg-name">LAVRay</span>
           </button>
-          <nav className="sb-nav">
+          <nav className="sb-nav" aria-label={t('aria.nav')}>
             {SECTIONS.map((s) => (
               <button
                 key={s.id}
@@ -170,13 +173,13 @@ function AppInner(): JSX.Element {
           </div>
         </aside>
 
-        <div id="main">
+        <main id="main" tabIndex={-1}>
           {section !== undefined && (
             <div id="grpHead">
               <h1 id="ghTitle">{t(section.navKey)}</h1>
               <p className="sub" id="ghSub">{tab ? t(tab.subKey) : ''}</p>
               {section.tabs.length > 1 && (
-                <div className="subtabs" id="ghTabs" role="tablist">
+                <div className="subtabs" id="ghTabs" role="tablist" aria-label={t('aria.tabs')}>
                   {section.tabs.map((tb) => (
                     <button
                       key={tb.id}
@@ -203,10 +206,10 @@ function AppInner(): JSX.Element {
             {sectionId === 'diag' && <DiagScreen />}
             {sectionId === 'settings' && <SettingsScreen />}
           </div>
-        </div>
+        </main>
       </div>
 
-      <footer id="statusBar">
+      <footer id="statusbar">
         <span className="mono">
           {lang} · {adapter.id}
         </span>

@@ -2,7 +2,6 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './prototype.css';
 import './base.css';
-import './app.css';
 import App from './App';
 
 // Нативный режим (Tauri): оболочка сообщает адрес и токен ядра через

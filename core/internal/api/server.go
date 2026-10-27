@@ -286,7 +286,7 @@ func (s *Server) activePresetID() string {
 	if v := s.settingStr(settingActivePreset); v != "" {
 		return v
 	}
-	return "lav-global"
+	return "global"
 }
 
 // customPresets — пользовательские наборы (хранятся в meta одним JSON).

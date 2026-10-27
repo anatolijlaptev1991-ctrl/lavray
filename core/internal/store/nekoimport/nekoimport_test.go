@@ -123,10 +123,12 @@ func TestImportFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(groups) != 2 || groups[0].ID != 0 || groups[1].ID != 1 {
-		t.Fatalf("groups = %+v, want ids [0,1] in tab order", groups)
+	// Миграция сеет Default в резервном диапазоне (store.DefaultGroupID) —
+	// импортированные группы идут в порядке pm.json следом за ней.
+	if len(groups) != 3 || groups[0].ID != store.DefaultGroupID || groups[1].ID != 0 || groups[2].ID != 1 {
+		t.Fatalf("groups = %+v, want [Default,0,1]", groups)
 	}
-	g1 := groups[1]
+	g1 := groups[2]
 	if g1.Kind != model.GroupSubscription || g1.SubscriptionURL != "https://sub.example.com/list" {
 		t.Fatalf("g1 = %+v", g1)
 	}

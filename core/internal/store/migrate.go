@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"time"
 )
 
@@ -77,6 +78,14 @@ var migrations = []migration{
 			   value         TEXT NOT NULL, -- JSON значения (тип — из дескриптора)
 			   updated_at_ms INTEGER NOT NULL
 			 )`,
+			// F4 (аудит №7): группа «Default» создаётся сразу — без неё
+			// импорт профилей/подписок падает NOT_FOUND (пользователь не
+			// может добавить ни одного сервера). ID — из резервного
+			// диапазона DefaultGroupID: маленькие id (0,1,2…) занимает
+			// импорт каталога NekoBox, и совпадение уничтожало бы группу
+			// пользователя при миграции.
+			`INSERT OR IGNORE INTO groups (id, kind, name, archive, skip_auto_update, tab_order, created_at_ms, updated_at_ms)
+			 VALUES (` + strconv.FormatInt(DefaultGroupID, 10) + `, 1, 'Default', 0, 0, 0, strftime('%s','now')*1000, strftime('%s','now')*1000)`,
 		},
 	},
 }

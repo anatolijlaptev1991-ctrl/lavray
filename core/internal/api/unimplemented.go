@@ -68,26 +68,6 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 	return errNotYetW6
 }
 
-func (s *Server) UpdateSubscriptionSettings(ctx context.Context, req *connect.Request[lavrayv1.UpdateSubscriptionSettingsRequest]) (*connect.Response[lavrayv1.Group], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) DeleteSubscription(ctx context.Context, req *connect.Request[lavrayv1.DeleteSubscriptionRequest]) (*connect.Response[lavrayv1.Empty], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) RollbackSubscription(ctx context.Context, req *connect.Request[lavrayv1.RollbackSubscriptionRequest]) (*connect.Response[lavrayv1.RollbackSubscriptionResponse], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) UpdateSubscription(ctx context.Context, req *connect.Request[lavrayv1.UpdateSubscriptionRequest], stream *connect.ServerStream[lavrayv1.SubscriptionProgress]) error {
-	return errNotYetW6
-}
-
-func (s *Server) UpdateAllSubscriptions(ctx context.Context, req *connect.Request[lavrayv1.UpdateAllSubscriptionsRequest], stream *connect.ServerStream[lavrayv1.SubscriptionProgress]) error {
-	return errNotYetW6
-}
-
 func (s *Server) CreatePreset(ctx context.Context, req *connect.Request[lavrayv1.CreatePresetRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
 	return nil, errNotYetW6
 }

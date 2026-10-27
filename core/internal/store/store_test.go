@@ -175,16 +175,22 @@ func TestGroupCRUD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list groups: %v", err)
 	}
-	if len(list) != 2 || list[0].ID != g2.ID || list[1].ID != g1.ID {
-		t.Fatalf("group order wrong: %d,%d", list[0].ID, list[1].ID)
+	// Миграция сеет группу Default (id=1) — в списке три группы, порядок
+	// переставленных проверяем в хвосте.
+	if len(list) != 3 || list[1].ID != g2.ID || list[2].ID != g1.ID {
+		t.Fatalf("group order wrong: %+v", list)
 	}
 
-	// Последнюю группу удалить нельзя (FR-UI-107).
+	// Последнюю группу удалить нельзя (FR-UI-107). Миграция сеет Default,
+	// поэтому «последняя» наступает после удаления обеих созданных.
 	if err := s.DeleteGroup(g1.ID); err != nil {
 		t.Fatalf("delete g1: %v", err)
 	}
-	if err := s.DeleteGroup(g2.ID); !errors.Is(err, ErrLastGroup) {
-		t.Fatalf("delete last group: got %v, want ErrLastGroup", err)
+	if err := s.DeleteGroup(g2.ID); err != nil {
+		t.Fatalf("delete g2: %v", err)
+	}
+	if err := s.DeleteGroup(1); !errors.Is(err, ErrLastGroup) {
+		t.Fatalf("delete last (Default) group: got %v, want ErrLastGroup", err)
 	}
 }
 

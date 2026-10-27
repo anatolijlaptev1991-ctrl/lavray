@@ -18,6 +18,11 @@ import (
 
 const dbFileName = "lavray.db"
 
+// DefaultGroupID — резервный id встроенной группы «Default»: маленькие
+// номера (0,1,2…) принадлежат импорту NekoBox, поэтому встроенная группа
+// живёт в верхнем диапазоне и не конфликтует ни с одним реальным каталогом.
+const DefaultGroupID int64 = 2147483000
+
 // Ошибки хранилища (сопоставляются ошибкам ConnectRPC на слое API, W6).
 var (
 	ErrNotFound   = fmt.Errorf("store: not found")

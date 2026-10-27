@@ -90,11 +90,20 @@ func main() {
 		os.Exit(1)
 	}
 
+	// S12 (аудит shell): токен читается РОВНО ОДИН раз ДО старта сервера.
+	// Раньше его тянул из канала каждый первый запрос: при параллельных RPC
+	// (UI шлёт их сразу) второй получатель блокировался навсегда, а сами
+	// поля гонялись. Теперь значение фиксируется здесь.
+	authToken := <-tokenCh
+	if authToken == "" {
+		mux.Logf(logs.LevelWarn, "core", "auth-токен пуст: все запросы будут отклонены (fail-closed)")
+	}
+
 	server := api.NewServer(api.Deps{Store: st, Logs: mux, Runner: inst.NopRunner{}})
 	// appVersion — билд-флаг платформенных репо.
 	root := http.NewServeMux()
 	server.Register(root)
-	httpSrv := &http.Server{Handler: authMiddleware(root, tokenCh, mux)}
+	httpSrv := &http.Server{Handler: authMiddleware(root, authToken, mux)}
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- httpSrv.Serve(ln) }()
@@ -150,34 +159,24 @@ func listenSocket(spec string) (net.Listener, string, error) {
 	return ln, "tcp://" + ln.Addr().String(), nil
 }
 
-// authMiddleware — Bearer-токен из stdin на каждом запросе (кроме healthz).
-func authMiddleware(next http.Handler, tokenCh <-chan string, mux *logs.Mux) http.Handler {
-	var token string
-	assigned := false
+// authMiddleware — Bearer-токен на каждом запросе (кроме healthz и OPTIONS).
+// Токен фиксирован (read-once до Serve) — гонок и блокировок нет.
+func authMiddleware(next http.Handler, token string, mux *logs.Mux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !assigned {
-			token = <-tokenCh
-			assigned = true
-		}
 		if r.URL.Path == "/healthz" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		// CORS preflight не несёт Authorization (браузер шлёт его до запроса) —
-		// отвечает corsWrap; здесь пропускаем без проверки токена.
+		// CORS preflight не несёт Authorization (браузер шлёт его до запроса).
 		if r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
 			return
 		}
-		// Токен ОБЯЗАТЕЛЕН (fail-closed): пустой токен означает, что оболочка
-		// не передала секрет — принимать запросы нельзя (иначе локальный
-		// процесс мог бы управлять ядром без авторизации).
-		{
-			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-			if token == "" || got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
-				http.Error(w, `{"code":"unauthenticated"}`, http.StatusUnauthorized)
-				return
-			}
+		// Fail-closed: пустой токен = отказ всем (оболочка не передала секрет).
+		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		if token == "" || got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+			http.Error(w, `{"code":"unauthenticated"}`, http.StatusUnauthorized)
+			return
 		}
 		next.ServeHTTP(w, r)
 	})

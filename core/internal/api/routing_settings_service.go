@@ -6,8 +6,9 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+
 	"sort"
+	"strconv"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -16,8 +17,6 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/presets"
 )
-
-const metaActivePreset = "routing.active_preset"
 
 // instStateIdle — единственное состояние, когда настройки применяются
 // без перезапуска (FR-UI-062).
@@ -36,7 +35,7 @@ func (s *Server) ListPresets(ctx context.Context, req *connect.Request[lavrayv1.
 	for _, p := range list {
 		out = append(out, presetToProto(p))
 	}
-	active, _, err := s.st.GetMeta(metaActivePreset)
+	active := s.activePresetID()
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -65,7 +64,14 @@ func (s *Server) ActivatePreset(ctx context.Context, req *connect.Request[lavray
 	if err := p.Validate(); err != nil {
 		return nil, mapErr(err)
 	}
-	if err := s.st.SetMeta(metaActivePreset, p.ID); err != nil {
+	// F2 (аудит №7): активный пресет — в settings (единственный источник,
+	// который читает activePresetID при сборке конфига), не в meta.
+	// Значение — JSON-строка (геттер settingStr делает json.Unmarshal).
+	encoded, err := json.Marshal(p.ID)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	if err := s.st.SetSetting(settingActivePreset, string(encoded)); err != nil {
 		return nil, mapErr(err)
 	}
 	needsRestart := s.inst.Status().State != instStateIdle
@@ -73,13 +79,7 @@ func (s *Server) ActivatePreset(ctx context.Context, req *connect.Request[lavray
 }
 
 func (s *Server) GetActivePreset(ctx context.Context, req *connect.Request[lavrayv1.GetActivePresetRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
-	active, ok, err := s.st.GetMeta(metaActivePreset)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	if !ok { // по умолчанию — Глобальный (онбординг: прочие языки)
-		active = "global"
-	}
+	active := s.activePresetID()
 	p, ok, err := s.findPreset(active)
 	if err != nil {
 		return nil, mapErr(err)
@@ -248,20 +248,23 @@ func (s *Server) SetSettings(ctx context.Context, req *connect.Request[lavrayv1.
 		if !known[k] && !strings.HasPrefix(k, "dns.") {
 			continue // неизвестный ключ не применяется и не попадает в accepted (LNB-30-класс: не молча — список accepted честный)
 		}
+		// F6 (аудит №7): значения хранятся СТРОГО как JSON — геттеры
+		// (settingStr/Bool/Int) делают json.Unmarshal, поэтому "1"/"0" и
+		// сырые строки молча превращались в дефолты (TUN/порты не применялись).
 		var raw string
 		switch kind := v.GetValue().(type) {
 		case *lavrayv1.SettingValue_StringValue:
-			raw = kind.StringValue
-		case *lavrayv1.SettingValue_BoolValue:
-			if kind.BoolValue {
-				raw = "1"
-			} else {
-				raw = "0"
+			b, err := json.Marshal(kind.StringValue)
+			if err != nil {
+				return nil, mapErr(err)
 			}
+			raw = string(b)
+		case *lavrayv1.SettingValue_BoolValue:
+			raw = strconv.FormatBool(kind.BoolValue)
 		case *lavrayv1.SettingValue_IntValue:
-			raw = fmt.Sprintf("%d", kind.IntValue)
+			raw = strconv.FormatInt(kind.IntValue, 10)
 		case *lavrayv1.SettingValue_DoubleValue:
-			raw = fmt.Sprintf("%v", kind.DoubleValue)
+			raw = strconv.FormatFloat(kind.DoubleValue, 'g', -1, 64)
 		case *lavrayv1.SettingValue_JsonValue:
 			raw = kind.JsonValue
 		case *lavrayv1.SettingValue_StringListValue:

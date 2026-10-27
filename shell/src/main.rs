@@ -47,12 +47,26 @@ fn core_state(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> CoreState {
 fn spawn_core() -> Option<(String, String)> {
     let exe = std::env::current_exe().ok()?;
     let dir = exe.parent()?.to_path_buf();
-    let core_bin = dir.join(if cfg!(windows) {
+    let core_name = if cfg!(windows) {
         "lavray-core.exe"
     } else {
         "lavray-core"
-    });
-    let data_dir = dir.join("data");
+    };
+    // Tauri сохраняет resources, зеркаля относительный путь: установка кладёт
+    // ядро в <exe_dir>/binaries/. Порядок: рядом, binaries/, resources/.
+    let core_bin = [
+        dir.join(core_name),
+        dir.join("binaries").join(core_name),
+        dir.join("resources").join(core_name),
+    ]
+    .into_iter()
+    .find(|p| p.exists())?;
+    // Данные — в пользовательском каталоге: perMachine-установка в Program
+    // Files не даёт писать не-админу (LNB-класс: «данные рядом с exe» ломается).
+    let data_dir = std::env::var_os("APPDATA")
+        .map(std::path::PathBuf::from)
+        .map(|p| p.join("LAVRay"))
+        .unwrap_or_else(|| dir.join("data"));
     std::fs::create_dir_all(&data_dir).ok()?;
 
     let token = generate_auth_token().ok()?;

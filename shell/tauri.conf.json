@@ -21,7 +21,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost"
+      "csp": "default-src 'self'; connect-src 'self' ipc: http://ipc.localhost http://127.0.0.1:* http://localhost:*; img-src 'self' data:; style-src 'self' 'unsafe-inline'"
     }
   },
   "bundle": {
@@ -29,6 +29,27 @@
     "icon": [
       "icons/icon.ico",
       "icons/icon.png"
-    ]
+    ],
+    "targets": [
+      "nsis",
+      "msi"
+    ],
+    "resources": [
+      "binaries/lavray-core.exe"
+    ],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "displayLanguageSelector": false,
+        "languages": [
+          "Russian",
+          "English"
+        ]
+      }
+    },
+    "shortDescription": "LAVRay — кроссплатформенный клиент прокси с раздельной маршрутизацией",
+    "longDescription": "LAVRay — наследник NekoBox: единый интерфейс для Windows/Linux/macOS/OpenWrt, Go-ядро на sing-box, раздельная маршрутизация по пресетам (LAV Preset RU/CN), TUN и системный прокси, обязательная проверка подписей обновлений (TUF-lite).",
+    "publisher": "LAVRay",
+    "copyright": "GPL-3.0 · 2026"
   }
 }

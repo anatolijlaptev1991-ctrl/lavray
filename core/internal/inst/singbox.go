@@ -14,12 +14,13 @@ package inst
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 
 	box "github.com/sagernet/sing-box"
+	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
+	sbjson "github.com/sagernet/sing/common/json"
 )
 
 // SingBoxRunner — запуск форка sing-box в текущем процессе (одновременно —
@@ -46,15 +47,23 @@ func (r *SingBoxRunner) Start(ctx context.Context, configJSON []byte) error {
 	if r.instance != nil {
 		return fmt.Errorf("singbox: инстанс уже запущен")
 	}
+	// ВАЖНО: option.Options в форке разбирается ТОЛЬКО своим декодером
+	// (`sing/common/json`) с реестрами в контексте. Стандартный
+	// encoding/json «успешно» декодировал, но оставлял поля пустыми —
+	// box.New затем падал «parse rule[0]: missing conditions» на ЛЮБОМ
+	// конфиге. Это ловилось только реальным прогоном sing-box.
+	baseCtx := include.Context(ctx)
 	var options option.Options
-	if err := json.Unmarshal(configJSON, &options); err != nil {
+	if err := sbjson.UnmarshalContext(baseCtx, configJSON, &options); err != nil {
 		return fmt.Errorf("singbox: некорректный конфиг: %w", err)
 	}
 	// Рабочий каталог процесса — каталог данных (rule-set кэш, cache_file
 	// с относительными путями); подставляет вызывающая сторона (serve).
-	// box.New(box.Options{Context, Options}) — см. box.go форка: контекст
-	// несёт реестр сервисов/инбаундов; JSON — option.Options.
-	instance, err := box.New(box.Options{Context: ctx, Options: options})
+	// sing-box 1.14 требует в контексте реестры протоколов (endpoint/
+	// inbound/outbound/dns/service/certificate): без них box.New падает
+	// «missing endpoint registry in context». include.Context(ctx) — ровно
+	// тот набор, что использует штатный cmd/sing-box.
+	instance, err := box.New(box.Options{Context: baseCtx, Options: options})
 	if err != nil {
 		return fmt.Errorf("singbox: box.New: %w", err)
 	}

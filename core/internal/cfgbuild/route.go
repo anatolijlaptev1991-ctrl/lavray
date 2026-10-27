@@ -91,6 +91,7 @@ func (c *ruleSetCollector) list() []any {
 func makeMatchRule(list []string, isIP bool, rs *ruleSetCollector) map[string]any {
 	rule := map[string]any{}
 	var ruleSet, ipCidr, domainFull, domainSub, domainKw, domainRe []any
+	ipIsPrivate := false
 	ruleSetSeen := map[string]bool{}
 	appendRuleSet := func(tag string) {
 		if tag == "" || ruleSetSeen[tag] {
@@ -105,6 +106,13 @@ func makeMatchRule(list []string, isIP bool, rs *ruleSetCollector) map[string]an
 		}
 		if isIP {
 			if rest, ok := strings.CutPrefix(item, "geoip:"); ok {
+				// «geoip:private» — встроенное свойство sing-box, а НЕ файл
+				// rule-set: апстрим не публикует geoip-private.srs, и попытка
+				// открыть его валила старт («invalid rule-set file»).
+				if rest == "private" {
+					ipIsPrivate = true
+					continue
+				}
 				appendRuleSet(rs.add("geoip", rest))
 			} else {
 				ipCidr = append(ipCidr, item)
@@ -132,6 +140,9 @@ func makeMatchRule(list []string, isIP bool, rs *ruleSetCollector) map[string]an
 	if isIP {
 		if len(ipCidr) > 0 {
 			rule["ip_cidr"] = ipCidr
+		}
+		if ipIsPrivate {
+			rule["ip_is_private"] = true
 		}
 		return rule
 	}

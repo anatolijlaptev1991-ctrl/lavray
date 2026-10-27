@@ -40,9 +40,12 @@ func TestMakeMatchRuleIPs(t *testing.T) {
 		"geoip:private",
 		"10.0.0.0/8",
 	}, true, rs)
+	// geoip:private — встроенное ip_is_private (файла geoip-private.srs
+	// в апстриме нет; попытка открыть его валила старт sing-box).
 	want := map[string]any{
-		"rule_set": []any{"geoip-ru", "geoip-private"},
-		"ip_cidr":  []any{"10.0.0.0/8"},
+		"rule_set":      []any{"geoip-ru"},
+		"ip_cidr":       []any{"10.0.0.0/8"},
+		"ip_is_private": true,
 	}
 	if !reflect.DeepEqual(want, rule) {
 		t.Fatalf("makeMatchRule(ips) =\n%v\nwant\n%v", rule, want)

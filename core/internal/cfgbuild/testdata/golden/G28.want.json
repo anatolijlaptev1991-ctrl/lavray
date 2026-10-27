@@ -286,12 +286,6 @@
         "path": "geo/geoip/ru.srs",
         "tag": "geoip-ru",
         "type": "local"
-      },
-      {
-        "format": "binary",
-        "path": "geo/geoip/private.srs",
-        "tag": "geoip-private",
-        "type": "local"
       }
     ],
     "rules": [
@@ -440,10 +434,10 @@
         ]
       },
       {
+        "ip_is_private": true,
         "outbound": "bypass",
         "rule_set": [
-          "geoip-ru",
-          "geoip-private"
+          "geoip-ru"
         ]
       },
       {

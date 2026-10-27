@@ -115,12 +115,6 @@
       },
       {
         "format": "binary",
-        "path": "geo/geoip/private.srs",
-        "tag": "geoip-private",
-        "type": "local"
-      },
-      {
-        "format": "binary",
         "path": "geo/geoip/ru.srs",
         "tag": "geoip-ru",
         "type": "local"
@@ -164,9 +158,9 @@
         "ip_cidr": [
           "10.0.0.0/8"
         ],
+        "ip_is_private": true,
         "outbound": "bypass",
         "rule_set": [
-          "geoip-private",
           "geoip-ru"
         ]
       },

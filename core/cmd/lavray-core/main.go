@@ -30,6 +30,7 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/api"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/headless"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/presets"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
 
@@ -75,6 +76,13 @@ func main() {
 
 	mux := logs.NewMux(1000)
 	mux.Logf(logs.LevelInfo, "core", "lavray-core запускается: listen=%s data=%s", *listen, *dataDir)
+
+	// Geo-базы (.srs) встроены в бинарник: без них любой пресет с
+	// geosite:/geoip: валил старт sing-box. Распаковка — при первом запуске
+	// (и после смены ревизии набора).
+	if geoErr := presets.EnsureGeo(*dataDir); geoErr != nil {
+		mux.Logf(logs.LevelWarn, "core", "geo-базы: %v (правила geosite/geoip могут не работать)", geoErr)
+	}
 
 	st, err := store.Open(*dataDir)
 	if err != nil {

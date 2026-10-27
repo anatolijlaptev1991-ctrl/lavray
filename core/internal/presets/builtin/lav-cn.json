@@ -28,7 +28,6 @@
     ],
     "direct_domain": [
       "geosite:cn",
-      "geosite:category-gov-cn",
       "geosite:tld-cn"
     ],
     "block_domain": [

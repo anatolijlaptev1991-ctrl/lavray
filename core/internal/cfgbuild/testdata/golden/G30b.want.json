@@ -83,12 +83,6 @@
         "path": "geo/geosite/category-ads-all.srs",
         "tag": "geosite-category-ads-all",
         "type": "local"
-      },
-      {
-        "format": "binary",
-        "path": "geo/geoip/private.srs",
-        "tag": "geoip-private",
-        "type": "local"
       }
     ],
     "rules": [
@@ -111,10 +105,8 @@
         ]
       },
       {
-        "outbound": "bypass",
-        "rule_set": [
-          "geoip-private"
-        ]
+        "ip_is_private": true,
+        "outbound": "bypass"
       },
       {
         "network": [

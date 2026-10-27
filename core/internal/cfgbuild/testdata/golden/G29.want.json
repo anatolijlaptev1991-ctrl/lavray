@@ -12,7 +12,6 @@
         "action": "route",
         "rule_set": [
           "geosite-cn",
-          "geosite-category-gov-cn",
           "geosite-tld-cn"
         ],
         "server": "dns-direct"
@@ -108,12 +107,6 @@
       },
       {
         "format": "binary",
-        "path": "geo/geosite/category-gov-cn.srs",
-        "tag": "geosite-category-gov-cn",
-        "type": "local"
-      },
-      {
-        "format": "binary",
         "path": "geo/geosite/tld-cn.srs",
         "tag": "geosite-tld-cn",
         "type": "local"
@@ -128,12 +121,6 @@
         "format": "binary",
         "path": "geo/geoip/cn.srs",
         "tag": "geoip-cn",
-        "type": "local"
-      },
-      {
-        "format": "binary",
-        "path": "geo/geoip/private.srs",
-        "tag": "geoip-private",
         "type": "local"
       }
     ],
@@ -166,15 +153,14 @@
         "outbound": "bypass",
         "rule_set": [
           "geosite-cn",
-          "geosite-category-gov-cn",
           "geosite-tld-cn"
         ]
       },
       {
+        "ip_is_private": true,
         "outbound": "bypass",
         "rule_set": [
-          "geoip-cn",
-          "geoip-private"
+          "geoip-cn"
         ]
       },
       {

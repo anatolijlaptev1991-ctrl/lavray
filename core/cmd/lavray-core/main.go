@@ -13,6 +13,7 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/subtle"
 	"errors"
 	"flag"
 	"fmt"
@@ -168,9 +169,12 @@ func authMiddleware(next http.Handler, tokenCh <-chan string, mux *logs.Mux) htt
 			next.ServeHTTP(w, r)
 			return
 		}
-		if token != "" {
+		// Токен ОБЯЗАТЕЛЕН (fail-closed): пустой токен означает, что оболочка
+		// не передала секрет — принимать запросы нельзя (иначе локальный
+		// процесс мог бы управлять ядром без авторизации).
+		{
 			got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-			if got != token {
+			if token == "" || got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
 				http.Error(w, `{"code":"unauthenticated"}`, http.StatusUnauthorized)
 				return
 			}

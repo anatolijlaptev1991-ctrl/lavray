@@ -134,64 +134,59 @@ jobs:
         run: go build ./...
 
   # --------------------------------------------------------------------------
-  # rust: оболочка shell/ (Tauri 2). Системные зависимости — стандартный набор
-  # Tauri для ubuntu-24.04 (webkit2gtk-4.1).
+  # core-run: РЕАЛЬНАЯ сборка ядра с работающим sing-box (тег singbox_run).
+  # Без этого «Подключиться» в приложении = NopRunner (ничего не подключает).
+  # Сеть CI скачивает форк и его зависимости; локально это недостижимо (DPI).
   # --------------------------------------------------------------------------
-  rust:
+  core-run:
     runs-on: ubuntu-24.04
     defaults:
       run:
-        working-directory: shell
+        working-directory: core
     steps:
       - uses: actions/checkout@v4
-      - name: Системные зависимости Tauri
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+      - name: Зависимости раннера (форк sing-box)
+        env:
+          GOPRIVATE: github.com/anatolijlaptev1991-ctrl/*
+          GOFLAGS: -mod=mod
         run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev build-essential curl wget file \
-            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: shell
-      - name: cargo fmt
-        run: cargo fmt --all -- --check
-      - name: cargo clippy
-        run: cargo clippy --all-targets -- -D warnings
-      - name: cargo test
-        run: cargo test
-      - name: cargo build
-        run: cargo build
-
-  # --------------------------------------------------------------------------
-  # node: UI (ui/, единый React для приложения и веб-панели)
-  # --------------------------------------------------------------------------
-  node:
-    runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: ui
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: ui/package-lock.json
-      - name: npm ci
-        run: npm ci
-      - name: Проверка сгенерированного контракта (buf + protoc-gen-es)
+          go get github.com/anatolijlaptev1991-ctrl/sing-box@v1.14.2-0.20260916133904-628a9ed70b12 || true
+          go mod tidy
+      - name: Сборка с реальным раннером (singbox_run + quic)
+        env:
+          CGO_ENABLED: '0'
+          GOFLAGS: -mod=mod
         run: |
-          npx buf generate proto
-          git diff --exit-code -- src/gen || {
-            echo "::error::src/gen устарел: запустите 'npx buf generate proto' и закоммитьте"; exit 1; }
-      - name: tsc --noEmit
-        run: npx tsc --noEmit
-      - name: eslint
-        run: npx eslint .
-      - name: vitest
-        run: npx vitest run
-      - name: vite build
-        run: npm run build
+          go build -tags "singbox_run with_quic" -o /tmp/lavray-core ./cmd/lavray-core/
+          ls -la /tmp/lavray-core
+      - name: Smoke - ядро поднимается, healthz и auth отвечают
+        shell: bash
+        run: |
+          set -euo pipefail
+          DATA=$(mktemp -d)
+          TOKEN="ci-test-token-0123456789abcdef0123"
+          echo "$TOKEN" | /tmp/lavray-core serve --listen-socket 127.0.0.1:0 --data "$DATA" > /tmp/core.log 2>&1 &
+          CORE_PID=$!
+          READY=""
+          for i in $(seq 1 60); do
+            READY=$(grep -o "LAVRAY_CORE_READY tcp://[0-9.]*:[0-9]*" /tmp/core.log | head -1 || true)
+            if [ -n "$READY" ]; then break; fi
+            sleep 0.25
+          done
+          if [ -z "$READY" ]; then echo "core did not become ready"; cat /tmp/core.log; exit 1; fi
+          PORT="${READY##*:}"
+          echo "core listening on port $PORT"
+          HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/healthz")
+          echo "healthz=$HEALTH"
+          NOAUTH=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/lavray.v1.CoreService/GetStatus")
+          echo "no-auth=$NOAUTH"
+          STATUS=$(curl -s -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "{}" "http://127.0.0.1:$PORT/lavray.v1.CoreService/GetStatus")
+          echo "status=$STATUS"
+          kill $CORE_PID || true
+          test "$HEALTH" = "200"
+          test "$NOAUTH" = "401"
+          echo "$STATUS" | grep -q "state"

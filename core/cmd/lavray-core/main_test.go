@@ -139,3 +139,48 @@ func buildCore(t *testing.T) string {
 	}
 	return exe
 }
+
+// Пустой токен (оболочка не передала секрет) — ядро обязано отклонять ВСЕ
+// запросы (fail-closed), а не открываться.
+func TestEmptyTokenRejectsAll(t *testing.T) {
+	dir, _ := os.MkdirTemp("", "core-empty-token-*")
+	defer os.RemoveAll(dir)
+	exe := buildCore(t)
+	cmd := exec.Command(exe, "serve", "--listen-socket", "127.0.0.1:0", "--data", dir)
+	stdin, _ := cmd.StdinPipe()
+	stdout, _ := cmd.StdoutPipe()
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { stdin.Close(); cmd.Process.Kill(); cmd.Wait() }()
+
+	// Пустая строка = токена нет.
+	if _, err := stdin.Write([]byte("\n")); err != nil {
+		t.Fatal(err)
+	}
+	sc := bufio.NewScanner(stdout)
+	var port string
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.HasPrefix(line, "LAVRAY_CORE_READY ") {
+			port = strings.TrimPrefix(line, "LAVRAY_CORE_READY tcp://")
+			break
+		}
+	}
+	if port == "" {
+		t.Fatal("READY не получен")
+	}
+	c, err := net.Dial("tcp", port)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	c.SetDeadline(time.Now().Add(5 * time.Second))
+	// Без Authorization — 401, даже при пустом ожидаемом токене.
+	c.Write([]byte("GET /lavray.v1.CoreService/GetStatus HTTP/1.1\r\nHost: t\r\nConnection: close\r\n\r\n"))
+	buf := make([]byte, 256)
+	n, _ := c.Read(buf)
+	if code := parseStatus(string(buf[:n])); code != 401 {
+		t.Fatalf("пустой токен открыл доступ: %d", code)
+	}
+}

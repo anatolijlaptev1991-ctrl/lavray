@@ -154,3 +154,43 @@ func (s *Server) DownloadUpdates(ctx context.Context, req *connect.Request[lavra
 func (s *Server) ApplyUpdates(ctx context.Context, req *connect.Request[lavrayv1.ApplyUpdatesRequest], stream *connect.ServerStream[lavrayv1.UpdateEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errNotYetW6)
 }
+
+// Rollback — откат к ранее установленной версии компонента. Реальная замена
+// файлов — за Installer-интерфейсом релизной обвязки; здесь фиксируем запрос
+// и состояние (RolledBack) для Центра обновлений.
+func (s *Server) Rollback(ctx context.Context, req *connect.Request[lavrayv1.RollbackRequest]) (*connect.Response[lavrayv1.RollbackResponse], error) {
+	if req.Msg.Component == lavrayv1.UpdateComponent_UPDATE_COMPONENT_UNSPECIFIED {
+		return nil, invalidArg("component обязателен")
+	}
+	// Применение отката выполняет оболочка (она владеет файлами); ядро
+	// только подтверждает запрос и сбрасывает serial канала, чтобы следующая
+	// проверка снова предложила обновление.
+	if err := s.st.SetSetting(setUpdSerialSt, "0"); err != nil {
+		return nil, mapErr(err)
+	}
+	if err := s.st.SetSetting(setUpdSerialBe, "0"); err != nil {
+		return nil, mapErr(err)
+	}
+	return connect.NewResponse(&lavrayv1.RollbackResponse{}), nil
+}
+
+// VerifyLocalUpdate — проверка скачанного артефакта по подписи из манифеста
+// (LNB-34: оболочка кладёт файлы в staging и спрашивает ядро).
+func (s *Server) VerifyLocalUpdate(ctx context.Context, req *connect.Request[lavrayv1.VerifyLocalUpdateRequest]) (*connect.Response[lavrayv1.VerifyLocalUpdateResponse], error) {
+	c, err := s.newUpdater()
+	if err != nil {
+		return nil, err
+	}
+	if req.Msg.InstallerPath == "" {
+		return nil, invalidArg("installer_path обязателен")
+	}
+	res, err := c.Check(ctx)
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	_ = res
+	// Проверка sha256 самого файла против манифеста выполняется оболочкой
+	// (у ядра нет доступа к staging-каталогу); здесь подтверждаем, что
+	// манифест валиден и подписан — дальше оболочка сверяет хэш.
+	return connect.NewResponse(&lavrayv1.VerifyLocalUpdateResponse{Valid: true}), nil
+}

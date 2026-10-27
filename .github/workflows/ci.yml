@@ -163,16 +163,18 @@ jobs:
         run: |
           go build -tags "singbox_run with_quic" -o /tmp/lavray-core ./cmd/lavray-core/
           ls -la /tmp/lavray-core
-      - name: Smoke - ядро поднимается, healthz и auth отвечают
+      - name: Smoke - ядро поднимается, healthz, auth и RPC
         shell: bash
         run: |
           set -euo pipefail
           DATA=$(mktemp -d)
           TOKEN="ci-test-token-0123456789abcdef0123"
-          echo "$TOKEN" | /tmp/lavray-core serve --listen-socket 127.0.0.1:0 --data "$DATA" > /tmp/core.log 2>&1 &
+          # T1: stdin ОБЯЗАН оставаться открытым — закрытие = «смерть
+          # оболочки» (§3.2), ядро штатно выходит. Первая строка — токен.
+          (echo "$TOKEN"; sleep 120) | /tmp/lavray-core serve --listen-socket 127.0.0.1:0 --data "$DATA" > /tmp/core.log 2>&1 &
           CORE_PID=$!
           READY=""
-          for i in $(seq 1 60); do
+          for i in $(seq 1 80); do
             READY=$(grep -o "LAVRAY_CORE_READY tcp://[0-9.]*:[0-9]*" /tmp/core.log | head -1 || true)
             if [ -n "$READY" ]; then break; fi
             sleep 0.25
@@ -181,12 +183,93 @@ jobs:
           PORT="${READY##*:}"
           echo "core listening on port $PORT"
           HEALTH=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/healthz")
-          echo "healthz=$HEALTH"
           NOAUTH=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$PORT/lavray.v1.CoreService/GetStatus")
-          echo "no-auth=$NOAUTH"
-          STATUS=$(curl -s -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" -d "{}" "http://127.0.0.1:$PORT/lavray.v1.CoreService/GetStatus")
+          BADAUTH=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer wrong" "http://127.0.0.1:$PORT/lavray.v1.CoreService/GetStatus")
+          STATUS=$(curl -s -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json"             -d "{}" "http://127.0.0.1:$PORT/lavray.v1.CoreService/GetStatus")
+          echo "healthz=$HEALTH no-auth=$NOAUTH bad-auth=$BADAUTH"
           echo "status=$STATUS"
-          kill $CORE_PID || true
+          kill $CORE_PID 2>/dev/null || true
           test "$HEALTH" = "200"
           test "$NOAUTH" = "401"
-          echo "$STATUS" | grep -q "state"
+          test "$BADAUTH" = "401"
+          # T2: поле state не сериализуется при дефолте (proto3 omit) —
+          # проверяем реально присутствующие поля ответа.
+          echo "$STATUS" | grep -q "coreVersion"
+
+  # --------------------------------------------------------------------------
+  # rust: оболочка shell/ (Tauri 2). UI собирается заранее — frontendDist
+  # (../ui/dist) нужен макросу generate_context! на этапе компиляции.
+  # --------------------------------------------------------------------------
+  rust:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: shell
+    steps:
+      - uses: actions/checkout@v4
+      - name: Системные зависимости Tauri
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends             libwebkit2gtk-4.1-dev build-essential curl wget file             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shell
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: "UI: сборка (нужна для frontendDist)"
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
+      - name: Заглушка ядра (resources ожидает binaries/lavray-core)
+        run: |
+          mkdir -p binaries
+          if [ ! -f binaries/lavray-core ]; then
+            { echo '#!/bin/sh'; echo 'exit 1'; } > binaries/lavray-core
+            chmod +x binaries/lavray-core
+          fi
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: cargo test
+        run: cargo test
+      - name: cargo build
+        run: cargo build
+
+  # --------------------------------------------------------------------------
+  # node: UI (ui/, единый React для приложения и веб-панели)
+  # --------------------------------------------------------------------------
+  node:
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: npm ci
+        run: npm ci
+      - name: Проверка сгенерированного контракта (buf + protoc-gen-es)
+        run: |
+          npx buf generate proto
+          git diff --exit-code -- src/gen || {
+            echo "::error::src/gen устарел: запустите 'npx buf generate proto' и закоммитьте"; exit 1; }
+      - name: tsc --noEmit
+        run: npx tsc --noEmit
+      - name: eslint
+        run: npx eslint .
+      - name: vitest
+        run: npx vitest run
+      - name: vite build
+        run: npm run build

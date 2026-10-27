@@ -127,7 +127,7 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mount(path, h)
 	path, h = lavrayv1connect.NewGatewayServiceHandler(lavrayv1connect.UnimplementedGatewayServiceHandler{}, opts...)
 	mount(path, h)
-	path, h = lavrayv1connect.NewUpdateServiceHandler(lavrayv1connect.UnimplementedUpdateServiceHandler{}, opts...)
+	path, h = lavrayv1connect.NewUpdateServiceHandler(s, opts...)
 	mount(path, h)
 	path, h = lavrayv1connect.NewWebSessionServiceHandler(lavrayv1connect.UnimplementedWebSessionServiceHandler{}, opts...)
 	mount(path, h)

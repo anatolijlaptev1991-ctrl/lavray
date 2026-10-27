@@ -45,8 +45,11 @@ jobs:
           GOPRIVATE: github.com/anatolijlaptev1991-ctrl/*
           GOFLAGS: -mod=mod
         run: |
+          go mod tidy
           New-Item -ItemType Directory -Force -Path ../shell/binaries | Out-Null
-          go build -trimpath -ldflags '-s -w' -o ../shell/binaries/lavray-core.exe ./cmd/lavray-core/
+          # T3 (аудит №6): БЕЗ этого тега ядро без sing-box и «Подключиться»
+          # не работает. go mod tidy выше уже подтянул форк.
+          go build -tags "singbox_run with_quic" -trimpath -ldflags '-s -w' -o ../shell/binaries/lavray-core.exe ./cmd/lavray-core/
           Get-Item ../shell/binaries/lavray-core.exe | Select-Object Name, Length
 
       - name: "Оболочка: установщик NSIS"

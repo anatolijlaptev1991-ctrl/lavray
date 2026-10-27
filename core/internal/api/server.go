@@ -441,7 +441,6 @@ func (s *Server) coreStatus() *lavrayv1.CoreStatus {
 // nowMs — время для стримов (выделено для будущих тест-инъекций).
 func nowMs() int64 { return time.Now().UnixMilli() }
 
-
 // corsWrap — CORS для Tauri-окна: webview отдаёт страницу с origin
 // tauri://localhost (или http://tauri.localhost на Windows), а ядро живёт на
 // http://127.0.0.1:<port> — это кросс-оригин запрос. Разрешаем только
@@ -449,11 +448,11 @@ func nowMs() int64 { return time.Now().UnixMilli() }
 // обязательным (CORS — не аутентификация).
 func corsWrap(next http.Handler) http.Handler {
 	allowed := map[string]bool{
-		"tauri://localhost":        true,
-		"http://tauri.localhost":   true,
-		"https://tauri.localhost":  true,
-		"http://localhost:1420":    true, // vite dev
-		"http://127.0.0.1:1420":    true,
+		"tauri://localhost":       true,
+		"http://tauri.localhost":  true,
+		"https://tauri.localhost": true,
+		"http://localhost:1420":   true, // vite dev
+		"http://127.0.0.1:1420":   true,
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")

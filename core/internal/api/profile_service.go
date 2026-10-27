@@ -299,6 +299,13 @@ func (s *Server) ImportContent(ctx context.Context, req *connect.Request[lavrayv
 	if err != nil {
 		return nil, mapErr(err)
 	}
+	// Группировка по странам (FR-UI-008): ядро определяет ISO-код по имени
+	// (флаг/код/название) или TLD — UI показывает ключи сгруппированными.
+	for _, p := range res.Profiles {
+		if p.Geo == "" {
+			p.Geo = model.DetectGeo(p.Name, p.Address)
+		}
+	}
 	parsed := make([]*lavrayv1.Profile, 0, len(res.Profiles))
 	var warns []*lavrayv1.CustomFieldWarning
 	for i, p := range res.Profiles {

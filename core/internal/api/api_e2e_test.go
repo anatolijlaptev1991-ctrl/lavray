@@ -246,3 +246,39 @@ func TestGetStatusColdServer(t *testing.T) {
 		t.Fatalf("state вне диапазона: %v", st.Msg.State)
 	}
 }
+
+func TestImportFillsGeoByCountry(t *testing.T) {
+	cs := newE2E(t)
+	ctx := context.Background()
+	// Подписка с ключами разных стран — типичный случай.
+	content := strings.Join([]string{
+		"trojan://p@jp1.example.com:443#🇯🇵 Токио",
+		"trojan://p@nl1.example.com:443#🇳🇱 Амстердам",
+		"trojan://p@de1.example.com:443#Франкфурт",
+		"trojan://p@unknown.example.com:443#node-1",
+	}, "\n")
+	res, err := cs.profile.ImportContent(ctx, connect.NewRequest(&lavrayv1.ImportContentRequest{
+		Content:       content,
+		TargetGroupId: int64p(1),
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Msg.AddedProfileIds) != 4 {
+		t.Fatalf("added=%d", len(res.Msg.AddedProfileIds))
+	}
+	list, err := cs.profile.ListProfiles(ctx, connect.NewRequest(&lavrayv1.ListProfilesRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]string{}
+	for _, p := range list.Msg.Profiles {
+		byName[p.Name] = p.Geo
+	}
+	want := map[string]string{"🇯🇵 Токио": "jp", "🇳🇱 Амстердам": "nl", "Франкфурт": "de", "node-1": ""}
+	for name, geo := range want {
+		if byName[name] != geo {
+			t.Errorf("%s: geo=%q want %q", name, byName[name], geo)
+		}
+	}
+}

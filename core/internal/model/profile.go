@@ -63,6 +63,11 @@ type Profile struct {
 	Tags     []string `json:"tags,omitempty"`
 	Notes    string   `json:"notes,omitempty"`
 
+	// Geo — страна/регион сервера: ISO 3166-1 alpha-2 (нижний регистр, "jp",
+	// "nl", …) либо "" если неизвестна. Заполняется импортёром/подпиской из
+	// имени (флаги, коды стран) и служит группировкой «по странам» в UI.
+	Geo string `json:"geo,omitempty"`
+
 	TestResult TestResult      `json:"test_result,omitempty"`
 	Traffic    TrafficCounters `json:"traffic"`
 

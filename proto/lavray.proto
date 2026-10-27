@@ -435,6 +435,11 @@ message Profile {
     CustomDetail custom = 27;
     ChainDetail chain = 28;
   }
+
+  // Страна/регион сервера: ISO 3166-1 alpha-2 в нижнем регистре ("jp", "nl"),
+  // пусто = неизвестна. Заполняется ядром при импорте (эмодзи-флаг, код в
+  // имени, название, TLD) — UI группирует ключи подписки по странам.
+  string geo = 29;
 }
 
 // V2Ray Stream Settings (FR-UI-090a–090l; fmt/V2RayStreamSettings.hpp).

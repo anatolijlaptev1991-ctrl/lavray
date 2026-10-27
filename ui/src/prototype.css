@@ -980,3 +980,10 @@ html[data-shell="browser"]{--font-sans:Inter,system-ui,-apple-system,"Segoe UI",
    пустую полосу, если окно не нативное. */
 html:not([data-shell="native"]) .titlebar { display: none; }
 html:not([data-shell="native"]) #app { grid-template-rows: minmax(0, 1fr) var(--sb-h); }
+
+/* ---------- Группы серверов по странам (FR-UI-008) ---------- */
+.srv-groups { display: flex; flex-direction: column; gap: 14px; }
+.srv-group-h { display: flex; align-items: center; gap: 8px; margin: 0 0 6px;
+  font-size: .8125rem; font-weight: 650; color: var(--t2); }
+.srv-group-h .muted { margin-inline-start: auto; font-weight: 400; }
+.srv-flag { font-size: 1.05rem; line-height: 1; }

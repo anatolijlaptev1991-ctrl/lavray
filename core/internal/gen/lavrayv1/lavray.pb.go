@@ -3365,7 +3365,11 @@ type Profile struct {
 	//	*Profile_Tuic
 	//	*Profile_Custom
 	//	*Profile_Chain
-	Detail        isProfile_Detail `protobuf_oneof:"detail"`
+	Detail isProfile_Detail `protobuf_oneof:"detail"`
+	// Страна/регион сервера: ISO 3166-1 alpha-2 в нижнем регистре ("jp", "nl"),
+	// пусто = неизвестна. Заполняется ядром при импорте (эмодзи-флаг, код в
+	// имени, название, TLD) — UI группирует ключи подписки по странам.
+	Geo           string `protobuf:"bytes,29,opt,name=geo,proto3" json:"geo,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3605,6 +3609,13 @@ func (x *Profile) GetChain() *ChainDetail {
 		}
 	}
 	return nil
+}
+
+func (x *Profile) GetGeo() string {
+	if x != nil {
+		return x.Geo
+	}
+	return ""
 }
 
 type isProfile_Detail interface {
@@ -13710,7 +13721,7 @@ const file_lavray_proto_rawDesc = "" +
 	"\fuplink_bytes\x18\x01 \x01(\x03R\vuplinkBytes\x12%\n" +
 	"\x0edownlink_bytes\x18\x02 \x01(\x03R\rdownlinkBytes\x12)\n" +
 	"\x0elast_update_ms\x18\x03 \x01(\x03H\x00R\flastUpdateMs\x88\x01\x01B\x11\n" +
-	"\x0f_last_update_ms\"\xe8\t\n" +
+	"\x0f_last_update_ms\"\xfa\t\n" +
 	"\aProfile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
 	"\bgroup_id\x18\x02 \x01(\x03R\agroupId\x12*\n" +
@@ -13740,7 +13751,8 @@ const file_lavray_proto_rawDesc = "" +
 	"\thysteria2\x18\x19 \x01(\v2\x1a.lavray.v1.Hysteria2DetailH\x00R\thysteria2\x12+\n" +
 	"\x04tuic\x18\x1a \x01(\v2\x15.lavray.v1.TuicDetailH\x00R\x04tuic\x121\n" +
 	"\x06custom\x18\x1b \x01(\v2\x17.lavray.v1.CustomDetailH\x00R\x06custom\x12.\n" +
-	"\x05chain\x18\x1c \x01(\v2\x16.lavray.v1.ChainDetailH\x00R\x05chainB\b\n" +
+	"\x05chain\x18\x1c \x01(\v2\x16.lavray.v1.ChainDetailH\x00R\x05chain\x12\x10\n" +
+	"\x03geo\x18\x1d \x01(\tR\x03geoB\b\n" +
 	"\x06detailB\b\n" +
 	"\x06_notesB\x10\n" +
 	"\x0e_created_at_msB\x10\n" +

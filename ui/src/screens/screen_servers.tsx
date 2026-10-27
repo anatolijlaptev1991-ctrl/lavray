@@ -8,6 +8,7 @@ import type { Profile } from '../gen/lavray_pb';
 import { useCore, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { friendlyCoreError } from '../lib/core';
+import { groupByGeo } from '../lib/geo';
 
 const TYPE_LABEL: Record<number, string> = {
   [ProfileType.SOCKS]: 'SOCKS',
@@ -22,7 +23,7 @@ const TYPE_LABEL: Record<number, string> = {
 };
 
 export function ServersScreen(): JSX.Element {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const core = useCore();
   const [search, setSearch] = useState('');
   const { profiles, total, refresh } = useProfiles(search);
@@ -148,25 +149,39 @@ export function ServersScreen(): JSX.Element {
       {msg !== '' && <div className="toast-ok">{msg}</div>}
       {err !== '' && <div className="toast-err" role="alert">{err}</div>}
 
-      <ul className="srv-list">
-        {profiles.map((p) => (
-          <li key={String(p.id)} className="srv-row">
-            <span className="srv-type">{TYPE_LABEL[p.type] ?? '?'}</span>
-            <span className="srv-name">{p.name}</span>
-            <span className="muted mono">
-              {p.address}:{String(p.port)}
-            </span>
-            <button
-              className="btn ghost"
-              onClick={() => void removeSelected(p.id)}
-              aria-label={`${t('srv.delSel')} ${p.name}`}
-            >
-              ✕
-            </button>
-          </li>
-        ))}
-        {profiles.length === 0 && <li className="muted">{t('srv.empty.d')}</li>}
-      </ul>
+      {profiles.length === 0 ? (
+        <p className="muted">{t('srv.empty.d')}</p>
+      ) : (
+        <div className="srv-groups">
+          {groupByGeo(profiles, (p) => p.geo, lang).map((g) => (
+            <section key={g.code === '' ? '_' : g.code} className="srv-group">
+              <h3 className="srv-group-h">
+                <span className="srv-flag" aria-hidden="true">{g.flag}</span>
+                {g.label}
+                <span className="muted">{g.items.length}</span>
+              </h3>
+              <ul className="srv-list">
+                {g.items.map((p) => (
+                  <li key={String(p.id)} className="srv-row">
+                    <span className="srv-type">{TYPE_LABEL[p.type] ?? '?'}</span>
+                    <span className="srv-name">{p.name}</span>
+                    <span className="muted mono">
+                      {p.address}:{String(p.port)}
+                    </span>
+                    <button
+                      className="btn ghost"
+                      onClick={() => void removeSelected(p.id)}
+                      aria-label={`${t('srv.delSel')} ${p.name}`}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

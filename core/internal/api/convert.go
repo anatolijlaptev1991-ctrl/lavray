@@ -211,6 +211,7 @@ func profileToModel(p *lavrayv1.Profile) (*model.Profile, error) {
 		GroupID:               p.GetGroupId(),
 		Type:                  mt,
 		Name:                  p.GetName(),
+		Geo:                   p.GetGeo(),
 		Address:               strings.TrimSpace(p.GetAddress()), // FR-UI-083
 		Port:                  int(p.GetPort()),
 		Favorite:              p.GetFavorite(),
@@ -432,6 +433,7 @@ func profileToProto(m *model.Profile) *lavrayv1.Profile {
 		GroupId:               m.GroupID,
 		Type:                  pt,
 		Name:                  m.Name,
+		Geo:                   m.Geo,
 		Address:               m.Address,
 		Port:                  int32(m.Port),
 		Favorite:              m.Favorite,

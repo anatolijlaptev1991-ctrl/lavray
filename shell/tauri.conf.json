@@ -4,7 +4,8 @@
   "version": "0.1.0",
   "identifier": "io.github.anatolijlaptev1991-ctrl.lavray",
   "build": {
-    "frontendDist": "desktop-placeholder"
+    "frontendDist": "../ui/dist",
+    "beforeDevCommand": ""
   },
   "app": {
     "withGlobalTauri": true,
@@ -25,6 +26,9 @@
   },
   "bundle": {
     "active": true,
-    "icon": ["icons/icon.ico", "icons/icon.png"]
+    "icon": [
+      "icons/icon.ico",
+      "icons/icon.png"
+    ]
   }
 }

@@ -13,11 +13,15 @@ import { applyDocumentLanguage, detectLanguage, setLanguage } from './lib/i18n';
 import { applyTheme, loadPreferences, watchSystemTheme } from './lib/theme';
 import { getPlatformAdapter } from './platform/adapter';
 import { ConnectionScreen } from './screens/screen_connection';
+import { ConnsScreen } from './screens/screen_conns';
 import { DiagScreen } from './screens/screen_diag';
+import { DnsScreen } from './screens/screen_dns';
+import { LogScreen } from './screens/screen_log';
 import { RulesScreen } from './screens/screen_rules';
 import { ServersScreen } from './screens/screen_servers';
 import { SubscriptionsScreen } from './screens/screen_subscriptions';
 import { SettingsScreen } from './screens/screen_settings';
+import { UpdatesScreen } from './screens/screen_updates';
 
 const NAV_ICONS: Record<string, IconName> = {
   connection: 'zap',
@@ -202,9 +206,12 @@ function AppInner(): JSX.Element {
             {sectionId === 'connection' && <ConnectionScreen />}
             {sectionId === 'servers' &&
               (tab?.id === 'subscriptions' ? <SubscriptionsScreen /> : <ServersScreen />)}
-            {sectionId === 'rules' && <RulesScreen />}
-            {sectionId === 'diag' && <DiagScreen />}
-            {sectionId === 'settings' && <SettingsScreen />}
+            {sectionId === 'rules' && (tab?.id === 'dns' ? <DnsScreen /> : <RulesScreen />)}
+            {sectionId === 'diag' && tab?.id === 'conns' && <ConnsScreen />}
+            {sectionId === 'diag' && tab?.id === 'log' && <LogScreen />}
+            {sectionId === 'diag' && tab?.id !== 'conns' && tab?.id !== 'log' && <DiagScreen />}
+            {sectionId === 'settings' &&
+              (tab?.id === 'updates' ? <UpdatesScreen /> : <SettingsScreen />)}
           </div>
         </main>
       </div>

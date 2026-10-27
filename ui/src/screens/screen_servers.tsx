@@ -3,12 +3,13 @@
 // подтверждением custom-полей, экспорт ссылок.
 import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
-import { ProfileType } from '../gen/lavray_pb';
+import { ProfileType, TestLatencyRequest_Mode } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 import { useCore, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { friendlyCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
+import { ProfileEditor } from '../components/ProfileEditor';
 
 const TYPE_LABEL: Record<number, string> = {
   [ProfileType.SOCKS]: 'SOCKS',
@@ -34,6 +35,9 @@ export function ServersScreen(): JSX.Element {
   const [preview, setPreview] = useState<Profile[]>([]);
   const [groups, setGroups] = useState<{ id: bigint; name: string }[]>([]);
   const [targetGroup, setTargetGroup] = useState('');
+  const [latency, setLatency] = useState<Record<string, string>>({});
+  const [testing, setTesting] = useState(false);
+  const [editing, setEditing] = useState<Profile | null | undefined>(undefined);
 
   // Реальные группы из ядра (A2 аудита №4: хардкод '1' → NOT_FOUND,
   // потому что встроенная группа живёт в резервном id-диапазоне).
@@ -99,6 +103,39 @@ export function ServersScreen(): JSX.Element {
     }
   }, [core, targetGroup, t]);
 
+  // Тест задержки TCP-пингом (FR-UI-200): ядро стримит кадр на профиль,
+  // результат тут же появляется в списке и сохраняется в профиле.
+  const testLatency = useCallback(async (): Promise<void> => {
+    setErr('');
+    setMsg('');
+    const ids = profiles.map((p) => p.id);
+    if (ids.length === 0) return;
+    setTesting(true);
+    setLatency({});
+    try {
+      const stream = core.profiles.testLatency({
+        profileIds: ids,
+        mode: TestLatencyRequest_Mode.TCP_PING,
+      });
+      for await (const res of stream) {
+        const r = res.result;
+        const key = String(res.profileId);
+        if (r?.lastError !== undefined && r.lastError !== '') {
+          setLatency((m) => ({ ...m, [key]: '✕' }));
+        } else if (r?.latencyMs !== undefined) {
+          setLatency((m) => ({ ...m, [key]: `${String(r.latencyMs)} ms` }));
+        }
+        setMsg(`${String(res.index)} / ${String(res.total)}`);
+      }
+      refresh();
+    } catch (e) {
+      setErr(friendlyCoreError(e));
+    } finally {
+      setTesting(false);
+      setMsg('');
+    }
+  }, [core, profiles, refresh]);
+
   const removeSelected = useCallback(
     async (id: bigint): Promise<void> => {
       setErr('');
@@ -126,8 +163,22 @@ export function ServersScreen(): JSX.Element {
         <button className="btn" onClick={() => { setImporting((v) => !v); }}>
           {t('imp.do')}
         </button>
+        <button
+          className="btn primary"
+          onClick={() => { setEditing(null); }}
+          disabled={targetGroup === ''}
+        >
+          {t('quick.import')}
+        </button>
         <button className="btn" onClick={() => void doExport()}>
           {t('srv.details')}
+        </button>
+        <button
+          className="btn"
+          onClick={() => void testLatency()}
+          disabled={testing || profiles.length === 0}
+        >
+          {testing ? t('imp.decrypting') : t('common.testLatency')}
         </button>
         <span className="muted">{t('srv.current')}: {String(total)}</span>
       </div>
@@ -197,9 +248,22 @@ export function ServersScreen(): JSX.Element {
                 {g.items.map((p) => (
                   <li key={String(p.id)} className="srv-row">
                     <span className="srv-type">{TYPE_LABEL[p.type] ?? '?'}</span>
-                    <span className="srv-name">{p.name}</span>
+                    <button
+                      className="srv-name"
+                      style={{ background: 'none', border: 0, color: 'inherit', cursor: 'pointer', textAlign: 'start' }}
+                      onClick={() => { setEditing(p); }}
+                      title={t('common.edit')}
+                    >
+                      {p.name}
+                    </button>
                     <span className="muted mono">
                       {p.address}:{String(p.port)}
+                    </span>
+                    <span className="mono srv-lat">
+                      {latency[String(p.id)] ??
+                        (p.testResult?.latencyMs !== undefined
+                          ? `${String(p.testResult.latencyMs)} ms`
+                          : '—')}
                     </span>
                     <button
                       className="btn ghost"
@@ -214,6 +278,15 @@ export function ServersScreen(): JSX.Element {
             </section>
           ))}
         </div>
+      )}
+
+      {editing !== undefined && (
+        <ProfileEditor
+          profile={editing}
+          groupId={targetGroup === '' ? 0n : BigInt(targetGroup)}
+          onClose={() => { setEditing(undefined); }}
+          onSaved={refresh}
+        />
       )}
     </div>
   );

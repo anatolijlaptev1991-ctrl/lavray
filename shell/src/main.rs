@@ -11,6 +11,9 @@ use lavray_shell::coreproc::driver::{generate_auth_token, RealCoreProcess};
 use lavray_shell::coreproc::{CoreProcess, CoreSpawnConfig, CoreState, SecretToken};
 use lavray_shell::uiprotocol::IPC_PROTOCOL_VERSION;
 use std::sync::{Arc, Mutex};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::Manager;
 
 /// Версия протокола UI ↔ shell (`uiprotocol.rs`).
 #[tauri::command]
@@ -97,6 +100,13 @@ fn main() {
     let runtime = Arc::new(Mutex::new(RuntimeState::default()));
     let rt_for_setup = Arc::clone(&runtime);
     tauri::Builder::default()
+        // Сингл-инстанс (shell-lifecycle §8.1): второй запуск фокусирует окно.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         .manage(Arc::clone(&runtime))
         .setup(move |app| {
             if let Some((url, tok)) = spawn_core() {
@@ -105,8 +115,41 @@ fn main() {
                     s.core_token = tok;
                 }
             }
-            // Окно создаётся из tauri.conf.json автоматически.
-            let _ = app;
+            // Трей (DS §10): показать окно / выйти; закрытие окна — в трей.
+            let show = MenuItem::with_id(app, "show", "Открыть LAVRay", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show, &quit])?;
+            let mut tray = TrayIconBuilder::new()
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "quit" => app.exit(0),
+                    "show" => {
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        let app = tray.app_handle();
+                        if let Some(w) = app.get_webview_window("main") {
+                            let _ = w.show();
+                            let _ = w.set_focus();
+                        }
+                    }
+                });
+            if let Some(icon) = app.default_window_icon() {
+                tray = tray.icon(icon.clone());
+            }
+            tray.build(app)?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

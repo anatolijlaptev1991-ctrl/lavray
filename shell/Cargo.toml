@@ -10,7 +10,8 @@ name = "lavray_shell"
 
 # Зависимости пинятся по semver-минорным версиям (tauri = "2" — по заданию).
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"

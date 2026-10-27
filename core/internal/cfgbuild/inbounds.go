@@ -94,16 +94,46 @@ func buildInbounds(st *BuildSettings, forTest bool) ([]any, error) {
 	}
 
 	// custom_inbound: {"inbounds":[...]} добавляется к сгенерированным.
+	// L11 аудита №1: раньше объект добавлялся без единой проверки — можно
+	// было открыть 0.0.0.0:1080 без авторизации (та же настройка через
+	// inbound.address отвергается) или занять тег mixed-in и сломать старт.
 	if !forTest {
 		raw := strings.TrimSpace(st.Inbound.CustomInboundJSON)
 		if raw != "" && raw != "{}" {
 			var custom struct {
-				Inbounds []any `json:"inbounds"`
+				Inbounds []map[string]any `json:"inbounds"`
 			}
 			if err := json.Unmarshal([]byte(raw), &custom); err != nil {
 				return nil, invalidArgument("inbound.custom_inbound", "invalid JSON: %v", err)
 			}
-			inbounds = append(inbounds, custom.Inbounds...)
+			usedTags := map[string]bool{}
+			for _, in := range inbounds {
+				if m, ok := in.(map[string]any); ok {
+					if tag, _ := m["tag"].(string); tag != "" {
+						usedTags[tag] = true
+					}
+				}
+			}
+			for _, in := range custom.Inbounds {
+				tag, _ := in["tag"].(string)
+				if tag != "" && usedTags[tag] {
+					return nil, invalidArgument("inbound.custom_inbound",
+						"тег %q уже занят сгенерированным inbound'ом", tag)
+				}
+				usedTags[tag] = true
+				listen, _ := in["listen"].(string)
+				if listen == "" {
+					listen, _ = in["listen_address"].(string)
+				}
+				if listen != "" && !isLoopbackAddr(listen) {
+					// FR-UI-279: наружу — только с авторизацией.
+					if st.Inbound.AuthUser == "" || st.Inbound.AuthPass == "" {
+						return nil, invalidArgument("inbound.custom_inbound",
+							"inbound на %s требует inbound.auth.user/pass (FR-UI-279)", listen)
+					}
+				}
+				inbounds = append(inbounds, in)
+			}
 		}
 	}
 	return inbounds, nil

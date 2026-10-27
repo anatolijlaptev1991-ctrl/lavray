@@ -88,6 +88,22 @@ var migrations = []migration{
 			 VALUES (` + strconv.FormatInt(DefaultGroupID, 10) + `, 1, 'Default', 0, 0, 0, strftime('%s','now')*1000, strftime('%s','now')*1000)`,
 		},
 	},
+	{
+		// L19 аудита №1: правка уже применённой миграции v1 не доезжает до
+		// существующих БД (schema_version=1 → v1 пропускается). Поэтому
+		// гарантия «Default-группа существует» и исправление дефолта
+		// активного пресета вынесены в отдельную миграцию v2.
+		version: 2,
+		stmts: []string{
+			`INSERT OR IGNORE INTO groups (id, kind, name, archive, skip_auto_update, tab_order, created_at_ms, updated_at_ms)
+			 VALUES (` + strconv.FormatInt(DefaultGroupID, 10) + `, 1, 'Default', 0, 0, 0, strftime('%s','now')*1000, strftime('%s','now')*1000)`,
+			// L20: дефолт дескриптора указывал на несуществующий builtin-id
+			// "lav-global" — активный пресет не находился, и ядро собирало
+			// нейтральный конфиг без block-списков и geoip:private.
+			`UPDATE settings SET value = '"global"'
+			   WHERE key = 'routing.active_preset' AND value = '"lav-global"'`,
+		},
+	},
 }
 
 // schemaVersion читает текущую версию схемы (0 — свежая база).

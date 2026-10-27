@@ -232,9 +232,13 @@ func TestRoutingActivateAndGetActive(t *testing.T) {
 
 func TestUnimplementedRPCAnswersCode(t *testing.T) {
 	cs := newE2E(t)
-	// ResetTraffic реализован заглушкой W7 — Unimplemented, не паника/смерть.
-	if _, err := cs.profile.ResetTraffic(context.Background(), connect.NewRequest(&lavrayv1.ResetTrafficRequest{Ids: []int64{1}})); connect.CodeOf(err) != connect.CodeUnimplemented {
-		t.Fatalf("reset traffic: code=%v err=%v", connect.CodeOf(err), err)
+	// Ещё не реализованный RPC обязан отвечать UNIMPLEMENTED, а не паникой.
+	if _, err := cs.profile.ResolveDomains(context.Background(), connect.NewRequest(&lavrayv1.ResolveDomainsRequest{Ids: []int64{1}})); connect.CodeOf(err) != connect.CodeUnimplemented {
+		t.Fatalf("resolve domains: code=%v err=%v", connect.CodeOf(err), err)
+	}
+	// ResetTraffic реализован (FR-UI-211) — пустой список = все профили, ok.
+	if _, err := cs.profile.ResetTraffic(context.Background(), connect.NewRequest(&lavrayv1.ResetTrafficRequest{})); err != nil {
+		t.Fatalf("reset traffic: %v", err)
 	}
 }
 

@@ -139,3 +139,18 @@ func TestMuxFilterAndSlowSubscriber(t *testing.T) {
 		}
 	}
 }
+
+// L4 аудита №1: ANSI-последовательность внутри секрета не должна обходить
+// редакцию. Раньше StripANSI шёл ПОСЛЕ Redact, и цветовой код разрывал ключ.
+func TestRedactSurvivesAnsiInsideSecret(t *testing.T) {
+	m := NewMux(10)
+	m.Logf("info", "core", "PASS\x1b[31mWORD=hunter2 tok\x1b[0men=abcdef")
+	tail := m.Tail(1)
+	if len(tail) != 1 {
+		t.Fatalf("tail=%d", len(tail))
+	}
+	msg := tail[0].Message
+	if strings.Contains(msg, "hunter2") || strings.Contains(msg, "abcdef") {
+		t.Fatalf("секрет утёк в журнал: %q", msg)
+	}
+}

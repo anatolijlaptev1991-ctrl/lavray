@@ -270,12 +270,37 @@ func (s *Store) loadProfileOrder(g *model.Group) error {
 	return rows.Err()
 }
 
+// nextID — следующий id для таблицы. L18 аудита №1: MAX(id)+1 переиспользует
+// id только что удалённой записи, из-за чего ChainDetail.ProfileIDs,
+// front_proxy_id и снапшоты начинали указывать на ДРУГОЙ профиль. Поэтому
+// высоководная отметка хранится в meta и только растёт (id удалённых записей
+// не возвращаются в оборот).
 func nextID(tx *sql.Tx, table string) (int64, error) {
+	key := "store.last_id." + table
 	var maxID sql.NullInt64
 	if err := tx.QueryRow(`SELECT MAX(id) FROM ` + table).Scan(&maxID); err != nil {
 		return 0, err
 	}
-	return nullInt64(maxID) + 1, nil
+	next := nullInt64(maxID) + 1
+
+	var savedRaw string
+	err := tx.QueryRow(`SELECT value FROM meta WHERE key = ?`, key).Scan(&savedRaw)
+	switch {
+	case err == nil:
+		var saved int64
+		if _, perr := fmt.Sscanf(savedRaw, "%d", &saved); perr == nil && saved >= next {
+			next = saved + 1
+		}
+	case errors.Is(err, sql.ErrNoRows):
+		// отметки ещё нет
+	default:
+		return 0, err
+	}
+	if _, err := tx.Exec(`INSERT INTO meta (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, fmt.Sprintf("%d", next)); err != nil {
+		return 0, err
+	}
+	return next, nil
 }
 
 func boolInt(b bool) int {

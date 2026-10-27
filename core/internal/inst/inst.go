@@ -125,6 +125,8 @@ type Manager struct {
 	lastError  string
 	lastConfig []byte
 
+	startCancel context.CancelFunc // отмена текущего Start (L13)
+
 	subMu  sync.Mutex
 	subs   map[chan Event]struct{}
 	closed bool // Shutdown отработал
@@ -158,14 +160,22 @@ func (m *Manager) Start(ctx context.Context, info RunInfo) error {
 	if info.StartedAtMs == 0 {
 		info.StartedAtMs = time.Now().UnixMilli()
 	}
+	if m.closed {
+		m.mu.Unlock()
+		return ErrNotRunning // L14: после Shutdown инстанс не поднимается
+	}
+	startCtx, cancel := context.WithCancel(ctx)
+	m.startCancel = cancel
 	m.state = StateStarting
 	m.run = &info
 	m.lastError = ""
 	m.mu.Unlock()
 	m.notifySnapshot()
 
-	err := m.runner.Start(ctx, info.ConfigJSON)
+	err := m.runner.Start(startCtx, info.ConfigJSON)
+	cancel()
 	m.mu.Lock()
+	m.startCancel = nil
 	if err != nil {
 		m.state = StateCrashed
 		m.lastError = err.Error()
@@ -192,8 +202,16 @@ func (m *Manager) Stop(ctx context.Context) error {
 		m.mu.Unlock()
 		return nil
 	case StateStarting:
+		// L13 аудита №1: раньше Stop во время Start возвращал ErrNotRunning и
+		// ничего не отменял — через мгновение инстанс переходил в Ready, а
+		// пользователь считал себя отключённым. Теперь отменяем старт и
+		// дожидаемся его завершения под тем же мьютексом.
+		cancel := m.startCancel
 		m.mu.Unlock()
-		return ErrNotRunning // старт в полёте: Stop бессмысленен (Runner.Start ещё не вернулся)
+		if cancel != nil {
+			cancel()
+		}
+		return nil
 	}
 	m.state = StateStopping
 	m.mu.Unlock()

@@ -86,7 +86,12 @@ func (m *Mux) Logf(level, source, format string, args ...any) {
 	if source == "" {
 		source = SourceCore
 	}
-	msg := StripANSI(Redact(fmt.Sprintf(format, args...)))
+	// L4 аудита №1: ANSI снимаем ДО редакции. Иначе «PASS[31mWORD=x»
+	// после Redact не матчится (ключ разорван escape-последовательностью),
+	// а после StripANSI получается открытый «PASSWORD=x» в журнале и
+	// подписчиках (LNB-01). Повторная редакция страхует случаи, когда сама
+	// escape-последовательность склеивала части секрета.
+	msg := Redact(StripANSI(fmt.Sprintf(format, args...)))
 	m.publish(Line{TsMs: time.Now().UnixMilli(), Level: level, Source: source, Message: msg})
 }
 

@@ -92,6 +92,11 @@ type Client struct {
 
 	// Now — инъекция времени (тесты).
 	Now func() time.Time
+
+	// Channel — запрошенный канал ("stable"/"beta"); пусто = выбрать новейший
+	// из обоих (L8 аудита №1: пользователь stable не должен получать beta,
+	// у которой просто больше serial).
+	Channel string
 }
 
 // Check выполняет полный цикл проверки (§5): sources → root(ротация) →
@@ -109,7 +114,25 @@ func (c *Client) Check(ctx context.Context) (*Result, error) {
 		return nil, err
 	}
 
-	// 1) timestamp — параллельно, первый валидный (§5 «свежесть»).
+	// 1) ROOT — ДО timestamp (L1 аудита №1): timestamp может быть подписан
+	// НОВЫМ ключом после ротации. Если верифицировать timestamp старым root,
+	// легитимная ротация навсегда ломает обновления (и отзыв ключа невозможен).
+	// Поэтому сначала пробуем подтянуть root N+1 с любого источника: он должен
+	// быть подписан порогом СТАРОГО root, после чего Trust переключается.
+	for _, s := range srcs {
+		rawRoot, ferr := s.Fetch(ctx, "root.json")
+		if ferr != nil || len(rawRoot) == 0 {
+			continue
+		}
+		if newTrust, verr := c.Trust.VerifyRootUpdate(rawRoot); verr == nil {
+			c.Trust = newTrust
+			break
+		}
+		// Ошибка ротации НЕ фейлит проверку: старый root остаётся валидным
+		// до истечения timestamp (SECURITY.md §4.3).
+	}
+
+	// 2) timestamp — параллельно, первый валидный (§5 «свежесть»).
 	env, ts, src, err := fetchFirstValid(ctx, srcs, "timestamp.json", func(raw []byte) (*Timestamp, error) {
 		env, err := c.Trust.Verify(raw, "timestamp")
 		if err != nil {
@@ -129,17 +152,6 @@ func (c *Client) Check(ctx context.Context) (*Result, error) {
 	}
 	_ = env
 
-	// 2) root: по timestamp.meta нет прямого пина (root меняется редко и
-	// тянется при ротации); проверяем наличие новой версии root параллельно —
-	// если она есть и подписана порогом старых, переключаем Trust.
-	if rawRoot, err := src.Fetch(ctx, "root.json"); err == nil && len(rawRoot) > 0 {
-		if newTrust, err := c.Trust.VerifyRootUpdate(rawRoot); err == nil {
-			c.Trust = newTrust
-		}
-		// Ошибка ротации НЕ фейлит проверку: старый root остаётся валидным
-		// до истечения timestamp —見 SECURITY.md §4.3.
-	}
-
 	// 3) manifest — стабильный и beta; выбор канала по большему serial,
 	// который > сохранённого (downgrade-защита §7).
 	mf, isNewer, channel, err := c.pickManifest(ctx, src, ts, now)
@@ -158,9 +170,14 @@ func (c *Client) Check(ctx context.Context) (*Result, error) {
 		c.State.LastCheckedAt = now.UnixMilli()
 		c.State.RootVersion = int64(c.Trust.Root().Version)
 		c.State.LastWorkingURL = sourceBase(src)
+		// L5 аудита №1: serial — МАКСИМУМ из сохранённого и выбранного, иначе
+		// деградировавшее зеркало откатывало счётчик и открывало повторный
+		// downgrade-replay.
 		if channel == "stable" {
-			c.State.SerialStable = int64(mf.Serial)
-		} else {
+			if int64(mf.Serial) > c.State.SerialStable {
+				c.State.SerialStable = int64(mf.Serial)
+			}
+		} else if int64(mf.Serial) > c.State.SerialBeta {
 			c.State.SerialBeta = int64(mf.Serial)
 		}
 	}
@@ -210,7 +227,11 @@ func (c *Client) pickManifest(ctx context.Context, src Source, ts *Timestamp, no
 		channel string
 	}
 	var cands []cand
-	for _, channel := range []string{"stable", "beta"} {
+	channels := []string{"stable", "beta"}
+	if c.Channel != "" {
+		channels = []string{c.Channel}
+	}
+	for _, channel := range channels {
 		name := ManifestName(channel)
 		entry, ok := ts.Meta[name]
 		if !ok {
@@ -223,6 +244,18 @@ func (c *Client) pickManifest(ctx context.Context, src Source, ts *Timestamp, no
 		env, err := c.Trust.Verify(raw, "manifest")
 		if err != nil {
 			continue // подпись/порог — пропускаем источник для этого файла
+		}
+		// L6 аудита №1: timestamp ПИННИТ sha256 и length манифеста (§3.2).
+		// Без этой сверки подмена тела manifest-<channel>.json (тот же serial,
+		// валидная подпись на другом документе) проходила незамеченной.
+		if entry.Sha256 != "" {
+			sum := sha256.Sum256(env.Signed)
+			if hex.EncodeToString(sum[:]) != entry.Sha256 {
+				continue
+			}
+		}
+		if entry.Length > 0 && int64(len(env.Signed)) != entry.Length {
+			continue
 		}
 		mf, err := ParseManifest(env.Signed)
 		if err != nil {
@@ -240,6 +273,9 @@ func (c *Client) pickManifest(ctx context.Context, src Source, ts *Timestamp, no
 		if expires(mf.Expires, now) {
 			continue
 		}
+		// L7 аудита №1: секции app/core опциональны в манифесте (бывают
+		// релизы только пресетов/гео) — не разыменовываем их вслепую.
+
 		cands = append(cands, cand{mf, channel})
 	}
 	if len(cands) == 0 {

@@ -300,9 +300,16 @@ func applyStreamSettings(out map[string]any, s *model.StreamSettings, st *BuildS
 			out["transport"] = tr
 		}
 	}
-	if caps.tls && (s.Security == "tls" || s.Security == "reality") {
-		if tls := buildTLS(s, st); len(tls) > 0 {
-			out["tls"] = tls
+	// L10 аудита №1: непустой RealityPublicKey сам по себе включает reality.
+	// Раньше профиль с RealityPublicKey, но пустым Security, уезжал БЕЗ tls —
+	// открытый текст и утечка UUID. Security=reality без ключа — ошибка
+	// валидации, а не молчаливый plaintext.
+	if caps.tls {
+		realityRequested := s.Security == "reality" || s.RealityPublicKey != ""
+		if s.Security == "tls" || realityRequested {
+			if tls := buildTLS(s, st); len(tls) > 0 {
+				out["tls"] = tls
+			}
 		}
 	}
 	if caps.packetEncoding && s.PacketEncoding != "" {

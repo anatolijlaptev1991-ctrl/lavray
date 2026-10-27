@@ -133,9 +133,18 @@ func NewSubscriber(client *http.Client, opts Options) *Subscriber {
 	dial := func(ctx context.Context, _, addr string) (net.Conn, error) {
 		return dialPinned(ctx, addr, guard, opts.ConnectTimeout)
 	}
+	// L3 аудита №1: клиент вызывающей стороны НИКОГДА не мутируется.
+	// Раньше при проксированном/произвольном транспорте мы меняли
+	// CheckRedirect и TLSClientConfig общего *http.Client — следующий
+	// подписчик (в т.ч. без insecure) наследовал InsecureSkipVerify, то есть
+	// MITM для всех подписок. Всегда работаем на своей копии.
 	if client == nil {
 		client = &http.Client{Transport: &http.Transport{DialContext: dial}}
-	} else if tr, ok := client.Transport.(*http.Transport); ok && !transportProxied(tr) {
+	} else {
+		shallow := *client
+		client = &shallow
+	}
+	if tr, ok := client.Transport.(*http.Transport); ok && !transportProxied(tr) {
 		// Транспорт без прокси: клонируем (не мутируем транспорт вызывающей
 		// стороны) и включаем пиннинг.
 		c := tr.Clone()

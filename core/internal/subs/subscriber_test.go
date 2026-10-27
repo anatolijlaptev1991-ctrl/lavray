@@ -601,8 +601,10 @@ func TestApplyDuplicateKeys(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Пароль тот же, что у сохранённых профилей (addProfile): ключ
+	// эквивалентности теперь включает креденшелы (L15 аудита №1).
 	one := []*model.Profile{{Type: model.TypeTrojan, Name: "one", Address: "same.example.com", Port: 443,
-		Detail: &model.TrojanVlessDetail{Password: "p"}}}
+		Detail: &model.TrojanVlessDetail{Password: "x"}}}
 	res, err := Apply(st, snap, ApplyParams{Next: one, Confirmed: true})
 	if err != nil {
 		t.Fatal(err)
@@ -618,8 +620,8 @@ func TestApplyDuplicateKeys(t *testing.T) {
 	// 2) В ответе два дубля → создаётся/остаётся один.
 	snap2, _ := TakeSnapshot(st, g.ID)
 	two := []*model.Profile{
-		{Type: model.TypeTrojan, Name: "n1", Address: "same.example.com", Port: 443, Detail: &model.TrojanVlessDetail{Password: "p"}},
-		{Type: model.TypeTrojan, Name: "n2", Address: "same.example.com", Port: 443, Detail: &model.TrojanVlessDetail{Password: "p"}},
+		{Type: model.TypeTrojan, Name: "n1", Address: "same.example.com", Port: 443, Detail: &model.TrojanVlessDetail{Password: "x"}},
+		{Type: model.TypeTrojan, Name: "n2", Address: "same.example.com", Port: 443, Detail: &model.TrojanVlessDetail{Password: "x"}},
 	}
 	if _, err := Apply(st, snap2, ApplyParams{Next: two, Confirmed: true}); err != nil {
 		t.Fatal(err)
@@ -661,5 +663,33 @@ func TestDialPinnedRejectsRebindToPrivate(t *testing.T) {
 	_, err := dialPinned(context.Background(), "sub.example.com:443", guard, time.Second)
 	if err == nil || !strings.Contains(err.Error(), "локальный/приватный") {
 		t.Fatalf("err = %v, ждали отказ по приватному IP", err)
+	}
+}
+
+// L15 аудита №1: два РАЗНЫХ аккаунта на одном host:port — не дубли.
+// Раньше ключ (type,address,port) склеивал их, второй профиль терялся.
+func TestApplyDifferentCredentialsAreNotDuplicates(t *testing.T) {
+	st := newTestStore(t)
+	g := newSubGroup(t, st, "https://x.example.com/sub")
+	snap, err := TakeSnapshot(st, g.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	next := []*model.Profile{
+		{Type: model.TypeVMess, Name: "acct-A", Address: "same.example.com", Port: 443,
+			Detail: &model.VMessDetail{UUID: "11111111-1111-1111-1111-111111111111", Security: "auto"}},
+		{Type: model.TypeVMess, Name: "acct-B", Address: "same.example.com", Port: 443,
+			Detail: &model.VMessDetail{UUID: "22222222-2222-2222-2222-222222222222", Security: "auto"}},
+	}
+	res, err := Apply(st, snap, ApplyParams{Next: next, Confirmed: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	after, _ := st.ListProfiles(g.ID)
+	if len(after) != 2 {
+		t.Fatalf("разные аккаунты склеены: %d профилей, ждали 2", len(after))
+	}
+	if len(res.Diff.Added) != 2 || len(res.Diff.Deleted) != 0 {
+		t.Fatalf("diff = +%d/-%d, ждали +2/-0", len(res.Diff.Added), len(res.Diff.Deleted))
 	}
 }

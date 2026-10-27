@@ -81,9 +81,12 @@ func TestStoreMigrationsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first open: %v", err)
 	}
+	// Версия = последняя миграция в списке (не хардкод: новые миграции
+	// добавляются, идемпотентность проверяется ниже).
+	want := migrations[len(migrations)-1].version
 	v1, err := s1.SchemaVersion()
-	if err != nil || v1 != 1 {
-		t.Fatalf("schema version after first open = %d, %v; want 1", v1, err)
+	if err != nil || v1 != want {
+		t.Fatalf("schema version after first open = %d, %v; want %d", v1, err, want)
 	}
 	if err := s1.Close(); err != nil {
 		t.Fatalf("close: %v", err)
@@ -95,12 +98,14 @@ func TestStoreMigrationsIdempotent(t *testing.T) {
 	}
 	defer s2.Close()
 	v2, err := s2.SchemaVersion()
-	if err != nil || v2 != 1 {
-		t.Fatalf("schema version after second open = %d, %v; want 1", v2, err)
+	if err != nil || v2 != want {
+		t.Fatalf("schema version after second open = %d, %v; want %d", v2, err, want)
 	}
+	// По строке на каждую применённую миграцию; повторное открытие их не
+	// дублирует.
 	var n int
-	if err := s2.DB().QueryRow(`SELECT COUNT(*) FROM schema_version`).Scan(&n); err != nil || n != 1 {
-		t.Fatalf("schema_version rows = %d, %v; want 1", n, err)
+	if err := s2.DB().QueryRow(`SELECT COUNT(*) FROM schema_version`).Scan(&n); err != nil || int64(n) != want {
+		t.Fatalf("schema_version rows = %d, %v; want %d", n, err, want)
 	}
 }
 

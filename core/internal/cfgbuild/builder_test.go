@@ -203,7 +203,8 @@ func TestCustomInternalFull(t *testing.T) {
 	full := `{"log":{"level":"warn"},"outbounds":[{"type":"direct","tag":"x"}]}`
 	p := &model.Profile{
 		ID: 6, Type: model.TypeCustomConfig, Address: "n/a", Port: 1,
-		Detail: &model.CustomDetail{Core: "internal-full", FullConfigJSON: full},
+		Detail:                &model.CustomDetail{Core: "internal-full", FullConfigJSON: full},
+		CustomFieldsConfirmed: true, // L2: произвольный конфиг требует подтверждения
 	}
 	res, err := Build(BuildRequest{Profile: p})
 	if err != nil {
@@ -397,5 +398,18 @@ func TestMarshalDeterministic(t *testing.T) {
 	var check map[string]any
 	if err := json.Unmarshal(a, &check); err != nil {
 		t.Fatalf("невалидный JSON: %v", err)
+	}
+}
+
+// L2 аудита №1: internal-full без подтверждения пользователем не применяется
+// (иначе импортированный профиль поднимал произвольный inbound).
+func TestCustomInternalFullRequiresConfirmation(t *testing.T) {
+	full := `{"inbounds":[{"listen":"0.0.0.0","listen_port":9}],"outbounds":[{"type":"direct","tag":"x"}]}`
+	p := &model.Profile{
+		ID: 7, Type: model.TypeCustomConfig, Address: "n/a", Port: 1,
+		Detail: &model.CustomDetail{Core: "internal-full", FullConfigJSON: full},
+	}
+	if _, err := Build(BuildRequest{Profile: p}); err == nil {
+		t.Fatal("internal-full без custom_fields_confirmed должен быть отвергнут")
 	}
 }

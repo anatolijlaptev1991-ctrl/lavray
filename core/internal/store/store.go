@@ -8,9 +8,11 @@ package store
 import (
 	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite" // регистрация драйвера (CGO_ENABLED=0)
@@ -48,7 +50,15 @@ func Open(dir string) (*Store, error) {
 
 	// foreign_keys/journal_mode должны действовать на КАЖДОМ соединении
 	// пула — задаём их в DSN (modernc.org/sqlite: _pragma=...).
-	dsn := "file:" + filepath.ToSlash(filepath.Join(dir, dbFileName)) +
+	// L17 аудита №1: путь экранируется как URL. Раньше конкатенация строк
+	// ломалась на «#»/«?» в пути (%APPDATA%\LAVRay#1): «#» обрезал DSN, и БД
+	// создавалась в другом каталоге (split-brain между запусками).
+	dbPath := filepath.ToSlash(filepath.Join(dir, dbFileName))
+	if !strings.HasPrefix(dbPath, "/") {
+		dbPath = "/" + dbPath // Windows: file:///C:/...
+	}
+	u := url.URL{Scheme: "file", Path: dbPath}
+	dsn := u.String() +
 		"?_pragma=foreign_keys(1)" +
 		"&_pragma=journal_mode(WAL)" +
 		"&_pragma=synchronous(NORMAL)" +

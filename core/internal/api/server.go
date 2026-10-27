@@ -63,6 +63,10 @@ type Server struct {
 	// ---- SettingsService: поток изменений ----
 	setMu   sync.Mutex
 	setSubs map[chan *lavrayv1.SettingsChanged]struct{}
+
+	// ---- тесты задержки: один батч на процесс (StopTests) ----
+	testsMu      sync.Mutex
+	testsRunning *testRun
 }
 
 // NewServer создаёт сервер зависимостями (Deps.Store обязателен).
@@ -214,8 +218,12 @@ func (s *Server) buildSettings(tunMode bool) *cfgbuild.BuildSettings {
 		AuthPass:          s.settingStr("inbound.auth.pass"),
 		CustomInboundJSON: s.settingStr("inbound.custom_inbound"),
 	}
+	// L21 аудита №1: TUN включается ТОЛЬКО режимом подключения. Настройка
+	// tun.enabled=true в режиме SYSTEM_PROXY раньше глушила mixed-слушатель
+	// (inbounds=[tun-in]) — системный прокси указывал на 127.0.0.1:2080, где
+	// никто не слушал. Настройка теперь лишь разрешает TUN как режим.
 	st.Tun = cfgbuild.TunSettings{
-		Enabled:       tunMode || s.settingBool("tun.enabled"),
+		Enabled:       tunMode,
 		InterfaceName: s.settingStr("tun.interface_name"),
 		MTU:           s.settingInt("tun.mtu"),
 		Stack:         tunStackOf(s.settingInt("tun.impl")),

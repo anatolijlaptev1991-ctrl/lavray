@@ -54,10 +54,42 @@ type profileKey struct {
 	typ     model.ProfileType
 	address string
 	port    int
+	// L15 аудита №1: без креденшелов два разных аккаунта на одном хосте и
+	// порту (разные uuid/пароли) считались одним профилем — второй терялся
+	// при применении подписки, а обновление давало ложный CONFIRM_REQUIRED.
+	credentials string
 }
 
 func keyOf(p *model.Profile) profileKey {
-	return profileKey{p.Type, p.Address, p.Port}
+	return profileKey{p.Type, p.Address, p.Port, credentialKey(p)}
+}
+
+// endpointKey — «мягкий» ключ: тот же сервер, креденшелы могут смениться
+// (провайдер ротирует пароль/uuid). Используется вторым проходом, чтобы
+// обновление на месте сохраняло id/избранное/статистику (FR-UI-249), и
+// только если точного совпадения не нашлось.
+func endpointKey(p *model.Profile) profileKey {
+	return profileKey{typ: p.Type, address: p.Address, port: p.Port}
+}
+
+// credentialKey — стабильная часть секрета профиля, участвующая в
+// идентичности (uuid/пароль/метод), без раскрытия значения в логах.
+func credentialKey(p *model.Profile) string {
+	switch d := p.Detail.(type) {
+	case *model.VMessDetail:
+		return "vmess:" + d.UUID + ":" + d.Security
+	case *model.TrojanVlessDetail:
+		return "tv:" + d.Password + ":" + d.Flow
+	case *model.ShadowsocksDetail:
+		return "ss:" + d.Method + ":" + d.Password
+	case *model.SocksHTTPDetail:
+		return "sh:" + d.Proto + ":" + d.Username + ":" + d.Password
+	case *model.Hysteria2Detail:
+		return "hy2:" + d.Password
+	case *model.TUICDetail:
+		return "tuic:" + d.UUID + ":" + d.Password
+	}
+	return ""
 }
 
 // dedupByKey оставляет первое вхождение ключа (type+address+port).
@@ -91,18 +123,54 @@ func ComputeDiff(existing, next []*model.Profile) *Diff {
 		nextKeys[keyOf(p)] = true
 	}
 	matched := make(map[profileKey]bool)
+	// Мягкие совпадения: сервер тот же, креденшелы сменились.
+	softMatched := make(map[profileKey]bool)
+	var softOld []*model.Profile
+	var dupes []*model.Profile
 	for _, e := range existing {
 		k := keyOf(e)
-		if nextKeys[k] && !matched[k] {
+		switch {
+		case nextKeys[k] && !matched[k]:
 			matched[k] = true
+			softMatched[endpointKey(e)] = true
 			d.Updated++ // обновится на месте, id/статистика сохранятся
-			continue
+		case nextKeys[k]:
+			// Второй профиль с тем же ключом — настоящий дубль (W3-3).
+			dupes = append(dupes, e)
+		default:
+			softOld = append(softOld, e)
 		}
+	}
+	for _, e := range dupes {
 		d.Deleted = append(d.Deleted, item(e))
 	}
 	for _, p := range next {
-		if !matched[keyOf(p)] {
+		k := keyOf(p)
+		if matched[k] {
+			continue
+		}
+		ek := endpointKey(p)
+		if softMatched[ek] {
+			continue // уже учтён как обновление
+		}
+		// Точного совпадения нет — ищем «тот же сервер с новым паролем».
+		soft := false
+		for i, e := range softOld {
+			if endpointKey(e) == ek {
+				soft = true
+				softMatched[ek] = true
+				d.Updated++
+				softOld = append(softOld[:i], softOld[i+1:]...)
+				break
+			}
+		}
+		if !soft {
 			d.Added = append(d.Added, item(p))
+		}
+	}
+	for _, e := range softOld {
+		if !softMatched[endpointKey(e)] {
+			d.Deleted = append(d.Deleted, item(e))
 		}
 	}
 	d.Kept = d.Updated
@@ -194,6 +262,9 @@ func Apply(st StoreAPI, snap *Snapshot, params ApplyParams) (*UpdateResult, erro
 	// Дубль ключа в группе (W3-3): в map остаётся первый, остальные —
 	// удаляются вместе с непокрытыми (ComputeDiff считает их Deleted).
 	existing := make(map[profileKey]*model.Profile, len(snap.Profiles))
+	// soft — тот же сервер с другими креденшелами (ротация пароля/uuid):
+	// второй проход сопоставления, чтобы профиль обновлялся на месте.
+	soft := make(map[profileKey][]*model.Profile, len(snap.Profiles))
 	var existingDupes []*model.Profile
 	for _, e := range snap.Profiles {
 		k := keyOf(e)
@@ -202,6 +273,33 @@ func Apply(st StoreAPI, snap *Snapshot, params ApplyParams) (*UpdateResult, erro
 			continue
 		}
 		existing[k] = e
+		ek := endpointKey(e)
+		soft[ek] = append(soft[ek], e)
+	}
+	// takeOld — точное совпадение, иначе мягкое (сервер тот же).
+	takeOld := func(p *model.Profile) (*model.Profile, bool) {
+		k := keyOf(p)
+		if old, ok := existing[k]; ok {
+			delete(existing, k)
+			ek := endpointKey(old)
+			for i, cand := range soft[ek] {
+				if cand == old {
+					soft[ek] = append(soft[ek][:i], soft[ek][i+1:]...)
+					break
+				}
+			}
+			return old, true
+		}
+		ek := endpointKey(p)
+		for i, cand := range soft[ek] {
+			if keyOf(cand) == k {
+				continue
+			}
+			soft[ek] = append(soft[ek][:i], soft[ek][i+1:]...)
+			delete(existing, keyOf(cand))
+			return cand, true
+		}
+		return nil, false
 	}
 	var order []int64
 	err := func() error {
@@ -212,7 +310,7 @@ func Apply(st StoreAPI, snap *Snapshot, params ApplyParams) (*UpdateResult, erro
 			if p.Geo == "" {
 				p.Geo = model.DetectGeo(p.Name, p.Address)
 			}
-			if old, ok := existing[keyOf(p)]; ok {
+			if old, ok := takeOld(p); ok {
 				merged := *p
 				merged.ID = old.ID
 				merged.GroupID = old.GroupID
@@ -221,12 +319,16 @@ func Apply(st StoreAPI, snap *Snapshot, params ApplyParams) (*UpdateResult, erro
 				merged.Traffic = old.Traffic
 				merged.Notes = old.Notes
 				merged.Tags = old.Tags
+				// L26 аудита №1: geo — пользовательская метаданная; сохраняем
+				// его, если новый разбор страну не определил.
+				if merged.Geo == "" {
+					merged.Geo = old.Geo
+				}
 				merged.CustomFieldsConfirmed = false // новые поля — не подтверждены (LNB-25)
 				if err := st.UpdateProfile(&merged); err != nil {
 					return fmt.Errorf("применение: обновление профиля %d: %w", old.ID, err)
 				}
 				order = append(order, old.ID)
-				delete(existing, keyOf(p))
 				continue
 			}
 			p.GroupID = snap.GroupID
@@ -304,8 +406,22 @@ func Rollback(st StoreAPI, snap *Snapshot) error {
 	}
 	for _, p := range snap.Profiles {
 		restore := *p
+		// L16 аудита №1: id из снапшота мог быть переиспользован (старый
+		// nextID = MAX+1) — тогда ImportProfile падал на UNIQUE, и группа
+		// оставалась ПУСТОЙ. Пробуем исходный id, при конфликте — новый.
 		if err := st.ImportProfile(&restore); err != nil {
-			return fmt.Errorf("откат: восстановление %d: %w", p.ID, err)
+			restore.ID = 0
+			restore.GroupID = snap.GroupID
+			if err2 := st.CreateProfile(&restore); err2 != nil {
+				return fmt.Errorf("откат: восстановление %d: %v (повтор без id: %v)", p.ID, err, err2)
+			}
+			restoreID := restore.ID
+			for i := range snap.Order {
+				if snap.Order[i] == p.ID {
+					snap.Order[i] = restoreID
+					break
+				}
+			}
 		}
 	}
 	if err := st.ReorderProfiles(snap.GroupID, snap.Order); err != nil {

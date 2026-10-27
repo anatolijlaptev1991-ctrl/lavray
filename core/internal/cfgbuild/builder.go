@@ -150,8 +150,14 @@ func Build(req BuildRequest) (*BuildResult, error) {
 
 	var cfg map[string]any
 	if isInternalFull(req.Profile) {
-		// internal-full: конфиг «как есть» (§3.1.9), custom_config сверху
-		// через allowlist.
+		// L2 аудита №1: произвольный конфиг ядра («как есть»), пришедший из
+		// импорта, применяется ТОЛЬКО после подтверждения пользователем —
+		// ровно как custom_config (LNB-25/FR-UI-257). Иначе импортированный
+		// профиль открывал 0.0.0.0:9 без ведома пользователя.
+		if !req.Profile.CustomFieldsConfirmed {
+			return nil, invalidArgument("custom.bean.core",
+				"internal-full конфиг требует подтверждения (custom_fields_confirmed)")
+		}
 		var err error
 		cfg, err = internalFullConfig(req.Profile)
 		if err != nil {
@@ -341,6 +347,12 @@ func resolveChain(req BuildRequest) ([]*model.Profile, error) {
 	if resolveErr != nil {
 		return nil, resolveErr
 	}
+	// L12 аудита №1: пустая цепочка раньше давала конфиг без outbound «proxy»,
+	// при этом route.final=proxy — sing-box падал на старте, а Connect
+	// сообщал успех. Пустая цепочка — ошибка валидации на месте.
+	if len(ents) == 0 {
+		return nil, invalidArgument("chain", "цепочка пуста: нет профилей для outbound «proxy»")
+	}
 
 	// Групповой front proxy добавляется в конец (становится входом).
 	if req.Group != nil && req.Group.FrontProxyID != nil && *req.Group.FrontProxyID >= 0 {
@@ -480,6 +492,13 @@ func validateEnt(p *model.Profile) error {
 	}
 	if p.Port <= 0 || p.Port > 65535 {
 		return invalidArgument("port", "profile %d: invalid port %d", p.ID, p.Port)
+	}
+	// L10 аудита №1: reality без ключа — не «tls по умолчанию», а ошибка:
+	// иначе получился бы открытый текст с утечкой UUID.
+	if p.Stream != nil && p.Stream.Security == "reality" &&
+		strings.TrimSpace(p.Stream.RealityPublicKey) == "" {
+		return invalidArgument("stream.reality_public_key",
+			"profile %d: security=reality требует public_key", p.ID)
 	}
 	return nil
 }

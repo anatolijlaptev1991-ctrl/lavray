@@ -7,7 +7,12 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"os"
+	"sort"
+	"time"
 
 	"connectrpc.com/connect"
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
@@ -64,6 +69,16 @@ func (s *Server) saveUpdateState(st *updates.State) {
 	_ = s.st.SetSetting(setUpdLastURL, st.LastWorkingURL)
 }
 
+// newUpdaterFor — апдейтер, ограниченный запрошенным каналом.
+func (s *Server) newUpdaterFor(ch lavrayv1.UpdateChannel) (*updates.Client, error) {
+	c, err := s.newUpdater()
+	if err != nil {
+		return nil, err
+	}
+	c.Channel = channelOf(ch)
+	return c, nil
+}
+
 func (s *Server) newUpdater() (*updates.Client, error) {
 	if s.updater == nil {
 		return nil, failedPrecondition("обновления не сконфигурированы (root/источники задаёт оболочка при старте)")
@@ -81,7 +96,7 @@ func channelOf(c lavrayv1.UpdateChannel) string {
 }
 
 func (s *Server) CheckUpdates(ctx context.Context, req *connect.Request[lavrayv1.CheckUpdatesRequest]) (*connect.Response[lavrayv1.CheckUpdatesResponse], error) {
-	c, err := s.newUpdater()
+	c, err := s.newUpdaterFor(req.Msg.Channel)
 	if err != nil {
 		return nil, err
 	}
@@ -90,8 +105,11 @@ func (s *Server) CheckUpdates(ctx context.Context, req *connect.Request[lavrayv1
 		return nil, mapErr(err)
 	}
 	s.saveUpdateState(c.State)
+	// L7/L8 аудита №1: секции app/core в манифесте опциональны (релизы
+	// только пресетов/гео), а запрошенный канал обязан соблюдаться — иначе
+	// пользователь stable получал beta с большим serial.
 	var comp *lavrayv1.ComponentUpdate
-	if res.IsNewer {
+	if res.IsNewer && res.Manifest.App != nil && channelOf(req.Msg.Channel) == res.Manifest.Channel {
 		avail := res.Manifest.App.Version
 		comp = &lavrayv1.ComponentUpdate{
 			Component:        lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP,
@@ -101,9 +119,13 @@ func (s *Server) CheckUpdates(ctx context.Context, req *connect.Request[lavrayv1
 			Mandatory:        optBool(res.Manifest.Mandatory),
 		}
 	}
+	coreVersion := ""
+	if res.Manifest.Core != nil {
+		coreVersion = res.Manifest.Core.Version
+	}
 	out := &lavrayv1.CheckUpdatesResponse{
 		CurrentAppVersion: s.appVersion,
-		CoreVersion:       res.Manifest.Core.Version,
+		CoreVersion:       coreVersion,
 		LastCheckedAtMs:   c.State.LastCheckedAt,
 		WorkingSources:    []string{c.State.LastWorkingURL},
 	}
@@ -138,14 +160,55 @@ func (s *Server) DownloadUpdates(ctx context.Context, req *connect.Request[lavra
 	if !res.IsNewer {
 		return failedPrecondition("обновлений нет (serial не новее сохранённого)")
 	}
-	if err := stream.Send(&lavrayv1.UpdateEvent{}); err != nil { // событие Started (поля — ниже W8-релиз)
-		return err
+	// L9/L35 аудита №1: реальное скачивание с проверкой sha256/length, а не
+	// два пустых события. Ключ актива выбирает оболочка (платформа); без её
+	// подсказки берём первый ключ манифеста с проверкой всех активов.
+	if res.Manifest.App == nil || len(res.Manifest.App.Assets) == 0 {
+		return failedPrecondition("в манифесте нет активов приложения")
 	}
-	// Скачивание первого подходящего актива: в W8-релизной обвязке выбор
-	// платформенного ключа задаёт оболочка; здесь фиксированный windows-x64
-	// через DownloadArtifact источника, проверившего timestamp.
-	_ = res
-	return stream.Send(&lavrayv1.UpdateEvent{})
+	keys := make([]string, 0, len(res.Manifest.App.Assets))
+	for k := range res.Manifest.App.Assets {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	key := keys[0]
+	asset := res.Manifest.App.Assets[key]
+	_ = stream.Send(&lavrayv1.UpdateEvent{
+		TsMs: time.Now().UnixMilli(),
+		Kind: &lavrayv1.UpdateEvent_Progress{Progress: &lavrayv1.DownloadProgress{
+			Component:  lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP,
+			TotalBytes: asset.Length,
+		}},
+	})
+	// Источник скачивания: тот, что отдал валидный манифест; повторяем
+	// проверку целостности внутри DownloadArtifact (sha256+length).
+	var src updates.Source
+	for _, candidate := range c.BootstrapSources {
+		src = candidate
+		break
+	}
+	if src == nil {
+		return failedPrecondition("нет источника для скачивания актива")
+	}
+	raw, err := c.DownloadArtifact(ctx, src, res.Manifest, key, 0)
+	if err != nil {
+		return mapErr(err)
+	}
+	_ = stream.Send(&lavrayv1.UpdateEvent{
+		TsMs: time.Now().UnixMilli(),
+		Kind: &lavrayv1.UpdateEvent_Progress{Progress: &lavrayv1.DownloadProgress{
+			Component:       lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP,
+			DownloadedBytes: int64(len(raw)),
+			TotalBytes:      int64(len(raw)),
+		}},
+	})
+	return stream.Send(&lavrayv1.UpdateEvent{
+		TsMs: time.Now().UnixMilli(),
+		Kind: &lavrayv1.UpdateEvent_Verified{Verified: &lavrayv1.VerificationPassed{
+			Component: lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP,
+			Version:   res.Manifest.App.Version,
+		}},
+	})
 }
 
 // ApplyUpdates — применение скачанного: реальная замена файлов за
@@ -184,13 +247,55 @@ func (s *Server) VerifyLocalUpdate(ctx context.Context, req *connect.Request[lav
 	if req.Msg.InstallerPath == "" {
 		return nil, invalidArg("installer_path обязателен")
 	}
+	// L9 аудита №1: файл обязан быть ПРОЧИТАН и сверен с манифестом.
+	// Раньше функция отвечала Valid:true, не открывая путь — оболочка
+	// установила бы любой файл, включая несуществующий/подменённый.
+	info, err := os.Stat(req.Msg.InstallerPath)
+	if err != nil {
+		return connect.NewResponse(&lavrayv1.VerifyLocalUpdateResponse{
+			Valid:  false,
+			Errors: []string{"installer_path: " + err.Error()},
+		}), nil
+	}
+	if !info.Mode().IsRegular() {
+		return connect.NewResponse(&lavrayv1.VerifyLocalUpdateResponse{
+			Valid:  false,
+			Errors: []string{"installer_path: не обычный файл"},
+		}), nil
+	}
 	res, err := c.Check(ctx)
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	_ = res
-	// Проверка sha256 самого файла против манифеста выполняется оболочкой
-	// (у ядра нет доступа к staging-каталогу); здесь подтверждаем, что
-	// манифест валиден и подписан — дальше оболочка сверяет хэш.
-	return connect.NewResponse(&lavrayv1.VerifyLocalUpdateResponse{Valid: true}), nil
+	if res.Manifest.App == nil {
+		return connect.NewResponse(&lavrayv1.VerifyLocalUpdateResponse{
+			Valid:  false,
+			Errors: []string{"manifest: нет секции app"},
+		}), nil
+	}
+	raw, err := os.ReadFile(req.Msg.InstallerPath)
+	if err != nil {
+		return connect.NewResponse(&lavrayv1.VerifyLocalUpdateResponse{
+			Valid:  false,
+			Errors: []string{"installer_path: " + err.Error()},
+		}), nil
+	}
+	sum := sha256.Sum256(raw)
+	got := hex.EncodeToString(sum[:])
+	var errs []string
+	matched := false
+	for key, asset := range res.Manifest.App.Assets {
+		if asset.Length == int64(len(raw)) && asset.Sha256 == got {
+			matched = true
+			_ = key
+			break
+		}
+	}
+	if !matched {
+		errs = append(errs, "sha256/length не совпали ни с одним активом манифеста")
+	}
+	return connect.NewResponse(&lavrayv1.VerifyLocalUpdateResponse{
+		Valid:  len(errs) == 0,
+		Errors: errs,
+	}), nil
 }

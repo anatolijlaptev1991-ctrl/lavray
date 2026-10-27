@@ -999,3 +999,18 @@ func subscriptionInfoToProto(m *model.SubscriptionInfo) *lavrayv1.SubscriptionIn
 	}
 	return si
 }
+
+// testResultToProto — модель результата теста → proto (LatencyResult).
+func testResultToProto(m model.TestResult) *lavrayv1.TestResult {
+	tr := &lavrayv1.TestResult{}
+	if m.LatencyMs != nil {
+		tr.LatencyMs = m.LatencyMs
+	}
+	if m.TestedAtMs != nil {
+		tr.TestedAtMs = m.TestedAtMs
+	}
+	if m.LastError != "" {
+		tr.LastError = strp(m.LastError)
+	}
+	return tr
+}

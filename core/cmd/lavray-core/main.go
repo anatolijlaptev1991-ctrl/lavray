@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/api"
-	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
@@ -99,7 +98,10 @@ func main() {
 		mux.Logf(logs.LevelWarn, "core", "auth-токен пуст: все запросы будут отклонены (fail-closed)")
 	}
 
-	server := api.NewServer(api.Deps{Store: st, Logs: mux, Runner: inst.NopRunner{}})
+	// L24 аудита №1: pickRunner() выбирает реальный sing-box в сборке с
+	// тегом singbox_run; раньше хардкод NopRunner означал, что туннель не
+	// запускался НИ В ОДНОЙ сборке.
+	server := api.NewServer(api.Deps{Store: st, Logs: mux, Runner: pickRunner()})
 	// appVersion — билд-флаг платформенных репо.
 	root := http.NewServeMux()
 	server.Register(root)

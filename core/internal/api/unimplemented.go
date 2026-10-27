@@ -16,10 +16,6 @@ import (
 
 var errNotYetW6 = connect.NewError(connect.CodeUnimplemented, errors.New("RPC запланирован, но ещё не реализован в W6"))
 
-func (s *Server) ResetTraffic(ctx context.Context, req *connect.Request[lavrayv1.ResetTrafficRequest]) (*connect.Response[lavrayv1.Empty], error) {
-	return nil, errNotYetW6
-}
-
 func (s *Server) RemoveUnavailableProfiles(ctx context.Context, req *connect.Request[lavrayv1.RemoveUnavailableProfilesRequest]) (*connect.Response[lavrayv1.RemoveUnavailableResponse], error) {
 	return nil, errNotYetW6
 }
@@ -32,20 +28,8 @@ func (s *Server) ExportConfig(ctx context.Context, req *connect.Request[lavrayv1
 	return nil, errNotYetW6
 }
 
-func (s *Server) StopTests(ctx context.Context, req *connect.Request[lavrayv1.StopTestsRequest]) (*connect.Response[lavrayv1.Empty], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) ClearTestResults(ctx context.Context, req *connect.Request[lavrayv1.ClearTestResultsRequest]) (*connect.Response[lavrayv1.Empty], error) {
-	return nil, errNotYetW6
-}
-
 func (s *Server) ResolveDomains(ctx context.Context, req *connect.Request[lavrayv1.ResolveDomainsRequest]) (*connect.Response[lavrayv1.ResolveDomainsResponse], error) {
 	return nil, errNotYetW6
-}
-
-func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.TestLatencyRequest], stream *connect.ServerStream[lavrayv1.LatencyResult]) error {
-	return errNotYetW6
 }
 
 func (s *Server) CreatePreset(ctx context.Context, req *connect.Request[lavrayv1.CreatePresetRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {

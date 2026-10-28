@@ -2,7 +2,7 @@
 // вкладки групп, тулбар с поиском/фильтрами/протоколом, второй тулбар с
 // плотностью/группировкой/тестом, список профилей карточками, массовое
 // выделение, тест задержки с прогрессом, гео-группировка.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { ProfileType, TestLatencyRequest_Mode } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
@@ -10,6 +10,7 @@ import { useCore, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { friendlyCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
+import { formatMs } from '../lib/i18n';
 import { ProfileEditor } from '../components/ProfileEditor';
 import { ImportDialog } from '../components/ImportDialog';
 import { GroupsDialog } from '../components/dialogs';
@@ -73,6 +74,7 @@ export function ServersScreen(): JSX.Element {
   const [editing, setEditing] = useState<Profile | null | undefined>(undefined);
   const [importOpen, setImportOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
+  const testAbort = useRef<AbortController | null>(null);
 
   useEffect(() => {
     void (async (): Promise<void> => {
@@ -97,14 +99,23 @@ export function ServersScreen(): JSX.Element {
     if (protoFilter !== 'all') list = list.filter((p) => String(p.type) === protoFilter);
     if (statusFilter === 'fav') list = list.filter((p) => p.favorite);
     if (statusFilter === 'fast') {
-      list = list.filter((p) => (p.testResult?.latencyMs ?? 10_000) < 500);
+      // SS-02: отрицательная задержка = «недоступен»; в «быстрые» не входит.
+      list = list.filter((p) => {
+        const ms = p.testResult?.latencyMs;
+        return ms !== undefined && ms > 0 && ms < 500;
+      });
     }
     if (statusFilter === 'down') {
       list = list.filter((p) => (p.testResult?.lastError ?? '') !== '');
     }
     const sorted = [...list];
     if (sortKey === 'delay') {
-      sorted.sort((a, b) => (a.testResult?.latencyMs ?? 9999) - (b.testResult?.latencyMs ?? 9999));
+      // Недоступные (<0) и непроверенные — в конец, между собой по имени.
+      const rank = (p: Profile): number => {
+        const ms = p.testResult?.latencyMs;
+        return ms !== undefined && ms > 0 ? ms : 1_000_000;
+      };
+      sorted.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, lang));
     } else {
       sorted.sort((a, b) => a.name.localeCompare(b.name, lang));
     }
@@ -128,11 +139,16 @@ export function ServersScreen(): JSX.Element {
       if (ids.length === 0) return;
       setTesting(true);
       setLatency({});
+      // SS-03: стрим отменяем при уходе с экрана/остановке, иначе setState
+      // после unmount и параллельные прогоны.
+      testAbort.current?.abort();
+      const ac = new AbortController();
+      testAbort.current = ac;
       try {
-        const stream = core.profiles.testLatency({
-          profileIds: ids,
-          mode: TestLatencyRequest_Mode.TCP_PING,
-        });
+        const stream = core.profiles.testLatency(
+          { profileIds: ids, mode: TestLatencyRequest_Mode.TCP_PING },
+          { signal: ac.signal },
+        );
         for await (const res of stream) {
           const r = res.result;
           const key = String(res.profileId);
@@ -145,8 +161,9 @@ export function ServersScreen(): JSX.Element {
         }
         refresh();
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        if (!ac.signal.aborted) setErr(friendlyCoreError(e));
       } finally {
+        if (testAbort.current === ac) testAbort.current = null;
         setTesting(false);
         setProgress('');
       }
@@ -154,13 +171,26 @@ export function ServersScreen(): JSX.Element {
     [core, refresh, tf],
   );
 
+  // SS-05: остановка рвёт стрим (контракт: отмена — закрытие стрима) и
+  // снимает флаг running; ошибка больше не глотается.
   const stopTests = useCallback(async (): Promise<void> => {
+    testAbort.current?.abort();
+    testAbort.current = null;
+    setTesting(false);
+    setProgress('');
     try {
       await core.profiles.stopTests({});
-    } catch {
-      /* уже остановлено */
+    } catch (e) {
+      setErr(friendlyCoreError(e));
     }
   }, [core]);
+
+  // Отмена стрима при размонтировании экрана.
+  useEffect(() => {
+    return (): void => {
+      testAbort.current?.abort();
+    };
+  }, []);
 
   const removeSelected = useCallback(async (): Promise<void> => {
     const ids = [...selected].map((s) => BigInt(s));
@@ -191,7 +221,14 @@ export function ServersScreen(): JSX.Element {
   const toggleFav = useCallback(
     async (p: Profile): Promise<void> => {
       try {
-        await core.profiles.setProfileMeta({ id: p.id, favorite: !p.favorite });
+        // SS-01: SetProfileMeta замещает repeated-поля — передаём текущие
+        // tags/notes, иначе они стираются при клике на «избранное».
+        await core.profiles.setProfileMeta({
+          id: p.id,
+          favorite: !p.favorite,
+          tags: p.tags,
+          notes: p.notes,
+        });
         refresh();
       } catch (e) {
         setErr(friendlyCoreError(e));
@@ -407,7 +444,7 @@ export function ServersScreen(): JSX.Element {
         </button>
         <button
           className="btn btn-pri"
-          disabled={targetGroup === ''}
+          disabled={targetGroup === '' && groupFilter === 'all'}
           onClick={() => {
             setEditing(null);
           }}
@@ -499,7 +536,9 @@ export function ServersScreen(): JSX.Element {
 
       {importOpen && (
         <ImportDialog
-          groupId={targetGroup === '' ? 0n : BigInt(targetGroup)}
+          groupId={BigInt(
+            groupFilter !== 'all' ? groupFilter : targetGroup === '' ? '0' : targetGroup,
+          )}
           onClose={() => {
             setImportOpen(false);
           }}
@@ -510,7 +549,9 @@ export function ServersScreen(): JSX.Element {
       {editing !== undefined && (
         <ProfileEditor
           profile={editing}
-          groupId={targetGroup === '' ? 0n : BigInt(targetGroup)}
+          groupId={BigInt(
+            groupFilter !== 'all' ? groupFilter : targetGroup === '' ? '0' : targetGroup,
+          )}
           onClose={() => {
             setEditing(undefined);
           }}
@@ -544,10 +585,10 @@ function ProfileRow({
   onDelete,
   typeLabel,
 }: RowProps): JSX.Element {
-  const { t } = useI18n();
+  const { t, tf, lang } = useI18n();
+  const ms = p.testResult?.latencyMs;
   const delay =
-    latencyLabel ??
-    (p.testResult?.latencyMs !== undefined ? `${String(p.testResult.latencyMs)} ms` : '—');
+    latencyLabel ?? (ms !== undefined && ms > 0 ? formatMs(ms, lang) : '—');
   const down = (p.testResult?.lastError ?? '') !== '';
   return (
     <li className={`prow${checked ? ' sel' : ''}`}>
@@ -555,7 +596,7 @@ function ProfileRow({
         type="checkbox"
         className="prow-chk"
         checked={checked}
-        aria-label={`${t('srv.select')} ${p.name}`}
+        aria-label={tf('srv.select', { name: p.name })}
         onChange={(e) => {
           onCheck(e.target.checked);
         }}

@@ -4,7 +4,7 @@
 // маршрута.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
-import { GetPublicIpRequest_Via, SelfCheckResult_Status } from '../gen/lavray_pb';
+import { GetPublicIpRequest_Via, RunSelfCheckRequest_CheckKind, SelfCheckResult_Status } from '../gen/lavray_pb';
 import { friendlyCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
@@ -42,21 +42,28 @@ const STATE_LABEL: Record<RunState, string> = {
   err: 'st.fail',
 };
 
-/** Локализация названия проверки по enum-значению. */
+/** Локализация названия проверки — по РЕАЛЬНОМУ enum контракта
+ *  (SD-01 аудита round 3: прежняя таблица была сдвинута на единицу). */
 const KIND_LABEL: Record<number, string> = {
-  1: 'chk.core.t',
-  2: 'chk.server.t',
-  3: 'chk.dns.t',
-  4: 'chk.port.t',
-  5: 'chk.proxy.t',
+  [RunSelfCheckRequest_CheckKind.CORE_ALIVE]: 'chk.core.t',
+  [RunSelfCheckRequest_CheckKind.SERVER_REACHABLE]: 'chk.server.t',
+  [RunSelfCheckRequest_CheckKind.DNS_RESOLVES]: 'chk.dns.t',
+  [RunSelfCheckRequest_CheckKind.PROXY_ACTIVE]: 'chk.proxy.t',
+  [RunSelfCheckRequest_CheckKind.CLOCK_SKEW]: 'chk.fix.time',
+  [RunSelfCheckRequest_CheckKind.SUBSCRIPTION_OK]: 'chk.fix.sub',
+  [RunSelfCheckRequest_CheckKind.PORT_FREE]: 'chk.port.t',
+  [RunSelfCheckRequest_CheckKind.IPV6]: 'tun.ipv6',
 };
 
 const FIX_LABEL: Record<string, string> = {
+  // SD-05: коды по контракту (proto SelfCheckResult.fix_code).
   restart_profile: 'err.retry',
   open_dns: 'chk.fix.dns',
   change_port: 'chk.fix.port',
+  fix_clock: 'chk.fix.time',
   sync_clock: 'chk.fix.time',
   open_subscriptions: 'chk.fix.sub',
+  open_subscription: 'chk.fix.sub',
 };
 
 export function DiagScreen(): JSX.Element {
@@ -114,7 +121,8 @@ export function DiagScreen(): JSX.Element {
     } catch (e) {
       setErr(friendlyCoreError(e));
     } finally {
-      setRunning(false);
+      // SD-04: не сбрасываем флаг, если этот прогон уже устарел (запущен новый).
+      if (my === token.current) setRunning(false);
     }
   }, [core, t, tf]);
 
@@ -159,7 +167,9 @@ export function DiagScreen(): JSX.Element {
             <span>{t('chk.run')}</span>
           </button>
         </div>
-        <p className="cap" role="status" aria-live="polite">{summary}</p>
+        {(summary !== '' || rows.length > 0) && (
+          <p className="cap" role="status" aria-live="polite">{summary}</p>
+        )}
         <ol className="chk-list">
           {rows.map((r) => (
             <li className={`chk-item chk-${r.state}`} key={String(r.kind)}>
@@ -172,14 +182,29 @@ export function DiagScreen(): JSX.Element {
                 <span className="chk-d">{r.detail}</span>
               </span>
               {r.fixCode !== '' && FIX_LABEL[r.fixCode] !== undefined && (
-                <button className="btn btn-sec btn-sm chk-fix">
+                // SD-02: действие исправления открывает соответствующий
+                // экран, а не висит кнопкой без обработчика.
+                <button
+                  className="btn btn-sec btn-sm chk-fix"
+                  onClick={() => {
+                    const target =
+                      r.fixCode === 'open_dns'
+                        ? 'screen=rules&tab=dns'
+                        : r.fixCode === 'open_subscriptions' || r.fixCode === 'open_subscription'
+                          ? 'screen=servers&tab=subscriptions'
+                          : r.fixCode === 'change_port' || r.fixCode === 'restart_profile'
+                            ? 'screen=settings'
+                            : 'screen=connection';
+                    window.location.hash = target;
+                  }}
+                >
                   {t(FIX_LABEL[r.fixCode] as never)}
                 </button>
               )}
             </li>
           ))}
         </ol>
-        {rows.length === 0 && !running && <p className="muted">{t('chk.run')}</p>}
+
       </div>
 
       {/* ---- Утечки ---- */}
@@ -199,7 +224,7 @@ export function DiagScreen(): JSX.Element {
             <dd className="mono">{publicIp ?? t('leak.off')}</dd>
           </div>
           <div>
-            <dt>{t('leak.dns')}</dt>
+            <dt>{t('conn.ip')}</dt>
             <dd className="mono">{ipLeak ?? t('leak.off')}</dd>
           </div>
         </dl>

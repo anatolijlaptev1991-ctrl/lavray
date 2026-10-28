@@ -66,8 +66,11 @@ const CORE_ROWS: readonly Row[] = [
   { key: 'core.underlying_dns', type: SettingType.STRING, labelKey: 'dns.local', descKey: 'dns.local.d' },
   { key: 'mux.protocol', type: SettingType.STRING, labelKey: 'mux.protocol' },
   { key: 'mux.concurrency', type: SettingType.INT, labelKey: 'mux.concurrency' },
-  { key: 'security.allow_insecure_default', type: SettingType.BOOL, labelKey: 'set.confirmQuit' },
-  { key: 'enable_external_cores', type: SettingType.BOOL, labelKey: 'set.checkUpd' },
+  { key: 'mux.default_on', type: SettingType.BOOL, labelKey: 'mux.default_on' },
+  // ST-01 (аудит round 3): подписи строго соответствуют смыслу ключа —
+  // раньше allow_insecure был подписан «Подтверждать выход».
+  { key: 'security.allow_insecure_default', type: SettingType.BOOL, labelKey: 'dns.warn.t' },
+  { key: 'enable_external_cores', type: SettingType.BOOL, labelKey: 'onb.src.neko' },
 ];
 
 function valueOf(v: SettingValue | undefined): string | boolean | number {
@@ -385,14 +388,15 @@ export function SettingsScreen(): JSX.Element {
               </h2>
               <div className="set-row">
                 <div className="set-txt">
-                  <div className="set-l">{t('set.rememberScreen')}</div>
+                  <div className="set-l">{t('conn.traffic')}</div>
+                  <div className="set-d">{t('set.rememberScreen')}</div>
                 </div>
                 <div className="set-ctl">
                   <button
                     className={`sw${values['ui.conn_stat'] === true ? ' on' : ''}`}
                     role="switch"
                     aria-checked={values['ui.conn_stat'] === true}
-                    aria-label={t('set.rememberScreen')}
+                    aria-label={t('conn.traffic')}
                     onClick={() => {
                       void save('ui.conn_stat', SettingType.BOOL, values['ui.conn_stat'] !== true);
                     }}
@@ -462,6 +466,15 @@ export function SettingsScreen(): JSX.Element {
                         className="input input-mono set-num"
                         id={r.key}
                         type={r.type === SettingType.INT ? 'number' : r.key.endsWith('pass') ? 'password' : 'text'}
+                        placeholder={
+                          r.key === 'inbound.port'
+                            ? '2080'
+                            : r.key === 'inbound.auth.user'
+                              ? t('set.login')
+                              : r.key === 'inbound.auth.pass'
+                                ? t('set.password')
+                                : ''
+                        }
                         value={String(values[r.key] ?? '')}
                         onChange={(e) => {
                           setValues((prev) => ({ ...prev, [r.key]: e.target.value }));
@@ -568,8 +581,14 @@ export function SettingsScreen(): JSX.Element {
               {boolRow({
                 key: 'tun.enabled',
                 type: SettingType.BOOL,
-                labelKey: 'set.sysproxy',
-                descKey: 'set.sysproxyD',
+                labelKey: 'mode.tun',
+                descKey: 'tun.dlg.d',
+              })}
+              {boolRow({
+                key: 'tun.kill_switch',
+                type: SettingType.BOOL,
+                labelKey: 'tun.strict',
+                descKey: 'tun.strict.d',
               })}
             </div>
           )}

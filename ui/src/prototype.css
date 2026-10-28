@@ -87,6 +87,9 @@ kbd,.kbd{
 
 /* ============ app frame ============ */
 #app{display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:var(--tb-h) minmax(0,1fr) var(--sb-h); height:100vh; min-width:0}
+/* Минимум окна — только для нативной оболочки: в браузере (веб-панель на
+   роутере/удалённый доступ) контейнер обязан сжиматься до ширины экрана,
+   иначе макет вылезает за окно и навигация обрезается. */
 #app[data-mode="native"]{min-width:880px;min-height:560px}
 
 /* ---- title bar (S3: per-OS chrome) ---- */
@@ -432,9 +435,9 @@ html[data-theme="light"] .toast{box-shadow:0 8px 28px rgba(27,36,52,.16)}
 .cx-empty-d{color:var(--t2)}
 .cx-empty-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
 .conn-graph{position:relative}
-.graph-empty{position:absolute;inset:56px 16px 16px;display:grid;place-items:center;color:var(--t2);font-size:.875rem;text-align:center;pointer-events:none}
-.graph-empty::before{content:"";position:absolute;inset:0;background:var(--surface);border-radius:var(--r-sm)}
-.graph-empty{z-index:1}
+.graph-empty{position:absolute;inset:56px 16px 16px;display:grid;place-items:center;
+  color:var(--t2);font-size:.875rem;text-align:center;pointer-events:none;z-index:1;
+  background:var(--surface);border-radius:var(--r-sm)}
 .banner{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border-radius:var(--r-md);margin-bottom:16px;flex-wrap:wrap}
 .banner>.ic{flex:none;margin-top:2px}
 .bn-t{flex:1;min-width:220px;display:flex;flex-direction:column;gap:2px;font-size:.8125rem}
@@ -1107,10 +1110,12 @@ html[data-shell="browser"] #app { grid-template-rows: minmax(0, 1fr) var(--sb-h)
 .onb-preset{padding:10px;border:1px solid var(--b-subtle);border-radius:var(--r-md);
   background:var(--surface);font-size:.75rem;text-align:start}
 .onb-preset.on{border:2px solid var(--accent);padding:9px}
-.cx-meta{display:flex;flex-direction:column;gap:6px;margin:8px 0 0}
-.cx-meta>div{display:flex;justify-content:space-between;gap:10px;font-size:.8125rem}
-.cx-meta dt{color:var(--t3)}
-.cx-meta dd{margin:0;font-weight:500}
+/* Онбординг-сводка: строки вместо плиток (отдельный класс, чтобы не
+   перебивать сетку .cx-meta из прототипа). */
+.onb-summary{display:flex;flex-direction:column;gap:6px;margin:8px 0 0}
+.onb-summary>div{display:flex;justify-content:space-between;gap:10px;font-size:.8125rem}
+.onb-summary dt{color:var(--t3)}
+.onb-summary dd{margin:0;font-weight:500}
 @media (max-width:600px){
   .grp-dlg-new{flex-wrap:wrap}
   .onb-lang-grid,.onb-src-grid,.onb-preset-grid{grid-template-columns:minmax(0,1fr)}
@@ -1186,4 +1191,38 @@ html[data-shell="browser"] #app { grid-template-rows: minmax(0, 1fr) var(--sb-h)
   .prof-toolbar .searchwrap{max-width:none;width:100%}
   .prow-type{display:none}
   .prow-lat{min-width:48px;font-size:.6875rem}
+}
+
+/* ============ недостающие базовые классы (аудит round 3) ============ */
+.muted{color:var(--t3)}
+.toast-ok{color:var(--ok-text);font-size:.875rem}
+.toast-err{color:var(--err-text);font-size:.875rem}
+.srv-import-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.srv-group{display:flex;flex-direction:column;gap:6px}
+.srv-groups{display:flex;flex-direction:column;gap:16px}
+.onb-pane{animation:scrFade var(--t-std) linear both}
+.tb-left{display:flex;align-items:center;gap:8px;min-width:0}
+.tb-right{display:flex;align-items:center;gap:2px;padding-inline-end:6px}
+.sb-card-v{font-size:.75rem;color:var(--t2)}
+.srv,.rules,.diag,.log,.dns,.subs,.updates,.set,.conns{display:flex;flex-direction:column;gap:12px;min-width:0}
+.rules{gap:16px}
+.upd-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.upd-row{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--b-subtle);
+  border-radius:var(--r-md);background:var(--surface2);flex-wrap:wrap}
+.upd-row .sub-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.conns-table{width:100%;border-collapse:collapse;font-size:.75rem}
+.conns-table th{text-align:start;font-weight:600;color:var(--t3);padding:8px 10px;
+  border-bottom:1px solid var(--b-subtle);font-size:.6875rem;text-transform:uppercase;letter-spacing:.02em}
+.conns-table td{padding:8px 10px;border-bottom:1px solid var(--b-subtle);max-width:280px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.conns-table tr:last-child td{border-bottom:0}
+/* активный раздел: подложка вместо отсутствующей полоски .sb-ind */
+.sb-item.on{background:var(--accent-soft);color:var(--accent)}
+.subtab[aria-selected="true"]{box-shadow:inset 0 -2px 0 var(--accent)}
+/* Отключённая кнопка: только прозрачность. Перекрашивать color нельзя —
+   на .btn-pri текст становится серым на янтарном (нечитаемо). */
+.btn:disabled{opacity:.62}
+@media (max-width:600px){
+  .conns-table th:nth-child(3),.conns-table td:nth-child(3),
+  .conns-table th:nth-child(4),.conns-table td:nth-child(4){display:none}
 }

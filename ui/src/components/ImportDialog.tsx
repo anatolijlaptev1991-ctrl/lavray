@@ -110,10 +110,13 @@ export function ImportDialog({ groupId, onClose, onImported }: Props): JSX.Eleme
     setErr('');
     setBusy(true);
     try {
+      // ID-02 (аудит round 3): custom-поля разрешаем ТОЛЬКО когда были
+      // предупреждения и пользователь нажал «Добавить» после их просмотра
+      // (LNB-25/FR-UI-257). Иначе двухфазное подтверждение обходилось.
       const res = await core.profiles.importContent({
         content: link,
         targetGroupId: groupId,
-        allowCustomFields: true,
+        allowCustomFields: warnings.length > 0,
       });
       setOk(tf('toast.subUpdated', { name: String(res.addedProfileIds.length) }));
       onImported();
@@ -123,7 +126,7 @@ export function ImportDialog({ groupId, onClose, onImported }: Props): JSX.Eleme
     } finally {
       setBusy(false);
     }
-  }, [core, link, groupId, tf, onImported, onClose]);
+  }, [core, link, groupId, tf, onImported, onClose, warnings.length]);
 
   const addAsSubscription = useCallback(async (): Promise<void> => {
     setErr('');
@@ -282,7 +285,7 @@ export function ImportDialog({ groupId, onClose, onImported }: Props): JSX.Eleme
                       onChange={(e) => {
                         const f = e.target.files?.[0];
                         if (f === undefined) return;
-                        setErr('Распознавание QR из изображения появится в следующем обновлении');
+                        setErr(t('toast.window'));
                       }}
                     />
                   </label>

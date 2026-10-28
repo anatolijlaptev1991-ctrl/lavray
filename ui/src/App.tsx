@@ -136,6 +136,25 @@ function AppInner(): JSX.Element {
   const selectSection = useCallback((id: string): void => {
     setSectionId(id);
     setTabId('');
+    // Держим hash в синхроне: на него опираются переходы из других экранов
+    // (диагностика → маршрут, импорт → серверы) и скриншот-проверки.
+    window.location.hash = `screen=${id}`;
+  }, []);
+
+  // AP-02 (аудит round 3): смена hash извне переключает экран.
+  useEffect(() => {
+    const onHash = (): void => {
+      const params = new URLSearchParams(window.location.hash.slice(1));
+      const sec = params.get('screen') ?? '';
+      if (SECTIONS.some((x) => x.id === sec)) {
+        setSectionId(sec);
+        setTabId(params.get('tab') ?? '');
+      }
+    };
+    window.addEventListener('hashchange', onHash);
+    return (): void => {
+      window.removeEventListener('hashchange', onHash);
+    };
   }, []);
 
   useEffect(() => {
@@ -192,7 +211,15 @@ function AppInner(): JSX.Element {
   const connOn = status.state === CoreState.CONNECTED;
 
   return (
-    <div id="app" data-mode="native" tabIndex={-1}>
+    <div
+      id="app"
+      data-mode={
+        (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined
+          ? 'native'
+          : 'browser'
+      }
+      tabIndex={-1}
+    >
       <a className="skip-link" href="#main">
         {t('a11y.skip')}
       </a>
@@ -209,7 +236,14 @@ function AppInner(): JSX.Element {
         </div>
         <span className="tb-flex" />
         <div className="tb-right">
-          <button className="tb-ic" aria-label={t('aria.menu')}>
+          <button
+            className="tb-ic"
+            aria-label={t('aria.menu')}
+            title={t('aria.menu')}
+            onClick={() => {
+              setHotkeysOpen(true);
+            }}
+          >
             <Icon name="menu" />
           </button>
         </div>

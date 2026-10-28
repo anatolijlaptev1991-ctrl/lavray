@@ -97,16 +97,18 @@ export function RulesScreen(): JSX.Element {
     try {
       // Приложение (game.exe) → process_name; иначе адрес/домен.
       const isProcess = /\.exe$|\.app$/i.test(q);
-      const res = await core.diagnostics.checkRoute({
-        address: q,
-        processName: isProcess ? q : undefined,
-      });
+      // SR-02: для процесса address не заполняем (контракт: адрес — домен/IP).
+      const res = await core.diagnostics.checkRoute(
+        isProcess ? { processName: q } : { address: q },
+      );
       const outbound =
         res.outbound === OutboundEnum.PROXY
           ? t('out.proxy')
           : res.outbound === OutboundEnum.DIRECT
             ? t('out.direct')
-            : t('out.block');
+            : res.outbound === OutboundEnum.BLOCK
+              ? t('out.block')
+              : '—';
       setRouteResult({ outbound, rule: res.matchedRule ?? null });
     } catch (e) {
       setErr(friendlyCoreError(e));
@@ -302,6 +304,7 @@ export function RulesScreen(): JSX.Element {
                 ))}
                 {active?.builtin !== true && (
                   <AddRule
+                    kind={def.kind}
                     placeholder={def.ip ? '10.0.0.0/8' : 'domain.example'}
                     onAdd={(v) => void addRule(def, v)}
                   />
@@ -346,10 +349,18 @@ export function RulesScreen(): JSX.Element {
 }
 
 /** Инлайн-поле добавления правила. */
-function AddRule({ placeholder, onAdd }: { readonly placeholder: string; readonly onAdd: (v: string) => void }): JSX.Element {
+function AddRule({
+  kind,
+  placeholder,
+  onAdd,
+}: {
+  readonly kind: string;
+  readonly placeholder: string;
+  readonly onAdd: (v: string) => void;
+}): JSX.Element {
   const [value, setValue] = useState('');
   return (
-    <span className="rule-add">
+    <span className="rule-add" data-rule-add={kind}>
       <input
         className="input input-mono"
         value={value}

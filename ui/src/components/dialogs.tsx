@@ -33,6 +33,7 @@ export function DialogShell({
   onClose,
   autofocusRef,
 }: ShellProps): JSX.Element {
+  const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -84,7 +85,7 @@ export function DialogShell({
       >
         <div className="dlg-h">
           <h2 id={titleId}>{title}</h2>
-          <button className="btn btn-ic btn-sm" aria-label={t_close()} title={t_close()} onClick={onClose}>
+          <button className="btn btn-ic btn-sm" aria-label={t('common.close')} title={t('common.close')} onClick={onClose}>
             <Icon name="x" />
           </button>
         </div>
@@ -95,10 +96,7 @@ export function DialogShell({
   );
 }
 
-/** Ключ закрытия берём из i18n напрямую (оболочка вне хука). */
-function t_close(): string {
-  return (window as { __lavrayClose?: string }).__lavrayClose ?? 'Close';
-}
+
 
 // ============================================================================
 // Подтверждение (dlgConfirm)
@@ -115,7 +113,6 @@ interface ConfirmProps {
 
 export function ConfirmDialog({ title, text, confirmLabel, danger = false, onConfirm, onClose }: ConfirmProps): JSX.Element {
   const { t } = useI18n();
-  (window as { __lavrayClose?: string }).__lavrayClose = t('common.close');
   return (
     <DialogShell
       titleId="cfTitle"
@@ -249,7 +246,7 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
               {g.name}
               <small>
                 {tf('pl.prof.one', { n: g.profileOrder.length })}
-                {g.kind === Group_Kind.SUBSCRIPTION ? ' · subscription' : ''}
+                {g.kind === Group_Kind.SUBSCRIPTION ? ` · ${t('nav.subscriptions')}` : ''}
               </small>
             </span>
             <button
@@ -609,7 +606,7 @@ export function OnboardingDialog({
           {step === 4 && (
             <div className="onb-pane">
               <h3 className="onb-h">{t('onb.doneTitle')}</h3>
-              <dl className="cx-meta">
+              <dl className="onb-summary">
                 <div>
                   <dt>{t('set.lang')}</dt>
                   <dd>{LANG_NATIVE[lang]}</dd>

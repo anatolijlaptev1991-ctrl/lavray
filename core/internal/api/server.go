@@ -42,6 +42,11 @@ type Server struct {
 	inst *inst.Manager
 	http *http.Client
 
+	// ipURL — сервис публичного IP (GetPublicIp/CheckLeaks); dial — набор
+	// номера для зондов (IPv6, порт); тесты подменяют оба.
+	ipURL string
+	dial  func(ctx context.Context, network, addr string) (net.Conn, error)
+
 	// OnShutdown вызывается после остановки инстанса при CoreService.Shutdown
 	// (W8 headless подставит выход из процесса; здесь — только остановка).
 	OnShutdown func(ctx context.Context)
@@ -90,6 +95,8 @@ func NewServer(d Deps) *Server {
 		logs:        lg,
 		inst:        inst.NewManager(d.Runner),
 		http:        httpc,
+		ipURL:       publicIPURL,
+		dial:        (&net.Dialer{}).DialContext,
 		subsRunning: map[int64]bool{},
 		subsSnap:    map[int64]*subs.Snapshot{},
 		setSubs:     map[chan *lavrayv1.SettingsChanged]struct{}{},

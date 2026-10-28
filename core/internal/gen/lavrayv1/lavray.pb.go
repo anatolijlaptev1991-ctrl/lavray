@@ -10923,8 +10923,11 @@ type LeakReport struct {
 	DnsEgress           *string                `protobuf:"bytes,3,opt,name=dns_egress,json=dnsEgress,proto3,oneof" json:"dns_egress,omitempty"`                            // резолвер, видимый тест-домену
 	Ipv6DirectAvailable bool                   `protobuf:"varint,4,opt,name=ipv6_direct_available,json=ipv6DirectAvailable,proto3" json:"ipv6_direct_available,omitempty"` // true при активном туннеле = риск утечки v6
 	TunnelActive        bool                   `protobuf:"varint,5,opt,name=tunnel_active,json=tunnelActive,proto3" json:"tunnel_active,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Замеры, которые НЕ выполнены: "direct_ip", "tunnel_ip", "dns", "ipv6".
+	// Пустое значение поля без замера нельзя читать как «в порядке».
+	Unchecked     []string `protobuf:"bytes,6,rep,name=unchecked,proto3" json:"unchecked,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LeakReport) Reset() {
@@ -10990,6 +10993,13 @@ func (x *LeakReport) GetTunnelActive() bool {
 		return x.TunnelActive
 	}
 	return false
+}
+
+func (x *LeakReport) GetUnchecked() []string {
+	if x != nil {
+		return x.Unchecked
+	}
+	return nil
 }
 
 type GatewayStatus struct {
@@ -14590,7 +14600,7 @@ const file_lavray_proto_rawDesc = "" +
 	"\x13GetPublicIpResponse\x12\x13\n" +
 	"\x02ip\x18\x01 \x01(\tH\x00R\x02ip\x88\x01\x01\x12\x17\n" +
 	"\ais_ipv6\x18\x02 \x01(\bR\x06isIpv6B\x05\n" +
-	"\x03_ip\"\xf8\x01\n" +
+	"\x03_ip\"\x96\x02\n" +
 	"\n" +
 	"LeakReport\x12 \n" +
 	"\ttunnel_ip\x18\x01 \x01(\tH\x00R\btunnelIp\x88\x01\x01\x12 \n" +
@@ -14598,7 +14608,8 @@ const file_lavray_proto_rawDesc = "" +
 	"\n" +
 	"dns_egress\x18\x03 \x01(\tH\x02R\tdnsEgress\x88\x01\x01\x122\n" +
 	"\x15ipv6_direct_available\x18\x04 \x01(\bR\x13ipv6DirectAvailable\x12#\n" +
-	"\rtunnel_active\x18\x05 \x01(\bR\ftunnelActiveB\f\n" +
+	"\rtunnel_active\x18\x05 \x01(\bR\ftunnelActive\x12\x1c\n" +
+	"\tunchecked\x18\x06 \x03(\tR\tuncheckedB\f\n" +
 	"\n" +
 	"_tunnel_ipB\f\n" +
 	"\n" +

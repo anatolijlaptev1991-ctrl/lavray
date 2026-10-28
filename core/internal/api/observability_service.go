@@ -7,7 +7,6 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -331,47 +330,53 @@ func (s *Server) RunSelfCheck(ctx context.Context, req *connect.Request[lavrayv1
 	return connect.NewResponse(out), nil
 }
 
-// GetPublicIp — «каков мой адрес наружу» (сравнение прямого и через туннель =
-// проверка утечек; здесь — только прямой запрос, туннельный — W8-стенд).
+// GetPublicIp — «каков мой адрес наружу». Поле via выбирает путь запроса
+// (T-16): THROUGH_TUNNEL — через mixed-in работающего инстанса (туннель не
+// поднят → FAILED_PRECONDITION), DIRECT — напрямую, UNSPECIFIED — через
+// туннель, если соединение активно, иначе напрямую.
 func (s *Server) GetPublicIp(ctx context.Context, req *connect.Request[lavrayv1.GetPublicIpRequest]) (*connect.Response[lavrayv1.GetPublicIpResponse], error) {
-	if s.http == nil {
-		return nil, failedPrecondition("http-клиент не сконфигурирован")
-	}
-	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	r, _ := http.NewRequestWithContext(cctx, http.MethodGet, "https://api.ipify.org/", nil)
-	resp, err := s.http.Do(r)
+	client, err := s.httpVia(req.Msg.Via)
 	if err != nil {
-		return nil, mapErr(fmt.Errorf("публичный IP: %w", err))
+		return nil, err
 	}
-	defer resp.Body.Close()
-	buf := make([]byte, 64)
-	n, _ := resp.Body.Read(buf)
-	ip := strings.TrimSpace(string(buf[:n]))
-	isV6 := strings.Contains(ip, ":")
-	return connect.NewResponse(&lavrayv1.GetPublicIpResponse{Ip: strpIf(ip), IsIpv6: isV6}), nil
+	ip, err := s.fetchPublicIP(ctx, client)
+	if err != nil {
+		return nil, unavailable(err)
+	}
+	return connect.NewResponse(&lavrayv1.GetPublicIpResponse{Ip: strpIf(ip.String()), IsIpv6: ip.Is6()}), nil
 }
 
-// CheckLeaks — сравнение IP напрямую и через туннель + DNS-egress
-// (FR-UI-273). Туннельный замер требует поднятого прокси-транспорта —
-// W8-стенд; каркас с прямым IP и TunnelActive из статуса инстанса.
+// CheckLeaks — IP напрямую и через туннель, прямой IPv6 (FR-UI-273). Что не
+// измерено, перечислено в LeakReport.unchecked: пустое поле не означает
+// «в порядке». DNS-эгресс не измеряется никогда: контролируемого тест-домена,
+// который показал бы адрес резолвера, у приложения нет.
 func (s *Server) CheckLeaks(ctx context.Context, req *connect.Request[lavrayv1.Empty]) (*connect.Response[lavrayv1.LeakReport], error) {
-	direct := ""
-	if s.http != nil {
-		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		r, _ := http.NewRequestWithContext(cctx, http.MethodGet, "https://api.ipify.org/", nil)
-		if resp, err := s.http.Do(r); err == nil {
-			buf := make([]byte, 64)
-			n, _ := resp.Body.Read(buf)
-			resp.Body.Close()
-			direct = strings.TrimSpace(string(buf[:n]))
-		}
-		cancel()
+	out := &lavrayv1.LeakReport{
+		TunnelActive: s.inst.Status().State == inst.StateReady,
+		Unchecked:    []string{"dns"},
 	}
-	st := s.inst.Status()
-	out := &lavrayv1.LeakReport{TunnelActive: st.State == inst.StateReady}
-	if direct != "" {
-		out.DirectIp = strpIf(direct)
+	tunnel, up := s.tunnelClient()
+	if up {
+		if ip, err := s.fetchPublicIP(ctx, tunnel); err == nil {
+			out.TunnelIp = strpIf(ip.String())
+		}
+	}
+	if out.TunnelIp == nil {
+		out.Unchecked = append(out.Unchecked, "tunnel_ip")
+	}
+	if s.tunnelIsTUN() {
+		out.Unchecked = append(out.Unchecked, "direct_ip", "ipv6")
+		return connect.NewResponse(out), nil
+	}
+	if ip, err := s.fetchPublicIP(ctx, s.http); err == nil {
+		out.DirectIp = strpIf(ip.String())
+	} else {
+		out.Unchecked = append(out.Unchecked, "direct_ip")
+	}
+	if up {
+		out.Ipv6DirectAvailable = s.ipv6DirectAvailable(ctx)
+	} else {
+		out.Unchecked = append(out.Unchecked, "ipv6")
 	}
 	return connect.NewResponse(out), nil
 }

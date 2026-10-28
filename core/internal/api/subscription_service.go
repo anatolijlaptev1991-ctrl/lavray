@@ -25,6 +25,7 @@ func (s *Server) subscriberFor() *subs.Subscriber {
 // allow_private_urls/таймауты раньше игнорировались).
 type subRequest struct {
 	userAgent          string
+	useProxy           *bool
 	insecureTLS        *bool
 	allowPrivate       *bool
 	connectTimeout     time.Duration
@@ -59,7 +60,8 @@ func (s *Server) subscriberWith(r subRequest) *subs.Subscriber {
 	} else if ua := s.settingStr("sub.user_agent"); ua != "" {
 		opts.UserAgent = ua
 	}
-	return subs.NewSubscriber(s.http, opts)
+	// T-16: через туннель, когда он поднят и use_proxy включён (LNB-33).
+	return subs.NewSubscriber(s.httpForSubscriptions(r.useProxy), opts)
 }
 
 func (s *Server) UpdateSubscriptionSettings(ctx context.Context, req *connect.Request[lavrayv1.UpdateSubscriptionSettingsRequest]) (*connect.Response[lavrayv1.Group], error) {
@@ -94,6 +96,7 @@ func (s *Server) UpdateSubscription(ctx context.Context, req *connect.Request[la
 	m := req.Msg
 	r := subRequest{
 		userAgent:          m.GetUserAgent(),
+		useProxy:           m.UseProxy,
 		insecureTLS:        m.InsecureTls,
 		allowPrivate:       m.AllowPrivateUrls,
 		confirmDestructive: m.GetConfirmDestructive(),

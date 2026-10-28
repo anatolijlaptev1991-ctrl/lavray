@@ -1629,6 +1629,9 @@ message LeakReport {
   optional string dns_egress = 3; // резолвер, видимый тест-домену
   bool ipv6_direct_available = 4; // true при активном туннеле = риск утечки v6
   bool tunnel_active = 5;
+  // Замеры, которые НЕ выполнены: "direct_ip", "tunnel_ip", "dns", "ipv6".
+  // Пустое значение поля без замера нельзя читать как «в порядке».
+  repeated string unchecked = 6;
 }
 
 // ============================================================================

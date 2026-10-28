@@ -236,6 +236,12 @@ func (s *Server) RestartProfile(ctx context.Context, req *connect.Request[lavray
 	}
 	mode := connectModeOf(st.Run.Mode)
 
+	// T-28: новый конфиг собирается и проверяется ДО остановки. Ошибка сборки
+	// (например, адрес LAN без пароля) уходит клиенту, а работающее соединение
+	// остаётся нетронутым.
+	if _, err := s.dryRunBuild(profile, mode); err != nil {
+		return nil, err
+	}
 	stopCtx, cancel := context.WithTimeout(ctx, inst.StopTimeout)
 	defer cancel()
 	if err := s.inst.Stop(stopCtx); err != nil {

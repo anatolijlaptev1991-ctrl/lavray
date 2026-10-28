@@ -38,6 +38,7 @@ export function DnsScreen(): JSX.Element {
   const [ok, setOk] = useState('');
   const [needsRestart, setNeedsRestart] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [restarting, setRestarting] = useState(false);
 
   const load = useCallback(async (): Promise<void> => {
     try {
@@ -82,6 +83,23 @@ export function DnsScreen(): JSX.Element {
     },
     [core, dns, t],
   );
+
+  // T-28: «Перезапустить ядро» вызывает CoreService.RestartProfile. Баннер
+  // скрывается только при успехе; отказ ядра (например, конфиг не собрался —
+  // соединение при этом остаётся) показывается в баннере ошибки.
+  const restart = useCallback(async (): Promise<void> => {
+    setErr('');
+    setOk('');
+    setRestarting(true);
+    try {
+      await core.core.restartProfile({});
+      setNeedsRestart(false);
+    } catch (e) {
+      setErr(showCoreError(e, t));
+    } finally {
+      setRestarting(false);
+    }
+  }, [core, t]);
 
   const pick = useCallback(
     async (p: Preset): Promise<void> => {
@@ -170,15 +188,16 @@ export function DnsScreen(): JSX.Element {
             <span className="t">{t('dns.restart')}</span>
             <button
               className="btn btn-sec btn-sm"
-              onClick={() => {
-                setNeedsRestart(false);
-              }}
+              disabled={restarting}
+              aria-busy={restarting}
+              onClick={() => void restart()}
             >
               <Icon name="refresh" />
               <span>{t('dns.restartBtn')}</span>
             </button>
             <button
               className="btn btn-ghost btn-sm"
+              disabled={restarting}
               onClick={() => {
                 setNeedsRestart(false);
               }}

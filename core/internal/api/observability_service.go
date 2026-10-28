@@ -12,10 +12,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/cfgbuild"
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
-	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 )
 
 // ---- LogService -----------------------------------------------------------------
@@ -189,99 +189,26 @@ func (s *Server) CheckRoute(ctx context.Context, req *connect.Request[lavrayv1.C
 	if addr == "" && proc == "" {
 		return nil, invalidArg("нужен address или process_name")
 	}
-	// Активный профиль/пресет: dry-run сборки + какой outbound выбрал бы
-	// сгенерированный route (проверка по правилам конфигбилдера).
-	profileID := int64(0)
-	if st := s.inst.Status(); st.Run != nil {
-		profileID = st.Run.ProfileID
+	// T-30: правила берутся из того же routeRules, что строит конфиг
+	// (rule_set, ip_*, тег bypass); запущенный профиль не нужен. В режиме TUN
+	// учитываются TUN-списки исключений.
+	preset, err := s.activePreset()
+	if err != nil {
+		return nil, mapErr(err)
 	}
-	var profile *model.Profile
-	if profileID != 0 {
-		p, err := s.st.GetProfile(profileID)
-		if err != nil {
-			return nil, mapErr(err)
-		}
-		profile = p
+	table, err := cfgbuild.BuildRouteTable(preset, s.buildSettings(s.tunnelIsTUN()))
+	if err != nil {
+		return nil, mapErr(err)
 	}
-	outbound := "direct" // без запущенного профиля весь трафик — напрямую
-	if profile != nil {
-		res, err := s.dryRunBuild(profile, lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY)
-		if err == nil && res.Config != nil {
-			if o := matchRouteOutbound(res.Config, addr, &proc); o != "" {
-				outbound = o
-			}
-		}
+	v := table.Evaluate(cfgbuild.ParseRouteQuery(addr, proc), s.ruleSetLookup(table))
+	if len(v.Unresolved) > 0 {
+		s.logs.Logf(logs.LevelWarn, logs.SourceCore, "тестер маршрута: не вычислено %v", v.Unresolved)
 	}
-	return connect.NewResponse(&lavrayv1.CheckRouteResponse{Outbound: outboundToProto(outbound)}), nil
-}
-
-// matchRouteOutbound — наивная оценка route.rules: точное domain-суффиксное
-// совпадение + process_name; полная семантика — sing-box rule-set в рантайме.
-func matchRouteOutbound(config map[string]any, addr string, process *string) string {
-	host := addr
-	if i := strings.Index(host, "://"); i >= 0 {
-		host = host[i+3:]
+	resp := &lavrayv1.CheckRouteResponse{Outbound: outboundToProto(v.Outbound), MatchedList: strp(v.List)}
+	if v.Index >= 0 {
+		resp.MatchedRule = strp(v.Rule + " → " + v.Outbound)
 	}
-	if i := strings.IndexAny(host, "/:"); i >= 0 {
-		host = host[:i]
-	}
-	host = strings.ToLower(strings.TrimSuffix(host, "."))
-	route, _ := config["route"].(map[string]any)
-	rules, _ := route["rules"].([]any)
-	matchDomain := func(pat any) bool {
-		p, ok := pat.(string)
-		if !ok {
-			return false
-		}
-		if strings.HasPrefix(p, ".") {
-			return strings.HasSuffix(host, p) || host == p[1:]
-		}
-		return host == p || strings.HasSuffix(host, "."+p)
-	}
-	for _, r := range rules {
-		rule, ok := r.(map[string]any)
-		if !ok {
-			continue
-		}
-		matched := false
-		if doms, ok := rule["domain"].([]any); ok {
-			for _, d := range doms {
-				if matchDomain(d) {
-					matched = true
-					break
-				}
-			}
-		}
-		if !matched {
-			if sufs, ok := rule["domain_suffix"].([]any); ok {
-				for _, d := range sufs {
-					if matchDomain(d) {
-						matched = true
-						break
-					}
-				}
-			}
-		}
-		if !matched && process != nil && *process != "" {
-			if procs, ok := rule["process_name"].([]any); ok {
-				for _, pn := range procs {
-					if p, ok := pn.(string); ok && strings.EqualFold(p, *process) {
-						matched = true
-						break
-					}
-				}
-			}
-		}
-		if matched {
-			if o, ok := rule["outbound"].(string); ok {
-				return o
-			}
-		}
-	}
-	if f, ok := route["final"].(string); ok && f != "" {
-		return f
-	}
-	return "proxy"
+	return connect.NewResponse(resp), nil
 }
 
 // RunSelfCheck — набор проверок по контракту; сетевые — через инъектированный

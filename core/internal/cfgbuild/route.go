@@ -21,6 +21,7 @@ package cfgbuild
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/presets"
@@ -161,12 +162,21 @@ func makeMatchRule(list []string, isIP bool, rs *ruleSetCollector) map[string]an
 	return rule
 }
 
-// buildRoute — route{} конфига (§3.4 шаг 6). kill-switch на уровне route —
-// см. deviations.yaml: v1 = форс strict_route (inbounds.go) + фаервол
-// оболочки (W8);DefOutbound final — только в рабочих конфигах (не forTest).
-func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTest, forExport bool, rs *ruleSetCollector) (map[string]any, error) {
-	route := map[string]any{}
-	var rules []any
+// routeRules — route.rules в порядке sing-box и источник каждого правила
+// (lists[i]: "direct_domain", "process_rules[0]"...). ЕДИНСТВЕННОЕ место, где
+// задан порядок правил: его вызывают buildRoute (конфиг) и BuildRouteTable
+// (тестер маршрута), поэтому разойтись они не могут.
+func routeRules(preset *presets.Preset, st *BuildSettings, forTest bool, rs *ruleSetCollector) (rules []any, lists []string, _ error) {
+	// mark подписывает правила, добавленные с прошлого вызова, списком-источником.
+	mark := func(list string, indexed bool) {
+		for k := 0; len(lists) < len(rules); k++ {
+			name := list
+			if indexed {
+				name = fmt.Sprintf("%s[%d]", list, k)
+			}
+			lists = append(lists, name)
+		}
+	}
 
 	// Sniffing (FR-UI-132): режимы Disable(0)/ForRouting(1); третьего режима
 	// некора нет (DROP). Перенесён из полей inbound в route-action (1.13+).
@@ -177,6 +187,7 @@ func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTe
 			"timeout": "3s",
 		})
 	}
+	mark("sniff", false)
 
 	// DNS hijack: перехват DNS-запросов из туннеля/слушателя.
 	if !forTest {
@@ -185,6 +196,7 @@ func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTe
 			"action":   "hijack-dns",
 		})
 	}
+	mark("hijack_dns", false)
 
 	// Custom-правила пресета — ПЕРВЫМИ (обновление пресета bd56088
 	// 2026-10-26: пин Riot→proxy обязан иметь приоритет над geosite:riot
@@ -193,14 +205,16 @@ func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTe
 	if !forTest {
 		presetRules, err := parseCustomRules(preset.Routing.CustomRules, "preset.routing.custom_rules")
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		rules = append(rules, presetRules...)
+		mark("custom_rules", true)
 		globalRules, err := parseCustomRules(st.CustomRouteGlobalJSON, "routing.custom_global")
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		rules = append(rules, globalRules...)
+		mark("custom_global", true)
 	}
 
 	// Списки пресета (§3.1.5): block → proxy → direct; домены, затем IP.
@@ -216,11 +230,17 @@ func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTe
 	}
 	if !forTest {
 		addRuleRoute(preset.Routing.BlockDomain, false, "block")
+		mark("block_domain", false)
 		addRuleRoute(preset.Routing.ProxyDomain, false, "proxy")
+		mark("proxy_domain", false)
 		addRuleRoute(preset.Routing.DirectDomain, false, "bypass")
+		mark("direct_domain", false)
 		addRuleRoute(preset.Routing.BlockIP, true, "block")
+		mark("block_ip", false)
 		addRuleRoute(preset.Routing.ProxyIP, true, "proxy")
+		mark("proxy_ip", false)
 		addRuleRoute(preset.Routing.DirectIP, true, "bypass")
+		mark("direct_ip", false)
 	}
 
 	// Процессные правила пресета (SCHEMA §2.1): фильтр по платформе сборки;
@@ -232,6 +252,7 @@ func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTe
 				"outbound":     pr.Outbound,
 			})
 		}
+		mark("process_rules", true)
 	}
 
 	// TUN-списки (FR-UI-184): bypass-процессы/CIDR мимо туннеля; whitelist
@@ -254,6 +275,7 @@ func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTe
 				"outbound": matchOut,
 			})
 		}
+		mark("tun_bypass", true)
 	}
 
 	// Built-in блокировки: NETBIOS/mDNS по UDP и multicast-диапазоны
@@ -274,7 +296,19 @@ func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTe
 		},
 	)
 
-	route["rules"] = rules
+	mark("builtin_block", true)
+	return rules, lists, nil
+}
+
+// buildRoute — route{} конфига (§3.4 шаг 6). kill-switch на уровне route —
+// см. deviations.yaml: v1 = форс strict_route (inbounds.go) + фаервол
+// оболочки (W8);DefOutbound final — только в рабочих конфигах (не forTest).
+func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTest, forExport bool, rs *ruleSetCollector) (map[string]any, error) {
+	rules, _, err := routeRules(preset, st, forTest, rs)
+	if err != nil {
+		return nil, err
+	}
+	route := map[string]any{"rules": rules}
 	if defs := rs.list(); len(defs) > 0 {
 		route["rule_set"] = defs
 	}

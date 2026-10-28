@@ -130,9 +130,13 @@ export const webAdapter: PlatformAdapter = {
  * `src/platform/tauri.ts` exists.
  */
 export function getPlatformAdapter(win: Window): PlatformAdapter {
-  if ('__TAURI_INTERNALS__' in win) {
-    // Future: return tauriAdapter (src/platform/tauri.ts, Tauri IPC) with
-    // the OS reported by the shell.
+  // В окне Tauri ID должен быть 'tauri': от него зависят data-mode
+  // (нативный хром + min-width) и показ возможностей оболочки. Раньше здесь
+  // был только комментарий, и приложение в окне считало себя веб-панелью
+  // (статус-бар показывал «web», нативный минимум окна не применялся).
+  const isTauri = (win as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
+  if (isTauri) {
+    return { ...webAdapter, id: 'tauri', os: detectOS(win) };
   }
   // Web stub: best-effort UA detection, so a mac-browser user keeps the
   // Cmd convention for section shortcuts.

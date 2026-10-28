@@ -156,6 +156,12 @@ function AppInner(): JSX.Element {
   const selectSection = useCallback((id: string): void => {
     setSectionId(id);
     setTabId('');
+    // Смена раздела — с начала страницы, иначе шапка остаётся за краем.
+    // typeof-проверка: в jsdom у элемента нет scrollTo (?. не спасает).
+    const mainEl = document.getElementById('main');
+    if (mainEl !== null && typeof mainEl.scrollTo === 'function') {
+      mainEl.scrollTo({ top: 0 });
+    }
     // Держим hash в синхроне: на него опираются переходы из других экранов
     // (диагностика → маршрут, импорт → серверы) и скриншот-проверки.
     window.location.hash = `screen=${id}`;
@@ -169,6 +175,8 @@ function AppInner(): JSX.Element {
       if (SECTIONS.some((x) => x.id === sec)) {
         setSectionId(sec);
         setTabId(params.get('tab') ?? '');
+        const el = document.getElementById('main');
+        if (el !== null && typeof el.scrollTo === 'function') el.scrollTo({ top: 0 });
       }
     };
     window.addEventListener('hashchange', onHash);

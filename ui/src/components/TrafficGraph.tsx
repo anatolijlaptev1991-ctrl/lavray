@@ -81,7 +81,14 @@ export function TrafficGraph({ active }: Props): JSX.Element {
         cv.width = Math.round(w * dpr);
         cv.height = Math.round(h * dpr);
       }
-      const ctx = cv.getContext('2d');
+      // jsdom/старые webview не умеют canvas — график просто не рисуется
+      // (иначе монтирование экрана падает в тестах и на урезанных webview).
+      let ctx: CanvasRenderingContext2D | null = null;
+      try {
+        ctx = cv.getContext('2d');
+      } catch {
+        return;
+      }
       if (ctx === null) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);

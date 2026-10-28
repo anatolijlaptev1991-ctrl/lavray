@@ -1,10 +1,18 @@
 // useCore.ts — React-хуки состояния ядра: клиенты + периодический опрос
 // статуса/профилей. Один контекст на приложение (источник — window env или
 // адаптер оболочки).
-import { createContext, useContext, useEffect, useState } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import { create } from '@bufbuild/protobuf';
 import type { CoreClients } from '../lib/core';
-import { createCoreClients, coreUrlFromEnv, friendlyCoreError } from '../lib/core';
+import { createCoreClients, friendlyCoreError } from '../lib/core';
+import { getCoreEndpoint, subscribeCoreEndpoint } from '../lib/coreEndpoint';
 import type { CoreStatus, Profile } from '../gen/lavray_pb';
 import { CoreState, CoreStatusSchema } from '../gen/lavray_pb';
 
@@ -16,13 +24,13 @@ export function useCore(): CoreClients {
   return clients;
 }
 
-/** Клиенты один раз на приложение (baseUrl/token из окружения оболочки). */
+/**
+ * Клиенты ядра для приложения. Пересоздаются, когда оболочка сообщает новый
+ * адрес или токен (после перезапуска ядра, T-03); страница не перезагружается.
+ */
 export function useCoreClients(): CoreClients {
-  const [clients] = useState<CoreClients>(() => {
-    const token = window.__LAVRAY_CORE_TOKEN;
-    return createCoreClients(coreUrlFromEnv(), token === undefined ? {} : { token });
-  });
-  return clients;
+  const { url, token } = useSyncExternalStore(subscribeCoreEndpoint, getCoreEndpoint);
+  return useMemo(() => createCoreClients(url, token === '' ? {} : { token }), [url, token]);
 }
 
 // Полный снимок статуса ядра (proto CoreStatus): нужен UI для таймера
@@ -42,6 +50,9 @@ export function useCoreStatus(): CoreStatus {
   const core = useCore();
   const [status, setStatus] = useState<CoreStatus>(initialStatus);
   useEffect(() => {
+    // Новые клиенты — другой адрес, возможно другой процесс ядра: статус
+    // прежнего («Подключено») не переносим (T-03).
+    setStatus(initialStatus());
     const tick = async (): Promise<void> => {
       try {
         const st = await core.core.getStatus({});

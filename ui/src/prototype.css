@@ -991,10 +991,9 @@ html[data-shell="browser"] #titlebar { display: none; }
 html[data-shell="browser"] #app { grid-template-rows: minmax(0, 1fr) var(--sb-h); }
 
 /* Собственный хром окна Tauri (tauri.conf.json: decorations=false).
-   Шапка — область перетаскивания; интерактивные элементы её гасят,
-   иначе кнопки не нажимаются. Словарь data-os — как в прототипе:
-   win / mac / linux (см. main.tsx). */
-#titlebar[data-tauri-drag-region] { -webkit-app-region: drag; app-region: drag; }
+   Перетаскивание — через команду оболочки window_start_drag (App.tsx),
+   поэтому app-region здесь не нужен: он конфликтовал с drag.js и давал
+   двойной вызов. Словарь data-os — как в прототипе: win / mac / linux. */
 #titlebar .tb-ic,
 #titlebar .cap-btn,
 #titlebar .tl-mac button { -webkit-app-region: no-drag; app-region: no-drag; }
@@ -1002,6 +1001,9 @@ html[data-shell="browser"] #app { grid-template-rows: minmax(0, 1fr) var(--sb-h)
 .tl-mac button.tl { padding: 0; border: 0; cursor: default; }
 html[data-os="mac"] .tl-mac { display: flex; align-items: center; }
 html[data-os="linux"] .caps-linux { display: flex; align-items: center; }
+/* На macOS полосы #macbar из прототипа нет — компенсация 24px оставляла
+   пустую полосу снизу. */
+html[data-shell="native"][data-os="mac"] #app { height: 100vh; }
 
 /* ---------- Группы серверов по странам (FR-UI-008) ---------- */
 .srv-groups { display: flex; flex-direction: column; gap: 14px; }

@@ -5,18 +5,19 @@
 import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { Icon } from '../components/Icon';
-import { CoreState } from '../gen/lavray_pb';
+import { CoreState, SubscriptionProgress_Phase, TestLatencyRequest_Mode } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { friendlyCoreError, showCoreError } from '../lib/core';
 import { applySystemProxy, coreModeFor, loadModes, saveModes } from '../lib/connection';
 import { TrafficGraph } from '../components/TrafficGraph';
+import { ImportDialog } from '../components/ImportDialog';
 import { geoName } from '../lib/geo';
 
 
 
 export function ConnectionScreen(): JSX.Element {
-  const { t, lang } = useI18n();
+  const { t, tf, lang } = useI18n();
   const core = useCore();
   const status = useCoreStatus();
   const { profiles, refresh } = useProfiles('');
@@ -29,9 +30,82 @@ export function ConnectionScreen(): JSX.Element {
   const [pickedId, setPickedId] = useState<bigint | null>(null);
   const [sessionSec, setSessionSec] = useState(0);
   const rayId = `ray${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  // Быстрые действия прототипа (.cx-qa): тест задержек, импорт, обновление
+  // подписок. Раньше все три просто перезапрашивали список профилей —
+  // кнопки-обманки, не делавшие обещанного.
+  const [busyAction, setBusyAction] = useState('');
+  const [actionMsg, setActionMsg] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const [subs, setSubs] = useState<readonly { id: bigint; name: string }[]>([]);
 
   const ready = status.state === CoreState.CONNECTED;
   const connecting = status.state === CoreState.CONNECTING;
+
+  // Список подписок нужен для быстрого действия «Обновить подписки»:
+  // обновление идёт по groupId, а не глобально.
+  useEffect(() => {
+    void (async (): Promise<void> => {
+      try {
+        const res = await core.subscriptions.listSubscriptions({});
+        setSubs(res.groups.map((s) => ({ id: s.id, name: s.name })));
+      } catch {
+        /* ядро недоступно — кнопка будет disabled */
+      }
+    })();
+  }, [core]);
+
+  /** «Проверить серверы»: задержка TCP по всем профилям. */
+  const testAll = useCallback(async (): Promise<void> => {
+    if (profiles.length === 0) return;
+    setBusyAction('test');
+    setActionMsg('');
+    setError('');
+    try {
+      const ids = profiles.map((p) => p.id);
+      const stream = core.profiles.testLatency(
+        { profileIds: ids, mode: TestLatencyRequest_Mode.TCP_PING },
+        {},
+      );
+      let ok = 0;
+      let total = 0;
+      for await (const res of stream) {
+        total = res.total;
+        if ((res.result?.lastError ?? '') === '') ok += 1;
+      }
+      setActionMsg(tf('test.progress', { done: ok, total }));
+      refresh();
+    } catch (e) {
+      setError(showCoreError(e, t));
+    } finally {
+      setBusyAction('');
+    }
+  }, [core, profiles, refresh, t, tf]);
+
+  /** «Обновить подписки»: последовательное обновление всех групп. */
+  const refreshSubs = useCallback(async (): Promise<void> => {
+    if (subs.length === 0) return;
+    setBusyAction('subs');
+    setActionMsg('');
+    setError('');
+    let done = 0;
+    try {
+      for (const s of subs) {
+        const stream = core.subscriptions.updateSubscription({
+          groupId: s.id,
+          confirmDestructive: false,
+        });
+        for await (const ev of stream) {
+          if (ev.phase === SubscriptionProgress_Phase.DONE) done += 1;
+        }
+      }
+      setActionMsg(tf('subs.updatedN', { n: done }));
+      refresh();
+    } catch (e) {
+      setError(showCoreError(e, t));
+    } finally {
+      setBusyAction('');
+    }
+  }, [core, subs, refresh, t, tf]);
 
   const active = useMemo(() => {
     if (pickedId !== null) return profiles.find((p) => p.id === pickedId);
@@ -44,21 +118,12 @@ export function ConnectionScreen(): JSX.Element {
   // D9 (аудит round 2): таймер считается от started_at_ms ядра, а не от
   // монтирования экрана — иначе при переходе между разделами время
   // обнулялось.
-  // При старте оболочка откатывает системный прокси, если прошлая сессия
-  // упала с включённым прокси (FR-UI-259).
-  useEffect(() => {
-    const isTauri = (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
-    if (!isTauri) return;
-    void (async (): Promise<void> => {
-      try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('recover_system_proxy');
-      } catch {
-        /* ядро ещё не поднялось */
-      }
-    })();
-  }, []);
-
+  //
+  // Откат системного прокси после падения прошлой сессии делает оболочка
+  // один раз в setup() (shell/src/main.rs). Здесь его вызывать нельзя:
+  // компонент монтируется при каждом переходе на «Подключение», и откат
+  // снимал бы прокси посреди активного туннеля (снимок удалялся — вернуть
+  // настройки пользователя было бы уже нечем).
   useEffect(() => {
     if (!ready) {
       setSessionSec(0);
@@ -287,17 +352,18 @@ export function ConnectionScreen(): JSX.Element {
         <div className="cx-qa">
           <button
             className="btn btn-ghost btn-sm"
+            disabled={busyAction !== '' || profiles.length === 0}
             onClick={() => {
-              refresh();
+              void testAll();
             }}
           >
-            <Icon name="refresh" />
+            <Icon name="gauge" />
             {t('quick.test')}
           </button>
           <button
             className="btn btn-ghost btn-sm"
             onClick={() => {
-              refresh();
+              setImportOpen(true);
             }}
           >
             <Icon name="plus" />
@@ -305,14 +371,17 @@ export function ConnectionScreen(): JSX.Element {
           </button>
           <button
             className="btn btn-ghost btn-sm"
+            disabled={busyAction !== '' || subs.length === 0}
             onClick={() => {
-              refresh();
+              void refreshSubs();
             }}
           >
-            <Icon name="gauge" />
+            <Icon name="rss" />
             {t('quick.subs')}
           </button>
         </div>
+
+        {actionMsg !== '' && <p className="hint">{actionMsg}</p>}
 
         {error !== '' && (
           <div className="banner banner-err" role="alert">
@@ -321,6 +390,16 @@ export function ConnectionScreen(): JSX.Element {
         )}
       </div>
       <TrafficGraph active={ready} />
+      {importOpen && (
+        <ImportDialog
+          groupId={0n}
+          onClose={() => { setImportOpen(false); }}
+          onImported={() => {
+            setImportOpen(false);
+            refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

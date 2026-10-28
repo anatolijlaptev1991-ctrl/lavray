@@ -9,9 +9,10 @@ import { SECTIONS, type Section, type SectionTab } from './app/sections';
 import { CoreContext, useCore, useCoreClients, useCoreStatus } from './hooks/useCore';
 import { CoreState } from './gen/lavray_pb';
 import { useI18n } from './hooks/useI18n';
-import { applyDocumentLanguage, detectLanguage, setLanguage } from './lib/i18n';
+import { useTrafficSpeed } from './hooks/useTraffic';
+import { applyDocumentLanguage, detectLanguage, formatBytes, setLanguage } from './lib/i18n';
 import { applyTheme, loadPreferences, watchSystemTheme } from './lib/theme';
-import { connectWith, disconnectAll, loadModes } from './lib/connection';
+import { loadModes, toggleConnection } from './lib/connection';
 import { getPlatformAdapter } from './platform/adapter';
 import { ConnectionScreen } from './screens/screen_connection';
 import { ConnsScreen } from './screens/screen_conns';
@@ -88,6 +89,7 @@ function AppInner(): JSX.Element {
   const adapter = useMemo(() => getPlatformAdapter(window), []);
   const status = useCoreStatus();
   const core = useCore();
+  const connOn = status.state === CoreState.CONNECTED;
 
   const section: Section | undefined = useMemo(
     () => SECTIONS.find((s) => s.id === sectionId) ?? SECTIONS[0],
@@ -219,7 +221,20 @@ function AppInner(): JSX.Element {
       const mod = adapter.os === 'macos' ? e.metaKey : e.ctrlKey;
       if (mod && e.key.toLowerCase() === 'd' && !typing) {
         e.preventDefault();
-        selectSection('connection');
+        // Прототип: Ctrl+D переключает соединение, а не только открывает
+        // экран. При пустом списке профилей остаётся навигация.
+        void (async (): Promise<void> => {
+          try {
+            const done = await toggleConnection({
+              core,
+              connected: connOn,
+              port: status.inbound?.port ?? 2080,
+            });
+            if (!done) selectSection('connection');
+          } catch {
+            selectSection('connection');
+          }
+        })();
         return;
       }
       if (mod && e.key === ',' && !typing) {
@@ -240,9 +255,70 @@ function AppInner(): JSX.Element {
     return (): void => {
       window.removeEventListener('keydown', onKey);
     };
-  }, [adapter.os, selectSection]);
+  }, [adapter.os, selectSection, core, connOn, status.inbound]);
 
-  const connOn = status.state === CoreState.CONNECTED;
+  // Стабильные колбэки для меню: AppInner перерисовывается раз в секунду
+  // (опрос статуса), и инлайновые стрелки перезапускали эффект меню —
+  // фокус прыгал на первый пункт.
+  const handleToggleConnect = useCallback((): void => {
+    void (async (): Promise<void> => {
+      try {
+        const done = await toggleConnection({
+          core,
+          connected: connOn,
+          port: status.inbound?.port ?? 2080,
+        });
+        if (!done) selectSection('connection');
+      } catch {
+        selectSection('connection');
+      }
+    })();
+  }, [core, connOn, status.inbound, selectSection]);
+
+  const handleAbout = useCallback((): void => {
+    selectSection('settings');
+    // Настройки грузятся асинхронно: ждём появления секции, а не фиксированные
+    // 80 мс, иначе при медленном ядре скролл молча не срабатывает.
+    let tries = 0;
+    const tick = (): void => {
+      const el = document.querySelector('[data-sec="about"]');
+      if (el !== null) {
+        el.scrollIntoView({ block: 'start' });
+        const h = el.querySelector('h2');
+        if (h !== null) {
+          h.tabIndex = -1;
+          h.focus();
+        }
+        return;
+      }
+      if (tries++ < 40) window.setTimeout(tick, 50);
+    };
+    window.setTimeout(tick, 50);
+  }, [selectSection]);
+
+  const handleMenuClose = useCallback((): void => {
+    setMenuAt(null);
+  }, []);
+
+  // Статус-бар: скорости и текущий профиль. Скорости — из того же потока
+  // статистики, что и график; профиль берём из статуса ядра (его имя
+  // приходит в CoreStatus), не загружая весь список.
+  const speed = useTrafficSpeed(connOn);
+  const [modes, setModes] = useState(() => loadModes(window.localStorage));
+  useEffect(() => {
+    // Экран подключения меняет режимы — статус-бар подхватывает изменения.
+    const sync = (): void => { setModes(loadModes(window.localStorage)); };
+    window.addEventListener('storage', sync);
+    const id = window.setInterval(sync, 1500);
+    return (): void => {
+      window.removeEventListener('storage', sync);
+      window.clearInterval(id);
+    };
+  }, []);
+  const activeProfileName =
+    status.activeProfileName === undefined || status.activeProfileName === ''
+      ? '—'
+      : status.activeProfileName;
 
   return (
     <div
@@ -257,34 +333,32 @@ function AppInner(): JSX.Element {
       <a className="skip-link" href="#main">
         {t('a11y.skip')}
       </a>
-      <header
-        id="titlebar"
-        data-tauri-drag-region
-        onMouseDown={(e) => {
-          // Перетаскивание безрамочного окна: клик по пустому месту шапки.
-          if (e.button !== 0) return;
-          if ((e.target as HTMLElement).closest('button') !== null) return;
-          void (async (): Promise<void> => {
-            if ((window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ === undefined) {
-              return;
-            }
-            const { invoke } = await import('@tauri-apps/api/core');
-            await invoke('window_start_drag');
-          })();
-        }}
-      >
+      {/* data-tauri-drag-region: перетаскивание и двойной клик (разворот)
+          обрабатывает сама Tauri. Ручной window_start_drag на mousedown
+          съедал второй клик — двойной клик не разворачивал окно. Кнопки
+          внутри шапки помечены no-drag в CSS. */}
+      <header id="titlebar" data-tauri-drag-region>
         <div className="tb-left">
+          {/* macOS: «светофор» первым элементом шапки (прототип, #titlebar). */}
+          <WindowChrome os={adapter.os} placement="start" />
           <span className="tb-brand">
             <BrandMark size={16} />
             <span>LAVRay</span>
           </span>
           <button
             className="tb-ic"
+            id="tbMenu"
             aria-label={t('aria.menu')}
             title={t('aria.menu')}
             aria-haspopup="menu"
             aria-expanded={menuAt !== null}
             onClick={(e) => {
+              // Повторный клик закрывает: без toggle mousedown на документе
+              // закрывал меню, а click тут же открывал его снова.
+              if (menuAt !== null) {
+                setMenuAt(null);
+                return;
+              }
               const r = e.currentTarget.getBoundingClientRect();
               setMenuAt({ x: r.left, y: r.bottom + 4 });
             }}
@@ -293,7 +367,7 @@ function AppInner(): JSX.Element {
           </button>
         </div>
         <span className="tb-flex" />
-        <WindowChrome os={adapter.os} />
+        <WindowChrome os={adapter.os} placement="end" />
       </header>
 
       <div id="body">
@@ -397,40 +471,12 @@ function AppInner(): JSX.Element {
         <TitlebarMenu
           at={menuAt}
           connected={connOn}
+          os={adapter.os}
           onImport={() => { setQuickImport('file'); }}
-          onToggleConnect={() => {
-            // Прототип: пункт меню сразу переключает соединение.
-            void (async (): Promise<void> => {
-              try {
-                if (connOn) {
-                  await disconnectAll(core);
-                } else {
-                  const list = await core.profiles.listProfiles({});
-                  const first = list.profiles[0];
-                  if (first === undefined) {
-                    selectSection('connection');
-                    return;
-                  }
-                  await connectWith({
-                    core,
-                    profileId: first.id,
-                    modes: loadModes(window.localStorage),
-                    port: status.inbound?.port ?? 2080,
-                  });
-                }
-              } catch {
-                selectSection('connection');
-              }
-            })();
-          }}
+          onToggleConnect={handleToggleConnect}
           onOnboarding={() => { setOnboarding(true); }}
           onHotkeys={() => { setHotkeysOpen(true); }}
-          onAbout={() => {
-            selectSection('settings');
-            window.setTimeout(() => {
-              document.querySelector('[data-sec="about"]')?.scrollIntoView({ block: 'start' });
-            }, 80);
-          }}
+          onAbout={handleAbout}
           onQuit={() => {
             void (async (): Promise<void> => {
               if ((window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ === undefined) {
@@ -440,7 +486,7 @@ function AppInner(): JSX.Element {
               await invoke('quit_app');
             })();
           }}
-          onClose={() => { setMenuAt(null); }}
+          onClose={handleMenuClose}
         />
       )}
       {/* Настройки → «Лицензии и компоненты» открывают диалог событием. */}
@@ -456,10 +502,44 @@ function AppInner(): JSX.Element {
       )}
 
       <footer id="statusbar">
-        <span className="mono">
-          {lang} · {adapter.id}
+        {/* Статус-бар прототипа: состояние, профиль, скорости, чипы
+            TUN/системный прокси. Раньше здесь были внутренние id
+            («ru · tauri») — отладочная информация в готовом UI. */}
+        <span className="st-item">
+          <span className={`dot${connOn ? ' ok' : ''}`} />
+          <span className="st-state">
+            {connOn ? t('conn.state.on') : t('conn.state.off')}
+          </span>
+        </span>
+        <span className="st-sep" />
+        <span className="st-item">
+          <span className="st-k">{t('st.profile')}</span>
+          <span className="mono">{activeProfileName}</span>
+        </span>
+        <span className="st-sep" />
+        <span className="st-item" style={{ gap: 10 }}>
+          <span className="spd dn">
+            <Icon name="download" size={16} />
+            <span>{formatBytes(speed.down, lang)}/s</span>
+          </span>
+          <span className="spd up">
+            <Icon name="upload" size={16} />
+            <span>{formatBytes(speed.up, lang)}/s</span>
+          </span>
         </span>
         <span className="flex1" />
+        {modes.tunMode && (
+          <span className={`st-chip${connOn ? ' on' : ''}`} title={t('set.tunD')}>
+            <span className="dot" />
+            TUN
+          </span>
+        )}
+        {modes.sysProxy && (
+          <span className={`st-chip${connOn ? ' on' : ''}`} title={t('set.sysproxyD')}>
+            <span className="dot" />
+            <span>{t('st.sysproxy')}</span>
+          </span>
+        )}
       </footer>
     </div>
   );

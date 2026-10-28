@@ -44,7 +44,8 @@ export type IconName =
   | 'lock'
   | 'minimize'
   | 'maximize'
-  | 'restore';
+  | 'restore'
+  | 'power';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
@@ -271,6 +272,12 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
     <>
       <rect width="12" height="12" x="5" y="9" rx="1" />
       <path d="M9 5h9a1 1 0 0 1 1 1v9" />
+    </>
+  ),
+  power: (
+    <>
+      <path d="M12 2v10" />
+      <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
     </>
   ),
 };

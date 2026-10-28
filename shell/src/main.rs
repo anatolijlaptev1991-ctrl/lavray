@@ -107,14 +107,23 @@ fn request_quit(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) {
 /// Отличается от закрытия окна (которое прячет его в трей): сначала
 /// помечаем остановку ядра, ждём graceful-лестницу надзирателя, затем
 /// выходим из цикла событий.
+///
+/// Асинхронная: `sleep` в синхронной команде выполнялся на главном потоке
+/// и подвешивал UI перед закрытием. Прокси снимается ДО выхода — иначе в
+/// ОС остаётся прокси на мёртвый порт до следующего запуска.
 #[tauri::command]
-fn quit_app(app: tauri::AppHandle, shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) {
-    if let Ok(mut s) = shared.lock() {
-        s.shutdown = true;
+async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(shared) = app.try_state::<Arc<Mutex<RuntimeState>>>() {
+        if let Ok(mut s) = shared.lock() {
+            s.shutdown = true;
+        }
     }
-    // Надзиратель гасит ядро через graceful-лестницу §5.
-    std::thread::sleep(std::time::Duration::from_millis(1200));
+    let _ = SysProxy::new(&data_dir()).release_on_quit();
+    // Клиенту (UI) даём закрыться, а ядро гасит надзиратель своей
+    // graceful-лестницей (§5) уже после выхода цикла событий: держать
+    // главный поток сном нельзя — окно «зависает» на секунду.
     app.exit(0);
+    Ok(())
 }
 
 /// Окно: свернуть / развернуть / скрыть в трей / перетащить.
@@ -329,6 +338,9 @@ fn main() {
                                 s.shutdown = true;
                             }
                         }
+                        // Прокси снимаем до выхода: иначе в ОС остаётся
+                        // прокси на мёртвый порт (как и в quit_app).
+                        let _ = SysProxy::new(&data_dir()).release_on_quit();
                         // Надзиратель гасит ядро через graceful-лестницу §5.
                         std::thread::sleep(std::time::Duration::from_millis(1200));
                         app.exit(0);

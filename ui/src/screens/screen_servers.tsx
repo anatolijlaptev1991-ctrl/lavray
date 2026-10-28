@@ -13,7 +13,7 @@ import { groupByGeo } from '../lib/geo';
 import { formatMs } from '../lib/i18n';
 import { ProfileEditor } from '../components/ProfileEditor';
 import { ImportDialog } from '../components/ImportDialog';
-import { GroupsDialog } from '../components/dialogs';
+import { ConfirmDialog, GroupsDialog } from '../components/dialogs';
 import { Icon } from '../components/Icon';
 
 const TYPE_LABEL: Record<number, string> = {
@@ -71,6 +71,11 @@ export function ServersScreen(): JSX.Element {
   const [progress, setProgress] = useState('');
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
+  // Подтверждение удаления: { ids, count }. null — диалог закрыт.
+  const [confirmDelete, setConfirmDelete] = useState<{
+    ids: readonly bigint[];
+    count: number;
+  } | null>(null);
   const [editing, setEditing] = useState<Profile | null | undefined>(undefined);
   const [importOpen, setImportOpen] = useState(false);
   const [groupsOpen, setGroupsOpen] = useState(false);
@@ -192,24 +197,13 @@ export function ServersScreen(): JSX.Element {
     };
   }, [t]);
 
-  const removeSelected = useCallback(async (): Promise<void> => {
-    const ids = [...selected].map((s) => BigInt(s));
-    if (ids.length === 0) return;
-    setErr('');
-    try {
-      await core.profiles.deleteProfile({ ids });
-      setSelected(new Set());
-      refresh();
-    } catch (e) {
-      setErr(showCoreError(e, t));
-    }
-  }, [core, selected, refresh, t]);
-
-  const removeOne = useCallback(
-    async (id: bigint): Promise<void> => {
+  const removeSelected = useCallback(
+    async (ids: readonly bigint[]): Promise<void> => {
+      if (ids.length === 0) return;
       setErr('');
       try {
-        await core.profiles.deleteProfile({ ids: [id] });
+        await core.profiles.deleteProfile({ ids: [...ids] });
+        setSelected(new Set());
         refresh();
       } catch (e) {
         setErr(showCoreError(e, t));
@@ -269,11 +263,12 @@ export function ServersScreen(): JSX.Element {
         void toggleFav(p);
       },
       onDelete: (): void => {
-        void removeOne(p.id);
+        // Удаление сервера необратимо — прототип всегда спрашивает.
+        setConfirmDelete({ ids: [p.id], count: 1 });
       },
       typeLabel: TYPE_LABEL[p.type] ?? '?',
     }),
-    [compact, selected, latency, toggleSelect, toggleFav, removeOne],
+    [compact, selected, latency, toggleSelect, toggleFav],
   );
 
   return (
@@ -468,7 +463,15 @@ export function ServersScreen(): JSX.Element {
             >
               {t('srv.selClear')}
             </button>
-            <button className="btn btn-danger btn-sm" onClick={() => void removeSelected()}>
+            <button
+              className="btn btn-danger btn-sm"
+              onClick={() => {
+                setConfirmDelete({
+                  ids: [...selected].map((s) => BigInt(s)),
+                  count: selected.size,
+                });
+              }}
+            >
               <Icon name="trash" />
               <span>{t('srv.delSel')}</span>
             </button>
@@ -556,6 +559,22 @@ export function ServersScreen(): JSX.Element {
             setEditing(undefined);
           }}
           onSaved={refresh}
+        />
+      )}
+      {confirmDelete !== null && (
+        <ConfirmDialog
+          title={t('common.delete')}
+          text={tf('srv.delConfirm', { n: confirmDelete.count })}
+          confirmLabel={t('common.delete')}
+          danger
+          onConfirm={() => {
+            const ids = confirmDelete.ids;
+            setConfirmDelete(null);
+            void removeSelected(ids);
+          }}
+          onClose={() => {
+            setConfirmDelete(null);
+          }}
         />
       )}
     </div>

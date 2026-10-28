@@ -11,6 +11,8 @@ export interface TitlebarMenuProps {
   readonly at: { readonly x: number; readonly y: number };
   /** Ядро подключено — меняет подпись и иконку пункта. */
   readonly connected: boolean;
+  /** ОС: от неё зависит обозначение модификатора (⌘ на macOS). */
+  readonly os: string;
   readonly onImport: () => void;
   readonly onToggleConnect: () => void;
   readonly onOnboarding: () => void;
@@ -20,17 +22,26 @@ export interface TitlebarMenuProps {
   readonly onClose: () => void;
 }
 
-type Item = {
+interface MenuAction {
+  readonly kind: 'item';
   readonly ic?: IconName;
   readonly label: string;
   readonly kbd?: string;
   readonly danger?: boolean;
   readonly fn: () => void;
-} | { readonly sep: true };
+}
+
+interface MenuSep {
+  readonly kind: 'sep';
+  readonly id: string;
+}
+
+type Item = MenuAction | MenuSep;
 
 export function TitlebarMenu({
   at,
   connected,
+  os,
   onImport,
   onToggleConnect,
   onOnboarding,
@@ -41,19 +52,48 @@ export function TitlebarMenu({
 }: TitlebarMenuProps): JSX.Element {
   const { t } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
+  // Модификатор по конвенции ОС (прототип: kbdLabel('D')).
+  const mod = os === 'macos' ? '⌘' : 'Ctrl';
 
   useEffect(() => {
     const root = ref.current;
-    // Первый пункт получает фокус — меню доступно с клавиатуры.
-    root?.querySelector<HTMLElement>('button')?.focus();
+    const buttons = (): HTMLElement[] =>
+      Array.from(root?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? []);
+
+    // Фокус ставится только при открытии: раньше эффект зависел от
+    // нестабильного onClose и перезапускался каждую секунду (опрос
+    // статуса), возвращая фокус на первый пункт.
+    buttons()[0]?.focus();
 
     const onDown = (e: MouseEvent): void => {
       if (root !== null && !root.contains(e.target as Node)) onClose();
     };
     const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
+      const list = buttons();
+      const idx = list.indexOf(document.activeElement as HTMLElement);
+      switch (e.key) {
+        case 'Escape':
+          e.preventDefault();
+          onClose();
+          return;
+        case 'ArrowDown':
+          e.preventDefault();
+          list[(idx + 1) % list.length]?.focus();
+          return;
+        case 'ArrowUp':
+          e.preventDefault();
+          list[(idx - 1 + list.length) % list.length]?.focus();
+          return;
+        case 'Home':
+          e.preventDefault();
+          list[0]?.focus();
+          return;
+        case 'End':
+          e.preventDefault();
+          list[list.length - 1]?.focus();
+          return;
+        default:
+          break;
       }
     };
     document.addEventListener('mousedown', onDown);
@@ -65,19 +105,21 @@ export function TitlebarMenu({
   }, [onClose]);
 
   const items: readonly Item[] = [
-    { ic: 'download', label: t('menu.file.import'), fn: onImport },
+    { kind: 'item', ic: 'download', label: t('menu.file.import'), fn: onImport },
     {
-      ic: connected ? 'x' : 'zap',
+      kind: 'item',
+      // Прототип использует `power` при активном соединении.
+      ic: connected ? 'power' : 'zap',
       label: t(connected ? 'conn.disconnect' : 'conn.connect'),
-      kbd: 'Ctrl D',
+      kbd: `${mod} D`,
       fn: onToggleConnect,
     },
-    { sep: true },
-    { ic: 'zap', label: t('menu.help.onb'), fn: onOnboarding },
-    { ic: 'keyboard', label: t('menu.help.hotkeys'), fn: onHotkeys },
-    { ic: 'info', label: t('menu.help.about'), fn: onAbout },
-    { sep: true },
-    { ic: 'x', label: t('menu.file.quit'), danger: true, fn: onQuit },
+    { kind: 'sep', id: 's1' },
+    { kind: 'item', ic: 'zap', label: t('menu.help.onb'), fn: onOnboarding },
+    { kind: 'item', ic: 'keyboard', label: t('menu.help.hotkeys'), fn: onHotkeys },
+    { kind: 'item', ic: 'info', label: t('menu.help.about'), fn: onAbout },
+    { kind: 'sep', id: 's2' },
+    { kind: 'item', ic: 'x', label: t('menu.file.quit'), danger: true, fn: onQuit },
   ];
 
   return (
@@ -90,9 +132,9 @@ export function TitlebarMenu({
         e.preventDefault();
       }}
     >
-      {items.map((it, i) =>
-        'sep' in it ? (
-          <div className="menu-sep" key={`sep-${String(i)}`} role="separator" />
+      {items.map((it) =>
+        it.kind === 'sep' ? (
+          <div className="menu-sep" key={it.id} role="separator" />
         ) : (
           <button
             key={it.label}

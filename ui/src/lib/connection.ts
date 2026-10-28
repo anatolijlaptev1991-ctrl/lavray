@@ -41,14 +41,17 @@ export function coreModeFor(modes: ModePreferences): ConnectMode {
   return modes.tunMode ? ConnectMode.TUN : ConnectMode.SYSTEM_PROXY;
 }
 
-/** Включить системный прокси через оболочку (только нативное окно). */
+/** Включить/снять системный прокси через оболочку (только нативное окно). */
 export async function applySystemProxy(on: boolean, port: number): Promise<void> {
   if ((window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ === undefined) {
     if (on) throw new Error('mode.sys.nativeOnly');
     return;
   }
   const { invoke } = await import('@tauri-apps/api/core');
-  await invoke('set_system_proxy', { enabled: on, port: Math.max(0, port) });
+  // Порт валидируется: u16 в Rust отвергает >65535 сырой ошибкой
+  // десериализации, которую пользователю показывать бессмысленно.
+  const safePort = Math.min(65535, Math.max(1, Math.trunc(port)));
+  await invoke('set_system_proxy', { enabled: on, port: safePort });
 }
 
 export interface ConnectArgs {
@@ -64,8 +67,43 @@ export async function connectWith(args: ConnectArgs): Promise<void> {
   await applySystemProxy(args.modes.sysProxy, args.port);
 }
 
-/** Отключение: сначала ядро, затем снятие системного прокси. */
+/**
+ * Отключение: сначала ядро, затем снятие системного прокси.
+ *
+ * Прокси снимается в `finally`: если ядро уже упало, `disconnect` бросит,
+ * но оставить ОС с прокси на мёртвый порт нельзя (FR-UI-259) — иначе
+ * пользователь остаётся без интернета.
+ */
 export async function disconnectAll(core: CoreClients): Promise<void> {
-  await core.core.disconnect({});
-  await applySystemProxy(false, 0);
+  try {
+    await core.core.disconnect({});
+  } finally {
+    await applySystemProxy(false, 0);
+  }
+}
+
+/**
+ * Переключение соединения из любого места (меню титлбара, Ctrl+D).
+ * Возвращает `false`, если подключать нечего — вызывающий решает, что
+ * показать (обычно переходит на экран «Подключение»).
+ */
+export async function toggleConnection(args: {
+  readonly core: CoreClients;
+  readonly connected: boolean;
+  readonly port: number;
+}): Promise<boolean> {
+  if (args.connected) {
+    await disconnectAll(args.core);
+    return true;
+  }
+  const list = await args.core.profiles.listProfiles({});
+  const first = list.profiles[0];
+  if (first === undefined) return false;
+  await connectWith({
+    core: args.core,
+    profileId: first.id,
+    modes: loadModes(window.localStorage),
+    port: args.port,
+  });
+  return true;
 }

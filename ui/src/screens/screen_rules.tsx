@@ -319,8 +319,16 @@ export function RulesScreen(): JSX.Element {
             className="btn btn-ghost btn-sm"
             disabled={active?.builtin === true}
             onClick={() => {
-              const first = LISTS.find((l) => (active?.[l.kind])?.length !== undefined);
-              if (first !== undefined) void addRule(first, '');
+              // Правило нельзя добавить «пустым»: подвал фокусирует первое
+              // поле ввода. Раньше сюда передавалась пустая строка, и
+              // addRule отбрасывал вызов — кнопка не делала ничего.
+              const input = document.querySelector<HTMLInputElement>('.rule-add input');
+              if (input !== null) {
+                const det = input.closest('details');
+                if (det !== null) det.open = true;
+                input.focus();
+                input.scrollIntoView({ block: 'center' });
+              }
             }}
           >
             <Icon name="plus" />

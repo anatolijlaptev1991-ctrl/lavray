@@ -11,7 +11,7 @@ import { useI18n } from '../hooks/useI18n';
 
 interface WinApi {
   minimize: () => Promise<void>;
-  toggleMaximize: () => Promise<void>;
+  toggleMaximize: () => Promise<boolean>;
   close: () => Promise<void>;
   isMaximized: () => Promise<boolean>;
   onResized: (cb: () => void) => Promise<() => void>;
@@ -21,7 +21,7 @@ interface WinApi {
  * Управление окном идёт через команды оболочки (`window_*` в shell/src/
  * main.rs), а не через `@tauri-apps/api/window`: у безрамочного окна
  * JS-команды требуют ACL-разрешений на каждое действие, и любое
- * отсутствующее право молча оставляет кнопку мёртвой.
+ * отсутствующее право молча оставляло кнопку мёртвой.
  */
 async function invokeShell<T>(cmd: string): Promise<T> {
   const { invoke } = await import('@tauri-apps/api/core');
@@ -39,9 +39,7 @@ async function loadWinApi(): Promise<WinApi | null> {
     minimize: async (): Promise<void> => {
       await invokeShell<null>('window_minimize');
     },
-    toggleMaximize: async (): Promise<void> => {
-      await invokeShell<boolean>('window_toggle_maximize');
-    },
+    toggleMaximize: () => invokeShell<boolean>('window_toggle_maximize'),
     close: async (): Promise<void> => {
       await invokeShell<null>('window_hide');
     },
@@ -54,6 +52,13 @@ async function loadWinApi(): Promise<WinApi | null> {
 export interface WindowChromeProps {
   /** ОС из адаптера: 'windows' | 'macos' | 'linux' | 'web'. */
   readonly os: string;
+  /**
+   * Где в шапке стоит блок: `start` — слева (macOS-«светофор» по
+   * прототипу), `end` — справа (Windows/Linux). Прототип ставит светофор
+   * первым элементом #titlebar, а кнопки Windows — последними, поэтому
+   * один компонент рендерит разное в зависимости от слота.
+   */
+  readonly placement: 'start' | 'end';
 }
 
 /** Адаптер отдаёт 'windows'/'macos', прототип — 'win'/'mac'. */
@@ -70,7 +75,7 @@ function normOs(os: string): 'win' | 'mac' | 'linux' | 'other' {
  * слева. Окно создаётся без системной рамки (tauri.conf.json), поэтому
  * эти кнопки — единственные: системный заголовок не дублируется.
  */
-export function WindowChrome({ os }: WindowChromeProps): JSX.Element | null {
+export function WindowChrome({ os, placement }: WindowChromeProps): JSX.Element | null {
   const { t } = useI18n();
   const [maximized, setMaximized] = useState(false);
   const platform = normOs(os);
@@ -81,14 +86,23 @@ export function WindowChrome({ os }: WindowChromeProps): JSX.Element | null {
     const alive = { current: true };
     let unlisten: (() => void) | undefined;
     void (async (): Promise<void> => {
-      const api = await loadWinApi();
-      if (api === null || !alive.current) return;
-      setMaximized(await api.isMaximized());
-      unlisten = await api.onResized(() => {
-        void api.isMaximized().then((m) => {
-          if (alive.current) setMaximized(m);
+      try {
+        const api = await loadWinApi();
+        if (api === null || !alive.current) return;
+        setMaximized(await api.isMaximized());
+        unlisten = await api.onResized(() => {
+          void api
+            .isMaximized()
+            .then((m) => {
+              if (alive.current) setMaximized(m);
+            })
+            .catch(() => {
+              /* окно закрывается — состояние уже не важно */
+            });
         });
-      });
+      } catch {
+        /* не Tauri или окно уже уничтожено: кнопки останутся без состояния */
+      }
     })();
     return (): void => {
       alive.current = false;
@@ -98,10 +112,34 @@ export function WindowChrome({ os }: WindowChromeProps): JSX.Element | null {
 
   if (platform === 'other') return null;
 
+  // Слот решает, что рендерить: macOS-«светофор» — только в начале шапки,
+  // кнопки Windows/Linux — только в конце. Иначе светофор оказывался
+  // справа, как в первой версии.
+  if (platform === 'mac' ? placement !== 'start' : placement !== 'end') return null;
+
+  // Действие кнопки: ошибки invoke не должны всплывать как unhandled
+  // rejection (окно уже перетаскивается, ACL, окно закрыто).
   const act = (fn: (api: WinApi) => Promise<void>): void => {
     void (async (): Promise<void> => {
-      const api = await loadWinApi();
-      if (api !== null) await fn(api);
+      try {
+        const api = await loadWinApi();
+        if (api !== null) await fn(api);
+      } catch {
+        /* окно недоступно — молча игнорируем */
+      }
+    })();
+  };
+
+  // Развернуть/восстановить: состояние берём из返回值 команды, а не только
+  // из события Resized (на части WM оно приходит с задержкой).
+  const toggleMax = (): void => {
+    void (async (): Promise<void> => {
+      try {
+        const api = await loadWinApi();
+        if (api !== null) setMaximized(await api.toggleMaximize());
+      } catch {
+        /* см. act */
+      }
     })();
   };
 
@@ -128,16 +166,13 @@ export function WindowChrome({ os }: WindowChromeProps): JSX.Element | null {
         />
         <button
           className="tl g"
-          aria-label={t('tb.max')}
-          title={t('tb.max')}
-          onClick={() => {
-            act((a) => a.toggleMaximize());
-          }}
+          aria-label={t(maximized ? 'tb.restore' : 'tb.max')}
+          title={t(maximized ? 'tb.restore' : 'tb.max')}
+          onClick={toggleMax}
         />
       </span>
     );
   }
-
   if (platform === 'linux') {
     return (
       <div className="caps-linux">
@@ -169,11 +204,9 @@ export function WindowChrome({ os }: WindowChromeProps): JSX.Element | null {
       </button>
       <button
         className="cap-btn"
-        aria-label={t('tb.max')}
-        title={t('tb.max')}
-        onClick={() => {
-          act((a) => a.toggleMaximize());
-        }}
+        aria-label={t(maximized ? 'tb.restore' : 'tb.max')}
+        title={t(maximized ? 'tb.restore' : 'tb.max')}
+        onClick={toggleMax}
       >
         <Icon name={maximized ? 'restore' : 'maximize'} size={16} />
       </button>

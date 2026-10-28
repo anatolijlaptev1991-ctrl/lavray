@@ -111,6 +111,10 @@ func main() {
 	// тегом singbox_run; раньше хардкод NopRunner означал, что туннель не
 	// запускался НИ В ОДНОЙ сборке.
 	server := api.NewServer(api.Deps{Store: st, Logs: mux, Runner: pickRunner()})
+	// Автообновление подписок (FR-UI-126, T-20): таймер обновляет группы, у
+	// которых прошёл интервал; skip_auto_update и архив пропускаются.
+	stopAutoUpdate := server.StartSubscriptionScheduler(context.Background())
+	defer stopAutoUpdate()
 	// appVersion — билд-флаг платформенных репо.
 	root := http.NewServeMux()
 	server.Register(root)

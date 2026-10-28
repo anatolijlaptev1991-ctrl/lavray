@@ -47,9 +47,18 @@ jobs:
         run: |
           go mod tidy
           New-Item -ItemType Directory -Force -Path ../shell/binaries | Out-Null
-          # T3 (аудит №6): БЕЗ этого тега ядро без sing-box и «Подключиться»
+          # T3 (аудит №6): БЕЗ тега singbox_run ядро без sing-box и «Подключиться»
           # не работает. go mod tidy выше уже подтянул форк.
-          go build -tags "singbox_run with_quic" -trimpath -ldflags '-s -w' -o ../shell/binaries/lavray-core.exe ./cmd/lavray-core/
+          # T-02: теги берём из единого списка core/BUILD_TAGS (в workflow их
+          # не копировать): без with_utls не запускаются REALITY и fp=, без
+          # with_gvisor — TUN со стеком по умолчанию.
+          $tags = (Get-Content BUILD_TAGS -Raw).Trim()
+          if ($tags -eq '') { throw 'core/BUILD_TAGS пуст' }
+          go build -tags $tags -trimpath -ldflags '-s -w' -o ../shell/binaries/lavray-core.exe ./cmd/lavray-core/
+          if ($LASTEXITCODE -ne 0) { throw 'ядро не собралось' }
+          # В собранном exe записаны ровно эти теги.
+          $info = (go version -m ../shell/binaries/lavray-core.exe) -join "`n"
+          if (-not $info.Contains("-tags=$tags")) { throw "в lavray-core.exe нет тегов $tags" }
           Get-Item ../shell/binaries/lavray-core.exe | Select-Object Name, Length
 
       - name: "Оболочка: установщик NSIS"

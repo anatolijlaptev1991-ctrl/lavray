@@ -156,13 +156,26 @@ jobs:
         run: |
           go get github.com/anatolijlaptev1991-ctrl/sing-box@v1.14.2-0.20260916133904-628a9ed70b12 || true
           go mod tidy
-      - name: Сборка с реальным раннером (singbox_run + quic)
+      - name: Сборка с реальным раннером (теги из core/BUILD_TAGS)
         env:
           CGO_ENABLED: '0'
           GOFLAGS: -mod=mod
         run: |
-          go build -tags "singbox_run with_quic" -o /tmp/lavray-core ./cmd/lavray-core/
+          # T-02: единый список тегов (singbox_run, with_quic, with_gvisor,
+          # with_utls); те же теги — в shell/build.ps1, build.sh и релизе.
+          TAGS="$(tr -d '[:space:]' < BUILD_TAGS)"
+          test -n "$TAGS"
+          go build -tags "$TAGS" -o /tmp/lavray-core ./cmd/lavray-core/
           ls -la /tmp/lavray-core
+          # В бинарнике записаны ровно эти теги.
+          go version -m /tmp/lavray-core | grep -F -- "-tags=$TAGS"
+      - name: "Реальный раннер: REALITY и uTLS стартуют (T-02)"
+        env:
+          CGO_ENABLED: '0'
+          GOFLAGS: -mod=mod
+        run: |
+          TAGS="$(tr -d '[:space:]' < BUILD_TAGS)"
+          go test -tags "$TAGS" ./internal/inst/ -run TestSingBoxRunnerStartsUTLSProfiles -count=1 -timeout 120s
       - name: Smoke - ядро поднимается, healthz, auth и RPC
         shell: bash
         run: |

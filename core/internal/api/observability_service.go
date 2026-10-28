@@ -184,8 +184,10 @@ func (s *Server) GetTrafficSummary(ctx context.Context, req *connect.Request[lav
 func (s *Server) CheckRoute(ctx context.Context, req *connect.Request[lavrayv1.CheckRouteRequest]) (*connect.Response[lavrayv1.CheckRouteResponse], error) {
 	msg := req.Msg
 	addr := strings.TrimSpace(msg.Address)
-	if addr == "" {
-		return nil, invalidArg("address обязателен")
+	// T-29: достаточно адреса ИЛИ имени процесса (приложение без адреса).
+	proc := strings.TrimSpace(msg.GetProcessName())
+	if addr == "" && proc == "" {
+		return nil, invalidArg("нужен address или process_name")
 	}
 	// Активный профиль/пресет: dry-run сборки + какой outbound выбрал бы
 	// сгенерированный route (проверка по правилам конфигбилдера).
@@ -205,7 +207,7 @@ func (s *Server) CheckRoute(ctx context.Context, req *connect.Request[lavrayv1.C
 	if profile != nil {
 		res, err := s.dryRunBuild(profile, lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY)
 		if err == nil && res.Config != nil {
-			if o := matchRouteOutbound(res.Config, addr, msg.ProcessName); o != "" {
+			if o := matchRouteOutbound(res.Config, addr, &proc); o != "" {
 				outbound = o
 			}
 		}

@@ -24,6 +24,8 @@ async function bootstrap(): Promise<void> {
 
   // data-shell на <html> (прототип): native в окне Tauri, browser в вебе.
   document.documentElement.dataset.shell = tauri !== undefined ? 'native' : 'browser';
+  // data-os — словарь прототипа (win/mac/linux): от него зависят шрифты
+  // ОС, «светофор» macOS и кнопки управления окном (CSS §titlebar).
   document.documentElement.dataset.os = adapterOS();
 
   const container = document.getElementById('root');

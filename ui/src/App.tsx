@@ -6,11 +6,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { BrandMark, Icon, type IconName } from './components/Icon';
 import { SECTIONS, type Section, type SectionTab } from './app/sections';
-import { CoreContext, useCoreClients, useCoreStatus } from './hooks/useCore';
+import { CoreContext, useCore, useCoreClients, useCoreStatus } from './hooks/useCore';
 import { CoreState } from './gen/lavray_pb';
 import { useI18n } from './hooks/useI18n';
 import { applyDocumentLanguage, detectLanguage, setLanguage } from './lib/i18n';
 import { applyTheme, loadPreferences, watchSystemTheme } from './lib/theme';
+import { connectWith, disconnectAll, loadModes } from './lib/connection';
 import { getPlatformAdapter } from './platform/adapter';
 import { ConnectionScreen } from './screens/screen_connection';
 import { ConnsScreen } from './screens/screen_conns';
@@ -24,6 +25,8 @@ import { SettingsScreen } from './screens/screen_settings';
 import { UpdatesScreen } from './screens/screen_updates';
 import { ImportDialog } from './components/ImportDialog';
 import { HotkeysDialog, LicensesDialog, OnboardingDialog } from './components/dialogs';
+import { TitlebarMenu } from './components/TitlebarMenu';
+import { WindowChrome } from './components/WindowChrome';
 
 const NAV_ICONS: Record<string, IconName> = {
   connection: 'zap',
@@ -80,8 +83,11 @@ function AppInner(): JSX.Element {
   const [hotkeysOpen, setHotkeysOpen] = useState(false);
   const [licensesOpen, setLicensesOpen] = useState(false);
   const [quickImport, setQuickImport] = useState<'link' | 'qr' | 'file' | null>(null);
+  // Меню титлбара (прототип tbMenuItems): импорт, подключение, справка, выход.
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const adapter = useMemo(() => getPlatformAdapter(window), []);
   const status = useCoreStatus();
+  const core = useCore();
 
   const section: Section | undefined = useMemo(
     () => SECTIONS.find((s) => s.id === sectionId) ?? SECTIONS[0],
@@ -251,32 +257,43 @@ function AppInner(): JSX.Element {
       <a className="skip-link" href="#main">
         {t('a11y.skip')}
       </a>
-      <header id="titlebar">
+      <header
+        id="titlebar"
+        data-tauri-drag-region
+        onMouseDown={(e) => {
+          // Перетаскивание безрамочного окна: клик по пустому месту шапки.
+          if (e.button !== 0) return;
+          if ((e.target as HTMLElement).closest('button') !== null) return;
+          void (async (): Promise<void> => {
+            if ((window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ === undefined) {
+              return;
+            }
+            const { invoke } = await import('@tauri-apps/api/core');
+            await invoke('window_start_drag');
+          })();
+        }}
+      >
         <div className="tb-left">
-          {/* «Светофор» macOS — классы прототипа (.tl-mac/.tl.r|y|g),
-              иначе иконки имели нулевой размер и были невидимы. */}
-          {adapter.os === 'macos' && (
-            <span className="tl-mac" aria-hidden="true">
-              <i className="tl r" />
-              <i className="tl y" />
-              <i className="tl g" />
-            </span>
-          )}
-          <span className="tb-brand">LAVRay</span>
-        </div>
-        <span className="tb-flex" />
-        <div className="tb-right">
+          <span className="tb-brand">
+            <BrandMark size={16} />
+            <span>LAVRay</span>
+          </span>
           <button
             className="tb-ic"
             aria-label={t('aria.menu')}
             title={t('aria.menu')}
-            onClick={() => {
-              setHotkeysOpen(true);
+            aria-haspopup="menu"
+            aria-expanded={menuAt !== null}
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setMenuAt({ x: r.left, y: r.bottom + 4 });
             }}
           >
             <Icon name="menu" />
           </button>
         </div>
+        <span className="tb-flex" />
+        <WindowChrome os={adapter.os} />
       </header>
 
       <div id="body">
@@ -376,6 +393,56 @@ function AppInner(): JSX.Element {
       )}
       {hotkeysOpen && <HotkeysDialog onClose={() => { setHotkeysOpen(false); }} />}
       {licensesOpen && <LicensesDialog onClose={() => { setLicensesOpen(false); }} />}
+      {menuAt !== null && (
+        <TitlebarMenu
+          at={menuAt}
+          connected={connOn}
+          onImport={() => { setQuickImport('file'); }}
+          onToggleConnect={() => {
+            // Прототип: пункт меню сразу переключает соединение.
+            void (async (): Promise<void> => {
+              try {
+                if (connOn) {
+                  await disconnectAll(core);
+                } else {
+                  const list = await core.profiles.listProfiles({});
+                  const first = list.profiles[0];
+                  if (first === undefined) {
+                    selectSection('connection');
+                    return;
+                  }
+                  await connectWith({
+                    core,
+                    profileId: first.id,
+                    modes: loadModes(window.localStorage),
+                    port: status.inbound?.port ?? 2080,
+                  });
+                }
+              } catch {
+                selectSection('connection');
+              }
+            })();
+          }}
+          onOnboarding={() => { setOnboarding(true); }}
+          onHotkeys={() => { setHotkeysOpen(true); }}
+          onAbout={() => {
+            selectSection('settings');
+            window.setTimeout(() => {
+              document.querySelector('[data-sec="about"]')?.scrollIntoView({ block: 'start' });
+            }, 80);
+          }}
+          onQuit={() => {
+            void (async (): Promise<void> => {
+              if ((window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ === undefined) {
+                return;
+              }
+              const { invoke } = await import('@tauri-apps/api/core');
+              await invoke('quit_app');
+            })();
+          }}
+          onClose={() => { setMenuAt(null); }}
+        />
+      )}
       {/* Настройки → «Лицензии и компоненты» открывают диалог событием. */}
       {quickImport !== null && (
         <ImportDialog

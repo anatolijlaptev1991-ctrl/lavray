@@ -123,4 +123,26 @@ describe('App scaffold smoke render', () => {
     expect(toast?.textContent).toContain('Подключено · example.lavray.net');
     expect(toast?.getAttribute('role')).toBe('status');
   });
+
+  it('gives every brand-mark gradient a unique id (ray stays painted)', () => {
+    renderApp();
+
+    // Регрессия: одинаковые id у <linearGradient> в нескольких знаках
+    // «Отражение» — невалидный документ; браузер разрешал url(#lavRay) в
+    // первый (скрытый в веб-режиме) элемент, и луч не закрашивался.
+    const ids = Array.from(document.querySelectorAll('linearGradient')).map(
+      (g) => g.getAttribute('id') ?? '',
+    );
+    expect(ids.length).toBeGreaterThan(1);
+    expect(new Set(ids).size).toBe(ids.length);
+
+    // Каждый луч ссылается на собственный существующий градиент.
+    for (const beam of Array.from(document.querySelectorAll('.a-beam'))) {
+      const ref = (beam as SVGElement).style.stroke;
+      // jsdom нормализует url(...) без кавычек, браузер — в кавычках.
+      expect(ref).toMatch(/^url\(["']?#?ray/);
+      const id = ref.replace(/^url\(["']?#?/, '').replace(/["']?\)$/, '');
+      expect(document.getElementById(id)?.tagName.toLowerCase()).toBe('lineargradient');
+    }
+  });
 });

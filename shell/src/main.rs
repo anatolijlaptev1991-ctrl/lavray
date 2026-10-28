@@ -103,6 +103,57 @@ fn request_quit(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) {
     }
 }
 
+/// quit_app — полный выход из приложения по пункту меню «Выход».
+/// Отличается от закрытия окна (которое прячет его в трей): сначала
+/// помечаем остановку ядра, ждём graceful-лестницу надзирателя, затем
+/// выходим из цикла событий.
+#[tauri::command]
+fn quit_app(app: tauri::AppHandle, shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) {
+    if let Ok(mut s) = shared.lock() {
+        s.shutdown = true;
+    }
+    // Надзиратель гасит ядро через graceful-лестницу §5.
+    std::thread::sleep(std::time::Duration::from_millis(1200));
+    app.exit(0);
+}
+
+/// Окно: свернуть / развернуть / скрыть в трей / перетащить.
+/// Управление окном вынесено в команды оболочки: у безрамочного окна
+/// JS-права `core:window:*` не всегда применяются к перетаскиванию, а
+/// каждая команда здесь — один вызов tao без ACL-посредника.
+#[tauri::command]
+fn window_minimize(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.minimize().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn window_toggle_maximize(window: tauri::WebviewWindow) -> Result<bool, String> {
+    let max = window.is_maximized().map_err(|e| e.to_string())?;
+    if max {
+        window.unmaximize().map_err(|e| e.to_string())?;
+    } else {
+        window.maximize().map_err(|e| e.to_string())?;
+    }
+    window.is_maximized().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn window_is_maximized(window: tauri::WebviewWindow) -> Result<bool, String> {
+    window.is_maximized().map_err(|e| e.to_string())
+}
+
+/// Закрытие окна = скрыть в трей (спека §8.1), как системный крестик.
+#[tauri::command]
+fn window_hide(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.hide().map_err(|e| e.to_string())
+}
+
+/// Начать перетаскивание окна за шапку (безрамочные окна требуют вызова).
+#[tauri::command]
+fn window_start_drag(window: tauri::WebviewWindow) -> Result<(), String> {
+    window.start_dragging().map_err(|e| e.to_string())
+}
+
 /// shell_error — причина отказа запуска ядра для UI (D15).
 #[tauri::command]
 fn shell_error(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> String {
@@ -325,6 +376,12 @@ fn main() {
             core_endpoint,
             shell_error,
             request_quit,
+            quit_app,
+            window_minimize,
+            window_toggle_maximize,
+            window_is_maximized,
+            window_hide,
+            window_start_drag,
             set_system_proxy,
             recover_system_proxy
         ])

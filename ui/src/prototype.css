@@ -990,6 +990,19 @@ html[data-shell="browser"]{--font-sans:Inter,system-ui,-apple-system,"Segoe UI",
 html[data-shell="browser"] #titlebar { display: none; }
 html[data-shell="browser"] #app { grid-template-rows: minmax(0, 1fr) var(--sb-h); }
 
+/* Собственный хром окна Tauri (tauri.conf.json: decorations=false).
+   Шапка — область перетаскивания; интерактивные элементы её гасят,
+   иначе кнопки не нажимаются. Словарь data-os — как в прототипе:
+   win / mac / linux (см. main.tsx). */
+#titlebar[data-tauri-drag-region] { -webkit-app-region: drag; app-region: drag; }
+#titlebar .tb-ic,
+#titlebar .cap-btn,
+#titlebar .tl-mac button { -webkit-app-region: no-drag; app-region: no-drag; }
+/* Кнопки «светофора» macOS — кнопки, а не декоративные i. */
+.tl-mac button.tl { padding: 0; border: 0; cursor: default; }
+html[data-os="mac"] .tl-mac { display: flex; align-items: center; }
+html[data-os="linux"] .caps-linux { display: flex; align-items: center; }
+
 /* ---------- Группы серверов по странам (FR-UI-008) ---------- */
 .srv-groups { display: flex; flex-direction: column; gap: 14px; }
 .srv-group-h { display: flex; align-items: center; gap: 8px; margin: 0 0 6px;

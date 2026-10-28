@@ -2,6 +2,7 @@
  * Inline SVG icons — Lucide style: 24 grid, stroke 1.75, currentColor
  * (paths copied from design/prototype.html `IC` map; DS §5).
  */
+import { useId } from 'react';
 import type { JSX } from 'react';
 
 export type IconName =
@@ -40,7 +41,10 @@ export type IconName =
   | 'eye'
   | 'download'
   | 'upload'
-  | 'lock';
+  | 'lock'
+  | 'minimize'
+  | 'maximize'
+  | 'restore';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
@@ -261,6 +265,14 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
       <path d="M12 8h.01" />
     </>
   ),
+  minimize: <path d="M5 12h14" />,
+  maximize: <rect width="14" height="14" x="5" y="5" rx="1" />,
+  restore: (
+    <>
+      <rect width="12" height="12" x="5" y="9" rx="1" />
+      <path d="M9 5h9a1 1 0 0 1 1 1v9" />
+    </>
+  ),
 };
 
 export interface IconProps {
@@ -290,8 +302,15 @@ export function Icon({ name, size = 18, className }: IconProps): JSX.Element {
 }
 
 /** BrandMark — знак «Отражение» (DS v1.2): L-луч, зеркало 45°, фотон.
- *  Геометрия скопирована из прототипа (design/prototype.html, .lgA). */
+ *  Геометрия скопирована из прототипа (design/prototype.html, .lgA).
+ *
+ *  Идентификаторы градиентов уникальны для каждого экземпляра: знак
+ *  встречается несколько раз на экране, а `id` в SVG глобальны — при
+ *  повторах браузер разрешал `url(#lavRay)` в первый (скрытый в веб-режиме
+ *  титлбар) элемент, и луч не закрашивался. */
 export function BrandMark({ size = 24 }: { readonly size?: number }): JSX.Element {
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const solid = `ray-${uid}`;
   return (
     <svg
       className="lgA lgA-sm"
@@ -304,18 +323,19 @@ export function BrandMark({ size = 24 }: { readonly size?: number }): JSX.Elemen
       {/* Градиент луча «Отражение» (прототип, design/prototype.html:975-984):
           единственное место, где градиенты разрешены (DS §2). */}
       <defs>
-        <linearGradient id="lavRay" gradientUnits="userSpaceOnUse" x1="23" y1="9" x2="49" y2="43">
-          <stop offset="0" className="lr-a" stopOpacity=".3" />
-          <stop offset=".5" className="lr-a" />
-          <stop offset="1" className="lr-b" />
-        </linearGradient>
-        <linearGradient id="lavRaySolid" gradientUnits="userSpaceOnUse" x1="23" y1="9" x2="49" y2="43">
+        <linearGradient id={solid} gradientUnits="userSpaceOnUse" x1="23" y1="9" x2="49" y2="43">
           <stop offset="0" className="lr-a" />
           <stop offset="1" className="lr-b" />
         </linearGradient>
       </defs>
       <g transform="translate(-4.5 1.5)">
-        <path className="a-beam" d="M23 13V43H45" strokeWidth="10" />
+        {/* stroke инлайном перекрывает url(#lavRaySolid) из .lgA-sm .a-beam */}
+        <path
+          className="a-beam"
+          d="M23 13V43H45"
+          strokeWidth="10"
+          style={{ stroke: `url(#${solid})` }}
+        />
         <circle className="a-photon" cx="56.5" cy="43" r="5" />
       </g>
     </svg>

@@ -2,17 +2,18 @@
 // 1082-1127 + CSS .cx-card/.cx-top/.cx-main/.cx-meta/.cx-qa): карточка
 // состояния со знаком «Отражение», пикер сервера, кнопка подключения,
 // режим, метаданные сессии, быстрые действия. Данные — от живого ядра.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { Icon } from '../components/Icon';
-import { ConnectMode, CoreState } from '../gen/lavray_pb';
+import { CoreState } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { friendlyCoreError, showCoreError } from '../lib/core';
+import { applySystemProxy, coreModeFor, loadModes, saveModes } from '../lib/connection';
 import { TrafficGraph } from '../components/TrafficGraph';
 import { geoName } from '../lib/geo';
 
-type Mode = 'sys' | 'tun';
+
 
 export function ConnectionScreen(): JSX.Element {
   const { t, lang } = useI18n();
@@ -20,14 +21,14 @@ export function ConnectionScreen(): JSX.Element {
   const status = useCoreStatus();
   const { profiles, refresh } = useProfiles('');
   // Режимы независимы (NekoBox-паритет): TUN — туннель, системный
-  // прокси — дополнительный канал для браузеров.
-  const [sysProxy, setSysProxy] = useState(true);
-  const [tunMode, setTunMode] = useState(false);
-  const mode: Mode = tunMode ? 'tun' : 'sys';
+  // прокси — дополнительный канал для браузеров. Выбор запоминается.
+  const [sysProxy, setSysProxy] = useState(() => loadModes(window.localStorage).sysProxy);
+  const [tunMode, setTunMode] = useState(() => loadModes(window.localStorage).tunMode);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pickedId, setPickedId] = useState<bigint | null>(null);
   const [sessionSec, setSessionSec] = useState(0);
+  const rayId = `ray${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
 
   const ready = status.state === CoreState.CONNECTED;
   const connecting = status.state === CoreState.CONNECTING;
@@ -77,17 +78,15 @@ export function ConnectionScreen(): JSX.Element {
   // Системный прокси ставится оболочкой (Rust): WinINET/gsettings/
   // networksetup + снимок прежних настроек для восстановления. В браузере
   // режим недоступен — веб-панель не управляет ОС пользователя.
-  const applySystemProxy = useCallback(
+  const applySys = useCallback(
     async (on: boolean): Promise<void> => {
-      const isTauri = (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
-      if (!isTauri) {
-        if (on) setError(t('mode.sys.nativeOnly'));
-        return;
-      }
       try {
-        const { invoke } = await import('@tauri-apps/api/core');
-        await invoke('set_system_proxy', { enabled: on, port: status.inbound?.port ?? 2080 });
+        await applySystemProxy(on, status.inbound?.port ?? 2080);
       } catch (e) {
+        if (e instanceof Error && e.message === 'mode.sys.nativeOnly') {
+          setError(t('mode.sys.nativeOnly'));
+          return;
+        }
         setError(showCoreError(e, t));
       }
     },
@@ -100,14 +99,14 @@ export function ConnectionScreen(): JSX.Element {
     try {
       if (ready) {
         await core.core.disconnect({});
-        await applySystemProxy(false);
+        await applySys(false);
       } else if (active !== undefined) {
         await core.core.connect({
           profileId: active.id,
-          mode: mode === 'sys' ? ConnectMode.SYSTEM_PROXY : ConnectMode.TUN,
+          mode: coreModeFor({ sysProxy, tunMode }),
         });
         // Системный прокси — независимо от TUN (оба режима сразу).
-        await applySystemProxy(sysProxy);
+        await applySys(sysProxy);
       } else {
         setError(t('cx.empty.t'));
       }
@@ -116,7 +115,7 @@ export function ConnectionScreen(): JSX.Element {
     } finally {
       setBusy(false);
     }
-  }, [core, mode, ready, active, t, sysProxy, applySystemProxy]);
+  }, [core, ready, active, t, sysProxy, tunMode, applySys]);
 
   const stateLabel = ready
     ? t('conn.state.on')
@@ -149,10 +148,12 @@ export function ConnectionScreen(): JSX.Element {
       <div className="card cx-card" id="stateCard" data-conn={ready ? 'on' : 'off'}>
         <div className="cx-top">
           <div className="ray" aria-hidden="true">
+            {/* id градиентов уникальны (useId): на экране несколько знаков,
+                а id в SVG глобальны — повтор ломал закраску луча. */}
             <svg className="lgA" viewBox="0 0 64 64" aria-hidden="true">
               <defs>
                 <linearGradient
-                  id="lavRay"
+                  id={rayId}
                   gradientUnits="userSpaceOnUse"
                   x1="23"
                   y1="9"
@@ -163,20 +164,15 @@ export function ConnectionScreen(): JSX.Element {
                   <stop offset=".5" className="lr-a" />
                   <stop offset="1" className="lr-b" />
                 </linearGradient>
-                <linearGradient
-                  id="lavRaySolid"
-                  gradientUnits="userSpaceOnUse"
-                  x1="23"
-                  y1="9"
-                  x2="49"
-                  y2="43"
-                >
-                  <stop offset="0" className="lr-a" />
-                  <stop offset="1" className="lr-b" />
-                </linearGradient>
               </defs>
               <g transform="translate(-4.5 1.5)">
-                <path className="a-beam" pathLength="100" d="M23 13V43H45" strokeWidth="8" />
+                <path
+                  className="a-beam"
+                  pathLength="100"
+                  d="M23 13V43H45"
+                  strokeWidth="8"
+                  style={{ stroke: `url(#${rayId})` }}
+                />
                 <path className="a-mirror" d="M14.5 43L23 51.5" />
                 <circle className="a-photon" cx="55.5" cy="43" r="3.6" />
               </g>
@@ -242,7 +238,9 @@ export function ConnectionScreen(): JSX.Element {
                     aria-checked={sysProxy}
                     aria-label={t('mode.sys')}
                     onClick={() => {
-                      setSysProxy((v) => !v);
+                      const next = !sysProxy;
+                      setSysProxy(next);
+                      saveModes(window.localStorage, { sysProxy: next, tunMode });
                     }}
                   />
                 </div>
@@ -254,7 +252,9 @@ export function ConnectionScreen(): JSX.Element {
                     aria-checked={tunMode}
                     aria-label={t('mode.tun')}
                     onClick={() => {
-                      setTunMode((v) => !v);
+                      const next = !tunMode;
+                      setTunMode(next);
+                      saveModes(window.localStorage, { sysProxy, tunMode: next });
                     }}
                   />
                 </div>

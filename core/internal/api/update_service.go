@@ -237,15 +237,12 @@ func (s *Server) Rollback(ctx context.Context, req *connect.Request[lavrayv1.Rol
 	if req.Msg.Component == lavrayv1.UpdateComponent_UPDATE_COMPONENT_UNSPECIFIED {
 		return nil, invalidArg("component обязателен")
 	}
-	// Применение отката выполняет оболочка (она владеет файлами); ядро
-	// только подтверждает запрос и сбрасывает serial канала, чтобы следующая
-	// проверка снова предложила обновление.
-	if err := s.st.SetSetting(setUpdSerialSt, "0"); err != nil {
-		return nil, mapErr(err)
-	}
-	if err := s.st.SetSetting(setUpdSerialBe, "0"); err != nil {
-		return nil, mapErr(err)
-	}
+	// Применение отката выполняет оболочка (она владеет файлами); ядро только
+	// подтверждает запрос. T-17 (A1-10): update.serial_stable/beta НЕ трогаем.
+	// Это монотонные счётчики принятых метаданных (UPDATE-SYSTEM §2): сброс в 0
+	// снимал защиту от downgrade и от повтора старого манифеста — после одного
+	// вызова принимался любой подписанный манифест канала. «Предложить
+	// обновление снова» после отката решается сравнением версий, а не serial.
 	return connect.NewResponse(&lavrayv1.RollbackResponse{}), nil
 }
 

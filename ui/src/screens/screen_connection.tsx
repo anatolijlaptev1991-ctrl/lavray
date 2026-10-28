@@ -2,22 +2,34 @@
 // 1082-1127 + CSS .cx-card/.cx-top/.cx-main/.cx-meta/.cx-qa): карточка
 // состояния со знаком «Отражение», пикер сервера, кнопка подключения,
 // режим, метаданные сессии, быстрые действия. Данные — от живого ядра.
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { Icon } from '../components/Icon';
-import { CoreState, SubscriptionProgress_Phase, TestLatencyRequest_Mode } from '../gen/lavray_pb';
+import {
+  ConnectMode,
+  CoreState,
+  SubscriptionProgress_Phase,
+  TestLatencyRequest_Mode,
+} from '../gen/lavray_pb';
+import type { Profile } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { showCoreError } from '../lib/core';
 import {
   applySystemProxy,
+  chooseProfile,
   coreModeFor,
   disconnectAll,
   loadModes,
+  loadSelectedProfileId,
+  reconnect,
   saveModes,
+  saveSelectedProfileId,
 } from '../lib/connection';
 import { ConnRight } from '../components/ConnRight';
 import { ImportDialog } from '../components/ImportDialog';
+import { ProfileMenu } from '../components/ProfileMenu';
+import type { ProfileMenuAnchor } from '../components/ProfileMenu';
 import { geoName } from '../lib/geo';
 
 
@@ -33,7 +45,14 @@ export function ConnectionScreen(): JSX.Element {
   const [tunMode, setTunMode] = useState(() => loadModes(window.localStorage).tunMode);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [pickedId, setPickedId] = useState<bigint | null>(null);
+  // Выбранный сервер запоминается (localStorage, как и режимы): раньше выбор
+  // жил в состоянии экрана и терялся при уходе со страницы, а Ctrl+D
+  // подключал первый сервер списка.
+  const [pickedId, setPickedId] = useState<bigint | null>(() =>
+    loadSelectedProfileId(window.localStorage),
+  );
+  const [menuAnchor, setMenuAnchor] = useState<ProfileMenuAnchor | null>(null);
+  const pickRef = useRef<HTMLButtonElement | null>(null);
   const [sessionSec, setSessionSec] = useState(0);
   const rayId = `ray${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   // Быстрые действия прототипа (.cx-qa): тест задержек, импорт, обновление
@@ -144,11 +163,10 @@ export function ConnectionScreen(): JSX.Element {
   // proto): на клиенте оно `undefined`, а не 0n. Раньше `undefined !== 0n`
   // давало «профиль не найден» и экран «Пока нет серверов» при живом списке.
   const runningId = status.activeProfileId ?? 0n;
+  // Пока соединение есть, карточка показывает запущенный сервер; иначе — тот,
+  // что выбран в меню (или первый, если выбора не было).
   const active = useMemo(
-    () =>
-      profiles.find((p) => p.id === pickedId) ??
-      profiles.find((p) => p.id === runningId) ??
-      profiles[0],
+    () => profiles.find((p) => p.id === runningId) ?? chooseProfile(profiles, pickedId),
     [profiles, pickedId, runningId],
   );
   // Блок с кнопкой нужен и когда соединение есть, а профиля нет в списке:
@@ -242,12 +260,41 @@ export function ConnectionScreen(): JSX.Element {
     sessionSec % 60,
   ).padStart(2, '0')}`;
 
-  const nextProfile = (): void => {
-    if (profiles.length < 2) return;
-    const idx = profiles.findIndex((p) => p.id === active?.id);
-    const next = profiles[(idx + 1) % profiles.length];
-    if (next !== undefined) setPickedId(next.id);
-  };
+  /**
+   * Выбор сервера в меню: запоминается; при активном соединении переключает
+   * его на выбранный сервер (Disconnect → Connect с теми же режимами).
+   */
+  const pickProfile = useCallback(
+    async (p: Profile): Promise<void> => {
+      setPickedId(p.id);
+      saveSelectedProfileId(window.localStorage, p.id);
+      if (!ready || runningId === 0n || p.id === runningId) return;
+      // Режим ядра остаётся прежним: берём фактический, а не переключатель.
+      const modes = { sysProxy, tunMode: status.mode === ConnectMode.TUN };
+      setBusy(true);
+      setError('');
+      try {
+        await reconnect({
+          core,
+          next: { profileId: p.id, modes },
+          prev: { profileId: runningId, modes },
+        });
+      } catch (e) {
+        // Остались на прежнем сервере (или без соединения): выбор возвращаем.
+        setPickedId(runningId);
+        saveSelectedProfileId(window.localStorage, runningId);
+        setError(showCoreError(e, t));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [core, ready, runningId, sysProxy, status.mode, t],
+  );
+
+  const closeMenu = useCallback((restoreFocus: boolean): void => {
+    setMenuAnchor(null);
+    if (restoreFocus) pickRef.current?.focus();
+  }, []);
 
   return (
     <div className="conn2">
@@ -300,10 +347,19 @@ export function ConnectionScreen(): JSX.Element {
               </span>
               <button
                 className="srv-pick"
+                ref={pickRef}
                 aria-haspopup="menu"
-                aria-expanded="false"
+                aria-expanded={menuAnchor !== null}
                 aria-describedby="srvLbl"
-                onClick={nextProfile}
+                disabled={busy || connecting || profiles.length === 0}
+                onClick={(e) => {
+                  if (menuAnchor !== null) {
+                    setMenuAnchor(null);
+                    return;
+                  }
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setMenuAnchor({ left: r.left, bottom: r.bottom, width: r.width });
+                }}
               >
                 <span className="srv-top">
                   <span className="srv-name">
@@ -438,6 +494,20 @@ export function ConnectionScreen(): JSX.Element {
         presetName={presetName}
         presetRules={presetRules}
       />
+      {menuAnchor !== null && (
+        <ProfileMenu
+          anchor={menuAnchor}
+          profiles={profiles}
+          selectedId={active?.id}
+          onSelect={(p) => {
+            void pickProfile(p);
+          }}
+          onAllServers={() => {
+            window.location.hash = 'screen=servers&tab=profiles';
+          }}
+          onClose={closeMenu}
+        />
+      )}
       {importOpen && (
         <ImportDialog
           onClose={() => { setImportOpen(false); }}

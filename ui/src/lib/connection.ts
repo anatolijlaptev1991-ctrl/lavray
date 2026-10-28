@@ -4,6 +4,7 @@
 // оба могут быть включены одновременно.
 import type { CoreClients } from './core';
 import { ConnectMode } from '../gen/lavray_pb';
+import type { Profile } from '../gen/lavray_pb';
 
 export interface ModePreferences {
   readonly sysProxy: boolean;
@@ -34,6 +35,58 @@ export function saveModes(storage: Storage, modes: ModePreferences): void {
   } catch {
     /* приватный режим браузера — настройки не сохраняются */
   }
+}
+
+const SERVER_KEY = 'lavray.server';
+
+/**
+ * Сервер, выбранный пользователем для подключения (id профиля). `null` —
+ * выбора не было или значение в хранилище испорчено. Хранится рядом с
+ * режимами (`lavray.modes`): это настройка интерфейса, а не ядра —
+ * `remember.id` ядра читает только headless-режим при `remember.enable`.
+ */
+export function loadSelectedProfileId(storage: Storage): bigint | null {
+  try {
+    const raw = storage.getItem(SERVER_KEY);
+    return raw !== null && /^[1-9]\d{0,18}$/.test(raw) ? BigInt(raw) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function saveSelectedProfileId(storage: Storage, id: bigint): void {
+  try {
+    storage.setItem(SERVER_KEY, id.toString());
+  } catch {
+    /* приватный режим браузера — выбор не сохраняется */
+  }
+}
+
+/** Сервер для подключения: выбранный пользователем, пока он есть в списке, иначе первый. */
+export function chooseProfile<T extends { readonly id: bigint }>(
+  profiles: readonly T[],
+  selectedId: bigint | null,
+): T | undefined {
+  return profiles.find((p) => p.id === selectedId) ?? profiles[0];
+}
+
+/** Задержка сервера, мс; `null` — не измерялась (0) или сервер недоступен (<0). */
+export function latencyMsOf(p: Profile): number | null {
+  const ms = p.testResult?.latencyMs;
+  return ms !== undefined && ms > 0 ? ms : null;
+}
+
+/** Порядок меню выбора: по возрастанию задержки, без замера — в конце, при равенстве — как в списке. */
+export function sortByLatency(profiles: readonly Profile[]): Profile[] {
+  return profiles
+    .map((profile, index) => ({ profile, index, ms: latencyMsOf(profile) }))
+    .sort((a, b) => {
+      if (a.ms === b.ms) return a.index - b.index;
+      if (a.ms === null) return 1;
+      if (b.ms === null) return -1;
+      return a.ms - b.ms;
+    })
+    .map((x) => x.profile);
 }
 
 /** Режим ядра: TUN приоритетнее, но системный прокси ставится отдельно. */
@@ -82,10 +135,57 @@ export async function disconnectAll(core: CoreClients): Promise<void> {
   }
 }
 
+/** Что запущено (или должно быть запущено): сервер и режимы. */
+export interface RunTarget {
+  readonly profileId: bigint;
+  readonly modes: ModePreferences;
+}
+
+/**
+ * Перезапуск соединения на другой сервер или режим ядра (TUN ↔ системный
+ * прокси). Ядро не меняет их на лету: Connect при активном инстансе отвечает
+ * failed_precondition, а RestartProfile сохраняет прежние профиль и режим —
+ * поэтому Disconnect, затем Connect.
+ *
+ * Если новый запуск не удался, пробуем вернуть прежний; не получилось и это —
+ * снимаем системный прокси: он смотрел бы на порт без слушателя. Ошибка
+ * нового запуска пробрасывается вызывающему.
+ */
+export async function reconnect(args: {
+  readonly core: CoreClients;
+  readonly next: RunTarget;
+  readonly prev: RunTarget;
+}): Promise<void> {
+  try {
+    await args.core.core.disconnect({});
+  } catch (e) {
+    await applySystemProxy(false, 0);
+    throw e;
+  }
+  try {
+    await args.core.core.connect({
+      profileId: args.next.profileId,
+      mode: coreModeFor(args.next.modes),
+    });
+  } catch (e) {
+    try {
+      await args.core.core.connect({
+        profileId: args.prev.profileId,
+        mode: coreModeFor(args.prev.modes),
+      });
+    } catch {
+      await applySystemProxy(false, 0);
+    }
+    throw e;
+  }
+}
+
 /**
  * Переключение соединения из любого места (меню титлбара, Ctrl+D).
- * Возвращает `false`, если подключать нечего — вызывающий решает, что
- * показать (обычно переходит на экран «Подключение»).
+ * Подключает сервер, выбранный на экране «Подключение» (первый в списке —
+ * только если выбора не было или сервер удалён). Возвращает `false`, если
+ * подключать нечего — вызывающий решает, что показать (обычно переходит на
+ * экран «Подключение»).
  */
 export async function toggleConnection(args: {
   readonly core: CoreClients;
@@ -97,11 +197,11 @@ export async function toggleConnection(args: {
     return true;
   }
   const list = await args.core.profiles.listProfiles({});
-  const first = list.profiles[0];
-  if (first === undefined) return false;
+  const chosen = chooseProfile(list.profiles, loadSelectedProfileId(window.localStorage));
+  if (chosen === undefined) return false;
   await connectWith({
     core: args.core,
-    profileId: first.id,
+    profileId: chosen.id,
     modes: loadModes(window.localStorage),
     port: args.port,
   });

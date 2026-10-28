@@ -1,10 +1,11 @@
 // screen_connection.test.tsx — регрессионные тесты экрана «Подключение».
 // Ядро — заглушка на уровне fetch (test-utils/coreStub.ts), ответы дословные.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createElement } from 'react';
+import { act, createElement } from 'react';
 import { setLanguage } from '../lib/i18n';
 import {
   Down,
+  Failure,
   click,
   connectedStatus,
   idleStatus,
@@ -14,6 +15,7 @@ import {
   stubCore,
   unmountAll,
 } from '../test-utils/coreStub';
+import type { CoreStub, Json } from '../test-utils/coreStub';
 import { ConnectionScreen } from './screen_connection';
 
 const invokeMock = vi.hoisted(() => vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>());
@@ -28,6 +30,7 @@ const screen = (): Promise<Awaited<ReturnType<typeof mount>>> => mount(createEle
 beforeEach(() => {
   setLanguage('en');
   window.localStorage.clear();
+  window.location.hash = '';
   invokeMock.mockReset();
   invokeMock.mockResolvedValue(undefined);
 });
@@ -108,5 +111,157 @@ describe('экран «Подключение» в простое (T-04)', () =>
     // Сообщение переведено, а не сырой ключ `core.unavailable`.
     const banner = view.container.querySelector('.banner-err')?.textContent ?? '';
     expect(banner).toContain('Core unavailable');
+  });
+});
+
+describe('выбор сервера на экране «Подключение» (T-26)', () => {
+  // S2 — самый быстрый, S3 не измерялся: порядок меню 2, 1, 3.
+  const three = (): Json =>
+    profileList(
+      profile('1', 'S1', { testResult: { latencyMs: 120 } }),
+      profile('2', 'S2', { testResult: { latencyMs: 35 } }),
+      profile('3', 'S3'),
+    );
+  const items = (): HTMLElement[] =>
+    Array.from(document.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]'));
+  /** «Имя|тип · задержка» без иконок и пустых вставок. */
+  const row = (el: Element): string =>
+    Array.from(el.children)
+      .map((c) => (c.textContent ?? '').replace(/\s/g, ' '))
+      .filter((x) => x !== '')
+      .join('|');
+  const trigger = (v: { container: HTMLElement }): HTMLElement | null =>
+    v.container.querySelector('.srv-pick');
+  const switches = (core: CoreStub): string[] =>
+    core.calls.map((c) => c.rpc).filter((r) => r.endsWith('Connect') || r.endsWith('Disconnect'));
+
+  it('карточка сервера открывает меню: по возрастанию задержки, ✓ у выбранного, «All servers…» внизу', async () => {
+    stubCore({ 'CoreService/GetStatus': idleStatus(), 'ProfileService/ListProfiles': three() });
+    const view = await screen();
+    expect(trigger(view)?.getAttribute('aria-expanded')).toBe('false');
+
+    await click(trigger(view));
+
+    expect(trigger(view)?.getAttribute('aria-expanded')).toBe('true');
+    expect(items().map(row)).toEqual([
+      'S2|VLESS · 35 ms',
+      'S1|VLESS · 120 ms',
+      'S3|VLESS · —',
+      'All servers…',
+    ]);
+    // Выбора ещё не было — отмечен первый сервер списка (S1), фокус на нём.
+    expect(items().map((el) => el.getAttribute('aria-checked'))).toEqual([
+      'false',
+      'true',
+      'false',
+      null,
+    ]);
+    expect(document.activeElement).toBe(items()[1]);
+  });
+
+  it('выбор запоминается: после ухода с экрана и возврата тот же сервер, Connect запускает его', async () => {
+    const core = stubCore({
+      'CoreService/GetStatus': idleStatus(),
+      'ProfileService/ListProfiles': three(),
+    });
+    const view = await screen();
+    await click(trigger(view));
+
+    await click(items()[2]); // S3
+
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(window.localStorage.getItem('lavray.server')).toBe('3');
+    expect(view.container.querySelector('.srv-name')?.textContent).toBe('S3');
+    expect(document.activeElement).toBe(trigger(view));
+    expect(core.bodies('CoreService/Connect')).toEqual([]); // в простое выбор только запоминается
+    view.unmount();
+
+    const again = await screen();
+    expect(again.container.querySelector('.srv-name')?.textContent).toBe('S3');
+    await click(again.container.querySelector('#cxMain .btn-lg'));
+    expect(core.bodies('CoreService/Connect')).toEqual([
+      { profileId: '3', mode: 'CONNECT_MODE_SYSTEM_PROXY' },
+    ]);
+  });
+
+  it('сохранённый сервер удалён из списка: карточка берёт первый', async () => {
+    window.localStorage.setItem('lavray.server', '99');
+    stubCore({ 'CoreService/GetStatus': idleStatus(), 'ProfileService/ListProfiles': three() });
+    const view = await screen();
+
+    expect(view.container.querySelector('.srv-name')?.textContent).toBe('S1');
+  });
+
+  it('при активном соединении выбор другого сервера переключает его: Disconnect, затем Connect', async () => {
+    const core = stubCore({
+      'CoreService/GetStatus': connectedStatus('1', 'S1'),
+      'ProfileService/ListProfiles': three(),
+    });
+    const view = await screen();
+    await click(trigger(view));
+
+    await click(items()[0]); // S2
+
+    expect(switches(core)).toEqual(['CoreService/Disconnect', 'CoreService/Connect']);
+    expect(core.bodies('CoreService/Connect')).toEqual([
+      { profileId: '2', mode: 'CONNECT_MODE_SYSTEM_PROXY' },
+    ]);
+    expect(window.localStorage.getItem('lavray.server')).toBe('2');
+  });
+
+  it('смена сервера сохраняет фактический режим ядра: работает TUN — новый сервер тоже в TUN', async () => {
+    const core = stubCore({
+      'CoreService/GetStatus': connectedStatus('1', 'S1', 'CONNECT_MODE_TUN'),
+      'ProfileService/ListProfiles': three(),
+    });
+    const view = await screen();
+    await click(trigger(view));
+
+    await click(items()[0]); // S2
+
+    expect(core.bodies('CoreService/Connect')).toEqual([{ profileId: '2', mode: 'CONNECT_MODE_TUN' }]);
+  });
+
+  it('новый сервер не запустился: возвращаем прежний, выбор откатывается, ошибка показана', async () => {
+    const core = stubCore({
+      'CoreService/GetStatus': connectedStatus('1', 'S1'),
+      'ProfileService/ListProfiles': three(),
+      'CoreService/Connect': (n) => (n === 0 ? new Failure('internal', 'bad config') : {}),
+    });
+    const view = await screen();
+    await click(trigger(view));
+
+    await click(items()[0]); // S2
+
+    expect(core.bodies('CoreService/Connect')).toEqual([
+      { profileId: '2', mode: 'CONNECT_MODE_SYSTEM_PROXY' },
+      { profileId: '1', mode: 'CONNECT_MODE_SYSTEM_PROXY' },
+    ]);
+    expect(window.localStorage.getItem('lavray.server')).toBe('1');
+    expect(view.container.querySelector('.banner-err')?.textContent).toContain('bad config');
+  });
+
+  it('клавиатура: Home/End/стрелки, Esc закрывает и возвращает фокус; «All servers…» открывает «Серверы»', async () => {
+    stubCore({ 'CoreService/GetStatus': idleStatus(), 'ProfileService/ListProfiles': three() });
+    const view = await screen();
+    const press = (key: string): Promise<void> =>
+      act(async () => {
+        document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+        await Promise.resolve();
+      });
+    await click(trigger(view));
+
+    await press('End');
+    expect(document.activeElement).toBe(items()[3]);
+    await press('Home');
+    await press('ArrowDown');
+    expect(document.activeElement).toBe(items()[1]);
+    await press('Escape');
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger(view));
+
+    await click(trigger(view));
+    await click(items()[3]);
+    expect(window.location.hash).toBe('#screen=servers&tab=profiles');
   });
 });

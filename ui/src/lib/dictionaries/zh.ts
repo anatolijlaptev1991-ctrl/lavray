@@ -282,6 +282,7 @@ export const zhDict: Record<string, string> = {
   "imp.prev.add": "添加",
   "imp.prev.one": "配置 {proto} · {addr}",
   "imp.prev.sub": "订阅 {host} · {servers} · {traffic} · {date}到期",
+  "imp.prev.subUrl": "订阅链接——首次更新后将加载服务器",
   "imp.qrHint": "将相机对准二维码，配置会自动添加",
   "imp.qrPaste": "粘贴图片",
   "imp.qrRegion": "框选屏幕区域",

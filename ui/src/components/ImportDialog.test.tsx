@@ -2,12 +2,12 @@
 // Диалог, открытый из «Подключения» или меню титлбара, не знает группу и
 // не должен слать targetGroupId=0 (ядро отвечало invalid_argument).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { MockInstance } from 'vitest';
+import type { Mock, MockInstance } from 'vitest';
 import { act, createElement } from 'react';
 import { create } from '@bufbuild/protobuf';
 import { createRoot } from 'react-dom/client';
 import App from '../App';
-import { ImportContentResponseSchema } from '../gen/lavray_pb';
+import { ImportContentResponse_ContentKind, ImportContentResponseSchema } from '../gen/lavray_pb';
 import { ConnectionScreen } from '../screens/screen_connection';
 import { ServersScreen } from '../screens/screen_servers';
 import { setLanguage } from '../lib/i18n';
@@ -17,11 +17,13 @@ import {
   buttonByText,
   click,
   flush,
+  groupOf,
   makeClients,
   mountWithCore,
   profileOf,
   typeInto,
 } from '../test-harness';
+import { ImportDialog } from './ImportDialog';
 
 const LINK = 'vless://b831381d-6324-4d53-ad4f-8cda48b30811@example.org:443#T07';
 
@@ -172,5 +174,71 @@ describe('T-07: импорт без выбранной группы', () => {
     act(() => {
       root.unmount();
     });
+  });
+});
+
+describe('T-19: ссылка на подписку и Happ', () => {
+  beforeEach(() => {
+    setLanguage('en');
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  });
+
+  const footer = (dialog: HTMLElement): string[] =>
+    Array.from(dialog.querySelectorAll('.dlg-f button')).map((b) => (b.textContent ?? '').trim());
+
+  /** Открывает диалог; ядро на превью отвечает видом kind (профилей нет). */
+  async function openWithKind(
+    kind: ImportContentResponse_ContentKind,
+    link: string,
+  ): Promise<{
+    dialog: HTMLElement;
+    importContent: ImportSpy;
+    createSubscription: MockInstance<CoreClients['subscriptions']['createSubscription']>;
+    onImported: Mock;
+  }> {
+    const clients = makeClients();
+    const importContent = vi
+      .spyOn(clients.profiles, 'importContent')
+      .mockResolvedValue(create(ImportContentResponseSchema, { kind }));
+    const createSubscription = vi
+      .spyOn(clients.subscriptions, 'createSubscription')
+      .mockResolvedValue(groupOf(5n, 'x'));
+    const onImported = vi.fn();
+    const m = await mountWithCore(
+      clients,
+      createElement(ImportDialog, { onClose: vi.fn(), onImported }),
+    );
+    // T-06: диалог на портале в body, а не внутри container.
+    const dialog = m.container.ownerDocument.querySelector<HTMLElement>('[role="dialog"]');
+    if (dialog === null) throw new Error('диалог импорта не открыт');
+    typeInto(dialog.querySelector<HTMLInputElement>('#impLink'), link);
+    expect(footer(dialog)).toEqual(['Cancel', 'Import']);
+    await click(buttonByText(dialog, 'Import'));
+    return { dialog, importContent, createSubscription, onImported };
+  }
+
+  it.each([
+    ['URL с портом и путём', 'https://panel.example.com:8443/sub/TOKEN'],
+    ['Happ-ссылка', 'happ://crypt/abc'],
+  ])('%s: ядро сказало SUBSCRIPTION_URL — кнопка «Add subscription», createSubscription', async (_n, link) => {
+    const t = await openWithKind(ImportContentResponse_ContentKind.SUBSCRIPTION_URL, link);
+    expect(footer(t.dialog)).toEqual(['Cancel', 'Add subscription']);
+    expect(t.dialog.querySelector('.imp-prev-list')).toBeNull();
+    expect(t.dialog.textContent).toContain('Subscription link');
+    typeInto(t.dialog.querySelector<HTMLInputElement>('#impName'), 'My sub');
+    await click(buttonByText(t.dialog, 'Add subscription'));
+    expect(t.createSubscription).toHaveBeenCalledWith({ name: 'My sub', url: link });
+    expect(t.importContent).toHaveBeenCalledTimes(1); // только превью: профиль не создаётся
+    expect(t.onImported).toHaveBeenCalledTimes(1);
+  });
+
+  it('SHARE_LINKS: после превью кнопка «Add», поля имени подписки нет', async () => {
+    const t = await openWithKind(ImportContentResponse_ContentKind.SHARE_LINKS, 'https://1.2.3.4:8443');
+    expect(footer(t.dialog)).toEqual(['Cancel', 'Add']);
+    expect(t.dialog.querySelector('#impName')).toBeNull();
   });
 });

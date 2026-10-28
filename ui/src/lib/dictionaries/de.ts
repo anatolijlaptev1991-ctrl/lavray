@@ -282,6 +282,7 @@ export const deDict: Record<string, string> = {
   "imp.prev.add": "Hinzufügen",
   "imp.prev.one": "Profil {proto} · {addr}",
   "imp.prev.sub": "Abo {host} · {servers} · {traffic} · läuft {date} ab",
+  "imp.prev.subUrl": "Abo-Link – die Server werden nach dem ersten Aktualisieren geladen",
   "imp.qrHint": "Kamera auf den QR-Code richten — das Profil wird automatisch hinzugefügt",
   "imp.qrPaste": "Bild einfügen",
   "imp.qrRegion": "Bildschirmbereich auswählen",

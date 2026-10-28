@@ -411,13 +411,17 @@ func (s *Server) CreateSubscription(ctx context.Context, req *connect.Request[la
 	if strings.TrimSpace(msg.Url) == "" {
 		return nil, invalidArg("url обязателен")
 	}
+	subURL, err := resolveSubscriptionURL(msg.Url) // T-19: happ://crypt… → ссылка подписки
+	if err != nil {
+		return nil, err
+	}
 	g := &model.Group{
 		Name:            msg.Name,
 		Kind:            model.GroupSubscription,
-		SubscriptionURL: msg.Url,
+		SubscriptionURL: subURL,
 	}
 	if g.Name == "" {
-		g.Name = hostOf(msg.Url)
+		g.Name = hostOf(subURL)
 	}
 	if err := s.st.CreateGroup(g); err != nil {
 		return nil, mapErr(err)

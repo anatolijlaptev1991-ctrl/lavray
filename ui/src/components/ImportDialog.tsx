@@ -5,6 +5,7 @@
 import { useCallback, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { createPortal } from 'react-dom';
+import { ImportContentResponse_ContentKind } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 import { friendlyCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
@@ -53,12 +54,6 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
   // ререндере родителя.
   useModal(dialogRef, { onClose, autofocusRef: firstFieldRef });
 
-  const looksLikeSubscription = useCallback((raw: string): boolean => {
-    const v = raw.trim();
-    if (!/^https?:\/\//i.test(v)) return false;
-    return !/^[a-z0-9+.-]+:\/\/[^/\s]+@?[^/\s]*:\d+/i.test(v);
-  }, []);
-
   const doPreview = useCallback(
     async (content: string): Promise<void> => {
       setErr('');
@@ -76,14 +71,15 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
           ),
         );
         setHint(res.hint ?? '');
-        setIsSubscription(looksLikeSubscription(content));
+        // Подписку определяет ядро (в том числе Happ-ссылку и URL с портом).
+        setIsSubscription(res.kind === ImportContentResponse_ContentKind.SUBSCRIPTION_URL);
       } catch (e) {
         setErr(friendlyCoreError(e));
       } finally {
         setBusy(false);
       }
     },
-    [core, looksLikeSubscription],
+    [core],
   );
 
   const doCommit = useCallback(async (): Promise<void> => {
@@ -112,17 +108,8 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
     setErr('');
     setBusy(true);
     try {
-      const autoName = ((): string => {
-        try {
-          return new URL(link.trim()).host;
-        } catch {
-          return '';
-        }
-      })();
-      await core.subscriptions.createSubscription({
-        name: name.trim() === '' ? autoName : name.trim(),
-        url: link.trim(),
-      });
+      // Пустое имя ядро заменяет хостом ссылки; happ://crypt… оно расшифровывает.
+      await core.subscriptions.createSubscription({ name: name.trim(), url: link.trim() });
       onImported();
       onClose();
     } catch (e) {
@@ -211,11 +198,12 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
                     onChange={(e) => {
                       setLink(e.target.value);
                       setPreview(null);
+                      setIsSubscription(false);
                     }}
                   />
                 </div>
 
-                {preview === null && looksLikeSubscription(link) && (
+                {preview !== null && isSubscription && (
                   <div className="field">
                     <label htmlFor="impName">{t('imp.name')}</label>
                     <input
@@ -316,20 +304,22 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
               <div className="card-h" style={{ marginBottom: 8 }}>
                 <span className="ic"><Icon name="search" /></span>
                 <h3 style={{ fontSize: '.875rem', fontWeight: 600 }}>
-                  {plural('pl.p', preview.length)}
+                  {isSubscription ? t('imp.prev.subUrl') : plural('pl.p', preview.length)}
                 </h3>
               </div>
-              <ul className="imp-prev-list">
-                {preview.slice(0, 8).map((p, i) => (
-                  <li key={`${String(p.type)}-${String(i)}`}>
-                    <span className="mono">{p.name}</span>
-                    <span className="muted mono">
-                      {p.address}:{String(p.port)}
-                    </span>
-                  </li>
-                ))}
-                {preview.length > 8 && <li className="muted">…</li>}
-              </ul>
+              {!isSubscription && (
+                <ul className="imp-prev-list">
+                  {preview.slice(0, 8).map((p, i) => (
+                    <li key={`${String(p.type)}-${String(i)}`}>
+                      <span className="mono">{p.name}</span>
+                      <span className="muted mono">
+                        {p.address}:{String(p.port)}
+                      </span>
+                    </li>
+                  ))}
+                  {preview.length > 8 && <li className="muted">…</li>}
+                </ul>
+              )}
             </div>
           )}
         </div>
@@ -337,12 +327,6 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
         <div className="dlg-f">
           <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
           <span className="flex1" />
-          {preview === null && isSubscription && link.trim() !== '' ? (
-            <button className="btn btn-pri" disabled={busy} onClick={() => void addAsSubscription()}>
-              <Icon name="rss" />
-              <span>{t('subs.add')}</span>
-            </button>
-          ) : null}
           {preview === null ? (
             <button
               className="btn btn-pri"
@@ -351,6 +335,11 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
             >
               <Icon name="search" />
               <span>{busy ? t('imp.decrypting') : t('imp.do')}</span>
+            </button>
+          ) : isSubscription ? (
+            <button className="btn btn-pri" disabled={busy} onClick={() => void addAsSubscription()}>
+              <Icon name="rss" />
+              <span>{t('subs.add')}</span>
             </button>
           ) : (
             <button className="btn btn-pri" disabled={busy} onClick={() => void doCommit()}>

@@ -282,6 +282,7 @@ export const ruDict: Record<string, string> = {
   "imp.prev.add": "Добавить",
   "imp.prev.one": "Профиль {proto} · {addr}",
   "imp.prev.sub": "Подписка {host} · {servers} · {traffic} · истекает {date}",
+  "imp.prev.subUrl": "Ссылка на подписку — серверы загрузятся после первого обновления",
   "imp.qrHint": "Наведите камеру на QR-код — профиль добавится автоматически",
   "imp.qrPaste": "Вставить картинку",
   "imp.qrRegion": "Выделить область экрана",

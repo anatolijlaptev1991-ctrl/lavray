@@ -282,6 +282,7 @@ export const esDict: Record<string, string> = {
   "imp.prev.add": "Añadir",
   "imp.prev.one": "Perfil {proto} · {addr}",
   "imp.prev.sub": "Suscripción {host} · {servers} · {traffic} · caduca {date}",
+  "imp.prev.subUrl": "Enlace de suscripción: los servidores se cargarán tras la primera actualización",
   "imp.qrHint": "Apunta la cámara al código QR: el perfil se añadirá solo",
   "imp.qrPaste": "Pegar una imagen",
   "imp.qrRegion": "Seleccionar un área de pantalla",

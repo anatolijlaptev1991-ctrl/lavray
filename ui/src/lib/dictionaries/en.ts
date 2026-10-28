@@ -282,6 +282,7 @@ export const enDict: Record<string, string> = {
   "imp.prev.add": "Add",
   "imp.prev.one": "Profile {proto} · {addr}",
   "imp.prev.sub": "Subscription {host} · {servers} · {traffic} · expires {date}",
+  "imp.prev.subUrl": "Subscription link — servers load after the first update",
   "imp.qrHint": "Point the camera at a QR code — the profile will be added automatically",
   "imp.qrPaste": "Paste an image",
   "imp.qrRegion": "Select a screen area",

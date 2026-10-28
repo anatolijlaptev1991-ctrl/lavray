@@ -313,6 +313,15 @@ func (s *Server) ImportContent(ctx context.Context, req *connect.Request[lavrayv
 	if strings.TrimSpace(msg.Content) == "" {
 		return nil, invalidArg("content пуст")
 	}
+	// T-19: ссылка на подписку (в том числе happ://crypt…, раскрывающийся в
+	// неё) — не профиль. Ядро сообщает kind=SUBSCRIPTION_URL, ничего не
+	// разбирает и не сохраняет; подписку создаёт клиент (CreateSubscription).
+	// intent=AS_LINKS отключает определение: разобрать как share-ссылку.
+	if msg.Intent != lavrayv1.ImportContentRequest_INTENT_AS_LINKS && isSubscriptionContent(msg.Content) {
+		return connect.NewResponse(&lavrayv1.ImportContentResponse{
+			Kind: lavrayv1.ImportContentResponse_CONTENT_KIND_SUBSCRIPTION_URL,
+		}), nil
+	}
 	res, err := parser.Parse([]byte(msg.Content), parser.Options{
 		// Расшифровка happ — в процессе (без подпроцесса, UX-15).
 		DecryptHapp: happDecryptInProcess,
@@ -343,6 +352,7 @@ func (s *Server) ImportContent(ctx context.Context, req *connect.Request[lavrayv
 		}
 	}
 	resp := &lavrayv1.ImportContentResponse{
+		Kind:                contentKindOf(msg.Content, res.Format),
 		ParsedProfiles:      parsed,
 		CustomFieldWarnings: warns,
 	}

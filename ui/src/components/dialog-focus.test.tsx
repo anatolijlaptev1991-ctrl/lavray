@@ -7,7 +7,9 @@ import { StrictMode, act, createRef } from 'react';
 import type { ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
+import { create } from '@bufbuild/protobuf';
 import App from '../App';
+import { ImportContentResponse_ContentKind, ImportContentResponseSchema } from '../gen/lavray_pb';
 import { CoreContext } from '../hooks/useCore';
 import { createCoreClients } from '../lib/core';
 import { DialogShell } from './dialogs';
@@ -117,8 +119,12 @@ describe('T-05: фокус в диалогах ставится один раз'
     expect(document.activeElement, 'фокус остался там, куда его поставил пользователь').toBe(other);
   });
 
-  it('ImportDialog: фокус в «Имя подписки» не возвращается в поле ссылки после ререндера', () => {
+  it('ImportDialog: фокус в «Имя подписки» не возвращается в поле ссылки после ререндера', async () => {
     const clients = createCoreClients('http://127.0.0.1:1');
+    // T-19: вид ссылки решает ядро, поле имени появляется после превью.
+    vi.spyOn(clients.profiles, 'importContent').mockResolvedValue(
+      create(ImportContentResponseSchema, { kind: ImportContentResponse_ContentKind.SUBSCRIPTION_URL }),
+    );
     const dialog = (): ReactElement => (
       <CoreContext.Provider value={clients}>
         <ImportDialog groupId={1n} onClose={() => undefined} onImported={() => undefined} />
@@ -130,6 +136,10 @@ describe('T-05: фокус в диалогах ставится один раз'
     act(() => {
       const link = document.querySelector<HTMLInputElement>('#impLink');
       if (link) setNativeValue(link, 'https://provider.example/sub?token=abc');
+    });
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('.dlg-f .btn-pri')?.click();
+      await sleep(20);
     });
     const name = document.querySelector<HTMLInputElement>('#impName');
     expect(name, 'для https-ссылки появляется поле имени подписки').not.toBeNull();
@@ -194,6 +204,19 @@ describe('T-05: App целиком, опрос статуса не крадёт 
   }
 
   it('импорт: фокус остаётся в «Имя подписки» после тика опроса статуса', async () => {
+    // T-19: превью идёт через ядро (ImportContent, Connect JSON); ядро отвечает «подписка».
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.endsWith('/ImportContent')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ kind: 'CONTENT_KIND_SUBSCRIPTION_URL' }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        );
+      }
+      return Promise.reject(new TypeError('Failed to fetch'));
+    });
     await mountApp();
     const importBtn = Array.from(document.querySelectorAll<HTMLButtonElement>('.srv-actions button')).find(
       (b) => /import/i.test(b.textContent ?? ''),
@@ -207,6 +230,10 @@ describe('T-05: App целиком, опрос статуса не крадёт 
       const link = document.querySelector<HTMLInputElement>('#impLink');
       if (link) setNativeValue(link, 'https://provider.example/sub?token=abc');
       await sleep(20);
+    });
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('.dlg-f .btn-pri')?.click();
+      await sleep(50);
     });
     const name = document.querySelector<HTMLInputElement>('#impName');
     expect(name).not.toBeNull();

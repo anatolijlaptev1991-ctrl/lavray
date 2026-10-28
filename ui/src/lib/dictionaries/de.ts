@@ -764,4 +764,10 @@ export const deDict: Record<string, string> = {
   "core.unavailable": "Core nicht verfügbar — die App läuft nicht oder der Core startete nicht",
   "mux.title": "Multiplexing",
   "core.external": "Externe Cores (Naive usw.)",
+  "onb.src.happ": "Aus Happ übernehmen",
+  "onb.src.happ.d": "happ://-Link einfügen — wird lokal entschlüsselt",
+  "onb.src.v2ray": "Aus v2rayN importieren",
+  "onb.src.v2ray.d": "v2rayN-Links, Base64 oder Exportdatei",
+  "mode.both.hint": "Beides kann gleichzeitig aktiv sein: Browser nutzen den Systemproxy, Spiele laufen über TUN.",
+  "mode.sys.nativeOnly": "Der Systemproxy lässt sich nur in der Desktop-App setzen",
 }

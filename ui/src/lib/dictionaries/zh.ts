@@ -758,4 +758,10 @@ export const zhDict: Record<string, string> = {
   "core.unavailable": "内核不可用 — 应用未运行或内核未能启动",
   "mux.title": "多路复用",
   "core.external": "外部内核（Naive 等）",
+  "onb.src.happ": "从 Happ 迁移",
+  "onb.src.happ.d": "粘贴 happ:// 链接 — 本地解密",
+  "onb.src.v2ray": "从 v2rayN 导入",
+  "onb.src.v2ray.d": "v2rayN 链接、base64 或导出文件",
+  "mode.both.hint": "两种模式可同时开启：浏览器走系统代理，游戏与控制台走 TUN。",
+  "mode.sys.nativeOnly": "系统代理只能在桌面应用中设置",
 }

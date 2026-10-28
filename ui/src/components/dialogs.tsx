@@ -449,14 +449,15 @@ export function OnboardingDialog({
   onOpenImport,
 }: {
   readonly onClose: () => void;
-  readonly onOpenImport: () => void;
+  readonly onOpenImport: (tab?: 'link' | 'qr' | 'file') => void;
 }): JSX.Element {
   const { t, tf, lang, setLanguage } = useI18n();
   const core = useCore();
   const [step, setStep] = useState(1);
   const [presets, setPresets] = useState<{ id: string; displayName: string }[]>([]);
   const [presetId, setPresetId] = useState('');
-  const [mode, setMode] = useState<'sys' | 'tun'>('sys');
+  const [sysProxy, setSysProxy] = useState(true);
+  const [tunMode, setTunMode] = useState(false);
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -537,22 +538,60 @@ export function OnboardingDialog({
                 <button
                   className="onb-src onb-src-btn"
                   onClick={() => {
-                    onOpenImport();
+                    onOpenImport('link');
                     onClose();
                   }}
                 >
                   <Icon name="plus" />
                   <span>{t('onb.src.link')}</span>
                 </button>
-                <span className="onb-src muted">
-                  <Icon name="rss" />
+                <button
+                  className="onb-src onb-src-btn"
+                  onClick={() => {
+                    onOpenImport('qr');
+                    onClose();
+                  }}
+                >
+                  <Icon name="eye" />
                   <span>{t('onb.src.qr')}</span>
-                </span>
-                <span className="onb-src muted">
+                </button>
+                <button
+                  className="onb-src onb-src-btn"
+                  onClick={() => {
+                    onOpenImport('file');
+                    onClose();
+                  }}
+                >
                   <Icon name="file" />
                   <span>{t('onb.src.file')}</span>
-                </span>
-                <span className="onb-src muted">
+                </button>
+                {/* Перенос из Happ: тот же диалог импорта, но открытый на
+                    вкладке ссылки — happ:// расшифровывается ядром. */}
+                <button
+                  className="onb-src onb-src-btn"
+                  title={t('onb.src.happ.d')}
+                  onClick={() => {
+                    onOpenImport('link');
+                    onClose();
+                  }}
+                >
+                  <Icon name="shield" />
+                  <span>{t('onb.src.happ')}</span>
+                </button>
+                {/* Импорт из v2rayN: ссылки/base64/файл экспорта — тот же
+                    парсер ImportContent, вкладка «Файл». */}
+                <button
+                  className="onb-src onb-src-btn"
+                  title={t('onb.src.v2ray.d')}
+                  onClick={() => {
+                    onOpenImport('file');
+                    onClose();
+                  }}
+                >
+                  <Icon name="download" />
+                  <span>{t('onb.src.v2ray')}</span>
+                </button>
+                <span className="onb-src muted" title={t('onb.neko.found')}>
                   <Icon name="layers" />
                   <span>{t('onb.src.neko')}</span>
                 </span>
@@ -581,25 +620,42 @@ export function OnboardingDialog({
                 ))}
               </div>
               <h3 className="onb-h" style={{ marginTop: 14 }}>{t('onb.modeTitle')}</h3>
-              <div className="seg seg-wide" role="radiogroup" aria-label={t('onb.modeTitle')}>
-                <button
-                  role="radio"
-                  aria-checked={mode === 'sys'}
-                  className={mode === 'sys' ? 'on' : ''}
-                  onClick={() => { setMode('sys'); }}
-                >
-                  {t('mode.sys')}
-                </button>
-                <button
-                  role="radio"
-                  aria-checked={mode === 'tun'}
-                  className={mode === 'tun' ? 'on' : ''}
-                  onClick={() => { setMode('tun'); }}
-                >
-                  {t('mode.tun')}
-                </button>
+              {/* Как в NekoBox: системный прокси и TUN — ДВА независимых
+                  переключателя. Можно включить оба: браузеры пойдут через
+                  системный прокси, игры и консоль — через TUN. */}
+              <div className="onb-modes">
+                <div className="set-row onb-mode-row">
+                  <div className="set-txt">
+                    <div className="set-l">{t('mode.sys')}</div>
+                    <div className="set-d">{t('mode.sys.hint')}</div>
+                  </div>
+                  <div className="set-ctl">
+                    <button
+                      className={`sw${sysProxy ? ' on' : ''}`}
+                      role="switch"
+                      aria-checked={sysProxy}
+                      aria-label={t('mode.sys')}
+                      onClick={() => { setSysProxy((v) => !v); }}
+                    />
+                  </div>
+                </div>
+                <div className="set-row onb-mode-row">
+                  <div className="set-txt">
+                    <div className="set-l">{t('mode.tun')}</div>
+                    <div className="set-d">{t('mode.tun.hint')}</div>
+                  </div>
+                  <div className="set-ctl">
+                    <button
+                      className={`sw${tunMode ? ' on' : ''}`}
+                      role="switch"
+                      aria-checked={tunMode}
+                      aria-label={t('mode.tun')}
+                      onClick={() => { setTunMode((v) => !v); }}
+                    />
+                  </div>
+                </div>
               </div>
-              <p className="hint">{mode === 'sys' ? t('mode.sys.hint') : t('mode.tun.hint')}</p>
+              <p className="hint">{t('mode.both.hint')}</p>
             </div>
           )}
 
@@ -617,7 +673,11 @@ export function OnboardingDialog({
                 </div>
                 <div>
                   <dt>{t('onb.modeTitle')}</dt>
-                  <dd>{mode === 'sys' ? t('mode.sys') : t('mode.tun')}</dd>
+                  <dd>
+                    {[sysProxy ? t('mode.sys') : '', tunMode ? t('mode.tun') : '']
+                      .filter((x) => x !== '')
+                      .join(' + ') || '—'}
+                  </dd>
                 </div>
               </dl>
             </div>

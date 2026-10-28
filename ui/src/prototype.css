@@ -1226,3 +1226,20 @@ html[data-shell="browser"] #app { grid-template-rows: minmax(0, 1fr) var(--sb-h)
   .conns-table th:nth-child(3),.conns-table td:nth-child(3),
   .conns-table th:nth-child(4),.conns-table td:nth-child(4){display:none}
 }
+
+/* ============ независимые режимы (NekoBox-паритет) ============ */
+/* Системный прокси и TUN — два отдельных тумблера, а не
+   взаимоисключающий переключатель. */
+.cx-modes{display:flex;flex-direction:column;gap:2px;margin-top:8px;
+  border:1px solid var(--b-subtle);border-radius:var(--r-md);background:var(--surface2)}
+.cx-mode-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 12px}
+.cx-mode-row+.cx-mode-row{border-top:1px solid var(--b-subtle)}
+.cx-mode-l{font-size:.8125rem;font-weight:500;min-width:0;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.onb-modes{display:flex;flex-direction:column;gap:2px;margin-top:8px;
+  border:1px solid var(--b-subtle);border-radius:var(--r-md);background:var(--surface2)}
+.onb-mode-row{border-top:0;padding:10px 12px}
+.onb-mode-row+.onb-mode-row{border-top:1px solid var(--b-subtle)}
+@media (max-width:600px){
+  .cx-mode-row,.onb-mode-row{padding:8px 10px}
+}

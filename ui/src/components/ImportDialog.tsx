@@ -14,6 +14,8 @@ type Tab = 'link' | 'qr' | 'file';
 
 interface Props {
   readonly groupId: bigint;
+  /** Вкладка, открываемая при показе (онбординг ведёт в нужный источник). */
+  readonly initialTab?: Tab;
   readonly onClose: () => void;
   readonly onImported: () => void;
 }
@@ -24,10 +26,10 @@ const TAB_KEY: Record<Tab, 'imp.tab.link' | 'imp.tab.qr' | 'imp.tab.file'> = {
   file: 'imp.tab.file',
 };
 
-export function ImportDialog({ groupId, onClose, onImported }: Props): JSX.Element {
+export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported }: Props): JSX.Element {
   const { t, tf, plural } = useI18n();
   const core = useCore();
-  const [tab, setTab] = useState<Tab>('link');
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [link, setLink] = useState('');
   const [name, setName] = useState('');
   const [preview, setPreview] = useState<Profile[] | null>(null);

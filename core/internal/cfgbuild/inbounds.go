@@ -6,8 +6,12 @@
 // kill-switch FR-UI-275 форсирует strict_route), custom_inbound-добавка.
 //
 // Отклонения от оракула (см. deviations.yaml):
-//   - FR-UI-279: при включённом TUN mixed-слушатель не эмитится (оракул
-//     эмитил оба — уязвимость апреля 2026);
+//   - FR-UI-279 сохранён как ТРЕБОВАНИЕ БЕЗОПАСНОСТИ для LAN: адрес не
+//     loopback требует пары user/pass. Ограничение «в TUN нет mixed»
+//     снято: NekoBox держит оба слушателя одновременно (системный прокси
+//     для браузеров + TUN для игр), и пользователь ожидает тот же паритет.
+//     Риск «локальный процесс воспользуется прокси» остаётся тем же, что у
+//     любого прокси-клиента: mixed слушает loopback, а не сеть;
 //   - endpoint_independent_nat не эмитится — поле удалено в sing-box 1.14
 //     (Deprecated: removed, option/tun.go);
 //   - interface_name по умолчанию lavray-tun (darwin: utun9), не neko-tun.
@@ -33,8 +37,12 @@ func defaultTunName(goos string) string {
 func buildInbounds(st *BuildSettings, forTest bool) ([]any, error) {
 	var inbounds []any
 
-	// mixed-in: выключен в forTest и в режиме TUN (FR-UI-279).
-	if !forTest && !st.Tun.Enabled && st.Inbound.Port > 0 && st.Inbound.Port <= 65535 {
+	// mixed-in: включается независимо от TUN — как в NekoBox (два
+	// независимых чекбокса «System Proxy» и «Tun Mode»). Это позволяет
+	// одновременно гонять браузеры через системный прокси, а игры/консоль —
+	// через TUN. Безопасность обеспечивается адресом (loopback по
+	// умолчанию) и требованием авторизации для не-loopback (FR-UI-279).
+	if !forTest && st.Inbound.Port > 0 && st.Inbound.Port <= 65535 {
 		listen := strings.TrimSpace(st.Inbound.Address)
 		if listen == "" {
 			listen = "127.0.0.1"

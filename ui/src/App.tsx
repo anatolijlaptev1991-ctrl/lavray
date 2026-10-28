@@ -79,7 +79,7 @@ function AppInner(): JSX.Element {
   });
   const [hotkeysOpen, setHotkeysOpen] = useState(false);
   const [licensesOpen, setLicensesOpen] = useState(false);
-  const [quickImport, setQuickImport] = useState(false);
+  const [quickImport, setQuickImport] = useState<'link' | 'qr' | 'file' | null>(null);
   const adapter = useMemo(() => getPlatformAdapter(window), []);
   const status = useCoreStatus();
 
@@ -363,16 +363,17 @@ function AppInner(): JSX.Element {
             setOnboarding(false);
             window.localStorage.setItem('lavray.onboarded', '1');
           }}
-          onOpenImport={() => { setQuickImport(true); }}
+          onOpenImport={(tab) => { setQuickImport(tab ?? 'link'); }}
         />
       )}
       {hotkeysOpen && <HotkeysDialog onClose={() => { setHotkeysOpen(false); }} />}
       {licensesOpen && <LicensesDialog onClose={() => { setLicensesOpen(false); }} />}
       {/* Настройки → «Лицензии и компоненты» открывают диалог событием. */}
-      {quickImport && (
+      {quickImport !== null && (
         <ImportDialog
           groupId={0n}
-          onClose={() => { setQuickImport(false); }}
+          initialTab={quickImport}
+          onClose={() => { setQuickImport(null); }}
           onImported={() => {
             window.location.hash = 'screen=servers&tab=profiles';
           }}

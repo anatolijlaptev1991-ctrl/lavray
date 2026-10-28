@@ -764,4 +764,10 @@ export const enDict: Record<string, string> = {
   "core.unavailable": "Core unavailable — the app is not running or the core did not start",
   "mux.title": "Multiplexing",
   "core.external": "External cores (Naive etc.)",
+  "onb.src.happ": "Migrate from Happ",
+  "onb.src.happ.d": "Paste a happ:// link — decrypted locally",
+  "onb.src.v2ray": "Import from v2rayN",
+  "onb.src.v2ray.d": "v2rayN links, base64 or export file",
+  "mode.both.hint": "Both can be on at once: browsers use the system proxy, games and consoles go through TUN.",
+  "mode.sys.nativeOnly": "The system proxy can be set only in the desktop app",
 }

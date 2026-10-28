@@ -8,8 +8,8 @@ import { Icon } from '../components/Icon';
 import { ConnectMode, CoreState } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { friendlyCoreError, showCoreError } from '../lib/core';
 import { TrafficGraph } from '../components/TrafficGraph';
-import { friendlyCoreError } from '../lib/core';
 import { geoName } from '../lib/geo';
 
 type Mode = 'sys' | 'tun';
@@ -19,7 +19,11 @@ export function ConnectionScreen(): JSX.Element {
   const core = useCore();
   const status = useCoreStatus();
   const { profiles, refresh } = useProfiles('');
-  const [mode, setMode] = useState<Mode>('sys');
+  // Режимы независимы (NekoBox-паритет): TUN — туннель, системный
+  // прокси — дополнительный канал для браузеров.
+  const [sysProxy, setSysProxy] = useState(true);
+  const [tunMode, setTunMode] = useState(false);
+  const mode: Mode = tunMode ? 'tun' : 'sys';
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [pickedId, setPickedId] = useState<bigint | null>(null);
@@ -39,6 +43,21 @@ export function ConnectionScreen(): JSX.Element {
   // D9 (аудит round 2): таймер считается от started_at_ms ядра, а не от
   // монтирования экрана — иначе при переходе между разделами время
   // обнулялось.
+  // При старте оболочка откатывает системный прокси, если прошлая сессия
+  // упала с включённым прокси (FR-UI-259).
+  useEffect(() => {
+    const isTauri = (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
+    if (!isTauri) return;
+    void (async (): Promise<void> => {
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('recover_system_proxy');
+      } catch {
+        /* ядро ещё не поднялось */
+      }
+    })();
+  }, []);
+
   useEffect(() => {
     if (!ready) {
       setSessionSec(0);
@@ -55,17 +74,40 @@ export function ConnectionScreen(): JSX.Element {
     };
   }, [ready, status.startedAtMs]);
 
+  // Системный прокси ставится оболочкой (Rust): WinINET/gsettings/
+  // networksetup + снимок прежних настроек для восстановления. В браузере
+  // режим недоступен — веб-панель не управляет ОС пользователя.
+  const applySystemProxy = useCallback(
+    async (on: boolean): Promise<void> => {
+      const isTauri = (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
+      if (!isTauri) {
+        if (on) setError(t('mode.sys.nativeOnly'));
+        return;
+      }
+      try {
+        const { invoke } = await import('@tauri-apps/api/core');
+        await invoke('set_system_proxy', { enabled: on, port: status.inbound?.port ?? 2080 });
+      } catch (e) {
+        setError(showCoreError(e, t));
+      }
+    },
+    [status.inbound, t],
+  );
+
   const toggle = useCallback(async (): Promise<void> => {
     setBusy(true);
     setError('');
     try {
       if (ready) {
         await core.core.disconnect({});
+        await applySystemProxy(false);
       } else if (active !== undefined) {
         await core.core.connect({
           profileId: active.id,
           mode: mode === 'sys' ? ConnectMode.SYSTEM_PROXY : ConnectMode.TUN,
         });
+        // Системный прокси — независимо от TUN (оба режима сразу).
+        await applySystemProxy(sysProxy);
       } else {
         setError(t('cx.empty.t'));
       }
@@ -74,7 +116,7 @@ export function ConnectionScreen(): JSX.Element {
     } finally {
       setBusy(false);
     }
-  }, [core, mode, ready, active, t]);
+  }, [core, mode, ready, active, t, sysProxy, applySystemProxy]);
 
   const stateLabel = ready
     ? t('conn.state.on')
@@ -188,27 +230,36 @@ export function ConnectionScreen(): JSX.Element {
               <span className="cap" id="modeLbl">
                 {t('mode.title')}
               </span>
-              <div className="seg seg-wide" role="radiogroup" aria-labelledby="modeLbl">
-                <button
-                  role="radio"
-                  aria-checked={mode === 'sys'}
-                  onClick={() => {
-                    setMode('sys');
-                  }}
-                >
-                  {t('mode.sys')}
-                </button>
-                <button
-                  role="radio"
-                  aria-checked={mode === 'tun'}
-                  onClick={() => {
-                    setMode('tun');
-                  }}
-                >
-                  {t('mode.tun')}
-                </button>
+              {/* Два независимых тумблера как в NekoBox: подключение
+                  режима определяется тем, что включено (TUN приоритетнее
+                  для туннеля, системный прокси — дополнительно). */}
+              <div className="cx-modes">
+                <div className="cx-mode-row">
+                  <span className="cx-mode-l">{t('mode.sys')}</span>
+                  <button
+                    className={`sw${sysProxy ? ' on' : ''}`}
+                    role="switch"
+                    aria-checked={sysProxy}
+                    aria-label={t('mode.sys')}
+                    onClick={() => {
+                      setSysProxy((v) => !v);
+                    }}
+                  />
+                </div>
+                <div className="cx-mode-row">
+                  <span className="cx-mode-l">{t('mode.tun')}</span>
+                  <button
+                    className={`sw${tunMode ? ' on' : ''}`}
+                    role="switch"
+                    aria-checked={tunMode}
+                    aria-label={t('mode.tun')}
+                    onClick={() => {
+                      setTunMode((v) => !v);
+                    }}
+                  />
+                </div>
               </div>
-              <p className="hint">{mode === 'sys' ? t('mode.sys.hint') : t('mode.tun.hint')}</p>
+              <p className="hint">{t('mode.both.hint')}</p>
             </div>
 
             <dl className="cx-meta">

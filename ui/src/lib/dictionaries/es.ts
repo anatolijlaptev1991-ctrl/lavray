@@ -764,4 +764,10 @@ export const esDict: Record<string, string> = {
   "core.unavailable": "Núcleo no disponible — la aplicación no está en ejecución o el núcleo no arrancó",
   "mux.title": "Multiplexación",
   "core.external": "Núcleos externos (Naive y otros)",
+  "onb.src.happ": "Migrar desde Happ",
+  "onb.src.happ.d": "Pega un enlace happ:// — se descifra localmente",
+  "onb.src.v2ray": "Importar desde v2rayN",
+  "onb.src.v2ray.d": "Enlaces de v2rayN, base64 o archivo de exportación",
+  "mode.both.hint": "Ambos pueden estar activos: los navegadores usan el proxy del sistema y los juegos van por TUN.",
+  "mode.sys.nativeOnly": "El proxy del sistema solo se configura en la aplicación de escritorio",
 }

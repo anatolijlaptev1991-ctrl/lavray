@@ -36,12 +36,13 @@ const (
 
 // Источники (поле source контракта LogLine).
 const (
-	SourceCore   = "core"
-	SourceSubs   = "subs"
-	SourceTest   = "test"
-	SourceAPI    = "api"
-	SourceUpdate = "update"
-	SourceGW     = "gateway"
+	SourceCore    = "core"
+	SourceSingBox = "singbox" // вывод sing-box (inst.SingBoxRunner.SetLogSink, T-33)
+	SourceSubs    = "subs"
+	SourceTest    = "test"
+	SourceAPI     = "api"
+	SourceUpdate  = "update"
+	SourceGW      = "gateway"
 )
 
 // Line — строка журнала (сообщение уже redacted и без ANSI).

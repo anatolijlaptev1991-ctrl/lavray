@@ -91,6 +91,13 @@ func NewServer(d Deps) *Server {
 	if httpc == nil {
 		httpc = &http.Client{Timeout: subs.DefaultOverallTimeout}
 	}
+	// T-33: журнал sing-box попадает в журнал ядра (GetTail/Subscribe);
+	// секреты вычищает Mux.Logf (Redact) до буфера.
+	if ls, ok := d.Runner.(inst.LogSinker); ok {
+		ls.SetLogSink(func(level, message string) {
+			lg.Logf(level, logs.SourceSingBox, "%s", message)
+		})
+	}
 	return &Server{
 		st:          d.Store,
 		logs:        lg,

@@ -33,6 +33,9 @@ type SingBoxRunner struct {
 	// закрытия, а не зовут Close ещё раз; новый Start запрещён, пока instance
 	// не освободит ресурсы.
 	closing *closeOp
+	// logSink — приёмник журнала sing-box (SetLogSink, T-33); nil — журнал
+	// остаётся в stderr процесса, где его никто не читает.
+	logSink LogSink
 }
 
 // closeOp — одно закрытие инстанса. err читать только после <-done.
@@ -43,6 +46,27 @@ type closeOp struct {
 
 // NewSingBoxRunner создаёт раннер (инстанс создаётся в Start).
 func NewSingBoxRunner() *SingBoxRunner { return &SingBoxRunner{} }
+
+// SetLogSink подключает приёмник журнала sing-box: следующие Start
+// перенаправляют вывод инстанса в sink (T-33). Вызывать до Start.
+func (r *SingBoxRunner) SetLogSink(sink LogSink) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.logSink = sink
+}
+
+// attachLogSink заменяет писатель журнала инстанса (neko-патч SetLogWritter
+// форка подменяет приватное поле фабрики через reflect/unsafe). Если пин форка
+// изменил устройство фабрики, это паника: гасим её и сообщаем через sink —
+// запуск не должен зависеть от журнала.
+func attachLogSink(instance *box.Box, sink LogSink) {
+	defer func() {
+		if r := recover(); r != nil {
+			sink("warn", fmt.Sprintf("журнал sing-box не перенаправлен: %v", r))
+		}
+	}()
+	instance.SetLogWritter(newLogWriter(sink))
+}
 
 // Start поднимает box.Box из конфига и ждёт готовности (box.Box.Start
 // возвращает после открытия inbounds/outbound'ов).
@@ -76,6 +100,12 @@ func (r *SingBoxRunner) Start(ctx context.Context, configJSON []byte) error {
 	instance, err := box.New(box.Options{Context: baseCtx, Options: options})
 	if err != nil {
 		return fmt.Errorf("singbox: box.New: %w", err)
+	}
+	// T-33: вывод sing-box — в журнал ядра. Раньше он шёл в stderr процесса,
+	// который никто не читает. До Start: записи, накопленные при box.New,
+	// выдаются фабрикой уже в новый писатель.
+	if r.logSink != nil {
+		attachLogSink(instance, r.logSink)
 	}
 	// T-14: ctx ограничивает время СТАРТА и отменяется Stop-ом (Disconnect во
 	// время подключения) — но не доходит до инстанса (WithoutCancel выше), так

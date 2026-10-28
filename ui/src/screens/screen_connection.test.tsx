@@ -265,3 +265,101 @@ describe('выбор сервера на экране «Подключение»
     expect(window.location.hash).toBe('#screen=servers&tab=profiles');
   });
 });
+
+describe('режимы на экране «Подключение» (T-27)', () => {
+  const connected = (mode = 'CONNECT_MODE_SYSTEM_PROXY'): Record<string, Json> => ({
+    'CoreService/GetStatus': connectedStatus('1', 'S1', mode),
+    'ProfileService/ListProfiles': profileList(profile('1', 'S1')),
+  });
+  /** [системный прокси, TUN] */
+  const sw = (v: { container: HTMLElement }): HTMLElement[] =>
+    Array.from(v.container.querySelectorAll<HTMLElement>('.cx-mode-row .sw'));
+  const stored = (): unknown => JSON.parse(window.localStorage.getItem('lavray.modes') ?? 'null');
+  const lifecycle = (core: CoreStub): string[] =>
+    core.calls.map((c) => c.rpc).filter((r) => r.endsWith('Connect') || r.endsWith('Disconnect'));
+
+  it('TUN при активном соединении: Disconnect → Connect в режиме TUN, выбор сохранён', async () => {
+    const core = stubCore(connected());
+    const view = await screen();
+
+    await click(sw(view)[1]);
+
+    expect(lifecycle(core)).toEqual(['CoreService/Disconnect', 'CoreService/Connect']);
+    expect(core.bodies('CoreService/Connect')).toEqual([{ profileId: '1', mode: 'CONNECT_MODE_TUN' }]);
+    expect(sw(view)[1]?.getAttribute('aria-checked')).toBe('true');
+    expect(stored()).toEqual({ sysProxy: true, tunMode: true });
+    expect(view.container.querySelector('#stateCard > .hint')?.textContent).toBe('Mode applied');
+  });
+
+  it('выключение TUN при работающем TUN возвращает режим системного прокси', async () => {
+    window.localStorage.setItem('lavray.modes', JSON.stringify({ sysProxy: true, tunMode: true }));
+    const core = stubCore(connected('CONNECT_MODE_TUN'));
+    const view = await screen();
+
+    await click(sw(view)[1]);
+
+    expect(core.bodies('CoreService/Connect')).toEqual([
+      { profileId: '1', mode: 'CONNECT_MODE_SYSTEM_PROXY' },
+    ]);
+    expect(sw(view)[1]?.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('TUN не запустился (нет прав): прежний режим восстановлен, переключатель и выбор откатились', async () => {
+    const core = stubCore({
+      ...connected(),
+      'CoreService/Connect': (n) => (n === 0 ? new Failure('internal', 'access is denied') : {}),
+    });
+    const view = await screen();
+
+    await click(sw(view)[1]);
+
+    expect(core.bodies('CoreService/Connect')).toEqual([
+      { profileId: '1', mode: 'CONNECT_MODE_TUN' },
+      { profileId: '1', mode: 'CONNECT_MODE_SYSTEM_PROXY' },
+    ]);
+    expect(sw(view)[1]?.getAttribute('aria-checked')).toBe('false');
+    expect(stored()).toEqual({ sysProxy: true, tunMode: false });
+    expect(view.container.querySelector('.banner-err')?.textContent).toContain('access is denied');
+  });
+
+  it('системный прокси при активном соединении применяется сразу, без перезапуска ядра', async () => {
+    (window as TauriWindow).__TAURI_INTERNALS__ = {};
+    const core = stubCore(connected());
+    const view = await screen();
+
+    await click(sw(view)[0]); // по умолчанию включён → выключаем
+
+    expect(invokeMock).toHaveBeenCalledWith('set_system_proxy', { enabled: false, port: 2080 });
+    expect(lifecycle(core)).toEqual([]);
+    expect(sw(view)[0]?.getAttribute('aria-checked')).toBe('false');
+    expect(stored()).toEqual({ sysProxy: false, tunMode: false });
+  });
+
+  it('системный прокси нельзя включить вне оболочки: переключатель возвращается, причина показана', async () => {
+    window.localStorage.setItem('lavray.modes', JSON.stringify({ sysProxy: false, tunMode: false }));
+    stubCore(connected());
+    const view = await screen();
+
+    await click(sw(view)[0]);
+
+    expect(sw(view)[0]?.getAttribute('aria-checked')).toBe('false');
+    expect(stored()).toEqual({ sysProxy: false, tunMode: false });
+    expect(view.container.querySelector('.banner-err')?.textContent).toContain('desktop app');
+  });
+
+  it('без соединения переключатели только запоминаются: ядру и оболочке ничего не уходит', async () => {
+    (window as TauriWindow).__TAURI_INTERNALS__ = {};
+    const core = stubCore({
+      'CoreService/GetStatus': idleStatus(),
+      'ProfileService/ListProfiles': profileList(profile('1', 'S1')),
+    });
+    const view = await screen();
+
+    await click(sw(view)[1]);
+    await click(sw(view)[0]);
+
+    expect(stored()).toEqual({ sysProxy: false, tunMode: true });
+    expect(lifecycle(core)).toEqual([]);
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+});

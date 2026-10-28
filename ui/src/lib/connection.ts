@@ -94,10 +94,35 @@ export function coreModeFor(modes: ModePreferences): ConnectMode {
   return modes.tunMode ? ConnectMode.TUN : ConnectMode.SYSTEM_PROXY;
 }
 
+// Фактическое состояние системного прокси: что оболочка применила по нашей
+// команде set_system_proxy в этом окне. Нужно статус-бару — раньше чип
+// «Системный прокси» горел по переключателю и подключению, даже если прокси
+// ОС не ставился (веб-режим, сбой команды).
+let sysProxyApplied = false;
+const sysProxyListeners = new Set<() => void>();
+
+function markSystemProxy(on: boolean): void {
+  if (sysProxyApplied === on) return;
+  sysProxyApplied = on;
+  for (const fn of sysProxyListeners) fn();
+}
+
+export function isSystemProxyApplied(): boolean {
+  return sysProxyApplied;
+}
+
+export function onSystemProxyChange(fn: () => void): () => void {
+  sysProxyListeners.add(fn);
+  return (): void => {
+    sysProxyListeners.delete(fn);
+  };
+}
+
 /** Включить/снять системный прокси через оболочку (только нативное окно). */
 export async function applySystemProxy(on: boolean, port: number): Promise<void> {
   if ((window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ === undefined) {
     if (on) throw new Error('mode.sys.nativeOnly');
+    markSystemProxy(false);
     return;
   }
   const { invoke } = await import('@tauri-apps/api/core');
@@ -105,6 +130,7 @@ export async function applySystemProxy(on: boolean, port: number): Promise<void>
   // десериализации, которую пользователю показывать бессмысленно.
   const safePort = Math.min(65535, Math.max(1, Math.trunc(port)));
   await invoke('set_system_proxy', { enabled: on, port: safePort });
+  markSystemProxy(on);
 }
 
 export interface ConnectArgs {

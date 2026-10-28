@@ -202,15 +202,17 @@ export function ConnectionScreen(): JSX.Element {
   // networksetup + снимок прежних настроек для восстановления. В браузере
   // режим недоступен — веб-панель не управляет ОС пользователя.
   const applySys = useCallback(
-    async (on: boolean): Promise<void> => {
+    async (on: boolean): Promise<boolean> => {
       try {
         await applySystemProxy(on, status.inbound?.port ?? 2080);
+        return true;
       } catch (e) {
         if (e instanceof Error && e.message === 'mode.sys.nativeOnly') {
           setError(t('mode.sys.nativeOnly'));
-          return;
+        } else {
+          setError(showCoreError(e, t));
         }
-        setError(showCoreError(e, t));
+        return false;
       }
     },
     [status.inbound, t],
@@ -240,6 +242,58 @@ export function ConnectionScreen(): JSX.Element {
       setBusy(false);
     }
   }, [core, ready, active, t, sysProxy, tunMode, applySys]);
+
+  // Переключатели режимов: выбор запоминается, а при активном соединении
+  // применяется сразу — раньше он лишь писался в localStorage и до следующего
+  // подключения ничего не менял. Не применилось — переключатель возвращается.
+  const changeSysProxy = useCallback(
+    async (next: boolean): Promise<void> => {
+      const prev = { sysProxy, tunMode };
+      setSysProxy(next);
+      saveModes(window.localStorage, { sysProxy: next, tunMode });
+      if (!ready) return;
+      setBusy(true);
+      setError('');
+      setActionMsg('');
+      if (await applySys(next)) {
+        setActionMsg(t('toast.modeApplied'));
+      } else {
+        setSysProxy(prev.sysProxy);
+        saveModes(window.localStorage, prev);
+      }
+      setBusy(false);
+    },
+    [ready, sysProxy, tunMode, applySys, t],
+  );
+
+  // TUN ядро на лету не включает: перезапуск соединения с новым режимом.
+  const changeTun = useCallback(
+    async (next: boolean): Promise<void> => {
+      const prev = { sysProxy, tunMode };
+      setTunMode(next);
+      saveModes(window.localStorage, { sysProxy, tunMode: next });
+      const running = status.mode === ConnectMode.TUN;
+      if (!ready || runningId === 0n || running === next) return;
+      setBusy(true);
+      setError('');
+      setActionMsg('');
+      try {
+        await reconnect({
+          core,
+          next: { profileId: runningId, modes: { sysProxy, tunMode: next } },
+          prev: { profileId: runningId, modes: { sysProxy, tunMode: running } },
+        });
+        setActionMsg(t('toast.modeApplied'));
+      } catch (e) {
+        setTunMode(prev.tunMode);
+        saveModes(window.localStorage, prev);
+        setError(showCoreError(e, t));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [core, ready, runningId, status.mode, sysProxy, tunMode, t],
+  );
 
   const stateLabel = ready
     ? t('conn.state.on')
@@ -401,10 +455,9 @@ export function ConnectionScreen(): JSX.Element {
                     role="switch"
                     aria-checked={sysProxy}
                     aria-label={t('mode.sys')}
+                    disabled={busy || connecting}
                     onClick={() => {
-                      const next = !sysProxy;
-                      setSysProxy(next);
-                      saveModes(window.localStorage, { sysProxy: next, tunMode });
+                      void changeSysProxy(!sysProxy);
                     }}
                   />
                 </div>
@@ -415,10 +468,9 @@ export function ConnectionScreen(): JSX.Element {
                     role="switch"
                     aria-checked={tunMode}
                     aria-label={t('mode.tun')}
+                    disabled={busy || connecting}
                     onClick={() => {
-                      const next = !tunMode;
-                      setTunMode(next);
-                      saveModes(window.localStorage, { sysProxy, tunMode: next });
+                      void changeTun(!tunMode);
                     }}
                   />
                 </div>

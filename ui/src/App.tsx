@@ -7,8 +7,9 @@ import type { JSX } from 'react';
 import { BrandMark, Icon, type IconName } from './components/Icon';
 import { SECTIONS, type Section, type SectionTab } from './app/sections';
 import { CoreContext, useCore, useCoreClients, useCoreStatus } from './hooks/useCore';
-import { CoreState } from './gen/lavray_pb';
+import { ConnectMode, CoreState } from './gen/lavray_pb';
 import { useI18n } from './hooks/useI18n';
+import { useSystemProxyApplied } from './hooks/useSystemProxy';
 import { useTrafficSpeed } from './hooks/useTraffic';
 import { applyDocumentLanguage, detectLanguage, formatBytes, setLanguage } from './lib/i18n';
 import { applyTheme, loadPreferences, watchSystemTheme } from './lib/theme';
@@ -319,6 +320,12 @@ function AppInner(): JSX.Element {
     status.activeProfileName === undefined || status.activeProfileName === ''
       ? '—'
       : status.activeProfileName;
+  // Чипы показывают фактическое состояние, а не переключатели: TUN горит, лишь
+  // когда ядро работает в режиме TUN, системный прокси — когда оболочка его
+  // применила. Чип виден и по настройке (потускневший), и по факту.
+  const sysApplied = useSystemProxyApplied();
+  const tunOn = connOn && status.mode === ConnectMode.TUN;
+  const sysOn = connOn && sysApplied;
 
   return (
     <div
@@ -527,14 +534,14 @@ function AppInner(): JSX.Element {
           </span>
         </span>
         <span className="flex1" />
-        {modes.tunMode && (
-          <span className={`st-chip${connOn ? ' on' : ''}`} title={t('set.tunD')}>
+        {(modes.tunMode || tunOn) && (
+          <span className={`st-chip${tunOn ? ' on' : ''}`} title={t('set.tunD')}>
             <span className="dot" />
             TUN
           </span>
         )}
-        {modes.sysProxy && (
-          <span className={`st-chip${connOn ? ' on' : ''}`} title={t('set.sysproxyD')}>
+        {(modes.sysProxy || sysOn) && (
+          <span className={`st-chip${sysOn ? ' on' : ''}`} title={t('set.sysproxyD')}>
             <span className="dot" />
             <span>{t('st.sysproxy')}</span>
           </span>

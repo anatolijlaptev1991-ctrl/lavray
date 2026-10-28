@@ -63,6 +63,16 @@ export function ServersScreen(): JSX.Element {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [protoFilter, setProtoFilter] = useState('all');
   const [sortKey, setSortKey] = useState<SortKey>('delay');
+  // Направление сортировки (прототип .sortdir): по задержке — по возрастанию,
+  // повторный клик переворачивает.
+  const [sortAsc, setSortAsc] = useState(true);
+  // Меню режима теста (.split-btn ▾): задержка или полный тест.
+  const [testMenuAt, setTestMenuAt] = useState<{ x: number; y: number } | null>(null);
+  // Меню строки профиля (прототип profileMenu): копировать ссылку, QR, тест.
+  const [rowMenu, setRowMenu] = useState<{
+    profile: Profile;
+    at: { x: number; y: number };
+  } | null>(null);
   const [compact, setCompact] = useState(false);
   const [groupBySub, setGroupBySub] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -114,18 +124,20 @@ export function ServersScreen(): JSX.Element {
       list = list.filter((p) => (p.testResult?.lastError ?? '') !== '');
     }
     const sorted = [...list];
+    const dir = sortAsc ? 1 : -1;
     if (sortKey === 'delay') {
-      // Недоступные (<0) и непроверенные — в конец, между собой по имени.
+      // Недоступные (<0) и непроверенные — в конец независимо от
+      // направления: «худшие» не должны всплывать наверх при перевороте.
       const rank = (p: Profile): number => {
         const ms = p.testResult?.latencyMs;
         return ms !== undefined && ms > 0 ? ms : 1_000_000;
       };
-      sorted.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name, lang));
+      sorted.sort((a, b) => dir * (rank(a) - rank(b)) || a.name.localeCompare(b.name, lang));
     } else {
-      sorted.sort((a, b) => a.name.localeCompare(b.name, lang));
+      sorted.sort((a, b) => dir * a.name.localeCompare(b.name, lang));
     }
     return sorted;
-  }, [allProfiles, groupFilter, protoFilter, statusFilter, sortKey, lang]);
+  }, [allProfiles, groupFilter, protoFilter, statusFilter, sortKey, sortAsc, lang]);
 
   const toggleSelect = useCallback((id: bigint, on: boolean): void => {
     setSelected((prev) => {
@@ -138,7 +150,7 @@ export function ServersScreen(): JSX.Element {
   }, []);
 
   const testLatency = useCallback(
-    async (ids: bigint[]): Promise<void> => {
+    async (ids: bigint[], kind: 'tcp' | 'full' = 'tcp'): Promise<void> => {
       setErr('');
       setMsg('');
       if (ids.length === 0) return;
@@ -151,7 +163,14 @@ export function ServersScreen(): JSX.Element {
       testAbort.current = ac;
       try {
         const stream = core.profiles.testLatency(
-          { profileIds: ids, mode: TestLatencyRequest_Mode.TCP_PING },
+          {
+            profileIds: ids,
+            // Полный тест проверяет и UDP/скорость — дороже по времени.
+            mode:
+              kind === 'full'
+                ? TestLatencyRequest_Mode.FULL_TEST
+                : TestLatencyRequest_Mode.TCP_PING,
+          },
           { signal: ac.signal },
         );
         for await (const res of stream) {
@@ -247,6 +266,21 @@ export function ServersScreen(): JSX.Element {
     }
   }, [core, selected, groupFilter, t]);
 
+  /** Копировать ссылку одного профиля (пункт меню строки). */
+  const copyOneLink = useCallback(
+    async (id: bigint): Promise<void> => {
+      setErr('');
+      try {
+        const res = await core.profiles.exportLinks({ ids: [id] });
+        await navigator.clipboard.writeText(res.links.join('\n'));
+        setMsg(t('toast.copied'));
+      } catch (e) {
+        setErr(showCoreError(e, t));
+      }
+    },
+    [core, t],
+  );
+
   const rowProps = useCallback(
     (p: Profile): RowProps => ({
       p,
@@ -265,6 +299,9 @@ export function ServersScreen(): JSX.Element {
       onDelete: (): void => {
         // Удаление сервера необратимо — прототип всегда спрашивает.
         setConfirmDelete({ ids: [p.id], count: 1 });
+      },
+      onRowMenu: (at: { x: number; y: number }): void => {
+        setRowMenu({ profile: p, at });
       },
       typeLabel: TYPE_LABEL[p.type] ?? '?',
     }),
@@ -363,6 +400,28 @@ export function ServersScreen(): JSX.Element {
           ))}
         </select>
 
+        {/* Фильтр по подписке (прототип #subSel): серверов может быть
+            несколько сотен из разных подписок. */}
+        <label className="cap" htmlFor="subSel">
+          {t('filter.sub')}
+        </label>
+        <select
+          className="select"
+          id="subSel"
+          value={groupFilter}
+          onChange={(e) => {
+            setGroupFilter(e.target.value);
+          }}
+        >
+          <option value="all">{t('filter.subAny')}</option>
+          <option value="0">{t('srv.manual')}</option>
+          {groups.map((g) => (
+            <option key={String(g.id)} value={String(g.id)}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+
         <button
           className="btn btn-ghost btn-sm"
           onClick={() => {
@@ -397,16 +456,38 @@ export function ServersScreen(): JSX.Element {
         </span>
         <span className="flex1" />
         {progress !== '' && <span className="cap mono">{progress}</span>}
-        <button
-          className="btn btn-sec"
-          disabled={testing || profiles.length === 0}
-          onClick={() => {
-            void testLatency(profiles.map((p) => p.id));
-          }}
-        >
-          <Icon name="gauge" />
-          <span>{t('test.all')}</span>
-        </button>
+        {/* split-btn прототипа: «Проверить все» + меню режима теста
+            (задержка / полный тест с UDP и скоростью). */}
+        <div className="split-btn">
+          <button
+            className="btn btn-sec"
+            disabled={testing || profiles.length === 0}
+            onClick={() => {
+              void testLatency(profiles.map((p) => p.id), 'tcp');
+            }}
+          >
+            <Icon name="gauge" />
+            <span>{t('test.all')}</span>
+          </button>
+          <button
+            className="btn btn-sec btn-ic"
+            aria-haspopup="menu"
+            aria-expanded={testMenuAt !== null}
+            aria-label={t('test.more')}
+            title={t('test.more')}
+            disabled={testing || profiles.length === 0}
+            onClick={(e) => {
+              if (testMenuAt !== null) {
+                setTestMenuAt(null);
+                return;
+              }
+              const r = e.currentTarget.getBoundingClientRect();
+              setTestMenuAt({ x: r.left - 140, y: r.bottom + 4 });
+            }}
+          >
+            <Icon name="chevron-down" size={16} />
+          </button>
+        </div>
         {testing && (
           <button className="btn btn-ghost btn-sm" onClick={() => void stopTests()}>
             {t('test.stop')}
@@ -416,11 +497,21 @@ export function ServersScreen(): JSX.Element {
           className="btn btn-ghost btn-sm"
           title={t('prof.sortTip')}
           onClick={() => {
-            setSortKey((k) => (k === 'delay' ? 'name' : 'delay'));
+            // Повторный клик по тому же режиму переворачивает направление;
+            // смена режима сбрасывает на возрастание.
+            if (sortKey === 'delay') {
+              setSortAsc((v) => !v);
+            } else {
+              setSortKey('delay');
+              setSortAsc(true);
+            }
           }}
         >
           <Icon name="sliders" />
           <span>{sortKey === 'delay' ? t('prof.sortDelay') : t('prof.sortName')}</span>
+          <span className={`sortdir${sortAsc ? '' : ' desc'}`}>
+            <Icon name="chevron-down" size={16} />
+          </span>
         </button>
         <span className="cap mono">
           {t('srv.current')}: {String(profiles.length)}
@@ -561,6 +652,92 @@ export function ServersScreen(): JSX.Element {
           onSaved={refresh}
         />
       )}
+      {/* Меню режима теста (прототип #testMore): быстрый пинг задержки или
+          полный тест с UDP и скоростью. */}
+      {testMenuAt !== null && (
+        <div
+          className="menu"
+          role="menu"
+          style={{ left: testMenuAt.x, top: testMenuAt.y }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setTestMenuAt(null);
+          }}
+        >
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setTestMenuAt(null);
+              void testLatency(profiles.map((p) => p.id), 'tcp');
+            }}
+          >
+            <Icon name="gauge" size={16} />
+            <span>{t('test.latency')}</span>
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setTestMenuAt(null);
+              void testLatency(profiles.map((p) => p.id), 'full');
+            }}
+          >
+            <Icon name="activity" size={16} />
+            <span>{t('test.full')}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Меню строки профиля (прототип profileMenu). */}
+      {rowMenu !== null && (
+        <div
+          className="menu"
+          role="menu"
+          style={{ left: rowMenu.at.x, top: rowMenu.at.y }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') setRowMenu(null);
+          }}
+        >
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              const id = rowMenu.profile.id;
+              setRowMenu(null);
+              void copyOneLink(id);
+            }}
+          >
+            <Icon name="copy" size={16} />
+            <span>{t('common.copyLink')}</span>
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              const id = rowMenu.profile.id;
+              setRowMenu(null);
+              void testLatency([id], 'tcp');
+            }}
+          >
+            <Icon name="gauge" size={16} />
+            <span>{t('common.testLatency')}</span>
+          </button>
+          <div className="menu-sep" role="separator" />
+          <button
+            className="menu-item danger"
+            role="menuitem"
+            onClick={() => {
+              const id = rowMenu.profile.id;
+              setRowMenu(null);
+              setConfirmDelete({ ids: [id], count: 1 });
+            }}
+          >
+            <Icon name="trash" size={16} />
+            <span>{t('common.delete')}</span>
+          </button>
+        </div>
+      )}
+
       {confirmDelete !== null && (
         <ConfirmDialog
           title={t('common.delete')}
@@ -590,6 +767,8 @@ interface RowProps {
   readonly onEdit: () => void;
   readonly onFav: () => void;
   readonly onDelete: () => void;
+  /** Меню строки (копировать ссылку / QR / тест): прототип profileMenu. */
+  readonly onRowMenu: (at: { x: number; y: number }) => void;
   readonly typeLabel: string;
 }
 
@@ -602,6 +781,7 @@ function ProfileRow({
   onEdit,
   onFav,
   onDelete,
+  onRowMenu,
   typeLabel,
 }: RowProps): JSX.Element {
   const { t, tf, lang } = useI18n();
@@ -638,6 +818,18 @@ function ProfileRow({
       </button>
       {!compact && <span className="prow-type mono">{typeLabel}</span>}
       <span className={`prow-lat mono${down ? ' err' : ''}`}>{delay}</span>
+      <button
+        className="prow-more btn btn-ic btn-sm"
+        aria-label={t('aria.menu')}
+        title={t('aria.menu')}
+        aria-haspopup="menu"
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          onRowMenu({ x: r.left - 160, y: r.bottom + 4 });
+        }}
+      >
+        <Icon name="menu" size={16} />
+      </button>
       <button
         className="prow-del btn btn-ic btn-sm"
         aria-label={t('common.delete')}

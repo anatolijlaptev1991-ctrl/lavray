@@ -223,6 +223,7 @@ export const enDict: Record<string, string> = {
   "filter.proto": "Protocol",
   "filter.protoAny": "any",
   "filter.sub": "Subscription",
+  "filter.subAny": "any",
   "filter.subAll": "all",
   "geo.de": "Germany · Frankfurt",
   "geo.fi": "Finland · Helsinki",

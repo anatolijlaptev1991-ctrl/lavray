@@ -223,6 +223,7 @@ export const ruDict: Record<string, string> = {
   "filter.proto": "Протокол",
   "filter.protoAny": "любой",
   "filter.sub": "Подписка",
+  "filter.subAny": "любая",
   "filter.subAll": "все",
   "geo.de": "Германия · Франкфурт",
   "geo.fi": "Финляндия · Хельсинки",

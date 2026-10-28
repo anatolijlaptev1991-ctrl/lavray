@@ -223,6 +223,7 @@ export const esDict: Record<string, string> = {
   "filter.proto": "Protocolo",
   "filter.protoAny": "cualquiera",
   "filter.sub": "Suscripción",
+  "filter.subAny": "cualquiera",
   "filter.subAll": "todas",
   "geo.de": "Alemania · Fráncfort",
   "geo.fi": "Finlandia · Helsinki",

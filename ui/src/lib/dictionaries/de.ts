@@ -223,6 +223,7 @@ export const deDict: Record<string, string> = {
   "filter.proto": "Protokoll",
   "filter.protoAny": "beliebig",
   "filter.sub": "Abo",
+  "filter.subAny": "beliebig",
   "filter.subAll": "alle",
   "geo.de": "Deutschland · Frankfurt",
   "geo.fi": "Finnland · Helsinki",

@@ -223,6 +223,7 @@ export const zhDict: Record<string, string> = {
   "filter.proto": "协议",
   "filter.protoAny": "任意",
   "filter.sub": "订阅",
+  "filter.subAny": "任意",
   "filter.subAll": "全部",
   "geo.de": "德国 · 法兰克福",
   "geo.fi": "芬兰 · 赫尔辛基",

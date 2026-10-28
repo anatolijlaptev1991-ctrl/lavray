@@ -10,6 +10,7 @@ import { useI18n } from '../hooks/useI18n';
 import { friendlyCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
 import { ProfileEditor } from '../components/ProfileEditor';
+import { ImportDialog } from '../components/ImportDialog';
 
 const TYPE_LABEL: Record<number, string> = {
   [ProfileType.SOCKS]: 'SOCKS',
@@ -38,6 +39,7 @@ export function ServersScreen(): JSX.Element {
   const [latency, setLatency] = useState<Record<string, string>>({});
   const [testing, setTesting] = useState(false);
   const [editing, setEditing] = useState<Profile | null | undefined>(undefined);
+  const [importOpen, setImportOpen] = useState(false);
 
   // Реальные группы из ядра (A2 аудита №4: хардкод '1' → NOT_FOUND,
   // потому что встроенная группа живёт в резервном id-диапазоне).
@@ -160,8 +162,8 @@ export function ServersScreen(): JSX.Element {
           onChange={(e) => { setSearch(e.target.value); }}
           aria-label={t('srv.all')}
         />
-        <button className="btn" onClick={() => { setImporting((v) => !v); }}>
-          {t('imp.do')}
+        <button className="btn" onClick={() => { setImportOpen(true); }}>
+          {t('imp.title')}
         </button>
         <button
           className="btn primary"
@@ -278,6 +280,14 @@ export function ServersScreen(): JSX.Element {
             </section>
           ))}
         </div>
+      )}
+
+      {importOpen && (
+        <ImportDialog
+          groupId={targetGroup === '' ? 0n : BigInt(targetGroup)}
+          onClose={() => { setImportOpen(false); }}
+          onImported={refresh}
+        />
       )}
 
       {editing !== undefined && (

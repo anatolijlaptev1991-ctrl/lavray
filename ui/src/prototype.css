@@ -770,6 +770,11 @@ body.w-sm .sb-nav{flex-direction:row;flex:1;gap:2px}
 body.w-sm .sb-item{flex:1 1 0;flex-direction:column;gap:2px;min-height:52px;padding:6px 2px;font-size:.6875rem;justify-content:center;text-align:center;min-width:0}
 body.w-sm .sb-l{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;position:static;width:auto;height:auto;clip:auto}
 body.w-sm .screen,body.w-sm #grpHead{padding-inline:16px}
+/* Нижняя навигация занимает место в grid (order:2 в #body) — контенту нужен
+   запас снизу, иначе последняя строка настроек уходит под панель. */
+body.w-sm #main{padding-bottom:18px}
+body.w-sm .sb-nav{gap:0}
+body.w-sm .sb-item .sb-l{font-size:.625rem;line-height:1.15}
 body.w-sm .conn-grid,body.w-sm .conn2,body.w-sm .form-grid,body.w-sm .preset-grid,body.w-sm .dns-grid,body.w-sm .sub-grid,body.w-sm .set-layout,body.w-sm .upd-vers{grid-template-columns:minmax(0,1fr)}
 body.w-sm .prof-toolbar,body.w-sm .log-toolbar{flex-wrap:wrap}
 body.w-sm .dlg-back{align-items:flex-end;padding:0}
@@ -988,3 +993,125 @@ html[data-shell="browser"] #app { grid-template-rows: minmax(0, 1fr) var(--sb-h)
   font-size: .8125rem; font-weight: 650; color: var(--t2); }
 .srv-group-h .muted { margin-inline-start: auto; font-weight: 400; }
 .srv-flag { font-size: 1.05rem; line-height: 1; }
+
+/* ============ settings: адаптация контролов (перенос прототипа) ============ */
+/* Широкий контрол для textarea/списков TUN: занимает остаток строки, но
+   не ломает сетку на узких окнах (прототип задавал max-width inline). */
+.set-ctl-wide{flex:1;max-width:260px;min-width:0}
+.set-ctl-wide .textarea,.set-ctl-wide .input{width:100%}
+/* Числовые поля фиксированной ширины (порт, MTU, concurrency). */
+.set-row .set-num{width:110px;min-width:0;flex:none}
+/* Поля ввода в строке настроек: умеренная ширина, не на всю строку
+   (прототип задавал width:110–160px inline). */
+.set-row .set-ctl>.input:not(.set-num){width:170px;min-width:0}
+/* Кнопка-файл: <label class="btn"> с невидимым input внутри. */
+.set-file{position:relative;overflow:hidden}
+.set-file input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%}
+/* Поиск настроек не должен растягиваться на всю ширину на широких окнах. */
+.set-search{max-width:420px;margin-bottom:14px}
+/* Строка настроек: подпись и контрол не наезжают друг на друга. */
+.set-row .set-ctl{flex:none}
+@media (max-width: 720px){
+  .set-row{flex-wrap:wrap;gap:6px}
+  .set-row .set-ctl{flex:1 1 100%;justify-content:flex-start}
+  .set-ctl-wide{max-width:none}
+  .set-num{width:100%}
+}
+
+/* ============ routing: редактор правил (перенос прототипа) ============ */
+.rt-in{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.rt-in .input{flex:1;min-width:180px}
+.rt-res{min-height:20px;margin-top:10px;font-size:.8125rem;color:var(--t2)}
+.rule-chips{display:flex;flex-wrap:wrap;gap:6px;padding:10px 0 2px}
+.rule-chip{display:inline-flex;align-items:center;gap:4px;max-width:100%}
+.rule-chip-x{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;
+  border-radius:var(--r-sm);color:var(--t3);flex:none}
+.rule-chip-x:hover{color:var(--err-text);background:var(--surface2)}
+.rule-chip-x .ic{width:11px;height:11px}
+.rule-add{display:inline-flex;align-items:center;gap:4px}
+.rule-add .input{width:170px;height:28px;font-size:.6875rem}
+.rt-foot{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
+/* fold: заголовок списка правил */
+.fold>summary{display:flex;align-items:center;gap:8px;cursor:pointer;padding:8px 0;
+  border-top:1px solid var(--b-subtle);list-style:none}
+.fold>summary::-webkit-details-marker{display:none}
+.fold>summary::before{content:"";width:6px;height:6px;border-right:1.5px solid var(--t3);
+  border-bottom:1.5px solid var(--t3);transform:rotate(-45deg);transition:transform var(--t-micro) var(--ease);flex:none}
+.fold[open]>summary::before{transform:rotate(45deg)}
+.ro-banner{display:flex;align-items:center;gap:8px;padding:10px 12px;margin-bottom:10px;
+  border-radius:var(--r-md);background:var(--surface2);border:1px solid var(--b-subtle);font-size:.75rem;color:var(--t2)}
+.ro-banner .ic{width:15px;height:15px;color:var(--t3);flex:none}
+@media (max-width:600px){
+  .rt-in{flex-direction:column;align-items:stretch}
+  .rt-in .input{width:100%}
+  .rt-foot{flex-direction:column;align-items:stretch;gap:8px}
+}
+
+/* ============ import dialog (dlgImport) ============ */
+.imp-pane{padding-top:12px}
+.imp-col{display:flex;flex-direction:column;gap:12px}
+.imp-qr{display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0}
+.imp-qr-frame{width:180px;height:180px;border:2px dashed var(--b-strong);border-radius:var(--r-lg);
+  display:flex;align-items:center;justify-content:center;color:var(--t3)}
+.imp-qr-frame .ic{width:44px;height:44px}
+.imp-qr-acts{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.imp-drop{display:flex;flex-direction:column;align-items:center;gap:8px;padding:34px 20px;cursor:pointer;
+  border:2px dashed var(--b-strong);border-radius:var(--r-lg);color:var(--t2);
+  transition:border-color var(--t-micro) var(--ease),background var(--t-micro) var(--ease)}
+.imp-drop:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+.imp-drop .ic{width:30px;height:30px}
+.imp-drop-t{font-size:.875rem;font-weight:600}
+.imp-prev-list{display:flex;flex-direction:column;gap:4px;font-size:.75rem;max-height:160px;overflow-y:auto}
+.imp-prev-list li{display:flex;justify-content:space-between;gap:10px}
+.imp-prev-list li .mono{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Вкладки (прототип .tabs/.tab) — если ещё не перенесены для диалога. */
+.dlg .tabs{display:flex;gap:2px;border-bottom:1px solid var(--b-subtle);margin-bottom:2px}
+.dlg .tab{min-height:34px;padding:7px 12px;font-size:.8125rem;font-weight:500;color:var(--t2)}
+.dlg .tab.on{color:var(--t1);font-weight:650;box-shadow:inset 0 -2px 0 var(--accent)}
+@media (max-width:600px){
+  .dlg .tabs{overflow-x:auto}
+  .imp-drop{padding:24px 14px}
+}
+
+/* ============ dialogs: группы/лицензии/журнал/онбординг ============ */
+.grp-dlg-list{display:flex;flex-direction:column;gap:4px;max-height:280px;overflow-y:auto}
+.grp-dlg-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:var(--r-md);
+  border:1px solid var(--b-subtle);background:var(--surface2)}
+.grp-dlg-row .n{flex:1;min-width:0;font-size:.8125rem;font-weight:500;overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap}
+.grp-dlg-row .n small{display:block;font-weight:400;color:var(--t3);font-size:.6875rem}
+.grp-dlg-new{display:flex;gap:6px;margin-top:12px}
+.grp-dlg-new .input{flex:1;min-width:0}
+.lic-list{margin:0;padding-inline-start:18px;display:flex;flex-direction:column;gap:8px;font-size:.8125rem}
+.le-samples{display:grid;gap:8px;margin-top:12px}
+.le-sample{font-size:.75rem;color:var(--t2);background:var(--surface2);border:1px solid var(--b-subtle);
+  border-radius:var(--r-sm);padding:8px;overflow-wrap:anywhere}
+/* онбординг */
+.onb-steps{display:flex;gap:6px;list-style:none;margin:12px 0 16px;padding:0}
+.onb-step{height:4px;flex:1;border-radius:2px;background:var(--b-subtle)}
+.onb-step.on{background:var(--accent)}
+.onb-step.done{background:var(--accent);opacity:.45}
+.onb-lang-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px}
+.onb-lang{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;
+  border:1px solid var(--b-subtle);border-radius:var(--r-md);background:var(--surface);text-align:start}
+.onb-lang.on{border:2px solid var(--accent);padding:9px 11px}
+.onb-lang .n{font-size:.8125rem;font-weight:500}
+.onb-lang .c{font-family:var(--font-mono);font-size:.6875rem;color:var(--t3)}
+.onb-h{font-size:.875rem;font-weight:600;margin:10px 0 4px}
+.onb-src-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-top:10px}
+.onb-src{display:flex;align-items:center;gap:8px;padding:10px 12px;border:1px solid var(--b-subtle);
+  border-radius:var(--r-md);font-size:.8125rem;background:var(--surface);text-align:start}
+.onb-src .ic{width:16px;height:16px;color:var(--t3);flex:none}
+.onb-src-btn:hover{border-color:var(--accent);color:var(--accent)}
+.onb-preset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-top:8px}
+.onb-preset{padding:10px;border:1px solid var(--b-subtle);border-radius:var(--r-md);
+  background:var(--surface);font-size:.75rem;text-align:start}
+.onb-preset.on{border:2px solid var(--accent);padding:9px}
+.cx-meta{display:flex;flex-direction:column;gap:6px;margin:8px 0 0}
+.cx-meta>div{display:flex;justify-content:space-between;gap:10px;font-size:.8125rem}
+.cx-meta dt{color:var(--t3)}
+.cx-meta dd{margin:0;font-weight:500}
+@media (max-width:600px){
+  .grp-dlg-new{flex-wrap:wrap}
+  .onb-lang-grid,.onb-src-grid,.onb-preset-grid{grid-template-columns:minmax(0,1fr)}
+}

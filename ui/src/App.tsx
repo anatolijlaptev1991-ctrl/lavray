@@ -22,6 +22,8 @@ import { ServersScreen } from './screens/screen_servers';
 import { SubscriptionsScreen } from './screens/screen_subscriptions';
 import { SettingsScreen } from './screens/screen_settings';
 import { UpdatesScreen } from './screens/screen_updates';
+import { ImportDialog } from './components/ImportDialog';
+import { HotkeysDialog, LicensesDialog, OnboardingDialog } from './components/dialogs';
 
 const NAV_ICONS: Record<string, IconName> = {
   connection: 'zap',
@@ -53,6 +55,11 @@ function AppInner(): JSX.Element {
   })();
   const [sectionId, setSectionId] = useState(initial.section);
   const [tabId, setTabId] = useState(initial.tab);
+  // Онбординг — при первом запуске (как в прототипе: dlgOnb).
+  const [onboarding, setOnboarding] = useState(() => window.localStorage.getItem('lavray.onboarded') !== '1');
+  const [hotkeysOpen, setHotkeysOpen] = useState(false);
+  const [licensesOpen, setLicensesOpen] = useState(false);
+  const [quickImport, setQuickImport] = useState(false);
   const adapter = useMemo(() => getPlatformAdapter(window), []);
   const status = useCoreStatus();
 
@@ -68,6 +75,35 @@ function AppInner(): JSX.Element {
   useEffect(() => {
     applyDocumentLanguage(document, lang);
   }, [lang]);
+
+  useEffect(() => {
+    const onLic = (): void => { setLicensesOpen(true); };
+    window.addEventListener('lavray:licenses', onLic);
+    return (): void => {
+      window.removeEventListener('lavray:licenses', onLic);
+    };
+  }, []);
+
+  // Адаптив по прототипу (S6): ширина < 960 — узкий сайдбар (w-md),
+  // < 600 — нижняя навигация (w-sm). Без этого на узких окнах контент
+  // обрезался справа: колонка сайдбара не отдавала место.
+  useEffect(() => {
+    // Ширину берём у viewport (в прототипе — contentRect #app; при
+    // data-mode=native у #app может быть min-width, из-за чего классификация
+    // «узко/широко» съезжала). Порог 600 → нижняя навигация, 960 → рельс.
+    const apply = (w: number): void => {
+      document.body.classList.toggle('w-md', w >= 600 && w < 960);
+      document.body.classList.toggle('w-sm', w < 600);
+    };
+    apply(window.innerWidth);
+    const onResize = (): void => {
+      apply(window.innerWidth);
+    };
+    window.addEventListener('resize', onResize);
+    return (): void => {
+      window.removeEventListener('resize', onResize);
+    };
+  }, []);
 
   // D2 (аудит round 2): колбэк системной темы обязан читать АКТУАЛЬНЫЕ
   // настройки, иначе смена темы ОС откатывала выбор пользователя.
@@ -106,6 +142,40 @@ function AppInner(): JSX.Element {
           e.preventDefault();
           selectSection(target.id);
         }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return (): void => {
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [adapter.os, selectSection]);
+
+  // Хоткеи прототипа (FR-UI-231…235): Ctrl/⌘+K — поиск, +D — подключить,
+  // «,» — настройки, «?» — список хоткеев. Игнорируем ввод в полях.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const el = e.target as HTMLElement | null;
+      const typing =
+        el !== null &&
+        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      const mod = adapter.os === 'macos' ? e.metaKey : e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 'd' && !typing) {
+        e.preventDefault();
+        selectSection('connection');
+        return;
+      }
+      if (mod && e.key === ',' && !typing) {
+        e.preventDefault();
+        selectSection('settings');
+        return;
+      }
+      if (e.key === '?' && !typing) {
+        e.preventDefault();
+        setHotkeysOpen(true);
+      }
+      if (mod && e.key.toLowerCase() === 'k' && !typing) {
+        e.preventDefault();
+        selectSection('servers');
       }
     };
     window.addEventListener('keydown', onKey);
@@ -225,6 +295,28 @@ function AppInner(): JSX.Element {
           </div>
         </main>
       </div>
+
+      {onboarding && (
+        <OnboardingDialog
+          onClose={() => {
+            setOnboarding(false);
+            window.localStorage.setItem('lavray.onboarded', '1');
+          }}
+          onOpenImport={() => { setQuickImport(true); }}
+        />
+      )}
+      {hotkeysOpen && <HotkeysDialog onClose={() => { setHotkeysOpen(false); }} />}
+      {licensesOpen && <LicensesDialog onClose={() => { setLicensesOpen(false); }} />}
+      {/* Настройки → «Лицензии и компоненты» открывают диалог событием. */}
+      {quickImport && (
+        <ImportDialog
+          groupId={0n}
+          onClose={() => { setQuickImport(false); }}
+          onImported={() => {
+            window.location.hash = 'screen=servers&tab=profiles';
+          }}
+        />
+      )}
 
       <footer id="statusbar">
         <span className="mono">

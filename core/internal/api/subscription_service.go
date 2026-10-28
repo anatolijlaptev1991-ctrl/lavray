@@ -225,7 +225,12 @@ func (s *Server) updateOne(ctx context.Context, groupID int64, stream *connect.S
 			}
 			send(resp)
 			if !(r.confirmDestructive || subscriptionConfirmed(ctx)) {
-				return connect.NewError(connect.CodeFailedPrecondition, err)
+				// T-18: кадр CONFIRM_REQUIRED — штатный ответ «нужно решение
+				// пользователя», а не сбой. Поток закрывается без ошибки:
+				// клиент читает кадры циклом, и ошибка в конце потока делала
+				// ветку подтверждения недостижимой. Группа не менялась;
+				// продолжить можно повторным вызовом с confirm_destructive=true.
+				return nil
 			}
 			continue
 		}

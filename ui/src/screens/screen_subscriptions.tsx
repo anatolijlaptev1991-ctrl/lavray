@@ -36,8 +36,16 @@ function relDate(ms: number, lang: string): string {
   return rtf.format(Math.round(diff / 864e5), 'day');
 }
 
+/** Обновление, остановленное на вопросе «удалить N из M серверов?» (T-18). */
+interface PendingConfirm {
+  readonly id: bigint;
+  readonly name: string;
+  readonly remove: number;
+  readonly total: number;
+}
+
 export function SubscriptionsScreen(): JSX.Element {
-  const { t, tf, lang } = useI18n();
+  const { t, tf, plural, lang } = useI18n();
   const core = useCore();
   const [subs, setSubs] = useState<Group[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -55,6 +63,8 @@ export function SubscriptionsScreen(): JSX.Element {
     name: string;
     count: number;
   } | null>(null);
+  // T-18: обновление, ожидающее подтверждения «удалит N из M серверов».
+  const [pending, setPending] = useState<PendingConfirm | null>(null);
 
   const reload = useCallback(async (): Promise<void> => {
     try {
@@ -118,29 +128,26 @@ export function SubscriptionsScreen(): JSX.Element {
   }, [core, url, name, t, tf, reload]);
 
   const update = useCallback(
-    async (id: bigint, gname: string): Promise<void> => {
+    async (id: bigint, gname: string, confirm = false): Promise<void> => {
       setErr('');
       setOk('');
       setProgress(t('scr.subs.sub'));
       setBusy(String(id));
       try {
-        // D4 (аудит round 2): успех показываем ТОЛЬКО при PHASE_DONE. При
-        // CONFIRM_REQUIRED раньше всё равно висел тост «обновлено», а
-        // деструктивное обновление нельзя было подтвердить из UI.
-        const attempt = async (confirm: boolean): Promise<{ done: boolean; needConfirm: boolean }> => {
-          let done = false;
-          let needConfirm = false;
-          let wouldRemove = 0;
-          let total = 0;
+        // D4 (аудит round 2): успех показываем ТОЛЬКО при PHASE_DONE.
+        // T-18: кадр CONFIRM_REQUIRED — не ошибка, а вопрос пользователю
+        // «Обновление удалит N из M серверов. Продолжить?». Ядро закрывает
+        // поток штатно; по «Обновить» вызов повторяется с confirmDestructive.
+        let done = false;
+        let wouldRemove: number | null = null;
+        try {
           const stream = core.subscriptions.updateSubscription({
             groupId: id,
             confirmDestructive: confirm,
           });
           for await (const ev of stream) {
             if (ev.phase === SubscriptionProgress_Phase.CONFIRM_REQUIRED) {
-              needConfirm = true;
               wouldRemove = ev.wouldRemoveCount ?? 0;
-              total = ev.totalCount ?? 0;
             } else if (ev.phase === SubscriptionProgress_Phase.FAILED) {
               setErrors((m) => ({ ...m, [String(id)]: ev.detail ?? 'error' }));
             } else if (ev.phase === SubscriptionProgress_Phase.DONE) {
@@ -149,18 +156,19 @@ export function SubscriptionsScreen(): JSX.Element {
               setProgress(ev.detail ?? '');
             }
           }
-          if (needConfirm && !confirm) {
-            const okConfirm = window.confirm(
-              `${t('sub.err.badge')}: ${String(wouldRemove)} / ${String(total)}`,
-            );
-            if (okConfirm) {
-              return attempt(true);
-            }
-          }
-          return { done, needConfirm };
-        };
-        const res = await attempt(false);
-        if (res.done) {
+        } catch (e) {
+          // Ядро до T-18 закрывало поток ошибкой после CONFIRM_REQUIRED: кадр
+          // уже получен, то есть это запрос подтверждения, а не сбой.
+          if (wouldRemove === null) throw e;
+        }
+        if (wouldRemove !== null && !confirm) {
+          setPending({
+            id,
+            name: gname,
+            remove: wouldRemove,
+            total: Math.max(counts[String(id)] ?? 0, wouldRemove),
+          });
+        } else if (done) {
           setErrors((m) => {
             const next: Record<string, string> = {};
             for (const [k, v] of Object.entries(m)) {
@@ -170,7 +178,7 @@ export function SubscriptionsScreen(): JSX.Element {
           });
           setOk(tf('toast.subUpdated', { name: gname }));
           await reload();
-        } else if (!res.needConfirm) {
+        } else {
           setErr(t('sub.err.badge'));
         }
       } catch (e) {
@@ -182,8 +190,18 @@ export function SubscriptionsScreen(): JSX.Element {
         setProgress('');
       }
     },
-    [core, t, tf, reload],
+    [core, t, tf, reload, counts],
   );
+
+  const confirmPending = useCallback((): void => {
+    if (pending === null) return;
+    setPending(null);
+    void update(pending.id, pending.name, true);
+  }, [pending, update]);
+
+  const closePending = useCallback((): void => {
+    setPending(null);
+  }, []);
 
   const toggleAuto = useCallback(
     async (g: Group): Promise<void> => {
@@ -436,6 +454,16 @@ export function SubscriptionsScreen(): JSX.Element {
           onClose={() => {
             setPendingDelete(null);
           }}
+        />
+      )}
+      {pending !== null && (
+        <ConfirmDialog
+          title={tf('sub.confirm.t', { name: pending.name })}
+          text={plural('pl.subDel', pending.total).split('{k}').join(String(pending.remove))}
+          confirmLabel={t('common.refresh')}
+          danger
+          onConfirm={confirmPending}
+          onClose={closePending}
         />
       )}
     </div>

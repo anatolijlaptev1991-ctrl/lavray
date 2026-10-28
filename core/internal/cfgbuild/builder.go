@@ -80,6 +80,9 @@ type BuildSettings struct {
 	GOOS string `json:"goos,omitempty"`
 	// OpenWRT — сборка шлюза: процессные правила опускаются (SCHEMA §2.1).
 	OpenWRT bool `json:"openwrt,omitempty"`
+	// DNSRemoteDirect — запросы к dns-remote идут напрямую, без detour в
+	// туннель (карточка «DoH» экрана DNS); по умолчанию — внутри туннеля.
+	DNSRemoteDirect bool `json:"dns_remote_direct,omitempty"`
 }
 
 // DefaultSettings — значения по умолчанию (model.SettingDescriptors).

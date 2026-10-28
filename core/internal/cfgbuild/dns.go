@@ -15,6 +15,8 @@ package cfgbuild
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -43,8 +45,13 @@ func buildDNS(preset *presets.Preset, st *BuildSettings, res *BuildResult, forTe
 	var rules []any
 
 	// Remote: через туннель (detour=proxy), резолв своего домена — dns-local.
+	// Карточка «DoH» (DNSRemoteDirect) — напрямую, без detour.
 	if !forTest {
-		srv, err := makeDnsServer("dns-remote", preset.DNS.RemoteDNS, "proxy", true)
+		detour := "proxy"
+		if st.DNSRemoteDirect {
+			detour = ""
+		}
+		srv, err := makeDnsServer("dns-remote", preset.DNS.RemoteDNS, detour, true)
 		if err != nil {
 			return nil, err
 		}
@@ -160,6 +167,33 @@ func advancedDNS(preset *presets.Preset) (map[string]any, error) {
 			"advanced dns object must define a server tagged \"dns-direct\" (route.default_domain_resolver, LNB-08)")
 	}
 	return dns, nil
+}
+
+// ValidateDNSAddress проверяет адрес DNS-сервера, введённый пользователем:
+// "local" либо [схема://]хост[:порт][/путь] со схемой udp, tcp, tls, https,
+// h3, quic или dhcp и непустым хостом.
+func ValidateDNSAddress(addr string) error {
+	addr = strings.TrimSpace(addr)
+	if addr == "" {
+		return errors.New("адрес пуст")
+	}
+	if addr == "local" {
+		return nil
+	}
+	if i := strings.Index(addr, "://"); i >= 0 {
+		switch strings.ToLower(addr[:i]) {
+		case "udp", "tcp", "tls", "https", "h3", "quic", "dhcp":
+		default:
+			return fmt.Errorf("схема %q не поддерживается (udp, tcp, tls, https, h3, quic, dhcp)", addr[:i])
+		}
+	}
+	if strings.ContainsAny(addr, " 	") {
+		return errors.New("адрес не должен содержать пробелов")
+	}
+	if _, err := makeDnsServer("dns-remote", addr, "", false); err != nil {
+		return errors.New("в адресе нет хоста")
+	}
+	return nil
 }
 
 // makeDnsServer — legacy-строка адреса → типизированный сервер sing-box

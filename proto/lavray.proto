@@ -1216,6 +1216,13 @@ message DnsSettings {
   optional string underlying_dns = 9;
   // FakeDNS (FR-UI-151): включается в TUN-настройках, здесь read-only.
   optional bool fake_dns_enabled = 10;
+
+  // Карточка экрана DNS (FR-UI-148): "auto" — DNS пресета без переопределения,
+  // "tunnel" — DoH внутри туннеля, "doh" — DoH напрямую, "dot" и "local" — по
+  // своему адресу, "custom" — remote_dns пользователя. Выбор хранится для
+  // активного пресета и на другие не действует. В SetDns пусто: remote_dns
+  // пуст — "auto", иначе "custom"; в GetDns — выбранная карточка.
+  optional string choice = 11;
 }
 
 message GetDnsRequest {}

@@ -4,28 +4,28 @@
 // «перезапустите ядро».
 import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
+import type { MessageInitShape } from '@bufbuild/protobuf';
 import { DnsSettings_Mode } from '../gen/lavray_pb';
-import type { DnsSettings } from '../gen/lavray_pb';
+import type { DnsSettings, DnsSettingsSchema } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
 
+// Карточки: серверы и маршрут запросов (туннель / напрямую) задаёт ядро по id
+// (поле choice); экран только показывает выбранную карточку.
 interface Preset {
   readonly id: string;
   readonly titleKey: string;
   readonly descKey: string;
-  readonly remote: string;
-  readonly direct: string;
-  readonly advanced: boolean;
 }
 
 const PRESETS: readonly Preset[] = [
-  { id: 'auto', titleKey: 'dns.auto', descKey: 'dns.auto.d', remote: 'https://dns.google/dns-query', direct: 'local', advanced: false },
-  { id: 'tunnel', titleKey: 'dns.tunnel', descKey: 'dns.tunnel.d', remote: 'https://dns.google/dns-query', direct: 'local', advanced: false },
-  { id: 'doh', titleKey: 'dns.doh', descKey: 'dns.doh.d', remote: 'https://dns.google/dns-query', direct: 'local', advanced: false },
-  { id: 'dot', titleKey: 'dns.dot', descKey: 'dns.dot.d', remote: 'tls://1.1.1.1', direct: 'local', advanced: false },
-  { id: 'local', titleKey: 'dns.local', descKey: 'dns.local.d', remote: 'local', direct: 'local', advanced: false },
+  { id: 'auto', titleKey: 'dns.auto', descKey: 'dns.auto.d' },
+  { id: 'tunnel', titleKey: 'dns.tunnel', descKey: 'dns.tunnel.d' },
+  { id: 'doh', titleKey: 'dns.doh', descKey: 'dns.doh.d' },
+  { id: 'dot', titleKey: 'dns.dot', descKey: 'dns.dot.d' },
+  { id: 'local', titleKey: 'dns.local', descKey: 'dns.local.d' },
 ];
 
 export function DnsScreen(): JSX.Element {
@@ -56,22 +56,12 @@ export function DnsScreen(): JSX.Element {
   }, [load, t]);
 
   const save = useCallback(
-    async (next: Partial<DnsSettings>): Promise<void> => {
-      if (dns === null) return;
+    async (next: MessageInitShape<typeof DnsSettingsSchema>): Promise<void> => {
       setErr('');
       setOk('');
       setBusy(true);
       try {
-        const res = await core.dns.setDns({
-          dns: {
-            mode: next.mode ?? dns.mode,
-            remoteDns: next.remoteDns ?? dns.remoteDns,
-            directDns: next.directDns ?? dns.directDns,
-            routingEnabled: next.routingEnabled ?? dns.routingEnabled,
-            advancedJson: next.advancedJson ?? dns.advancedJson,
-            remoteQueryStrategy: next.remoteQueryStrategy ?? dns.remoteQueryStrategy,
-          },
-        });
+        const res = await core.dns.setDns({ dns: next });
         if (res.applied !== undefined) setDns(res.applied);
         setNeedsRestart(res.needsProfileRestart);
         setOk(t('common.save'));
@@ -81,7 +71,7 @@ export function DnsScreen(): JSX.Element {
         setBusy(false);
       }
     },
-    [core, dns, t],
+    [core, t],
   );
 
   // T-28: «Перезапустить ядро» вызывает CoreService.RestartProfile. Баннер
@@ -104,11 +94,7 @@ export function DnsScreen(): JSX.Element {
   const pick = useCallback(
     async (p: Preset): Promise<void> => {
       setAdvanced(false);
-      await save({
-        mode: DnsSettings_Mode.SIMPLE,
-        remoteDns: p.remote,
-        directDns: p.direct,
-      });
+      await save({ mode: DnsSettings_Mode.SIMPLE, choice: p.id });
     },
     [save],
   );
@@ -123,21 +109,16 @@ export function DnsScreen(): JSX.Element {
         return;
       }
       if (res.formatted !== undefined) setJson(res.formatted);
-      setOk(t('dns.adv'));
+      setOk(t('dns.validated'));
     } catch (e) {
       setErr(showCoreError(e, t));
     }
   }, [core, json, t]);
 
-  const activeId = ((): string => {
-    if (dns === null) return '';
-    if (dns.mode === DnsSettings_Mode.ADVANCED) return 'advanced';
-    const remote = dns.remoteDns ?? '';
-    if (remote === 'local') return 'local';
-    if (remote.startsWith('tls://')) return 'dot';
-    if (remote.startsWith('https://')) return 'doh';
-    return 'auto';
-  })();
+  // Активная карточка — выбор, сохранённый ядром для активного пресета
+  // (choice), а не вывод по префиксу адреса. «custom» карточек не подсвечивает.
+  const activeId =
+    dns === null ? '' : dns.mode === DnsSettings_Mode.ADVANCED ? 'advanced' : (dns.choice ?? 'auto');
 
   return (
     <div className="dns">
@@ -231,7 +212,7 @@ export function DnsScreen(): JSX.Element {
               setAdvanced((v) => !v);
             }}
           >
-            {advanced ? t('dns.auto') : t('dns.custom')}
+            {advanced ? t('dns.custom') : 'JSON'}
           </button>
         </div>
 
@@ -247,9 +228,14 @@ export function DnsScreen(): JSX.Element {
               }}
               aria-label="DNS JSON"
             />
+            {dns?.fakeDnsEnabled === true && (
+              <p className="hint" role="note">
+                {t('dns.fakeipAdv')}
+              </p>
+            )}
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
               <button className="btn btn-sec btn-sm" onClick={() => void validate()}>
-                {t('dns.adv')}
+                {t('dns.validate')}
               </button>
               <button
                 className="btn btn-pri btn-sm"
@@ -258,6 +244,7 @@ export function DnsScreen(): JSX.Element {
                   void save({
                     mode: DnsSettings_Mode.ADVANCED,
                     advancedJson: json,
+                    routingEnabled: dns?.routingEnabled ?? false,
                   })
                 }
               >
@@ -279,7 +266,15 @@ export function DnsScreen(): JSX.Element {
             <button
               className="btn btn-pri btn-sm"
               disabled={busy}
-              onClick={() => void save({ remoteDns: dns?.remoteDns ?? '' })}
+              onClick={() =>
+                void save({
+                  mode: DnsSettings_Mode.SIMPLE,
+                  choice: 'custom',
+                  remoteDns: dns?.remoteDns ?? '',
+                  directDns: dns?.directDns,
+                  routingEnabled: dns?.routingEnabled ?? false,
+                })
+              }
             >
               {t('common.save')}
             </button>

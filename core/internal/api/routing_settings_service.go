@@ -94,15 +94,6 @@ func (s *Server) GetActivePreset(ctx context.Context, req *connect.Request[lavra
 // DNS-настройки живут в settings-хранилище с ключами dns.* (модель W1);
 // SetDns применяет «живые» поля без перезапуска (FR-UI-148).
 
-const (
-	setDNSMode     = "dns.mode"
-	setDNSRemote   = "dns.remote"
-	setDNSDirect   = "dns.direct"
-	setDNSRouting  = "dns.routing_enabled"
-	setDNSAdvJSON  = "dns.advanced_json"
-	setDNSStrategy = "dns.remote_query_strategy"
-)
-
 // domainStrategyStr/Of — мост между proto-энумом и строками sing-box.
 func domainStrategyStr(s lavrayv1.DomainStrategy) string {
 	switch s {
@@ -137,17 +128,19 @@ func (s *Server) GetDns(ctx context.Context, req *connect.Request[lavrayv1.GetDn
 	return connect.NewResponse(out), nil
 }
 
-// currentDNS — снимок действующего DNS: настройки пользователя поверх
-// активного пресета (A7 аудита: UI показывал пустые поля, потому что
-// GetDns читал только dns.*-ключи, которые никто не заполнял).
+// currentDNS — снимок действующего DNS: переопределение активного пресета
+// поверх DNS самого пресета; choice — выбранная карточка ("auto" без выбора).
 func (s *Server) currentDNS() *lavrayv1.DnsSettings {
-	out := &lavrayv1.DnsSettings{Mode: lavrayv1.DnsSettings_MODE_SIMPLE}
+	out := &lavrayv1.DnsSettings{Mode: lavrayv1.DnsSettings_MODE_SIMPLE, Choice: strp("auto")}
 	dns := presets.DNSBlock{Mode: "simple", RemoteDNS: "https://dns.google/dns-query", DirectDNS: "local"}
 	if p, err := s.activePreset(); err == nil && p != nil {
 		dns = p.DNS
 	}
-	if s.dnsSettingStr(setDNSMode) == "advanced" {
+	if dns.Mode == "advanced" {
 		out.Mode = lavrayv1.DnsSettings_MODE_ADVANCED
+	}
+	if ov, ok := s.activeDNSChoice(); ok {
+		out.Choice = strp(ov.Choice)
 	}
 	out.RemoteDns = strp(dns.RemoteDNS)
 	out.DirectDns = strp(dns.DirectDNS)
@@ -158,11 +151,6 @@ func (s *Server) currentDNS() *lavrayv1.DnsSettings {
 	if st, ok := domainStrategyOf(dns.RemoteQueryStrategy); ok {
 		out.RemoteQueryStrategy = &st
 	}
-	if v := s.dnsSettingStr(setDNSStrategy); v != "" {
-		if st, ok := domainStrategyOf(v); ok {
-			out.RemoteQueryStrategy = &st
-		}
-	}
 	if v := s.settingStr("core.underlying_dns"); v != "" {
 		out.UnderlyingDns = strp(v)
 	}
@@ -170,6 +158,9 @@ func (s *Server) currentDNS() *lavrayv1.DnsSettings {
 	return out
 }
 
+// SetDns записывает выбор карточки для АКТИВНОГО пресета (T-31): «Авто»
+// сбрасывает переопределение, остальные карточки задают серверы и маршрут
+// запросов (туннель / напрямую); свой адрес проверяется.
 func (s *Server) SetDns(ctx context.Context, req *connect.Request[lavrayv1.SetDnsRequest]) (*connect.Response[lavrayv1.SetDnsResponse], error) {
 	m := req.Msg.Dns
 	if m == nil {
@@ -185,50 +176,12 @@ func (s *Server) SetDns(ctx context.Context, req *connect.Request[lavrayv1.SetDn
 				"(на него ссылается route.default_domain_resolver, LNB-08)")
 		}
 	}
-	set := func(k, v string) error { return mapErr(s.st.SetSetting(k, v)) }
-	setJSONStr := func(k, v string) error {
-		b, err := json.Marshal(v)
-		if err != nil {
-			return mapErr(err)
-		}
-		return mapErr(s.st.SetSetting(k, string(b)))
-	}
-	switch m.Mode {
-	case lavrayv1.DnsSettings_MODE_ADVANCED:
-		if err := setJSONStr(setDNSMode, "advanced"); err != nil {
-			return nil, err
-		}
-	default:
-		if err := setJSONStr(setDNSMode, "simple"); err != nil {
-			return nil, err
-		}
-	}
-	if m.RemoteDns != nil {
-		if err := setJSONStr(setDNSRemote, *m.RemoteDns); err != nil {
-			return nil, err
-		}
-	}
-	if m.DirectDns != nil {
-		if err := setJSONStr(setDNSDirect, *m.DirectDns); err != nil {
-			return nil, err
-		}
-	}
-	if m.RemoteQueryStrategy != nil {
-		if err := setJSONStr(setDNSStrategy, domainStrategyStr(*m.RemoteQueryStrategy)); err != nil {
-			return nil, err
-		}
-	}
-	v := "0"
-	if m.RoutingEnabled {
-		v = "1"
-	}
-	if err := set(setDNSRouting, v); err != nil {
+	ov, err := choiceFromRequest(m)
+	if err != nil {
 		return nil, err
 	}
-	if m.AdvancedJson != nil {
-		if err := setJSONStr(setDNSAdvJSON, *m.AdvancedJson); err != nil {
-			return nil, err
-		}
+	if err := s.saveDNSChoice(ov); err != nil {
+		return nil, mapErr(err)
 	}
 	needsRestart := s.inst.Status().State != instStateIdle
 	return connect.NewResponse(&lavrayv1.SetDnsResponse{

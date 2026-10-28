@@ -10,6 +10,7 @@ import type { Group } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
 import { LANGUAGES, LANG_NATIVE } from '../lib/i18n';
 
@@ -36,36 +37,9 @@ export function DialogShell({
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    (autofocusRef?.current ?? rootRef.current)?.focus();
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const root = rootRef.current;
-      if (root === null) return;
-      const nodes = root.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      const first = nodes[0];
-      const last = nodes[nodes.length - 1];
-      if (first === undefined || last === undefined) return;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return (): void => {
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [onClose, autofocusRef, t]);
+  // T-05: фокус ставится один раз при открытии (useModal читает onClose через
+  // latest-ref), а не при каждом ререндере родителя.
+  useModal(rootRef, { onClose, autofocusRef });
 
   return (
     <div

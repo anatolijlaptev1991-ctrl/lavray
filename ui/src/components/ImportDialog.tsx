@@ -2,12 +2,13 @@
 // FR-UI-114…129): вкладки «Ссылка / QR-код / Файл», двухфазный импорт
 // (preview → подтверждение), предупреждения о выброшенных custom-полях,
 // авто-детект URL подписки.
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import type { Profile } from '../gen/lavray_pb';
 import { friendlyCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
 
 type Tab = 'link' | 'qr' | 'file';
@@ -43,37 +44,9 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
   const firstFieldRef = useRef<HTMLInputElement | null>(null);
 
   // a11y: фокус в первое поле, Esc закрывает, Tab не уходит из диалога.
-  useEffect(() => {
-    firstFieldRef.current?.focus();
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const root = dialogRef.current;
-      if (root === null) return;
-      const nodes = root.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      if (nodes.length === 0) return;
-      const first = nodes[0];
-      const last = nodes[nodes.length - 1];
-      if (first === undefined || last === undefined) return;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return (): void => {
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [onClose]);
+  // T-05: один раз при открытии (см. hooks/useModal.ts), а не при каждом
+  // ререндере родителя.
+  useModal(dialogRef, { onClose, autofocusRef: firstFieldRef });
 
   const looksLikeSubscription = useCallback((raw: string): boolean => {
     const v = raw.trim();
@@ -177,7 +150,14 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="dlg dlg-md" role="dialog" aria-modal="true" aria-labelledby="impTitle" ref={dialogRef}>
+      <div
+        className="dlg dlg-md"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="impTitle"
+        ref={dialogRef}
+        tabIndex={-1}
+      >
         <div className="dlg-h">
           <h2 id="impTitle">{t('imp.title')}</h2>
           <button className="btn btn-ic btn-sm" aria-label={t('common.close')} title={t('common.close')} onClick={onClose}>

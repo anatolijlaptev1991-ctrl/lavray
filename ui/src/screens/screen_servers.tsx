@@ -189,7 +189,7 @@ export function ServersScreen(): JSX.Element {
             ...m,
             [key]: down ? '✕' : `${String(r?.latencyMs ?? 0)} ms`,
           }));
-          setProgress(tf('test.progress', { i: res.index, n: res.total }));
+          setProgress(tf('test.progress', { done: res.index, total: res.total }));
         }
         refresh();
       } catch (e) {

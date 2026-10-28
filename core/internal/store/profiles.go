@@ -133,6 +133,31 @@ func (s *Store) UpdateProfile(p *model.Profile) error {
 	})
 }
 
+// SaveTestResult записывает результат теста — колонки latency_ms,
+// tested_at_ms, full_report и ключ test_result в JSON (там живёт last_error) —
+// отдельным UPDATE (T-22). Остальные поля профиля не читаются и не пишутся:
+// устаревшая копия профиля у вызывающего не может затереть правки (избранное,
+// заметки, имя), а updated_at_ms остаётся прежним — результат теста не правка
+// профиля. Пустой результат очищает прежний (ClearTestResults).
+func (s *Store) SaveTestResult(id int64, r model.TestResult) error {
+	blob, err := json.Marshal(r)
+	if err != nil {
+		return fmt.Errorf("store: marshal test result: %w", err)
+	}
+	res, err := s.db.Exec(`UPDATE profiles SET
+		latency_ms = ?, tested_at_ms = ?, full_report = ?,
+		data = json_set(data, '$.test_result', json(?))
+	WHERE id = ?`,
+		nullableLatency(&r), nullableInt64(r.TestedAtMs), nullableString(r.FullReport), string(blob), id)
+	if err != nil {
+		return fmt.Errorf("store: save test result: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // profileCols — все декодируемые колонки профиля ОДНИМ запросом.
 //
 // ВАЖНО: пул соединений ограничен одним (SetMaxOpenConns(1), store.go), поэтому

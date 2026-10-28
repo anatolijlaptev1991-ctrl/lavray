@@ -118,11 +118,12 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 			defer func() { <-sem }()
 
 			res := s.tcpPing(runCtx, p, timeout)
-			// Сохраняем результат (TestedAt/Latency/LastError) — только если
-			// профиль ещё существует (иначе UpdateProfile вернёт NotFound).
-			saved := *p
-			saved.TestResult = res
-			if err := s.st.UpdateProfile(&saved); err != nil && !errors.Is(err, store.ErrNotFound) {
+			// T-22: пишем ТОЛЬКО результат (TestedAt/Latency/LastError) отдельным
+			// UPDATE. Раньше сюда шла копия профиля, прочитанная при старте
+			// батча, целиком через UpdateProfile: она затирала правки
+			// (избранное, заметки, имя) и не сохраняла задержку (UpdateProfile
+			// не пишет её колонки). Удалённый за время теста профиль — не ошибка.
+			if err := s.st.SaveTestResult(p.ID, res); err != nil && !errors.Is(err, store.ErrNotFound) {
 				s.logs.Logf("warn", "test", "сохранение результата профиля %d: %v", p.ID, err)
 			}
 
@@ -205,12 +206,8 @@ func (s *Server) ClearTestResults(ctx context.Context, req *connect.Request[lavr
 		}
 	}
 	for _, id := range ids {
-		p, err := s.st.GetProfile(id)
-		if err != nil {
-			continue
-		}
-		p.TestResult = model.TestResult{}
-		if err := s.st.UpdateProfile(p); err != nil {
+		// T-22: UpdateProfile не пишет колонки результата — сбрасываем отдельным UPDATE.
+		if err := s.st.SaveTestResult(id, model.TestResult{}); err != nil && !errors.Is(err, store.ErrNotFound) {
 			return nil, mapErr(err)
 		}
 	}

@@ -56,7 +56,12 @@ function AppInner(): JSX.Element {
   const [sectionId, setSectionId] = useState(initial.section);
   const [tabId, setTabId] = useState(initial.tab);
   // Онбординг — при первом запуске (как в прототипе: dlgOnb).
-  const [onboarding, setOnboarding] = useState(() => window.localStorage.getItem('lavray.onboarded') !== '1');
+  const [onboarding, setOnboarding] = useState(() => {
+    // ?onboarded=1 — для скриншот-тестов и повторных проверок UI.
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('onboarded') === '1') return false;
+    return window.localStorage.getItem('lavray.onboarded') !== '1';
+  });
   const [hotkeysOpen, setHotkeysOpen] = useState(false);
   const [licensesOpen, setLicensesOpen] = useState(false);
   const [quickImport, setQuickImport] = useState(false);

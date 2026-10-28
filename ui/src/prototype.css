@@ -1115,3 +1115,75 @@ html[data-shell="browser"] #app { grid-template-rows: minmax(0, 1fr) var(--sb-h)
   .grp-dlg-new{flex-wrap:wrap}
   .onb-lang-grid,.onb-src-grid,.onb-preset-grid{grid-template-columns:minmax(0,1fr)}
 }
+
+/* ============ checks: утечки + статусные баннеры ============ */
+.banner-ok{background:rgba(78,122,99,.10);border:1px solid rgba(78,122,99,.32)}
+.banner-ok .ic{color:var(--ok-text)}
+.leak-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:10px 0 0}
+.leak-grid>div{display:flex;flex-direction:column;gap:3px}
+.leak-grid dt{font-size:.6875rem;color:var(--t3);text-transform:uppercase;letter-spacing:.02em}
+.leak-grid dd{margin:0;font-size:.8125rem;overflow-wrap:anywhere}
+.chk-item.chk-err .chk-t{color:var(--err-text)}
+.chk-item.chk-warn .chk-t{color:var(--warn-text)}
+@media (max-width:600px){
+  .chk-item{flex-wrap:wrap}
+  .chk-fix{margin-inline-start:32px}
+}
+
+/* ============ servers: вкладки групп (прототип srvsTabs) ============ */
+.srv-gtabs{display:flex;align-items:center;gap:2px;overflow-x:auto;padding-bottom:2px;
+  border-bottom:1px solid var(--b-subtle);margin-bottom:12px;scrollbar-width:thin}
+.srv-gtab{display:inline-flex;align-items:center;gap:6px;min-height:34px;padding:7px 12px;
+  font-size:.8125rem;font-weight:500;color:var(--t2);white-space:nowrap;border-radius:var(--r-sm) var(--r-sm) 0 0}
+.srv-gtab:hover{color:var(--t1);background:var(--surface2)}
+.srv-gtab.on{color:var(--t1);font-weight:650;box-shadow:inset 0 -2px 0 var(--accent)}
+.srv-gtab .muted{font-size:.6875rem}
+.srv-gtab-add{padding:7px 9px;color:var(--t3)}
+.srv-gtab-add .ic{width:14px;height:14px}
+/* карточка трафика на экране подключения */
+.traffic-card{position:relative;display:flex;flex-direction:column;gap:8px}
+.traffic-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.speeds{display:flex;gap:14px}
+.spd{display:inline-flex;align-items:center;gap:5px;font-size:.75rem;color:var(--t2)}
+.spd .ic{width:13px;height:13px}
+.spd.dn .ic{color:var(--accent)} .spd.up .ic{color:var(--info)}
+.spd b{font-family:var(--font-mono);font-size:.8125rem;font-weight:600;color:var(--t1)}
+.traffic-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.6875rem;color:var(--t2)}
+.tl-item{display:inline-flex;align-items:center;gap:6px}
+.traffic-card canvas{width:100%;height:170px;display:block}
+@media (max-width:600px){
+  .traffic-card canvas{height:130px}
+  .traffic-legend{gap:10px}
+}
+
+/* ============ servers: карточки профилей (прототип .prow) ============ */
+.prof-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.prof-toolbar .searchwrap{flex:1;min-width:200px;max-width:360px}
+.prof-toolbar .select{width:auto}
+.srv-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.prof-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.prow{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--surface);
+  border:1px solid var(--b-subtle);border-radius:var(--r-lg);transition:border-color var(--t-micro) var(--ease)}
+.prow:hover{border-color:var(--b-strong)}
+.prow.sel{border-color:var(--accent)}
+.prow-chk{flex:none;width:15px;height:15px;accent-color:var(--accent);cursor:pointer}
+.prow-fav{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+  border-radius:var(--r-sm);color:var(--t3)}
+.prow-fav .ic{width:13px;height:13px}
+.prow-fav.on{color:var(--accent);background:var(--accent-soft)}
+.prow-fav:hover{color:var(--accent)}
+.prow-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:start;background:none;border:0;cursor:pointer}
+.prow-name{font-size:.8125rem;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prow-addr{font-size:.6875rem;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prow-type{flex:none;font-size:.6875rem;color:var(--t3);min-width:52px;text-align:end}
+.prow-lat{flex:none;font-size:.75rem;color:var(--ok-text);min-width:56px;text-align:end}
+.prow-lat.err{color:var(--err-text)}
+.prow-del{flex:none;color:var(--t3)}
+.prow-del:hover{color:var(--err-text)}
+.prof-list.compact .prow{padding:6px 10px}
+@media (max-width:600px){
+  .prof-toolbar{margin-bottom:10px}
+  .prof-toolbar .searchwrap{max-width:none;width:100%}
+  .prow-type{display:none}
+  .prow-lat{min-width:48px;font-size:.6875rem}
+}

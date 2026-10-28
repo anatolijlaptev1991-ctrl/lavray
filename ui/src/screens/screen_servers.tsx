@@ -1,7 +1,8 @@
-// screen_servers.tsx — «Серверы» (DS §8, FR-UI-081…099/257): список,
-// поиск, выбор, импорт контента (ссылка/список/QR-строка) с двухфазным
-// подтверждением custom-полей, экспорт ссылок.
-import { useCallback, useEffect, useState } from 'react';
+// screen_servers.tsx — «Серверы» по прототипу v1.2 (DS §8, FR-UI-081…099):
+// вкладки групп, тулбар с поиском/фильтрами/протоколом, второй тулбар с
+// плотностью/группировкой/тестом, список профилей карточками, массовое
+// выделение, тест задержки с прогрессом, гео-группировка.
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { ProfileType, TestLatencyRequest_Mode } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
@@ -11,38 +12,68 @@ import { friendlyCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
 import { ProfileEditor } from '../components/ProfileEditor';
 import { ImportDialog } from '../components/ImportDialog';
+import { GroupsDialog } from '../components/dialogs';
+import { Icon } from '../components/Icon';
 
 const TYPE_LABEL: Record<number, string> = {
   [ProfileType.SOCKS]: 'SOCKS',
   [ProfileType.HTTP]: 'HTTP',
-  [ProfileType.SHADOWSOCKS]: 'Shadowsocks',
+  [ProfileType.SHADOWSOCKS]: 'SS',
   [ProfileType.TROJAN]: 'Trojan',
   [ProfileType.VMESS]: 'VMess',
   [ProfileType.VLESS]: 'VLESS',
-  [ProfileType.HYSTERIA2]: 'Hysteria2',
+  [ProfileType.HYSTERIA2]: 'Hy2',
   [ProfileType.TUIC]: 'TUIC',
   [ProfileType.CHAIN]: 'Chain',
+  [ProfileType.CUSTOM_OUTBOUND]: 'Custom',
+  [ProfileType.CUSTOM_CONFIG]: 'Config',
 };
 
+const PROTO_OPTIONS: readonly { value: string; label: string }[] = [
+  { value: 'all', label: '' },
+  { value: String(ProfileType.SHADOWSOCKS), label: 'Shadowsocks' },
+  { value: String(ProfileType.VMESS), label: 'VMess' },
+  { value: String(ProfileType.VLESS), label: 'VLESS' },
+  { value: String(ProfileType.TROJAN), label: 'Trojan' },
+  { value: String(ProfileType.HYSTERIA2), label: 'Hysteria2' },
+  { value: String(ProfileType.TUIC), label: 'TUIC' },
+  { value: String(ProfileType.SOCKS), label: 'SOCKS5' },
+  { value: String(ProfileType.HTTP), label: 'HTTPS' },
+];
+
+type StatusFilter = 'all' | 'fav' | 'fast' | 'down';
+type SortKey = 'delay' | 'name';
+
+const STATUS_CHIPS: readonly { key: StatusFilter; labelKey: string }[] = [
+  { key: 'all', labelKey: 'filter.all' },
+  { key: 'fav', labelKey: 'filter.fav' },
+  { key: 'fast', labelKey: 'filter.fast' },
+  { key: 'down', labelKey: 'filter.down' },
+];
+
 export function ServersScreen(): JSX.Element {
-  const { t, lang } = useI18n();
+  const { t, tf, lang } = useI18n();
   const core = useCore();
   const [search, setSearch] = useState('');
-  const { profiles, total, refresh } = useProfiles(search);
-  const [importing, setImporting] = useState(false);
-  const [link, setLink] = useState('');
-  const [msg, setMsg] = useState('');
-  const [err, setErr] = useState('');
-  const [preview, setPreview] = useState<Profile[]>([]);
+  const { profiles: allProfiles, total: allTotal, refresh } = useProfiles(search);
   const [groups, setGroups] = useState<{ id: bigint; name: string }[]>([]);
   const [targetGroup, setTargetGroup] = useState('');
+  const [groupFilter, setGroupFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [protoFilter, setProtoFilter] = useState('all');
+  const [sortKey, setSortKey] = useState<SortKey>('delay');
+  const [compact, setCompact] = useState(false);
+  const [groupBySub, setGroupBySub] = useState(true);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [latency, setLatency] = useState<Record<string, string>>({});
   const [testing, setTesting] = useState(false);
+  const [progress, setProgress] = useState('');
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
   const [editing, setEditing] = useState<Profile | null | undefined>(undefined);
   const [importOpen, setImportOpen] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
 
-  // Реальные группы из ядра (A2 аудита №4: хардкод '1' → NOT_FOUND,
-  // потому что встроенная группа живёт в резервном id-диапазоне).
   useEffect(() => {
     void (async (): Promise<void> => {
       try {
@@ -55,90 +86,96 @@ export function ServersScreen(): JSX.Element {
           return first === undefined ? cur : String(first.id);
         });
       } catch {
-        /* ядро недоступно — импорт останется выключенным до следующего рендера */
+        /* ядро недоступно */
       }
     })();
   }, [core]);
 
-  const doPreview = useCallback(async (): Promise<void> => {
-    setErr('');
-    setMsg('');
-    try {
-      const res = await core.profiles.importContent({
-        content: link,
-        previewOnly: true,
-      });
-      setPreview(res.parsedProfiles);
-      setMsg(t('imp.do'));
-    } catch (e) {
-      setErr(friendlyCoreError(e));
+  const profiles = useMemo(() => {
+    let list = allProfiles;
+    if (groupFilter !== 'all') list = list.filter((p) => String(p.groupId) === groupFilter);
+    if (protoFilter !== 'all') list = list.filter((p) => String(p.type) === protoFilter);
+    if (statusFilter === 'fav') list = list.filter((p) => p.favorite);
+    if (statusFilter === 'fast') {
+      list = list.filter((p) => (p.testResult?.latencyMs ?? 10_000) < 500);
     }
-  }, [core, link, t]);
-
-  const doCommit = useCallback(async (): Promise<void> => {
-    setErr('');
-    try {
-      const res = await core.profiles.importContent({
-        content: link,
-        targetGroupId: targetGroup === '' ? 0n : BigInt(targetGroup),
-      });
-      setMsg(`${t('imp.do')}: ${String(res.addedProfileIds.length)}`);
-      setPreview([]);
-      setLink('');
-      setImporting(false);
-      refresh();
-    } catch (e) {
-      setErr(friendlyCoreError(e));
+    if (statusFilter === 'down') {
+      list = list.filter((p) => (p.testResult?.lastError ?? '') !== '');
     }
-  }, [core, link, targetGroup, t, refresh]);
-
-  const doExport = useCallback(async (): Promise<void> => {
-    setErr('');
-    try {
-      const res = await core.profiles.exportLinks({
-        groupId: targetGroup === '' ? 0n : BigInt(targetGroup),
-      });
-      await navigator.clipboard.writeText(res.links.join('\n'));
-      setMsg(t('toast.copied'));
-    } catch (e) {
-      setErr(friendlyCoreError(e));
+    const sorted = [...list];
+    if (sortKey === 'delay') {
+      sorted.sort((a, b) => (a.testResult?.latencyMs ?? 9999) - (b.testResult?.latencyMs ?? 9999));
+    } else {
+      sorted.sort((a, b) => a.name.localeCompare(b.name, lang));
     }
-  }, [core, targetGroup, t]);
+    return sorted;
+  }, [allProfiles, groupFilter, protoFilter, statusFilter, sortKey, lang]);
 
-  // Тест задержки TCP-пингом (FR-UI-200): ядро стримит кадр на профиль,
-  // результат тут же появляется в списке и сохраняется в профиле.
-  const testLatency = useCallback(async (): Promise<void> => {
-    setErr('');
-    setMsg('');
-    const ids = profiles.map((p) => p.id);
-    if (ids.length === 0) return;
-    setTesting(true);
-    setLatency({});
-    try {
-      const stream = core.profiles.testLatency({
-        profileIds: ids,
-        mode: TestLatencyRequest_Mode.TCP_PING,
-      });
-      for await (const res of stream) {
-        const r = res.result;
-        const key = String(res.profileId);
-        if (r?.lastError !== undefined && r.lastError !== '') {
-          setLatency((m) => ({ ...m, [key]: '✕' }));
-        } else if (r?.latencyMs !== undefined) {
-          setLatency((m) => ({ ...m, [key]: `${String(r.latencyMs)} ms` }));
-        }
-        setMsg(`${String(res.index)} / ${String(res.total)}`);
-      }
-      refresh();
-    } catch (e) {
-      setErr(friendlyCoreError(e));
-    } finally {
-      setTesting(false);
+  const toggleSelect = useCallback((id: bigint, on: boolean): void => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      const k = String(id);
+      if (on) next.add(k);
+      else next.delete(k);
+      return next;
+    });
+  }, []);
+
+  const testLatency = useCallback(
+    async (ids: bigint[]): Promise<void> => {
+      setErr('');
       setMsg('');
-    }
-  }, [core, profiles, refresh]);
+      if (ids.length === 0) return;
+      setTesting(true);
+      setLatency({});
+      try {
+        const stream = core.profiles.testLatency({
+          profileIds: ids,
+          mode: TestLatencyRequest_Mode.TCP_PING,
+        });
+        for await (const res of stream) {
+          const r = res.result;
+          const key = String(res.profileId);
+          const down = (r?.lastError ?? '') !== '';
+          setLatency((m) => ({
+            ...m,
+            [key]: down ? '✕' : `${String(r?.latencyMs ?? 0)} ms`,
+          }));
+          setProgress(tf('test.progress', { i: res.index, n: res.total }));
+        }
+        refresh();
+      } catch (e) {
+        setErr(friendlyCoreError(e));
+      } finally {
+        setTesting(false);
+        setProgress('');
+      }
+    },
+    [core, refresh, tf],
+  );
 
-  const removeSelected = useCallback(
+  const stopTests = useCallback(async (): Promise<void> => {
+    try {
+      await core.profiles.stopTests({});
+    } catch {
+      /* уже остановлено */
+    }
+  }, [core]);
+
+  const removeSelected = useCallback(async (): Promise<void> => {
+    const ids = [...selected].map((s) => BigInt(s));
+    if (ids.length === 0) return;
+    setErr('');
+    try {
+      await core.profiles.deleteProfile({ ids });
+      setSelected(new Set());
+      refresh();
+    } catch (e) {
+      setErr(friendlyCoreError(e));
+    }
+  }, [core, selected, refresh]);
+
+  const removeOne = useCallback(
     async (id: bigint): Promise<void> => {
       setErr('');
       try {
@@ -151,93 +188,282 @@ export function ServersScreen(): JSX.Element {
     [core, refresh],
   );
 
+  const toggleFav = useCallback(
+    async (p: Profile): Promise<void> => {
+      try {
+        await core.profiles.setProfileMeta({ id: p.id, favorite: !p.favorite });
+        refresh();
+      } catch (e) {
+        setErr(friendlyCoreError(e));
+      }
+    },
+    [core, refresh],
+  );
+
+  const exportLinks = useCallback(async (): Promise<void> => {
+    setErr('');
+    try {
+      const res =
+        selected.size > 0
+          ? await core.profiles.exportLinks({ ids: [...selected].map((s) => BigInt(s)) })
+          : await core.profiles.exportLinks(
+              groupFilter === 'all' ? {} : { groupId: BigInt(groupFilter) },
+            );
+      await navigator.clipboard.writeText(res.links.join('\n'));
+      setMsg(t('toast.copied'));
+    } catch (e) {
+      setErr(friendlyCoreError(e));
+    }
+  }, [core, selected, groupFilter, t]);
+
+  const rowProps = useCallback(
+    (p: Profile): RowProps => ({
+      p,
+      compact,
+      checked: selected.has(String(p.id)),
+      latencyLabel: latency[String(p.id)],
+      onCheck: (on: boolean): void => {
+        toggleSelect(p.id, on);
+      },
+      onEdit: (): void => {
+        setEditing(p);
+      },
+      onFav: (): void => {
+        void toggleFav(p);
+      },
+      onDelete: (): void => {
+        void removeOne(p.id);
+      },
+      typeLabel: TYPE_LABEL[p.type] ?? '?',
+    }),
+    [compact, selected, latency, toggleSelect, toggleFav, removeOne],
+  );
+
   return (
     <div className="srv">
-
-      <div className="srv-tools">
-        <input
-          className="input"
-          placeholder={t('srv.all')}
-          value={search}
-          onChange={(e) => { setSearch(e.target.value); }}
-          aria-label={t('srv.all')}
-        />
-        <button className="btn" onClick={() => { setImportOpen(true); }}>
-          {t('imp.title')}
-        </button>
-        <button
-          className="btn primary"
-          onClick={() => { setEditing(null); }}
-          disabled={targetGroup === ''}
-        >
-          {t('quick.import')}
-        </button>
-        <button className="btn" onClick={() => void doExport()}>
-          {t('srv.details')}
-        </button>
-        <button
-          className="btn"
-          onClick={() => void testLatency()}
-          disabled={testing || profiles.length === 0}
-        >
-          {testing ? t('imp.decrypting') : t('common.testLatency')}
-        </button>
-        <span className="muted">{t('srv.current')}: {String(total)}</span>
-      </div>
-
-      {importing && (
-        <div className="srv-import">
-          <textarea
-            className="input"
-            rows={3}
-            placeholder={t('imp.drop')}
-            value={link}
-            onChange={(e) => { setLink(e.target.value); }}
-            aria-label={t('imp.drop')}
-          />
-          <div className="srv-import-row">
-            <select
-              className="input narrow"
-              value={targetGroup}
-              onChange={(e) => { setTargetGroup(e.target.value); }}
-              aria-label={t('srv.current')}
-            >
-              {groups.length === 0 && <option value="">—</option>}
-              {groups.map((g) => (
-                <option key={String(g.id)} value={String(g.id)}>
-                  {g.name}
-                </option>
-              ))}
-            </select>
-            <button className="btn" onClick={() => void doPreview()} disabled={link.trim() === ''}>
-              {t('imp.decrypting')}
-            </button>
+      {groups.length > 0 && (
+        <div className="srv-gtabs" role="tablist" aria-label={t('grp.title')}>
+          <button
+            className={`srv-gtab${groupFilter === 'all' ? ' on' : ''}`}
+            role="tab"
+            aria-selected={groupFilter === 'all'}
+            onClick={() => {
+              setGroupFilter('all');
+            }}
+          >
+            {t('srv.all')}
+            <span className="muted">{String(allTotal)}</span>
+          </button>
+          {groups.map((g) => (
             <button
-              className="btn primary"
-              onClick={() => void doCommit()}
-              disabled={link.trim() === '' || targetGroup === ''}
+              key={String(g.id)}
+              className={`srv-gtab${groupFilter === String(g.id) ? ' on' : ''}`}
+              role="tab"
+              aria-selected={groupFilter === String(g.id)}
+              onClick={() => {
+                setGroupFilter(String(g.id));
+              }}
             >
-              {t('imp.do')}
+              {g.name}
             </button>
-          </div>
-          {preview.length > 0 && (
-            <ul className="srv-preview">
-              {preview.map((p, i) => (
-                <li key={`${String(p.type)}-${String(i)}`}>
-                  {TYPE_LABEL[p.type] ?? '?'} · {p.name} · {p.address}:{String(p.port)}
-                </li>
-              ))}
-            </ul>
-          )}
+          ))}
+          <button
+            className="srv-gtab srv-gtab-add"
+            aria-label={t('grp.create')}
+            title={t('grp.create')}
+            onClick={() => {
+              setGroupsOpen(true);
+            }}
+          >
+            <Icon name="plus" />
+          </button>
         </div>
       )}
 
+      <div className="prof-toolbar">
+        <div className="searchwrap">
+          <span className="ic">
+            <Icon name="search" />
+          </span>
+          <input
+            className="input"
+            type="text"
+            placeholder={t('prof.searchPh')}
+            aria-label={t('prof.searchPh')}
+            autoComplete="off"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+            }}
+          />
+          <span className="kbd">Ctrl K</span>
+        </div>
+
+        <div className="chips">
+          {STATUS_CHIPS.map((c) => (
+            <button
+              key={c.key}
+              className={`chip${statusFilter === c.key ? ' on' : ''}`}
+              onClick={() => {
+                setStatusFilter(c.key);
+              }}
+            >
+              {t(c.labelKey as never)}
+            </button>
+          ))}
+        </div>
+
+        <label className="cap" htmlFor="protoSel">
+          {t('filter.proto')}
+        </label>
+        <select
+          className="select"
+          id="protoSel"
+          value={protoFilter}
+          onChange={(e) => {
+            setProtoFilter(e.target.value);
+          }}
+        >
+          {PROTO_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.value === 'all' ? t('filter.protoAny') : o.label}
+            </option>
+          ))}
+        </select>
+
+        <button
+          className="btn btn-ghost btn-sm"
+          onClick={() => {
+            setGroupsOpen(true);
+          }}
+        >
+          <Icon name="layers" />
+          <span>{t('grp.manage')}</span>
+        </button>
+      </div>
+
+      <div className="prof-toolbar">
+        <div className="seg mini">
+          <button className={compact ? '' : ' on'} onClick={() => { setCompact(false); }}>
+            {t('dens.normal')}
+          </button>
+          <button className={compact ? 'on' : ''} onClick={() => { setCompact(true); }}>
+            {t('dens.compact')}
+          </button>
+        </div>
+        <span className="sub-auto">
+          <span>{t('srv.group')}</span>
+          <button
+            className={`sw${groupBySub ? ' on' : ''}`}
+            role="switch"
+            aria-checked={groupBySub}
+            aria-label={t('srv.group')}
+            onClick={() => {
+              setGroupBySub((v) => !v);
+            }}
+          />
+        </span>
+        <span className="flex1" />
+        {progress !== '' && <span className="cap mono">{progress}</span>}
+        <button
+          className="btn btn-sec"
+          disabled={testing || profiles.length === 0}
+          onClick={() => {
+            void testLatency(profiles.map((p) => p.id));
+          }}
+        >
+          <Icon name="gauge" />
+          <span>{t('test.all')}</span>
+        </button>
+        {testing && (
+          <button className="btn btn-ghost btn-sm" onClick={() => void stopTests()}>
+            {t('test.stop')}
+          </button>
+        )}
+        <button
+          className="btn btn-ghost btn-sm"
+          title={t('prof.sortTip')}
+          onClick={() => {
+            setSortKey((k) => (k === 'delay' ? 'name' : 'delay'));
+          }}
+        >
+          <Icon name="sliders" />
+          <span>{sortKey === 'delay' ? t('prof.sortDelay') : t('prof.sortName')}</span>
+        </button>
+        <span className="cap mono">
+          {t('srv.current')}: {String(profiles.length)}
+        </span>
+      </div>
+
+      <div className="srv-actions">
+        <button
+          className="btn btn-sec"
+          onClick={() => {
+            setImportOpen(true);
+          }}
+        >
+          <Icon name="download" />
+          <span>{t('prof.import')}</span>
+        </button>
+        <button
+          className="btn btn-pri"
+          disabled={targetGroup === ''}
+          onClick={() => {
+            setEditing(null);
+          }}
+        >
+          <Icon name="plus" />
+          <span>{t('prof.add')}</span>
+        </button>
+        <span className="flex1" />
+        <button className="btn btn-ghost btn-sm" onClick={() => void exportLinks()}>
+          <Icon name="copy" />
+          <span>{t('common.copyLink')}</span>
+        </button>
+        {selected.size > 0 && (
+          <>
+            <span className="cap mono">{tf('srv.selected', { n: selected.size })}</span>
+            <button
+              className="btn btn-ghost btn-sm"
+              onClick={() => {
+                setSelected(new Set());
+              }}
+            >
+              {t('srv.selClear')}
+            </button>
+            <button className="btn btn-danger btn-sm" onClick={() => void removeSelected()}>
+              <Icon name="trash" />
+              <span>{t('srv.delSel')}</span>
+            </button>
+          </>
+        )}
+      </div>
+
       {msg !== '' && <div className="toast-ok">{msg}</div>}
-      {err !== '' && <div className="toast-err" role="alert">{err}</div>}
+      {err !== '' && (
+        <div className="banner banner-err" role="alert">
+          <span className="ic">
+            <Icon name="alert" />
+          </span>
+          <div className="bn-t">{err}</div>
+        </div>
+      )}
 
       {profiles.length === 0 ? (
-        <p className="muted">{t('srv.empty.d')}</p>
-      ) : (
+        <div className="empty">
+          <Icon name="layers" />
+          <div className="empty-t">{t('srv.empty.t')}</div>
+          <div className="empty-d">{t('srv.empty.d')}</div>
+          <button
+            className="btn btn-pri"
+            onClick={() => {
+              setImportOpen(true);
+            }}
+          >
+            {t('prof.import')}
+          </button>
+        </div>
+      ) : groupBySub ? (
         <div className="srv-groups">
           {groupByGeo(profiles, (p) => p.geo, lang).map((g) => (
             <section key={g.code === '' ? '_' : g.code} className="srv-group">
@@ -246,46 +472,37 @@ export function ServersScreen(): JSX.Element {
                 {g.label}
                 <span className="muted">{g.items.length}</span>
               </h3>
-              <ul className="srv-list">
+              <ul className={`prof-list${compact ? ' compact' : ''}`}>
                 {g.items.map((p) => (
-                  <li key={String(p.id)} className="srv-row">
-                    <span className="srv-type">{TYPE_LABEL[p.type] ?? '?'}</span>
-                    <button
-                      className="srv-name"
-                      style={{ background: 'none', border: 0, color: 'inherit', cursor: 'pointer', textAlign: 'start' }}
-                      onClick={() => { setEditing(p); }}
-                      title={t('common.edit')}
-                    >
-                      {p.name}
-                    </button>
-                    <span className="muted mono">
-                      {p.address}:{String(p.port)}
-                    </span>
-                    <span className="mono srv-lat">
-                      {latency[String(p.id)] ??
-                        (p.testResult?.latencyMs !== undefined
-                          ? `${String(p.testResult.latencyMs)} ms`
-                          : '—')}
-                    </span>
-                    <button
-                      className="btn ghost"
-                      onClick={() => void removeSelected(p.id)}
-                      aria-label={`${t('srv.delSel')} ${p.name}`}
-                    >
-                      ✕
-                    </button>
-                  </li>
+                  <ProfileRow key={String(p.id)} {...rowProps(p)} />
                 ))}
               </ul>
             </section>
           ))}
         </div>
+      ) : (
+        <ul className={`prof-list${compact ? ' compact' : ''}`}>
+          {profiles.map((p) => (
+            <ProfileRow key={String(p.id)} {...rowProps(p)} />
+          ))}
+        </ul>
+      )}
+
+      {groupsOpen && (
+        <GroupsDialog
+          onClose={() => {
+            setGroupsOpen(false);
+          }}
+          onChanged={refresh}
+        />
       )}
 
       {importOpen && (
         <ImportDialog
           groupId={targetGroup === '' ? 0n : BigInt(targetGroup)}
-          onClose={() => { setImportOpen(false); }}
+          onClose={() => {
+            setImportOpen(false);
+          }}
           onImported={refresh}
         />
       )}
@@ -294,10 +511,81 @@ export function ServersScreen(): JSX.Element {
         <ProfileEditor
           profile={editing}
           groupId={targetGroup === '' ? 0n : BigInt(targetGroup)}
-          onClose={() => { setEditing(undefined); }}
+          onClose={() => {
+            setEditing(undefined);
+          }}
           onSaved={refresh}
         />
       )}
     </div>
+  );
+}
+
+interface RowProps {
+  readonly p: Profile;
+  readonly compact: boolean;
+  readonly checked: boolean;
+  readonly latencyLabel: string | undefined;
+  readonly onCheck: (on: boolean) => void;
+  readonly onEdit: () => void;
+  readonly onFav: () => void;
+  readonly onDelete: () => void;
+  readonly typeLabel: string;
+}
+
+function ProfileRow({
+  p,
+  compact,
+  checked,
+  latencyLabel,
+  onCheck,
+  onEdit,
+  onFav,
+  onDelete,
+  typeLabel,
+}: RowProps): JSX.Element {
+  const { t } = useI18n();
+  const delay =
+    latencyLabel ??
+    (p.testResult?.latencyMs !== undefined ? `${String(p.testResult.latencyMs)} ms` : '—');
+  const down = (p.testResult?.lastError ?? '') !== '';
+  return (
+    <li className={`prow${checked ? ' sel' : ''}`}>
+      <input
+        type="checkbox"
+        className="prow-chk"
+        checked={checked}
+        aria-label={`${t('srv.select')} ${p.name}`}
+        onChange={(e) => {
+          onCheck(e.target.checked);
+        }}
+      />
+      <button
+        className={`prow-fav${p.favorite ? ' on' : ''}`}
+        aria-label={p.favorite ? t('prof.favRm') : t('prof.favAdd')}
+        title={p.favorite ? t('prof.favRm') : t('prof.favAdd')}
+        onClick={onFav}
+      >
+        <Icon name="check" />
+      </button>
+      <button className="prow-main" onClick={onEdit} title={t('common.edit')}>
+        <span className="prow-name">{p.name}</span>
+        {!compact && (
+          <span className="prow-addr mono">
+            {p.address}:{String(p.port)}
+          </span>
+        )}
+      </button>
+      {!compact && <span className="prow-type mono">{typeLabel}</span>}
+      <span className={`prow-lat mono${down ? ' err' : ''}`}>{delay}</span>
+      <button
+        className="prow-del btn btn-ic btn-sm"
+        aria-label={t('common.delete')}
+        title={t('common.delete')}
+        onClick={onDelete}
+      >
+        <Icon name="trash" />
+      </button>
+    </li>
   );
 }

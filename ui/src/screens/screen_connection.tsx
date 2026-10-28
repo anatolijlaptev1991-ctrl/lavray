@@ -8,6 +8,7 @@ import { Icon } from '../components/Icon';
 import { ConnectMode, CoreState } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { TrafficGraph } from '../components/TrafficGraph';
 import { friendlyCoreError } from '../lib/core';
 import { geoName } from '../lib/geo';
 
@@ -268,6 +269,7 @@ export function ConnectionScreen(): JSX.Element {
           </div>
         )}
       </div>
+      <TrafficGraph active={ready} />
     </div>
   );
 }

@@ -6,12 +6,16 @@ package api
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"connectrpc.com/connect"
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
+
+// maxUserAgentLen — предел длины User-Agent подписки (байт).
+const maxUserAgentLen = 256
 
 func (s *Server) ListGroups(ctx context.Context, req *connect.Request[lavrayv1.ListGroupsRequest]) (*connect.Response[lavrayv1.ListGroupsResponse], error) {
 	list, err := s.st.ListGroups()
@@ -51,6 +55,27 @@ func (s *Server) UpdateGroup(ctx context.Context, req *connect.Request[lavrayv1.
 	}
 	g.Archive = in.Archive
 	g.SkipAutoUpdate = in.SkipAutoUpdate
+	// T-21: per-sub настройки подписки (FR-UI-263). optional-поле, которого нет
+	// в запросе, значение не меняет (так переключатель «Автообновление» не
+	// затирает интервал и User-Agent); 0 и пустая строка сбрасывают настройку
+	// к глобальной.
+	if in.UpdateIntervalMin != nil {
+		switch v := *in.UpdateIntervalMin; {
+		case v < 0:
+			return nil, invalidArg("update_interval_min не может быть отрицательным")
+		case v == 0:
+			g.UpdateIntervalMin = nil
+		default:
+			g.UpdateIntervalMin = int32p(v)
+		}
+	}
+	if in.UserAgent != nil {
+		ua := strings.TrimSpace(*in.UserAgent)
+		if len(ua) > maxUserAgentLen || strings.ContainsAny(ua, "\r\n\x00") {
+			return nil, invalidArg("user_agent: не длиннее %d байт, без переводов строки", maxUserAgentLen)
+		}
+		g.UserAgent = ua
+	}
 	if err := s.st.UpdateGroup(g); err != nil {
 		return nil, mapErr(err)
 	}

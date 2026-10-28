@@ -28,6 +28,7 @@ type subRequest struct {
 	useProxy           *bool
 	insecureTLS        *bool
 	allowPrivate       *bool
+	clearBefore        *bool
 	connectTimeout     time.Duration
 	overallTimeout     time.Duration
 	confirmDestructive bool
@@ -39,6 +40,7 @@ func (s *Server) subscriberWith(r subRequest) *subs.Subscriber {
 		AllowPrivateURL: s.settingBool("sub.allow_private_urls"),
 		InsecureTLS:     s.settingBool("sub.insecure"),
 		HWIDEnabled:     s.settingBool("sub.hwid_enabled"),
+		ClearBefore:     s.settingBool("sub.clear"), // FR-UI-124; запрос может перекрыть
 		Log: func(format string, args ...any) {
 			s.logs.Logf("warn", "subs", format, args...)
 		},
@@ -48,6 +50,9 @@ func (s *Server) subscriberWith(r subRequest) *subs.Subscriber {
 	}
 	if r.insecureTLS != nil {
 		opts.InsecureTLS = *r.insecureTLS
+	}
+	if r.clearBefore != nil {
+		opts.ClearBefore = *r.clearBefore
 	}
 	if r.connectTimeout > 0 {
 		opts.ConnectTimeout = r.connectTimeout
@@ -99,6 +104,7 @@ func (s *Server) UpdateSubscription(ctx context.Context, req *connect.Request[la
 		useProxy:           m.UseProxy,
 		insecureTLS:        m.InsecureTls,
 		allowPrivate:       m.AllowPrivateUrls,
+		clearBefore:        m.ClearBefore,
 		confirmDestructive: m.GetConfirmDestructive(),
 	}
 	if m.ConnectTimeoutMs != nil && m.GetConnectTimeoutMs() > 0 {

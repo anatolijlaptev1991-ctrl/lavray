@@ -248,6 +248,7 @@ type UpdateResult struct {
 type ApplyParams struct {
 	Next      []*model.Profile // разобранные профили (промежуточная копия уже разобрана)
 	Confirmed bool             // confirm_destructive (FR-UI-258)
+	Clear     bool             // clear_before (FR-UI-124): старые профили не сопоставляются, а удаляются
 	UsedURL   string           // успешный URL (→ last_working_url)
 	Info      *model.SubscriptionInfo
 	NowMs     int64 // для last_update (0 → время вызова)
@@ -285,6 +286,12 @@ func Apply(st StoreAPI, snap *Snapshot, params ApplyParams) (*UpdateResult, erro
 	}
 	// takeOld — точное совпадение, иначе мягкое (сервер тот же).
 	takeOld := func(p *model.Profile) (*model.Profile, bool) {
+		if params.Clear {
+			// T-21, clear_before (FR-UI-124): сопоставления нет — каждый профиль
+			// ответа создаётся заново, все прежние (existing) удаляются ниже.
+			// Порог 50 % (ComputeDiff) и снапшот для отката работают как раньше.
+			return nil, false
+		}
 		k := keyOf(p)
 		if old, ok := existing[k]; ok {
 			delete(existing, k)

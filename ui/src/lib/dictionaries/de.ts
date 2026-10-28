@@ -615,6 +615,7 @@ export const deDict: Record<string, string> = {
   "sub.expiresSoon": "Läuft bald ab",
   "sub.hwid.hint": "Manche Anbieter begrenzen die Zahl der Geräte. Die Kennung ist zufällig und wird für diese Installation erzeugt.",
   "sub.noExpiry": "Ohne Ablauf",
+  "sub.set.global": "Für alle Abos",
   "sub.set.hwid": "Gerätekennung senden (HWID)",
   "sub.set.interval": "Aktualisieren alle",
   "sub.set.tunnel": "Über den Tunnel aktualisieren, wenn er aktiv ist",

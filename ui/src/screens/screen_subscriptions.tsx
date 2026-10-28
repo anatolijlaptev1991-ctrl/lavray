@@ -12,6 +12,7 @@ import { formatBytes, NB } from '../lib/i18n';
 import { SubscriptionProgress_Phase } from '../gen/lavray_pb';
 import { ConfirmDialog } from '../components/dialogs';
 import { Icon } from '../components/Icon';
+import { SubscriptionSettingsDialog } from '../components/SubscriptionSettingsDialog';
 
 /** Состояние ошибки подписки → ключ словаря (как subErrParts прототипа). */
 function subErrKey(
@@ -65,6 +66,7 @@ export function SubscriptionsScreen(): JSX.Element {
   } | null>(null);
   // T-18: обновление, ожидающее подтверждения «удалит N из M серверов».
   const [pending, setPending] = useState<PendingConfirm | null>(null);
+  const [settingsFor, setSettingsFor] = useState<Group | null>(null);
 
   const reload = useCallback(async (): Promise<void> => {
     try {
@@ -203,6 +205,10 @@ export function SubscriptionsScreen(): JSX.Element {
     setPending(null);
   }, []);
 
+  const closeSettings = useCallback((): void => {
+    setSettingsFor(null);
+  }, []);
+
   const toggleAuto = useCallback(
     async (g: Group): Promise<void> => {
       try {
@@ -271,6 +277,16 @@ export function SubscriptionsScreen(): JSX.Element {
                   </span>
                 )}
                 <span className="flex1" />
+                <button
+                  className="btn btn-ic btn-sm"
+                  aria-label={t('sub.settings')}
+                  title={t('sub.settings')}
+                  onClick={() => {
+                    setSettingsFor(g);
+                  }}
+                >
+                  <Icon name="settings" />
+                </button>
                 <button
                   className="btn btn-ic btn-sm"
                   aria-label={t('common.open')}
@@ -464,6 +480,16 @@ export function SubscriptionsScreen(): JSX.Element {
           danger
           onConfirm={confirmPending}
           onClose={closePending}
+        />
+      )}
+
+      {settingsFor !== null && (
+        <SubscriptionSettingsDialog
+          group={settingsFor}
+          onClose={closeSettings}
+          onSaved={() => {
+            void reload();
+          }}
         />
       )}
     </div>

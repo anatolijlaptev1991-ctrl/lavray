@@ -615,6 +615,7 @@ export const enDict: Record<string, string> = {
   "sub.expiresSoon": "Expires soon",
   "sub.hwid.hint": "Some providers limit the number of devices. The identifier is random and created for this installation.",
   "sub.noExpiry": "No expiry",
+  "sub.set.global": "For all subscriptions",
   "sub.set.hwid": "Send a device identifier (HWID)",
   "sub.set.interval": "Update every",
   "sub.set.tunnel": "Update through the tunnel when it’s on",

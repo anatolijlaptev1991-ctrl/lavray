@@ -608,6 +608,7 @@ export const zhDict: Record<string, string> = {
   "sub.expiresSoon": "即将到期",
   "sub.hwid.hint": "部分服务商限制设备数量。标识为随机生成，仅用于本安装。",
   "sub.noExpiry": "长期有效",
+  "sub.set.global": "适用于所有订阅",
   "sub.set.hwid": "发送设备标识（HWID）",
   "sub.set.interval": "更新间隔",
   "sub.set.tunnel": "开启隧道时经隧道更新",

@@ -615,6 +615,7 @@ export const esDict: Record<string, string> = {
   "sub.expiresSoon": "Caduca pronto",
   "sub.hwid.hint": "Algunos proveedores limitan el número de dispositivos. El identificador es aleatorio y se crea para esta instalación.",
   "sub.noExpiry": "Sin caducidad",
+  "sub.set.global": "Para todas las suscripciones",
   "sub.set.hwid": "Enviar identificador de dispositivo (HWID)",
   "sub.set.interval": "Actualizar cada",
   "sub.set.tunnel": "Actualizar por el túnel cuando esté activo",

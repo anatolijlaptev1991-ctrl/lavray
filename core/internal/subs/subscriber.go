@@ -76,6 +76,7 @@ type Options struct {
 	AllowPrivateURL bool          // «разрешить локальные адреса» (LNB-05)
 	InsecureTLS     bool          // sub_insecure — с маркером в логе (LNB-19)
 	HWIDEnabled     bool          // FR-UI-265: только явный opt-in
+	ClearBefore     bool          // FR-UI-124 (sub_clear): очистить группу перед применением ответа
 	HWID            HWID
 	// Log — приёмник предупреждений (маркер insecure и пр.); nil → нет.
 	Log func(format string, args ...any)
@@ -474,6 +475,7 @@ func (s *Subscriber) Update(ctx context.Context, st StoreAPI, group *model.Group
 	result, err := Apply(st, snap, ApplyParams{
 		Next:      parsed.Profiles,
 		Confirmed: confirmed,
+		Clear:     s.opts.ClearBefore,
 		UsedURL:   resp.UsedURL,
 		Info:      info,
 	})

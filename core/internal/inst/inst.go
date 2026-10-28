@@ -126,7 +126,13 @@ type Manager struct {
 	lastConfig []byte
 
 	startCancel context.CancelFunc // отмена текущего Start (L13)
-	startDone   chan struct{}      // завершение текущего Start (I1)
+	startDone   chan struct{}      // завершение текущего Start (I1); закрывается ПОСЛЕ записи итогового состояния
+	// stopRequested — Stop пришёл, пока шёл Start (T-14, A1-06): Start,
+	// вернувшись из раннера, не публикует Ready, а гасит инстанс сам.
+	stopRequested bool
+	// stop — идущая остановка (T-14, A1-05): параллельные Stop ждут её
+	// результата, а не зовут runner.Stop повторно.
+	stop *stopOp
 
 	subMu  sync.Mutex
 	subs   map[chan Event]struct{}
@@ -137,6 +143,22 @@ type Manager struct {
 // контракта: событие несёт состояние, а не дельту).
 type Event struct {
 	Status Status
+}
+
+// stopOp — одна остановка инстанса. err читать только после <-done.
+type stopOp struct {
+	done chan struct{}
+	err  error
+}
+
+// wait ждёт завершения остановки либо ctx.
+func (o *stopOp) wait(ctx context.Context) error {
+	select {
+	case <-o.done:
+		return o.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // NewManager создаёт менеджера поверх runner (nil → NopRunner).
@@ -177,11 +199,53 @@ func (m *Manager) Start(ctx context.Context, info RunInfo) error {
 
 	err := m.runner.Start(startCtx, info.ConfigJSON)
 	cancel()
-	close(startDone)
+	return m.finishStart(ctx, info, startDone, err)
+}
+
+// finishStart записывает итог Start и только потом закрывает startDone: Stop,
+// ждущий конца старта, должен видеть окончательное состояние (T-14, A1-06;
+// раньше startDone закрывался до записи, и Stop возвращал успех, а инстанс
+// затем становился Ready).
+//
+// Если Stop пришёл во время старта, пользователь хотел отключиться, и Start
+// не оставляет за собой работающий инстанс: отмена раннером → Idle (не
+// Crashed), раннер отмену проигнорировал и поднялся → гасим его здесь же, без
+// публикации Ready. В обоих случаях Start возвращает ошибку с context.Canceled
+// (API отдаст CANCELED, и UI не включит системный прокси).
+func (m *Manager) finishStart(ctx context.Context, info RunInfo, startDone chan struct{}, err error) error {
 	m.mu.Lock()
 	m.startCancel = nil
 	m.startDone = nil
-	if err != nil {
+	cancelled := m.stopRequested
+	m.stopRequested = false
+
+	switch {
+	case cancelled && err == nil:
+		op := &stopOp{done: make(chan struct{})}
+		m.stop = op
+		m.state = StateStopping
+		m.mu.Unlock()
+		m.notifySnapshot()
+		stopCtx, stopCancel := context.WithTimeout(context.WithoutCancel(ctx), StopTimeout)
+		m.runStop(stopCtx, op)
+		stopCancel()
+		close(startDone)
+		if op.err != nil {
+			return errors.Join(fmt.Errorf("inst: старт отменён: %w", context.Canceled), op.err)
+		}
+		return fmt.Errorf("inst: старт отменён: %w", context.Canceled)
+
+	case cancelled:
+		m.state = StateIdle
+		m.lastError = ""
+		m.run = nil
+		m.lastConfig = nil
+		m.mu.Unlock()
+		close(startDone)
+		m.notifySnapshot()
+		return fmt.Errorf("inst: старт отменён: %w", context.Canceled)
+
+	case err != nil:
 		// I2 (аудит round 2): при падении старта run не должен оставаться —
 		// иначе Status показывает активный профиль в состоянии Crashed.
 		m.state = StateCrashed
@@ -189,12 +253,15 @@ func (m *Manager) Start(ctx context.Context, info RunInfo) error {
 		m.run = nil
 		m.lastConfig = nil
 		m.mu.Unlock()
+		close(startDone)
 		m.notifySnapshot()
 		return fmt.Errorf("inst: старт инстанса: %w", err)
 	}
+
 	m.state = StateReady
 	m.lastConfig = append([]byte(nil), info.ConfigJSON...)
 	m.mu.Unlock()
+	close(startDone)
 	m.notifySnapshot()
 	return nil
 }
@@ -204,50 +271,70 @@ func (m *Manager) Start(ctx context.Context, info RunInfo) error {
 // graceful-ожидание (≤ StopTimeout); таймаут → Crashed + ошибка (раннер может
 // ещё дорывать TUN в фоне — перезапуск в этом состоянии небезопасен, о чём и
 // говорит состояние).
+//
+// T-14: повторный и параллельный Stop во время остановки не зовёт
+// runner.Stop второй раз, а ждёт результата первой остановки (A1-05);
+// Stop во время Start отменяет старт и ждёт, пока Start запишет итог, —
+// после чего инстанс гарантированно не работает (A1-06).
 func (m *Manager) Stop(ctx context.Context) error {
-	m.mu.Lock()
-	switch m.state {
-	case StateIdle, StateCrashed:
-		m.mu.Unlock()
-		return nil
-	case StateStarting:
-		// L13/I1: отменяем старт и ЖДЁМ, пока Start завершится — иначе
-		// раннер, игнорирующий ctx, успевал перевести инстанс в Ready уже
-		// после «успешного» Disconnect.
-		cancel := m.startCancel
-		done := m.startDone
-		m.mu.Unlock()
-		if cancel != nil {
-			cancel()
-		}
-		if done != nil {
-			select {
-			case <-done:
-			case <-ctx.Done():
-				return ctx.Err()
+	for {
+		m.mu.Lock()
+		switch m.state {
+		case StateIdle, StateCrashed:
+			m.mu.Unlock()
+			return nil
+		case StateStopping:
+			op := m.stop
+			m.mu.Unlock()
+			return op.wait(ctx)
+		case StateStarting:
+			// L13/I1: отменяем старт и ЖДЁМ, пока Start запишет итоговое
+			// состояние (finishStart) — раннер, игнорирующий ctx, успевал
+			// стать Ready уже после «успешного» Disconnect.
+			m.stopRequested = true
+			cancel := m.startCancel
+			done := m.startDone
+			m.mu.Unlock()
+			if cancel != nil {
+				cancel()
 			}
+			if done != nil {
+				select {
+				case <-done:
+				case <-ctx.Done():
+					return ctx.Err()
+				}
+			}
+			continue // состояние окончательное: Idle/Crashed (или Ready, если Stop опоздал)
 		}
-		return nil
+		op := &stopOp{done: make(chan struct{})}
+		m.stop = op
+		m.state = StateStopping
+		m.mu.Unlock()
+		m.notifySnapshot()
+		m.runStop(ctx, op)
+		return op.err
 	}
-	m.state = StateStopping
-	m.mu.Unlock()
-	m.notifySnapshot()
+}
 
+// runStop вызывает runner.Stop, записывает итог (Idle либо Crashed), будит
+// всех, кто ждёт op, и рассылает снимок. Состояние перед вызовом — Stopping,
+// m.stop == op.
+func (m *Manager) runStop(ctx context.Context, op *stopOp) {
 	err := m.runner.Stop(ctx)
-
 	m.mu.Lock()
 	if err != nil {
 		m.state = StateCrashed
 		m.lastError = err.Error()
-		m.mu.Unlock()
-		m.notifySnapshot()
-		return fmt.Errorf("inst: остановка инстанса: %w", err)
+		op.err = fmt.Errorf("inst: остановка инстанса: %w", err)
+	} else {
+		m.state = StateIdle
+		m.run = nil
 	}
-	m.state = StateIdle
-	m.run = nil
+	m.stop = nil
 	m.mu.Unlock()
+	close(op.done)
 	m.notifySnapshot()
-	return nil
 }
 
 // Status возвращает снимок менеджера.

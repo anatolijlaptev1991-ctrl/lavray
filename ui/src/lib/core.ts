@@ -80,9 +80,17 @@ declare global {
 
 export function coreUrlFromEnv(): string {
   // Нативно: оболочка выставила адрес (main.tsx → core_endpoint).
-  // Веб: тот же origin (панель за одним хостом с ядром).
   if (window.__LAVRAY_CORE_URL !== undefined) return window.__LAVRAY_CORE_URL;
-  if (window.location.protocol.startsWith('http')) return window.location.origin;
+  // Tauri на Windows отдаёт страницу с origin http://tauri.localhost —
+  // это НЕ веб-режим. Без этой проверки UI слал RPC в собственный
+  // asset-сервер и получал «unsupported content type: text/html»
+  // (реальный дефект, пойман визуальной проверкой релизной сборки).
+  const host = window.location.hostname;
+  const isTauriShell = host === 'tauri.localhost' || window.location.protocol === 'tauri:';
+  if (!isTauriShell && window.location.protocol.startsWith('http')) {
+    return window.location.origin;
+  }
+  // Ядро ещё не сообщило адрес: явный маркер, чтобы ошибка была понятной.
   return 'http://127.0.0.1:0';
 }
 

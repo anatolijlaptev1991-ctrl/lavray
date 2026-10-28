@@ -2,7 +2,7 @@
 // оглавлением, поиском по настройкам и скролл-наблюдением. Все контролы
 // связаны с реальным API ядра (SettingsService), а тема/акцент/язык — с
 // локальными предпочтениями (как в прототипе).
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { create } from '@bufbuild/protobuf';
 import { SettingType, SettingValueSchema } from '../gen/lavray_pb';
@@ -10,6 +10,7 @@ import type { SettingDescriptor, SettingValue } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { ConfirmDialog } from '../components/dialogs';
 import { Icon, type IconName } from '../components/Icon';
 import {
   applyTheme,
@@ -62,14 +63,19 @@ const TUN_ROWS: readonly Row[] = [
   { key: 'tun.bypass_cidr', type: SettingType.STRING, labelKey: 'tun.exclAddr', descKey: 'tun.exclHint' },
 ];
 
+/** Ключ «не проверять TLS-сертификаты по умолчанию» (FR-UI-177, skip_cert в NekoBox). */
+const INSECURE_TLS_KEY = 'security.allow_insecure_default';
+
 const CORE_ROWS: readonly Row[] = [
   { key: 'core.underlying_dns', type: SettingType.STRING, labelKey: 'dns.local', descKey: 'dns.local.d' },
   { key: 'mux.protocol', type: SettingType.STRING, labelKey: 'mux.protocol' },
   { key: 'mux.concurrency', type: SettingType.INT, labelKey: 'mux.concurrency' },
   { key: 'mux.default_on', type: SettingType.BOOL, labelKey: 'mux.default_on' },
-  // ST-01 (аудит round 3): подписи строго соответствуют смыслу ключа —
-  // раньше allow_insecure был подписан «Подтверждать выход».
-  { key: 'security.allow_insecure_default', type: SettingType.BOOL, labelKey: 'dns.warn.t' },
+  // T-11: ключ отключает проверку TLS-сертификатов у ВСЕХ серверов
+  // (cfgbuild/outbounds.go: `s.AllowInsecure || st.AllowInsecureDefault`).
+  // Раньше он носил чужую подпись «Совместимость» (dns.warn.t) без описания.
+  // Подпись называет действие прямо; включение идёт через подтверждение.
+  { key: INSECURE_TLS_KEY, type: SettingType.BOOL, labelKey: 'set.insecure', descKey: 'set.insecure.d' },
   { key: 'enable_external_cores', type: SettingType.BOOL, labelKey: 'core.external' },
 ];
 
@@ -132,6 +138,7 @@ export function SettingsScreen(): JSX.Element {
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
   const [coreVersion, setCoreVersion] = useState('');
+  const [confirmInsecure, setConfirmInsecure] = useState(false);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
@@ -175,6 +182,16 @@ export function SettingsScreen(): JSX.Element {
     },
     [core, t],
   );
+
+  // T-11: стабильные колбэки — иначе перерисовка раз в секунду (опрос
+  // статуса) заново вешала бы обработчики диалога подтверждения.
+  const closeInsecureConfirm = useCallback((): void => {
+    setConfirmInsecure(false);
+  }, []);
+  const confirmInsecureOn = useCallback((): void => {
+    setConfirmInsecure(false);
+    void save(INSECURE_TLS_KEY, SettingType.BOOL, true);
+  }, [save]);
 
   const setThemePref = useCallback((next: ThemePreference): void => {
     setTheme(next);
@@ -258,6 +275,41 @@ export function SettingsScreen(): JSX.Element {
         />
       </div>
     </div>
+  );
+
+  // T-11: небезопасный режим TLS. Включение — только через подтверждение,
+  // выключение (безопасное направление) — сразу. Пока включено, под строкой
+  // висит предупреждение.
+  const insecureOn = values[INSECURE_TLS_KEY] === true;
+  const insecureRow = (r: Row): JSX.Element => (
+    <Fragment key={r.key}>
+      <div className="set-row">
+        <div className="set-txt">
+          <div className="set-l">{t(r.labelKey)}</div>
+          {r.descKey !== undefined && <div className="set-d">{t(r.descKey)}</div>}
+        </div>
+        <div className="set-ctl">
+          <button
+            className={`sw${insecureOn ? ' on' : ''}`}
+            role="switch"
+            aria-checked={insecureOn}
+            aria-label={t(r.labelKey)}
+            onClick={() => {
+              if (insecureOn) void save(r.key, r.type, false);
+              else setConfirmInsecure(true);
+            }}
+          />
+        </div>
+      </div>
+      {insecureOn && (
+        <div className="banner banner-warn" role="status">
+          <span className="ic">
+            <Icon name="alert" />
+          </span>
+          <div className="bn-t">{t('set.insecure.on')}</div>
+        </div>
+      )}
+    </Fragment>
   );
 
   return (
@@ -818,7 +870,9 @@ export function SettingsScreen(): JSX.Element {
                 </div>
               </div>
               {CORE_ROWS.filter((r) => matches(r.labelKey, r.descKey)).map((r) =>
-                r.type === SettingType.BOOL ? (
+                r.key === INSECURE_TLS_KEY ? (
+                  insecureRow(r)
+                ) : r.type === SettingType.BOOL ? (
                   boolRow(r)
                 ) : (
                   <div className="set-row" key={r.key}>
@@ -931,6 +985,16 @@ export function SettingsScreen(): JSX.Element {
           )}
         </div>
       </div>
+      {confirmInsecure && (
+        <ConfirmDialog
+          title={t('set.insecure.confirm.t')}
+          text={t('set.insecure.confirm.d')}
+          confirmLabel={t('set.insecure.confirm.ok')}
+          danger
+          onConfirm={confirmInsecureOn}
+          onClose={closeInsecureConfirm}
+        />
+      )}
     </div>
   );
 }

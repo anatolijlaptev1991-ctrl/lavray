@@ -492,7 +492,6 @@ function AppInner(): JSX.Element {
       {/* Настройки → «Лицензии и компоненты» открывают диалог событием. */}
       {quickImport !== null && (
         <ImportDialog
-          groupId={0n}
           initialTab={quickImport}
           onClose={() => { setQuickImport(null); }}
           onImported={() => {

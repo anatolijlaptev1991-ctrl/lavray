@@ -440,7 +440,6 @@ export function ConnectionScreen(): JSX.Element {
       />
       {importOpen && (
         <ImportDialog
-          groupId={0n}
           onClose={() => { setImportOpen(false); }}
           onImported={() => {
             setImportOpen(false);

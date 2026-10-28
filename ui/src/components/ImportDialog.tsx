@@ -15,7 +15,11 @@ import { Icon } from '../components/Icon';
 type Tab = 'link' | 'qr' | 'file';
 
 interface Props {
-  readonly groupId: bigint;
+  /**
+   * Группа назначения. Не задана (быстрое действие «Подключения», меню
+   * титлбара, онбординг) — ядро кладёт профили в «Default»; передавать 0 нельзя.
+   */
+  readonly groupId?: bigint | undefined;
   /** Вкладка, открываемая при показе (онбординг ведёт в нужный источник). */
   readonly initialTab?: Tab;
   readonly onClose: () => void;
@@ -91,7 +95,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
       // (LNB-25/FR-UI-257). Иначе двухфазное подтверждение обходилось.
       const res = await core.profiles.importContent({
         content: link,
-        targetGroupId: groupId,
+        ...(groupId === undefined ? {} : { targetGroupId: groupId }),
         allowCustomFields: warnings.length > 0,
       });
       setOk(tf('toast.subUpdated', { name: String(res.addedProfileIds.length) }));

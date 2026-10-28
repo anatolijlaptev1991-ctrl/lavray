@@ -139,6 +139,14 @@ export function ServersScreen(): JSX.Element {
     return sorted;
   }, [allProfiles, groupFilter, protoFilter, statusFilter, sortKey, sortAsc, lang]);
 
+  // Группа для импорта: вкладка/фильтр, иначе первая группа списка. «0» (пункт
+  // «Добавлены вручную») и ещё не загруженный список групп — это «группы нет»:
+  // ничего не передаём, ядро кладёт профили в «Default» (T-07).
+  const importGroupId = ((): bigint | undefined => {
+    const raw = groupFilter !== 'all' ? groupFilter : targetGroup;
+    return raw === '' || raw === '0' ? undefined : BigInt(raw);
+  })();
+
   const toggleSelect = useCallback((id: bigint, on: boolean): void => {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -630,9 +638,7 @@ export function ServersScreen(): JSX.Element {
 
       {importOpen && (
         <ImportDialog
-          groupId={BigInt(
-            groupFilter !== 'all' ? groupFilter : targetGroup === '' ? '0' : targetGroup,
-          )}
+          groupId={importGroupId}
           onClose={() => {
             setImportOpen(false);
           }}

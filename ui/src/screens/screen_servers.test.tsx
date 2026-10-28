@@ -1,8 +1,9 @@
 // screen_servers.test.tsx — экран «Серверы»: тест задержки, меню, копирование ссылок.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { MockInstance } from 'vitest';
 import { createElement } from 'react';
 import { create } from '@bufbuild/protobuf';
-import { LatencyResultSchema, TestLatencyRequest_Mode } from '../gen/lavray_pb';
+import { ExportLinksResponseSchema, LatencyResultSchema, TestLatencyRequest_Mode } from '../gen/lavray_pb';
 import type { LatencyResult } from '../gen/lavray_pb';
 import { setLanguage } from '../lib/i18n';
 import {
@@ -13,6 +14,7 @@ import {
   mountWithCore,
   profileOf,
 } from '../test-harness';
+import type { CoreClients } from '../lib/core';
 import { ServersScreen } from './screen_servers';
 
 beforeEach(() => {
@@ -83,5 +85,70 @@ describe('T-24: меню режима теста без нереализован
       mode: TestLatencyRequest_Mode.TCP_PING,
     });
     m.unmount();
+  });
+});
+
+describe('T-25: «Копировать ссылку»', () => {
+  const writeText = vi.fn((_text: string) => Promise.resolve());
+  beforeEach(() => {
+    writeText.mockClear();
+    Object.defineProperty(window.navigator, 'clipboard', { value: { writeText }, configurable: true });
+  });
+
+  async function mountServers(links: string[]): Promise<{
+    container: HTMLElement;
+    exportLinks: MockInstance<CoreClients['profiles']['exportLinks']>;
+    unmount: () => void;
+  }> {
+    const clients = makeClients({ profiles: [profileOf(1, 'S1'), profileOf(2, 'S2')] });
+    const exportLinks = vi
+      .spyOn(clients.profiles, 'exportLinks')
+      .mockResolvedValue(create(ExportLinksResponseSchema, { links }));
+    const m = await mountWithCore(clients, createElement(ServersScreen));
+    return { container: m.container, exportLinks, unmount: m.unmount };
+  }
+
+  const toolbarCopy = (c: HTMLElement): HTMLButtonElement => {
+    const bar = c.querySelector<HTMLElement>('.srv-actions');
+    if (bar === null) throw new Error('панель действий не найдена');
+    return buttonByText(bar, 'Copy link');
+  };
+
+  it('без выделения копирует ссылки видимых серверов, а не пустой запрос', async () => {
+    const t = await mountServers(['vless://a', 'vless://b']);
+    await click(toolbarCopy(t.container));
+    expect(t.exportLinks).toHaveBeenCalledWith({ ids: [1n, 2n] });
+    expect(writeText).toHaveBeenCalledWith('vless://a\nvless://b');
+    expect(t.container.querySelector('.toast-ok')?.textContent).toBe('Link copied to clipboard');
+    t.unmount();
+  });
+
+  it('с выделением копирует только выделенные', async () => {
+    const t = await mountServers(['vless://b']);
+    await click(t.container.querySelector('input[aria-label="Select S2"]'));
+    await click(toolbarCopy(t.container));
+    expect(t.exportLinks).toHaveBeenCalledWith({ ids: [2n] });
+    t.unmount();
+  });
+
+  it('пункт меню строки копирует ссылку своей строки, даже если отмечены другие', async () => {
+    const t = await mountServers(['vless://b']);
+    await click(t.container.querySelector('input[aria-label="Select S1"]'));
+    const moreButtons = t.container.querySelectorAll('.prow-more');
+    await click(moreButtons[1]); // меню строки S2
+    const menu = t.container.querySelector<HTMLElement>('[role="menu"]');
+    if (menu === null) throw new Error('меню строки не открылось');
+    await click(buttonByText(menu, 'Copy link'));
+    expect(t.exportLinks).toHaveBeenCalledWith({ ids: [2n] });
+    expect(writeText).toHaveBeenCalledWith('vless://b');
+    t.unmount();
+  });
+
+  it('если у серверов нет ссылки (цепочка, custom), буфер не трогаем и показываем ошибку', async () => {
+    const t = await mountServers([]);
+    await click(toolbarCopy(t.container));
+    expect(writeText).not.toHaveBeenCalled();
+    expect(t.container.querySelector('[role="alert"]')?.textContent).toContain('no shareable link');
+    t.unmount();
   });
 });

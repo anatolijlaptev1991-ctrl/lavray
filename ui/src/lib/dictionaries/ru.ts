@@ -591,6 +591,7 @@ export const ruDict: Record<string, string> = {
   "srv.group": "Группировать по подписке",
   "srv.manual": "Добавлены вручную",
   "srv.move": "Переместить в группу…",
+  "srv.noLink": "У этих серверов нет ссылки для копирования",
   "srv.selClear": "Снять выделение",
   "srv.select": "Выбрать {name}",
   "srv.selected": "Выбрано: {n}",

@@ -577,6 +577,7 @@ export const deDict: Record<string, string> = {
   "srv.group": "Nach Abo gruppieren",
   "srv.manual": "Manuell hinzugefügt",
   "srv.move": "In Gruppe verschieben…",
+  "srv.noLink": "Für diese Server gibt es keinen teilbaren Link",
   "srv.selClear": "Auswahl aufheben",
   "srv.select": "{name} auswählen",
   "srv.selected": "Ausgewählt: {n}",

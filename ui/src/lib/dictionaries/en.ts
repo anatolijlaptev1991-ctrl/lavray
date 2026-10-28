@@ -577,6 +577,7 @@ export const enDict: Record<string, string> = {
   "srv.group": "Group by subscription",
   "srv.manual": "Added manually",
   "srv.move": "Move to group…",
+  "srv.noLink": "These servers have no shareable link",
   "srv.selClear": "Clear selection",
   "srv.select": "Select {name}",
   "srv.selected": "Selected: {n}",

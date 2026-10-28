@@ -577,6 +577,7 @@ export const esDict: Record<string, string> = {
   "srv.group": "Agrupar por suscripción",
   "srv.manual": "Añadidos a mano",
   "srv.move": "Mover a grupo…",
+  "srv.noLink": "Estos servidores no tienen un enlace para compartir",
   "srv.selClear": "Quitar selección",
   "srv.select": "Seleccionar {name}",
   "srv.selected": "Seleccionados: {n}",

@@ -263,9 +263,6 @@ func (s *Server) ReorderProfiles(ctx context.Context, req *connect.Request[lavra
 
 func (s *Server) ExportLinks(ctx context.Context, req *connect.Request[lavrayv1.ExportLinksRequest]) (*connect.Response[lavrayv1.ExportLinksResponse], error) {
 	msg := req.Msg
-	if len(msg.Ids) == 0 && msg.GroupId == nil {
-		return nil, invalidArg("укажите ids или group_id")
-	}
 	var list []*model.Profile
 	if len(msg.Ids) > 0 {
 		for _, id := range msg.Ids {
@@ -276,8 +273,14 @@ func (s *Server) ExportLinks(ctx context.Context, req *connect.Request[lavrayv1.
 			list = append(list, p)
 		}
 	} else {
+		// T-25: пустой запрос — все профили (как ListProfiles без group_id);
+		// с group_id — только эта группа.
+		groupID := int64(-1)
+		if msg.GroupId != nil {
+			groupID = *msg.GroupId
+		}
 		var err error
-		list, err = s.st.ListProfiles(*msg.GroupId)
+		list, err = s.st.ListProfiles(groupID)
 		if err != nil {
 			return nil, mapErr(err)
 		}

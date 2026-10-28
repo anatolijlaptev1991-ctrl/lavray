@@ -570,6 +570,7 @@ export const zhDict: Record<string, string> = {
   "srv.group": "按订阅分组",
   "srv.manual": "手动添加",
   "srv.move": "移到分组…",
+  "srv.noLink": "这些服务器没有可复制的链接",
   "srv.selClear": "取消选择",
   "srv.select": "选择 {name}",
   "srv.selected": "已选 {n} 项",

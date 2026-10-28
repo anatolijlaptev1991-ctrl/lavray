@@ -257,28 +257,17 @@ export function ServersScreen(): JSX.Element {
     [core, refresh, t],
   );
 
-  const exportLinks = useCallback(async (): Promise<void> => {
-    setErr('');
-    try {
-      const res =
-        selected.size > 0
-          ? await core.profiles.exportLinks({ ids: [...selected].map((s) => BigInt(s)) })
-          : await core.profiles.exportLinks(
-              groupFilter === 'all' ? {} : { groupId: BigInt(groupFilter) },
-            );
-      await navigator.clipboard.writeText(res.links.join('\n'));
-      setMsg(t('toast.copied'));
-    } catch (e) {
-      setErr(showCoreError(e, t));
-    }
-  }, [core, selected, groupFilter, t]);
-
-  /** Копировать ссылку одного профиля (пункт меню строки). */
-  const copyOneLink = useCallback(
-    async (id: bigint): Promise<void> => {
+  /** Копирует ссылки профилей в буфер; у цепочек и custom ссылки нет (T-25). */
+  const copyLinks = useCallback(
+    async (ids: readonly bigint[]): Promise<void> => {
       setErr('');
+      setMsg('');
       try {
-        const res = await core.profiles.exportLinks({ ids: [id] });
+        const res = await core.profiles.exportLinks({ ids: [...ids] });
+        if (res.links.length === 0) {
+          setErr(t('srv.noLink'));
+          return;
+        }
         await navigator.clipboard.writeText(res.links.join('\n'));
         setMsg(t('toast.copied'));
       } catch (e) {
@@ -287,6 +276,15 @@ export function ServersScreen(): JSX.Element {
     },
     [core, t],
   );
+
+  /** «Копировать ссылку» в панели: выделенные серверы, без выделения — видимые. */
+  const exportLinks = useCallback(async (): Promise<void> => {
+    const ids = selected.size > 0 ? [...selected].map((s) => BigInt(s)) : profiles.map((p) => p.id);
+    if (ids.length > 0) await copyLinks(ids);
+  }, [selected, profiles, copyLinks]);
+
+  /** Копировать ссылку одного профиля (пункт меню строки) — вне зависимости от выделения. */
+  const copyOneLink = useCallback((id: bigint): Promise<void> => copyLinks([id]), [copyLinks]);
 
   const rowProps = useCallback(
     (p: Profile): RowProps => ({
@@ -546,7 +544,11 @@ export function ServersScreen(): JSX.Element {
           <span>{t('prof.add')}</span>
         </button>
         <span className="flex1" />
-        <button className="btn btn-ghost btn-sm" onClick={() => void exportLinks()}>
+        <button
+          className="btn btn-ghost btn-sm"
+          disabled={selected.size === 0 && profiles.length === 0}
+          onClick={() => void exportLinks()}
+        >
           <Icon name="copy" />
           <span>{t('common.copyLink')}</span>
         </button>

@@ -189,7 +189,9 @@ export function SettingsScreen(): JSX.Element {
   // TOC: подсветка секции по скроллу (#main — скроллер приложения).
   useEffect(() => {
     const root = document.getElementById('main');
-    if (root === null) return undefined;
+    // IntersectionObserver отсутствует в jsdom/старых webview — подсветка
+    // TOC не критична, поэтому деградируем безопасно (иначе тесты падали).
+    if (root === null || typeof IntersectionObserver === 'undefined') return undefined;
     const obs = new IntersectionObserver(
       (entries) => {
         for (const en of entries) {

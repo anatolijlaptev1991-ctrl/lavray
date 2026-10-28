@@ -73,7 +73,15 @@ describe('App scaffold smoke render', () => {
     // live-регион статуса, дублей заголовка нет.
     expect(document.querySelector('#ghTitle')?.textContent).toBe('Подключение');
     expect(document.querySelector('#connState')).not.toBeNull();
-    expect(document.querySelectorAll('h2').length).toBe(0);
+    // При первом запуске показывается онбординг (dlgOnb) со своим h2 —
+    // он перекрывает экран до завершения мастера.
+    const onb = document.querySelector('#onbTitle');
+    expect(onb?.textContent).toContain('LAVRay');
+    // Завершаем онбординг и убеждаемся, что экран подключения на месте.
+    act(() => {
+      window.localStorage.setItem('lavray.onboarded', '1');
+      window.dispatchEvent(new Event('hashchange'));
+    });
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(document.documentElement.dataset.accent).toBe('amber');
   });

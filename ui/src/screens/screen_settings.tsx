@@ -12,6 +12,7 @@ import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { ConfirmDialog } from '../components/dialogs';
 import { Icon, type IconName } from '../components/Icon';
+import { withoutSecrets } from '../lib/backup';
 import {
   applyTheme,
   loadPreferences,
@@ -772,13 +773,15 @@ export function SettingsScreen(): JSX.Element {
                 <div className="set-ctl">
                   <button
                     className="btn btn-sec btn-sm"
+                    aria-label={t('bk.export')}
                     onClick={() => {
                       void (async (): Promise<void> => {
                         try {
                           const res = await core.settings.getSettings({});
-                          const dump: Record<string, unknown> = {};
-                          for (const [k, v] of Object.entries(res.values)) dump[k] = valueOf(v);
-                          const blob = new Blob([JSON.stringify(dump, null, 2)], {
+                          const all: Record<string, string | boolean | number> = {};
+                          for (const [k, v] of Object.entries(res.values)) all[k] = valueOf(v);
+                          // T-13: пароль локального прокси и другие секреты в файл не пишем.
+                          const blob = new Blob([JSON.stringify(withoutSecrets(all), null, 2)], {
                             type: 'application/json',
                           });
                           const a = document.createElement('a');
@@ -794,13 +797,14 @@ export function SettingsScreen(): JSX.Element {
                       })();
                     }}
                   >
-                    {t('bk.export')}
+                    {t('bk.exportBtn')}
                   </button>
                 </div>
               </div>
               <div className="set-row">
                 <div className="set-txt">
                   <div className="set-l">{t('bk.restore')}</div>
+                  <div className="set-d">{t('bk.restoreD')}</div>
                 </div>
                 <div className="set-ctl">
                   <label className="btn btn-ghost btn-sm set-file">

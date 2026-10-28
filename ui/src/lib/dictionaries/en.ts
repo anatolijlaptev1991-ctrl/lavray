@@ -659,6 +659,7 @@ export const enDict: Record<string, string> = {
   "test.full": "Full test: UDP and speed",
   "test.latency": "Latency",
   "test.more": "More tests",
+  "test.na": "n/a",
   "test.progress": "Checked {done} of {total}",
   "test.stop": "Stop",
   "theme.dark": "Dark",

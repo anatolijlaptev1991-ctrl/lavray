@@ -24,6 +24,28 @@ const (
 	defaultTestConcurrent = 10
 )
 
+// testNAPrefix — начало TestResult.LastError для теста, который к этому
+// профилю не применим (T-23): это не «сервер недоступен». Клиент показывает
+// такой результат как «н/д» и не относит профиль к недоступным.
+const testNAPrefix = "n/a: "
+
+// tcpPingNotApplicable возвращает причину, по которой TCP-пинг не имеет
+// смысла для профиля, либо "". Hysteria2 и TUIC работают по UDP/QUIC: на их
+// порту TCP никто не слушает, и TCP-connect докладывал бы «недоступен» у
+// живого сервера (B1-10).
+func tcpPingNotApplicable(p *model.Profile) string {
+	if p == nil {
+		return ""
+	}
+	switch p.Type {
+	case model.TypeHysteria2:
+		return "Hysteria2 работает по UDP/QUIC — TCP-пинг неприменим"
+	case model.TypeTUIC:
+		return "TUIC работает по UDP/QUIC — TCP-пинг неприменим"
+	}
+	return ""
+}
+
 // testRun — отмена текущего батча (StopTests, FR-UI-203).
 type testRun struct {
 	mu     sync.Mutex
@@ -158,6 +180,9 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 // tcpPing измеряет время установки TCP-соединения с сервером профиля.
 func (s *Server) tcpPing(ctx context.Context, p *model.Profile, timeout time.Duration) model.TestResult {
 	now := time.Now().UnixMilli()
+	if why := tcpPingNotApplicable(p); why != "" {
+		return model.TestResult{TestedAtMs: &now, LastError: testNAPrefix + why}
+	}
 	if p == nil || p.Address == "" || p.Port <= 0 {
 		return model.TestResult{TestedAtMs: &now, LastError: "нет адреса/порта"}
 	}

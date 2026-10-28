@@ -659,6 +659,7 @@ export const deDict: Record<string, string> = {
   "test.full": "Voller Test: UDP und Tempo",
   "test.latency": "Latenz",
   "test.more": "Weitere Tests",
+  "test.na": "k. A.",
   "test.progress": "{done} von {total} geprüft",
   "test.stop": "Stoppen",
   "theme.dark": "Dunkel",

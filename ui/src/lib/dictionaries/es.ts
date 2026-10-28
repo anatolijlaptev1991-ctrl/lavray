@@ -659,6 +659,7 @@ export const esDict: Record<string, string> = {
   "test.full": "Prueba completa: UDP y velocidad",
   "test.latency": "Latencia",
   "test.more": "Más pruebas",
+  "test.na": "n/d",
   "test.progress": "Comprobados {done} de {total}",
   "test.stop": "Detener",
   "theme.dark": "Oscuro",

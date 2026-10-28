@@ -11,6 +11,7 @@ import { useI18n } from '../hooks/useI18n';
 import { showCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
 import { formatMs } from '../lib/i18n';
+import { isTestDown, isTestNotApplicable } from '../lib/testResult';
 import { ProfileEditor } from '../components/ProfileEditor';
 import { ImportDialog } from '../components/ImportDialog';
 import { ConfirmDialog, GroupsDialog } from '../components/dialogs';
@@ -121,7 +122,7 @@ export function ServersScreen(): JSX.Element {
       });
     }
     if (statusFilter === 'down') {
-      list = list.filter((p) => (p.testResult?.lastError ?? '') !== '');
+      list = list.filter((p) => isTestDown(p.testResult));
     }
     const sorted = [...list];
     const dir = sortAsc ? 1 : -1;
@@ -184,10 +185,11 @@ export function ServersScreen(): JSX.Element {
         for await (const res of stream) {
           const r = res.result;
           const key = String(res.profileId);
-          const down = (r?.lastError ?? '') !== '';
+          const na = isTestNotApplicable(r);
+          const down = isTestDown(r);
           setLatency((m) => ({
             ...m,
-            [key]: down ? '✕' : `${String(r?.latencyMs ?? 0)} ms`,
+            [key]: na ? t('test.na') : down ? '✕' : `${String(r?.latencyMs ?? 0)} ms`,
           }));
           setProgress(tf('test.progress', { done: res.index, total: res.total }));
         }
@@ -792,9 +794,10 @@ function ProfileRow({
 }: RowProps): JSX.Element {
   const { t, tf, lang } = useI18n();
   const ms = p.testResult?.latencyMs;
+  const na = isTestNotApplicable(p.testResult);
   const delay =
-    latencyLabel ?? (ms !== undefined && ms > 0 ? formatMs(ms, lang) : '—');
-  const down = (p.testResult?.lastError ?? '') !== '';
+    latencyLabel ?? (na ? t('test.na') : ms !== undefined && ms > 0 ? formatMs(ms, lang) : '—');
+  const down = isTestDown(p.testResult);
   return (
     <li className={`prow${checked ? ' sel' : ''}`}>
       <input

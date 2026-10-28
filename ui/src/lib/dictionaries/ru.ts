@@ -673,6 +673,7 @@ export const ruDict: Record<string, string> = {
   "test.full": "Полный тест: UDP и скорость",
   "test.latency": "Задержка",
   "test.more": "Другие проверки",
+  "test.na": "н/д",
   "test.progress": "Проверено {done} из {total}",
   "test.stop": "Остановить",
   "theme.dark": "Тёмная",

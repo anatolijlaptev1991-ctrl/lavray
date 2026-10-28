@@ -652,6 +652,7 @@ export const zhDict: Record<string, string> = {
   "test.full": "完整测试：UDP 与速度",
   "test.latency": "延迟",
   "test.more": "更多测试",
+  "test.na": "不适用",
   "test.progress": "已测 {done} / {total}",
   "test.stop": "停止",
   "theme.dark": "深色",

@@ -8,8 +8,14 @@ import { Icon } from '../components/Icon';
 import { CoreState, SubscriptionProgress_Phase, TestLatencyRequest_Mode } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
-import { friendlyCoreError, showCoreError } from '../lib/core';
-import { applySystemProxy, coreModeFor, loadModes, saveModes } from '../lib/connection';
+import { showCoreError } from '../lib/core';
+import {
+  applySystemProxy,
+  coreModeFor,
+  disconnectAll,
+  loadModes,
+  saveModes,
+} from '../lib/connection';
 import { ConnRight } from '../components/ConnRight';
 import { ImportDialog } from '../components/ImportDialog';
 import { geoName } from '../lib/geo';
@@ -134,13 +140,20 @@ export function ConnectionScreen(): JSX.Element {
     }
   }, [core, subs, refresh, t, tf]);
 
-  const active = useMemo(() => {
-    if (pickedId !== null) return profiles.find((p) => p.id === pickedId);
-    if (status.activeProfileId !== 0n) {
-      return profiles.find((p) => p.id === status.activeProfileId);
-    }
-    return profiles[0];
-  }, [profiles, pickedId, status.activeProfileId]);
+  // Ядро в простое присылает статус БЕЗ active_profile_id (поле optional в
+  // proto): на клиенте оно `undefined`, а не 0n. Раньше `undefined !== 0n`
+  // давало «профиль не найден» и экран «Пока нет серверов» при живом списке.
+  const runningId = status.activeProfileId ?? 0n;
+  const active = useMemo(
+    () =>
+      profiles.find((p) => p.id === pickedId) ??
+      profiles.find((p) => p.id === runningId) ??
+      profiles[0],
+    [profiles, pickedId, runningId],
+  );
+  // Блок с кнопкой нужен и когда соединение есть, а профиля нет в списке:
+  // иначе «Отключить» пропадает вместе с профилем.
+  const showMain = active !== undefined || ready;
 
   // D9 (аудит round 2): таймер считается от started_at_ms ядра, а не от
   // монтирования экрана — иначе при переходе между разделами время
@@ -190,8 +203,9 @@ export function ConnectionScreen(): JSX.Element {
     setError('');
     try {
       if (ready) {
-        await core.core.disconnect({});
-        await applySys(false);
+        // Прокси ОС снимается даже при сбое RPC (disconnectAll — try/finally):
+        // иначе браузеры остаются на мёртвом порту.
+        await disconnectAll(core);
       } else if (active !== undefined) {
         await core.core.connect({
           profileId: active.id,
@@ -203,7 +217,7 @@ export function ConnectionScreen(): JSX.Element {
         setError(t('cx.empty.t'));
       }
     } catch (e) {
-      setError(friendlyCoreError(e));
+      setError(showCoreError(e, t));
     } finally {
       setBusy(false);
     }
@@ -278,7 +292,7 @@ export function ConnectionScreen(): JSX.Element {
           </div>
         </div>
 
-        {active !== undefined ? (
+        {showMain ? (
           <div className="cx-main" id="cxMain">
             <div className="cx-server">
               <span className="cap" id="srvLbl">
@@ -292,11 +306,13 @@ export function ConnectionScreen(): JSX.Element {
                 onClick={nextProfile}
               >
                 <span className="srv-top">
-                  <span className="srv-name">{active.name}</span>
-                  <span className="badge">{active.type}</span>
+                  <span className="srv-name">
+                    {active?.name ?? status.activeProfileName ?? '—'}
+                  </span>
+                  {active !== undefined && <span className="badge">{active.type}</span>}
                 </span>
                 <span className="srv-addr mono">
-                  {active.address}:{String(active.port)}
+                  {active !== undefined ? `${active.address}:${String(active.port)}` : ''}
                 </span>
                 <span className="srv-chg">
                   <span>{t('srv.change')}</span>
@@ -365,7 +381,7 @@ export function ConnectionScreen(): JSX.Element {
               </div>
               <div>
                 <dt>{t('conn.country')}</dt>
-                <dd>{active.geo === '' ? '—' : geoName(active.geo, lang)}</dd>
+                <dd>{active === undefined || active.geo === '' ? '—' : geoName(active.geo, lang)}</dd>
               </div>
             </dl>
           </div>

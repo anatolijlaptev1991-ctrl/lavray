@@ -25,6 +25,7 @@ import {
 } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 import { friendlyCoreError } from '../lib/core';
+import { mergeDetail, mergeStream } from '../lib/profileMerge';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
@@ -357,44 +358,15 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
         // серверные/пользовательские метаданные из исходного профиля, иначе
         // пропадали избранное, теги, custom-поля и профиль уезжал в чужую
         // группу.
-        // PE-01 (аудит round 3): UpdateProfile — полная замена. Сохраняем
-        // поля, которых нет в форме: у TUIC — congestion/udp-relay/CA,
-        // у stream — header_type/early-data/certificate/packet_encoding/
-        // multiplex. Иначе они молча терялись при любом редактировании.
-        const keepDetail = ((): Profile['detail'] => {
-          if (profile.detail.case !== model.detail.case) return model.detail;
-          if (profile.detail.case === 'tuic' && model.detail.case === 'tuic') {
-            return {
-              case: 'tuic',
-              value: create(TuicDetailSchema, {
-                ...profile.detail.value,
-                ...model.detail.value,
-              }),
-            };
-          }
-          return model.detail;
-        })();
-        const keepStream =
-          profile.stream === undefined
-            ? model.stream
-            : model.stream === undefined
-              ? profile.stream
-              : create(StreamSettingsSchema, {
-                  ...profile.stream,
-                  ...model.stream,
-                  // Пустые значения формы не должны стирать сохранённые.
-                  certificate: model.stream.certificate === ''
-                    ? profile.stream.certificate
-                    : model.stream.certificate,
-                  headerType:
-                    model.stream.headerType === ''
-                      ? profile.stream.headerType
-                      : model.stream.headerType,
-                });
+        // PE-01 (аудит round 3) и T-10: то же для типоспецифичных полей и
+        // транспорта. Значения формы накладываются на исходные detail/stream
+        // (lib/profileMerge.ts), а не заменяют их: obfs/порты/скорости/CA у
+        // Hysteria2, plugin и UoT у Shadowsocks, packet_encoding/multiplex у
+        // VLESS/VMess/Trojan и т. д. не показаны в форме и должны уцелеть.
         const merged = create(ProfileSchema, {
           ...model,
-          detail: keepDetail,
-          stream: keepStream,
+          detail: mergeDetail(profile.detail, model.detail),
+          stream: mergeStream(profile.stream, model.stream),
           groupId: profile.groupId,
           favorite: profile.favorite,
           tags: profile.tags,

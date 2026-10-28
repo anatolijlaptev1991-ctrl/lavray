@@ -52,7 +52,12 @@ func (r *SingBoxRunner) Start(ctx context.Context, configJSON []byte) error {
 	// encoding/json «успешно» декодировал, но оставлял поля пустыми —
 	// box.New затем падал «parse rule[0]: missing conditions» на ЛЮБОМ
 	// конфиге. Это ловилось только реальным прогоном sing-box.
-	baseCtx := include.Context(ctx)
+	// T-01: инстанс живёт до Stop, а не до конца RPC Connect. Manager.Start
+	// отменяет ctx сразу после успешного старта (inst.go: cancel()), и
+	// раньше это обрывало каждое исходящее соединение
+	// («operation was canceled»). WithoutCancel сохраняет значения
+	// контекста, но не наследует отмену.
+	baseCtx := include.Context(context.WithoutCancel(ctx))
 	var options option.Options
 	if err := sbjson.UnmarshalContext(baseCtx, configJSON, &options); err != nil {
 		return fmt.Errorf("singbox: некорректный конфиг: %w", err)

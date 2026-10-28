@@ -78,6 +78,7 @@ export const enDict: Record<string, string> = {
   "common.cancel": "Cancel",
   "common.close": "Close",
   "common.copyLink": "Copy link",
+  "common.create": "Create",
   "common.delete": "Delete",
   "common.edit": "Edit",
   "common.next": "Next",

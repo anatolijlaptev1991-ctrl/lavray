@@ -78,6 +78,7 @@ export const esDict: Record<string, string> = {
   "common.cancel": "Cancelar",
   "common.close": "Cerrar",
   "common.copyLink": "Copiar enlace",
+  "common.create": "Crear",
   "common.delete": "Eliminar",
   "common.edit": "Editar",
   "common.next": "Siguiente",

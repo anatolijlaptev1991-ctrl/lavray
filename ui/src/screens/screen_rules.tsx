@@ -4,12 +4,14 @@
 // Встроенный пресет только для чтения — копия создаётся кастомным.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
-import { Outbound as OutboundEnum } from '../gen/lavray_pb';
+import { create } from '@bufbuild/protobuf';
+import { Outbound as OutboundEnum, RoutingPresetSchema } from '../gen/lavray_pb';
 import type { RoutingPreset } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
+import { DialogShell } from '../components/dialogs';
 
 type ListKind =
   | 'proxyDomain'
@@ -40,6 +42,16 @@ const OUTBOUND_OPTIONS: readonly { value: OutboundEnum; labelKey: string }[] = [
   { value: OutboundEnum.BLOCK, labelKey: 'out.block' },
 ];
 
+/** Примеры для тестера маршрута (прототип #rtSugg). */
+const ROUTE_SUGGESTIONS = [
+  'lori.ru',
+  'chat.openai.com',
+  'store.steampowered.com',
+  'example.org',
+  '192.168.1.10',
+  'cursor.exe',
+] as const;
+
 export function RulesScreen(): JSX.Element {
   const { t } = useI18n();
   const core = useCore();
@@ -52,6 +64,10 @@ export function RulesScreen(): JSX.Element {
   const [query, setQuery] = useState('');
   const [routeResult, setRouteResult] = useState<{ outbound: string; rule: string | null } | null>(null);
   const [testing, setTesting] = useState(false);
+  // Меню «Новый пресет» (#rtNew) и диалог создания пустого пресета.
+  const [newPresetAt, setNewPresetAt] = useState<{ x: number; y: number } | null>(null);
+  const [newOpen, setNewOpen] = useState(false);
+  const [newName, setNewName] = useState('');
 
   const reload = useCallback(async (): Promise<void> => {
     try {
@@ -88,34 +104,56 @@ export function RulesScreen(): JSX.Element {
     [core, t, reload],
   );
 
-  const checkRoute = useCallback(async (): Promise<void> => {
-    const q = query.trim();
-    if (q === '') return;
-    setErr('');
-    setTesting(true);
-    setRouteResult(null);
-    try {
-      // Приложение (game.exe) → process_name; иначе адрес/домен.
-      const isProcess = /\.exe$|\.app$/i.test(q);
-      // SR-02: для процесса address не заполняем (контракт: адрес — домен/IP).
-      const res = await core.diagnostics.checkRoute(
-        isProcess ? { processName: q } : { address: q },
-      );
-      const outbound =
-        res.outbound === OutboundEnum.PROXY
-          ? t('out.proxy')
-          : res.outbound === OutboundEnum.DIRECT
-            ? t('out.direct')
-            : res.outbound === OutboundEnum.BLOCK
-              ? t('out.block')
-              : '—';
-      setRouteResult({ outbound, rule: res.matchedRule ?? null });
-    } catch (e) {
-      setErr(showCoreError(e, t));
-    } finally {
-      setTesting(false);
-    }
-  }, [core, query, t]);
+  /** Копия пресета (встроенного или своего) — «Сохранить как». */
+  const copyPreset = useCallback(
+    async (sourceId: string, name?: string): Promise<void> => {
+      setErr('');
+      try {
+        const res = await core.routing.createPreset({
+          builtinSourceId: sourceId,
+          ...(name === undefined ? {} : { preset: create(RoutingPresetSchema, { displayName: name }) }),
+        });
+        await reload();
+        setActiveId(res.id);
+        setOk(t('rt.customizeCopy'));
+      } catch (e) {
+        setErr(showCoreError(e, t));
+      }
+    },
+    [core, reload, t],
+  );
+
+  const checkRoute = useCallback(
+    async (override?: string): Promise<void> => {
+      const q = (override ?? query).trim();
+      if (q === '') return;
+      setErr('');
+      setTesting(true);
+      setRouteResult(null);
+      try {
+        // Приложение (game.exe) → process_name; иначе адрес/домен.
+        const isProcess = /\.exe$|\.app$/i.test(q);
+        // SR-02: для процесса address не заполняем (контракт: адрес — домен/IP).
+        const res = await core.diagnostics.checkRoute(
+          isProcess ? { processName: q } : { address: q },
+        );
+        const outbound =
+          res.outbound === OutboundEnum.PROXY
+            ? t('out.proxy')
+            : res.outbound === OutboundEnum.DIRECT
+              ? t('out.direct')
+              : res.outbound === OutboundEnum.BLOCK
+                ? t('out.block')
+                : '—';
+        setRouteResult({ outbound, rule: res.matchedRule ?? null });
+      } catch (e) {
+        setErr(showCoreError(e, t));
+      } finally {
+        setTesting(false);
+      }
+    },
+    [core, query, t],
+  );
 
   const toggleRule = useCallback(
     async (def: ListDef, entry: string): Promise<void> => {
@@ -200,6 +238,22 @@ export function RulesScreen(): JSX.Element {
             {t('rt.test.run')}
           </button>
         </div>
+        {/* Примеры запросов (прототип #rtSugg): клик подставляет значение и
+            сразу проверяет маршрут — быстрее, чем набирать вручную. */}
+        <div className="rt-sugg">
+          {ROUTE_SUGGESTIONS.map((sg) => (
+            <button
+              key={sg}
+              type="button"
+              onClick={() => {
+                setQuery(sg);
+                void checkRoute(sg);
+              }}
+            >
+              {sg}
+            </button>
+          ))}
+        </div>
         <p className="rt-res" role="status" aria-live="polite">
           {routeResult === null
             ? ''
@@ -212,7 +266,62 @@ export function RulesScreen(): JSX.Element {
         <div className="card-h">
           <span className="ic"><Icon name="route" /></span>
           <h2>{t('rt.presets')}</h2>
+          <span className="flex1" />
+          {/* Меню «Новый пресет» (прототип #rtNew): сохранение копии
+              встроенного или создание пустого. */}
+          <button
+            className="btn btn-sec btn-sm"
+            aria-haspopup="menu"
+            aria-expanded={newPresetAt !== null}
+            onClick={(e) => {
+              if (newPresetAt !== null) {
+                setNewPresetAt(null);
+                return;
+              }
+              const r = e.currentTarget.getBoundingClientRect();
+              setNewPresetAt({ x: r.left - 120, y: r.bottom + 4 });
+            }}
+          >
+            <Icon name="plus" />
+            <span>{t('rt.new')}</span>
+          </button>
         </div>
+        {newPresetAt !== null && (
+          <div
+            className="menu"
+            role="menu"
+            style={{ left: newPresetAt.x, top: newPresetAt.y }}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setNewPresetAt(null);
+            }}
+          >
+            <button
+              className="menu-item"
+              role="menuitem"
+              disabled={active === undefined}
+              onClick={() => {
+                setNewPresetAt(null);
+                if (active !== undefined) {
+                  void copyPreset(active.id, `${active.displayName} (${t('rt.copyName')})`);
+                }
+              }}
+            >
+              <Icon name="copy" size={16} />
+              <span>{t('rt.saveAs')}</span>
+            </button>
+            <button
+              className="menu-item"
+              role="menuitem"
+              onClick={() => {
+                setNewPresetAt(null);
+                setNewOpen(true);
+              }}
+            >
+              <Icon name="plus" size={16} />
+              <span>{t('rt.newEmpty')}</span>
+            </button>
+          </div>
+        )}
         <div className="preset-grid">
           {presets.length === 0 && (
             <div className="empty" style={{ gridColumn: '1 / -1' }}>
@@ -259,18 +368,7 @@ export function RulesScreen(): JSX.Element {
             <button
               className="btn btn-sec btn-sm"
               onClick={() => {
-                void (async (): Promise<void> => {
-                  try {
-                    const res = await core.routing.createPreset({
-                      builtinSourceId: active.id,
-                    });
-                    await reload();
-                    setActiveId(res.id);
-                    setOk(t('rt.customizeCopy'));
-                  } catch (e) {
-                    setErr(showCoreError(e, t));
-                  }
-                })();
+                void copyPreset(active.id);
               }}
             >
               {t('rt.customizeCopy')}
@@ -352,6 +450,66 @@ export function RulesScreen(): JSX.Element {
           </select>
         </div>
       </div>
+
+      {newOpen && (
+        <DialogShell
+          titleId="rtNewTitle"
+          title={t('rt.newEmpty')}
+          size="sm"
+          onClose={() => {
+            setNewOpen(false);
+            setNewName('');
+          }}
+          footer={
+            <>
+              <span className="flex1" />
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  setNewOpen(false);
+                  setNewName('');
+                }}
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                className="btn btn-pri"
+                onClick={() => {
+                  void (async (): Promise<void> => {
+                    setNewOpen(false);
+                    try {
+                      const res = await core.routing.createPreset({
+                        preset: create(RoutingPresetSchema, {
+                          displayName:
+                            newName.trim() === '' ? t('rt.newPresetName') : newName.trim(),
+                        }),
+                      });
+                      await reload();
+                      setActiveId(res.id);
+                      setNewName('');
+                    } catch (e) {
+                      setErr(showCoreError(e, t));
+                    }
+                  })();
+                }}
+              >
+                {t('common.create')}
+              </button>
+            </>
+          }
+        >
+          <p className="hint">{t('rt.presetName')}</p>
+          <label className="sr-only" htmlFor="rtNewName">{t('rt.presetName')}</label>
+          <input
+            className="input"
+            id="rtNewName"
+            autoComplete="off"
+            placeholder={t('rt.newPresetName')}
+            value={newName}
+            onChange={(e) => { setNewName(e.target.value); }}
+          />
+        </DialogShell>
+      )}
     </div>
   );
 }

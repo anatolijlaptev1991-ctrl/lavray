@@ -78,6 +78,7 @@ export const ruDict: Record<string, string> = {
   "common.cancel": "Отмена",
   "common.close": "Закрыть",
   "common.copyLink": "Копировать ссылку",
+  "common.create": "Создать",
   "common.delete": "Удалить",
   "common.edit": "Редактировать",
   "common.next": "Далее",

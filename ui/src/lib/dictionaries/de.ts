@@ -78,6 +78,7 @@ export const deDict: Record<string, string> = {
   "common.cancel": "Abbrechen",
   "common.close": "Schließen",
   "common.copyLink": "Link kopieren",
+  "common.create": "Erstellen",
   "common.delete": "Löschen",
   "common.edit": "Bearbeiten",
   "common.next": "Weiter",

@@ -78,6 +78,7 @@ export const zhDict: Record<string, string> = {
   "common.cancel": "取消",
   "common.close": "关闭",
   "common.copyLink": "复制链接",
+  "common.create": "创建",
   "common.delete": "删除",
   "common.edit": "编辑",
   "common.next": "下一步",

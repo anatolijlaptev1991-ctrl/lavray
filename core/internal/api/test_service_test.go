@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -97,6 +98,37 @@ func TestTestLatencyPersistsResult(t *testing.T) {
 		}
 		if tr := p.TestResult; tr.LatencyMs != nil || tr.TestedAtMs != nil || tr.LastError != "" {
 			t.Fatalf("профиль %d: результат не очищен: %+v", id, tr)
+		}
+	}
+}
+
+// T-24 (B1-11): URL- и Full-тест ядро пока не умеет (эпик T-84) и отвечает
+// понятной ошибкой: раньше текст врал «требует запущенного инстанса» и
+// предлагал «подключитесь», хотя отказ безусловный.
+func TestTestLatencyUnsupportedModes(t *testing.T) {
+	cs := newE2E(t)
+	id := tcpProfile(t, cs, "p", 1)
+	for _, mode := range []lavrayv1.TestLatencyRequest_Mode{
+		lavrayv1.TestLatencyRequest_MODE_URL_TEST,
+		lavrayv1.TestLatencyRequest_MODE_FULL_TEST,
+	} {
+		stream, err := cs.profile.TestLatency(context.Background(), connect.NewRequest(&lavrayv1.TestLatencyRequest{
+			ProfileIds: []int64{id},
+			Mode:       mode,
+		}))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for stream.Receive() {
+			t.Fatalf("%v: получен кадр, ожидалась ошибка", mode)
+		}
+		err = stream.Err()
+		if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+			t.Fatalf("%v: code=%v err=%v", mode, connect.CodeOf(err), err)
+		}
+		msg := err.Error()
+		if !strings.Contains(msg, "не реализован") || !strings.Contains(msg, "TCP_PING") || strings.Contains(msg, "подключитесь") {
+			t.Fatalf("%v: непонятное сообщение: %q", mode, msg)
 		}
 	}
 }

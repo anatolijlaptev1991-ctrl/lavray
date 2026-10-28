@@ -83,8 +83,10 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 		return invalidArg("profile_ids не заданы")
 	}
 	if msg.Mode == lavrayv1.TestLatencyRequest_MODE_URL_TEST || msg.Mode == lavrayv1.TestLatencyRequest_MODE_FULL_TEST {
+		// T-24: отказ безусловный (T-84 реализует режимы), поэтому не врём про
+		// «запущенный инстанс» и не советуем подключиться.
 		return failedPrecondition(
-			"URL/Full-тест требует запущенного инстанса (туннель); используйте TCP-пинг или подключитесь")
+			"URL- и Full-тест пока не реализованы: используйте TCP-пинг (mode=TCP_PING)")
 	}
 
 	timeoutMs := int(msg.GetTimeoutMs())

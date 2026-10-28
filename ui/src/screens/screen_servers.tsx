@@ -159,7 +159,7 @@ export function ServersScreen(): JSX.Element {
   }, []);
 
   const testLatency = useCallback(
-    async (ids: bigint[], kind: 'tcp' | 'full' = 'tcp'): Promise<void> => {
+    async (ids: bigint[]): Promise<void> => {
       setErr('');
       setMsg('');
       if (ids.length === 0) return;
@@ -174,11 +174,8 @@ export function ServersScreen(): JSX.Element {
         const stream = core.profiles.testLatency(
           {
             profileIds: ids,
-            // Полный тест проверяет и UDP/скорость — дороже по времени.
-            mode:
-              kind === 'full'
-                ? TestLatencyRequest_Mode.FULL_TEST
-                : TestLatencyRequest_Mode.TCP_PING,
+            // URL- и Full-тест ядро пока не умеет (T-84): только TCP-пинг.
+            mode: TestLatencyRequest_Mode.TCP_PING,
           },
           { signal: ac.signal },
         );
@@ -473,7 +470,7 @@ export function ServersScreen(): JSX.Element {
             className="btn btn-sec"
             disabled={testing || profiles.length === 0}
             onClick={() => {
-              void testLatency(profiles.map((p) => p.id), 'tcp');
+              void testLatency(profiles.map((p) => p.id));
             }}
           >
             <Icon name="gauge" />
@@ -660,8 +657,8 @@ export function ServersScreen(): JSX.Element {
           onSaved={refresh}
         />
       )}
-      {/* Меню режима теста (прототип #testMore): быстрый пинг задержки или
-          полный тест с UDP и скоростью. */}
+      {/* Меню режима теста (прототип #testMore). Пункт «Полный тест: UDP и
+          скорость» скрыт до T-84 — ядро отвечает на него ошибкой. */}
       {testMenuAt !== null && (
         <div
           className="menu"
@@ -676,22 +673,11 @@ export function ServersScreen(): JSX.Element {
             role="menuitem"
             onClick={() => {
               setTestMenuAt(null);
-              void testLatency(profiles.map((p) => p.id), 'tcp');
+              void testLatency(profiles.map((p) => p.id));
             }}
           >
             <Icon name="gauge" size={16} />
             <span>{t('test.latency')}</span>
-          </button>
-          <button
-            className="menu-item"
-            role="menuitem"
-            onClick={() => {
-              setTestMenuAt(null);
-              void testLatency(profiles.map((p) => p.id), 'full');
-            }}
-          >
-            <Icon name="activity" size={16} />
-            <span>{t('test.full')}</span>
           </button>
         </div>
       )}
@@ -724,7 +710,7 @@ export function ServersScreen(): JSX.Element {
             onClick={() => {
               const id = rowMenu.profile.id;
               setRowMenu(null);
-              void testLatency([id], 'tcp');
+              void testLatency([id]);
             }}
           >
             <Icon name="gauge" size={16} />

@@ -7,7 +7,7 @@ import type { ReactNode } from 'react';
 import type { JSX } from 'react';
 import { Group_Kind } from '../gen/lavray_pb';
 import type { Group } from '../gen/lavray_pb';
-import { friendlyCoreError } from '../lib/core';
+import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
@@ -65,7 +65,7 @@ export function DialogShell({
     return (): void => {
       document.removeEventListener('keydown', onKey);
     };
-  }, [onClose, autofocusRef]);
+  }, [onClose, autofocusRef, t]);
 
   return (
     <div
@@ -148,7 +148,7 @@ interface GroupsDialogProps {
 }
 
 export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Element {
-  const { t, tf } = useI18n();
+  const { t, plural } = useI18n();
   const core = useCore();
   const [groups, setGroups] = useState<Group[]>([]);
   const [name, setName] = useState('');
@@ -161,13 +161,13 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
       const res = await core.profiles.listGroups({});
       setGroups(res.groups);
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     }
-  }, [core]);
+  }, [core, t]);
 
   useEffect(() => {
     void reload();
-  }, [reload]);
+  }, [reload, t]);
 
   const create = useCallback(async (): Promise<void> => {
     if (name.trim() === '') return;
@@ -181,11 +181,11 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
       await reload();
       onChanged();
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     } finally {
       setBusy(false);
     }
-  }, [core, name, reload, onChanged]);
+  }, [core, name, reload, onChanged, t]);
 
   const remove = useCallback(
     async (id: bigint): Promise<void> => {
@@ -195,10 +195,10 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
         await reload();
         onChanged();
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     },
-    [core, reload, onChanged],
+    [core, reload, onChanged, t],
   );
 
   const rename = useCallback(
@@ -210,10 +210,10 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
         await reload();
         onChanged();
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     },
-    [core, reload, onChanged],
+    [core, reload, onChanged, t],
   );
 
   return (
@@ -245,7 +245,7 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
             <span className="n">
               {g.name}
               <small>
-                {tf('pl.prof.one', { n: g.profileOrder.length })}
+                {plural('pl.p', g.profileOrder.length)}
                 {g.kind === Group_Kind.SUBSCRIPTION ? ` · ${t('nav.subscriptions')}` : ''}
               </small>
             </span>
@@ -469,7 +469,7 @@ export function OnboardingDialog({
         /* ядро недоступно — шаг покажет пусто */
       }
     })();
-  }, [core]);
+  }, [core, t]);
 
   const applyPreset = useCallback(
     async (id: string): Promise<void> => {
@@ -477,10 +477,10 @@ export function OnboardingDialog({
       try {
         await core.routing.activatePreset({ id });
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     },
-    [core],
+    [core, t],
   );
 
   return (

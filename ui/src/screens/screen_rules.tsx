@@ -6,7 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { Outbound as OutboundEnum } from '../gen/lavray_pb';
 import type { RoutingPreset } from '../gen/lavray_pb';
-import { friendlyCoreError } from '../lib/core';
+import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
@@ -59,13 +59,13 @@ export function RulesScreen(): JSX.Element {
       setPresets(res.presets);
       setActiveId(res.activePresetId);
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     }
-  }, [core]);
+  }, [core, t]);
 
   useEffect(() => {
     void reload();
-  }, [reload]);
+  }, [reload, t]);
 
   const active = useMemo(
     () => presets.find((p) => p.id === activeId),
@@ -82,7 +82,7 @@ export function RulesScreen(): JSX.Element {
         setOk(res.needsProfileRestart ? t('dns.restart') : t('common.save'));
         await reload();
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     },
     [core, t, reload],
@@ -111,7 +111,7 @@ export function RulesScreen(): JSX.Element {
               : '—';
       setRouteResult({ outbound, rule: res.matchedRule ?? null });
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     } finally {
       setTesting(false);
     }
@@ -134,7 +134,7 @@ export function RulesScreen(): JSX.Element {
         setPresets((prev) => prev.map((p) => (p.id === active.id ? updated : p)));
         setOk(t('common.save'));
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     },
     [core, active, t],
@@ -160,10 +160,10 @@ export function RulesScreen(): JSX.Element {
         const updated = res.preset ?? active;
         setPresets((prev) => prev.map((p) => (p.id === active.id ? updated : p)));
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     },
-    [core, active],
+    [core, active, t],
   );
 
   return (
@@ -217,8 +217,8 @@ export function RulesScreen(): JSX.Element {
           {presets.length === 0 && (
             <div className="empty" style={{ gridColumn: '1 / -1' }}>
               <Icon name="route" />
-              <div className="empty-t">{t('rt.presets')}</div>
-              <div className="empty-d">{t('cx.empty.d')}</div>
+              <div className="empty-t">{t('rt.empty.t')}</div>
+              <div className="empty-d">{t('rt.empty.d')}</div>
             </div>
           )}
           {presets.map((p) => (
@@ -268,7 +268,7 @@ export function RulesScreen(): JSX.Element {
                     setActiveId(res.id);
                     setOk(t('rt.customizeCopy'));
                   } catch (e) {
-                    setErr(friendlyCoreError(e));
+                    setErr(showCoreError(e, t));
                   }
                 })();
               }}

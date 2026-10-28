@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { UpdateChannel, UpdateComponent } from '../gen/lavray_pb';
 import type { CheckUpdatesResponse, ComponentUpdate, UpdateStateResponse } from '../gen/lavray_pb';
-import { friendlyCoreError } from '../lib/core';
+import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
@@ -58,7 +58,7 @@ export function UpdatesScreen(): JSX.Element {
 
   useEffect(() => {
     void loadState();
-  }, [loadState]);
+  }, [loadState, t]);
 
   const check = useCallback(async (): Promise<void> => {
     setErr('');
@@ -70,7 +70,7 @@ export function UpdatesScreen(): JSX.Element {
       if (res.available.length === 0) setOk(t('upd.upToDate'));
       await loadState();
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     } finally {
       setBusy(false);
     }
@@ -95,7 +95,7 @@ export function UpdatesScreen(): JSX.Element {
         }
         await loadState();
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       } finally {
         setBusy(false);
       }

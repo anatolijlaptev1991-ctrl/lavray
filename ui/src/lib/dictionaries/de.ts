@@ -754,4 +754,14 @@ export const deDict: Record<string, string> = {
   "web.login.t": "Bei LAVRay anmelden",
   "web.logout": "Abmelden",
   "web.remember": "Dieses Gerät 30 Tage merken",
-};
+  "grp.name": "Gruppenname",
+  "mux.protocol": "Multiplexing-Protokoll",
+  "mux.concurrency": "Gleichzeitige Streams",
+  "mux.default_on": "Standardmäßig aktiv",
+  "srv.type": "Typ",
+  "rt.empty.t": "Presets nicht geladen",
+  "rt.empty.d": "Core nicht verfügbar — Presets erscheinen nach dem Start",
+  "core.unavailable": "Core nicht verfügbar — die App läuft nicht oder der Core startete nicht",
+  "mux.title": "Multiplexing",
+  "core.external": "Externe Cores (Naive usw.)",
+}

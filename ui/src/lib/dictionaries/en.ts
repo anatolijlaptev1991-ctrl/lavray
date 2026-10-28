@@ -754,4 +754,14 @@ export const enDict: Record<string, string> = {
   "web.login.t": "Sign in to LAVRay",
   "web.logout": "Sign out",
   "web.remember": "Remember this device for 30 days",
-};
+  "grp.name": "Group name",
+  "mux.protocol": "Multiplexing protocol",
+  "mux.concurrency": "Concurrent streams",
+  "mux.default_on": "Enabled by default",
+  "srv.type": "Type",
+  "rt.empty.t": "Presets not loaded",
+  "rt.empty.d": "Core unavailable — presets will appear after it starts",
+  "core.unavailable": "Core unavailable — the app is not running or the core did not start",
+  "mux.title": "Multiplexing",
+  "core.external": "External cores (Naive etc.)",
+}

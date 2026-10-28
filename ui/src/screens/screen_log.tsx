@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import type { LogLine } from '../gen/lavray_pb';
 import { LogLevel } from '../gen/lavray_pb';
-import { friendlyCoreError } from '../lib/core';
+import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
@@ -51,13 +51,13 @@ export function LogScreen(): JSX.Element {
         const tail = await core.logs.getTail({ lines: 200 }, { signal: ac.signal });
         setLines(tail.lines);
       } catch (e) {
-        if (!ac.signal.aborted) setErr(friendlyCoreError(e));
+        if (!ac.signal.aborted) setErr(showCoreError(e, t));
       }
     })();
     return (): void => {
       ac.abort();
     };
-  }, [core]);
+  }, [core, t]);
 
   useEffect(() => {
     const abort = new AbortController();
@@ -74,19 +74,19 @@ export function LogScreen(): JSX.Element {
           });
         }
       } catch (e) {
-        if (!abort.signal.aborted) setErr(friendlyCoreError(e));
+        if (!abort.signal.aborted) setErr(showCoreError(e, t));
       }
     })();
     return (): void => {
       abort.abort();
     };
-  }, [core, minLevel]);
+  }, [core, minLevel, t]);
 
   useEffect(() => {
     if (!autoscroll) return;
     const el = viewRef.current;
     if (el !== null) el.scrollTop = el.scrollHeight;
-  }, [lines, autoscroll]);
+  }, [lines, autoscroll, t]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -103,7 +103,7 @@ export function LogScreen(): JSX.Element {
       await navigator.clipboard.writeText(text);
       setOk(t('log.exportBtn'));
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     }
   }, [filtered, t]);
 

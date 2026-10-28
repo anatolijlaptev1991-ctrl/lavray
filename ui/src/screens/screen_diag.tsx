@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { GetPublicIpRequest_Via, RunSelfCheckRequest_CheckKind, SelfCheckResult_Status } from '../gen/lavray_pb';
-import { friendlyCoreError } from '../lib/core';
+import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
@@ -119,7 +119,7 @@ export function DiagScreen(): JSX.Element {
       ).length;
       setSummary(bad === 0 ? t('chk.sum.ok') : tf('chk.sum.bad', { n: bad }));
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     } finally {
       // SD-04: не сбрасываем флаг, если этот прогон уже устарел (запущен новый).
       if (my === token.current) setRunning(false);
@@ -138,13 +138,13 @@ export function DiagScreen(): JSX.Element {
       setPublicIp(direct.ip ?? null);
       setIpLeak(tunnel.ip ?? null);
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     }
-  }, [core]);
+  }, [core, t]);
 
   useEffect(() => {
     void runChecks();
-  }, [runChecks]);
+  }, [runChecks, t]);
 
   const leakSame = publicIp !== null && ipLeak !== null && publicIp === ipLeak;
 

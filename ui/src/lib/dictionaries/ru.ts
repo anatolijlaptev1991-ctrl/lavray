@@ -766,4 +766,14 @@ export const ruDict: Record<string, string> = {
   "web.login.t": "Вход в LAVRay",
   "web.logout": "Выйти",
   "web.remember": "Запомнить это устройство на 30 дней",
-};
+  "grp.name": "Название группы",
+  "mux.protocol": "Протокол мультиплексирования",
+  "mux.concurrency": "Параллельных потоков",
+  "mux.default_on": "Включать по умолчанию",
+  "srv.type": "Тип",
+  "rt.empty.t": "Пресеты не загружены",
+  "rt.empty.d": "Ядро недоступно — пресеты появятся после подключения",
+  "core.unavailable": "Ядро недоступно — приложение не запущено или ядро не поднялось",
+  "mux.title": "Мультиплексирование",
+  "core.external": "Внешние ядра (Naive и др.)",
+}

@@ -8,7 +8,7 @@ import { ProfileType, TestLatencyRequest_Mode } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 import { useCore, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
-import { friendlyCoreError } from '../lib/core';
+import { showCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
 import { formatMs } from '../lib/i18n';
 import { ProfileEditor } from '../components/ProfileEditor';
@@ -91,7 +91,7 @@ export function ServersScreen(): JSX.Element {
         /* ядро недоступно */
       }
     })();
-  }, [core]);
+  }, [core, t]);
 
   const profiles = useMemo(() => {
     let list = allProfiles;
@@ -161,14 +161,14 @@ export function ServersScreen(): JSX.Element {
         }
         refresh();
       } catch (e) {
-        if (!ac.signal.aborted) setErr(friendlyCoreError(e));
+        if (!ac.signal.aborted) setErr(showCoreError(e, t));
       } finally {
         if (testAbort.current === ac) testAbort.current = null;
         setTesting(false);
         setProgress('');
       }
     },
-    [core, refresh, tf],
+    [core, refresh, tf, t],
   );
 
   // SS-05: остановка рвёт стрим (контракт: отмена — закрытие стрима) и
@@ -181,16 +181,16 @@ export function ServersScreen(): JSX.Element {
     try {
       await core.profiles.stopTests({});
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     }
-  }, [core]);
+  }, [core, t]);
 
   // Отмена стрима при размонтировании экрана.
   useEffect(() => {
     return (): void => {
       testAbort.current?.abort();
     };
-  }, []);
+  }, [t]);
 
   const removeSelected = useCallback(async (): Promise<void> => {
     const ids = [...selected].map((s) => BigInt(s));
@@ -201,9 +201,9 @@ export function ServersScreen(): JSX.Element {
       setSelected(new Set());
       refresh();
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     }
-  }, [core, selected, refresh]);
+  }, [core, selected, refresh, t]);
 
   const removeOne = useCallback(
     async (id: bigint): Promise<void> => {
@@ -212,10 +212,10 @@ export function ServersScreen(): JSX.Element {
         await core.profiles.deleteProfile({ ids: [id] });
         refresh();
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     },
-    [core, refresh],
+    [core, refresh, t],
   );
 
   const toggleFav = useCallback(
@@ -231,10 +231,10 @@ export function ServersScreen(): JSX.Element {
         });
         refresh();
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     },
-    [core, refresh],
+    [core, refresh, t],
   );
 
   const exportLinks = useCallback(async (): Promise<void> => {
@@ -249,7 +249,7 @@ export function ServersScreen(): JSX.Element {
       await navigator.clipboard.writeText(res.links.join('\n'));
       setMsg(t('toast.copied'));
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     }
   }, [core, selected, groupFilter, t]);
 

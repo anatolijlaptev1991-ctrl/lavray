@@ -7,7 +7,7 @@ import type { JSX } from 'react';
 import { create } from '@bufbuild/protobuf';
 import { SettingType, SettingValueSchema } from '../gen/lavray_pb';
 import type { SettingDescriptor, SettingValue } from '../gen/lavray_pb';
-import { friendlyCoreError } from '../lib/core';
+import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon, type IconName } from '../components/Icon';
@@ -70,7 +70,7 @@ const CORE_ROWS: readonly Row[] = [
   // ST-01 (аудит round 3): подписи строго соответствуют смыслу ключа —
   // раньше allow_insecure был подписан «Подтверждать выход».
   { key: 'security.allow_insecure_default', type: SettingType.BOOL, labelKey: 'dns.warn.t' },
-  { key: 'enable_external_cores', type: SettingType.BOOL, labelKey: 'onb.src.neko' },
+  { key: 'enable_external_cores', type: SettingType.BOOL, labelKey: 'core.external' },
 ];
 
 function valueOf(v: SettingValue | undefined): string | boolean | number {
@@ -148,10 +148,10 @@ export function SettingsScreen(): JSX.Element {
         for (const [k, v] of Object.entries(settings.values)) map[k] = valueOf(v);
         setValues(map);
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     })();
-  }, [core]);
+  }, [core, t]);
 
   const save = useCallback(
     async (key: string, kind: SettingType, raw: string | boolean | number): Promise<void> => {
@@ -170,7 +170,7 @@ export function SettingsScreen(): JSX.Element {
           setOk('');
         }, 1500);
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     },
     [core, t],
@@ -207,7 +207,7 @@ export function SettingsScreen(): JSX.Element {
     return (): void => {
       obs.disconnect();
     };
-  }, []);
+  }, [t]);
 
   const gotoSection = useCallback((id: string): void => {
     cardRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -409,12 +409,14 @@ export function SettingsScreen(): JSX.Element {
                 </div>
                 <div className="set-ctl">
                   <button
-                    className={`sw${values['tun.hide_console'] === true ? ' on' : ''}`}
+                    className={`sw${values['ui.start_minimal'] === true ? ' on' : ''}`}
                     role="switch"
-                    aria-checked={values['tun.hide_console'] === true}
+                    aria-checked={values['ui.start_minimal'] === true}
                     aria-label={t('set.tray')}
                     onClick={() => {
-                      void save('tun.hide_console', SettingType.BOOL, values['tun.hide_console'] !== true);
+                      // D7: скрытие консоли TUN — чужой ключ; для трея
+                      // используем shell-owned ui.start_minimal.
+                      void save('ui.start_minimal', SettingType.BOOL, values['ui.start_minimal'] !== true);
                     }}
                   />
                 </div>
@@ -733,7 +735,7 @@ export function SettingsScreen(): JSX.Element {
                             URL.revokeObjectURL(a.href);
                           }, 1000);
                         } catch (e) {
-                          setErr(friendlyCoreError(e));
+                          setErr(showCoreError(e, t));
                         }
                       })();
                     }}
@@ -769,7 +771,7 @@ export function SettingsScreen(): JSX.Element {
                             await core.settings.setSettings({ values: payload });
                             setOk(t('bk.restore'));
                           } catch (e2) {
-                            setErr(friendlyCoreError(e2));
+                            setErr(showCoreError(e2, t));
                           }
                         })();
                       }}
@@ -794,6 +796,9 @@ export function SettingsScreen(): JSX.Element {
                 </span>
                 <span>{t('sec.core')}</span>
               </h2>
+              <div className="set-row">
+                <div className="set-txt"><div className="set-l">{t('mux.title')}</div></div>
+              </div>
               <div className="set-row">
                 <div className="set-txt">
                   <div className="set-l">{t('set.appVersion')}</div>

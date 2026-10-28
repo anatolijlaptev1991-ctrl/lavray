@@ -748,4 +748,14 @@ export const zhDict: Record<string, string> = {
   "web.login.t": "登录 LAVRay",
   "web.logout": "退出登录",
   "web.remember": "记住此设备 30 天",
-};
+  "grp.name": "分组名称",
+  "mux.protocol": "多路复用协议",
+  "mux.concurrency": "并发流数量",
+  "mux.default_on": "默认启用",
+  "srv.type": "类型",
+  "rt.empty.t": "预设未加载",
+  "rt.empty.d": "内核不可用 — 启动后将显示预设",
+  "core.unavailable": "内核不可用 — 应用未运行或内核未能启动",
+  "mux.title": "多路复用",
+  "core.external": "外部内核（Naive 等）",
+}

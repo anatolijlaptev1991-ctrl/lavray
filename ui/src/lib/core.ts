@@ -94,11 +94,35 @@ export function coreUrlFromEnv(): string {
   return 'http://127.0.0.1:0';
 }
 
-/** Человекочитаемая причина недоступности ядра (вместо «Failed to fetch»). */
+/**
+ * Человекочитаемая причина недоступности ядра. Возвращает СТАБИЛЬНЫЙ КОД
+ * (`core.unavailable`), который UI переводит через t(); раньше здесь была
+ * захардкоженная русская строка, и в en/zh/es/de показывался русский текст.
+ */
+export const CORE_UNAVAILABLE = 'core.unavailable';
+
 export function friendlyCoreError(e: unknown): string {
   const msg = e instanceof Error ? e.message : String(e);
-  if (msg.includes('Failed to fetch') || msg.includes('NetworkError')) {
-    return 'Ядро недоступно — приложение не запущено или ядро не поднялось';
+  if (
+    msg.includes('Failed to fetch') ||
+    msg.includes('NetworkError') ||
+    msg.includes('fetch failed')
+  ) {
+    return CORE_UNAVAILABLE;
+  }
+  // Сырые служебные ответы транспорта (404/унimplemented от asset-сервера)
+  // не должны уходить пользователю как есть — это не его ошибка.
+  if (/(unimplemented|HTTP 404|HTTP 405|HTTP 5..)/i.test(msg)) {
+    return CORE_UNAVAILABLE;
   }
   return msg;
+}
+
+/** Перевести результат friendlyCoreError для показа. */
+export function showCoreError(
+  e: unknown,
+  t: (key: 'core.unavailable') => string,
+): string {
+  const v = friendlyCoreError(e);
+  return v === CORE_UNAVAILABLE ? t(CORE_UNAVAILABLE) : v;
 }

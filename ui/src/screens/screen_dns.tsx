@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { DnsSettings_Mode } from '../gen/lavray_pb';
 import type { DnsSettings } from '../gen/lavray_pb';
-import { friendlyCoreError } from '../lib/core';
+import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
@@ -46,13 +46,13 @@ export function DnsScreen(): JSX.Element {
       setAdvanced(res.mode === DnsSettings_Mode.ADVANCED);
       setJson(res.advancedJson ?? '');
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     }
-  }, [core]);
+  }, [core, t]);
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, t]);
 
   const save = useCallback(
     async (next: Partial<DnsSettings>): Promise<void> => {
@@ -75,7 +75,7 @@ export function DnsScreen(): JSX.Element {
         setNeedsRestart(res.needsProfileRestart);
         setOk(t('common.save'));
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       } finally {
         setBusy(false);
       }
@@ -107,7 +107,7 @@ export function DnsScreen(): JSX.Element {
       if (res.formatted !== undefined) setJson(res.formatted);
       setOk(t('dns.adv'));
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     }
   }, [core, json, t]);
 

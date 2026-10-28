@@ -5,7 +5,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import type { Group } from '../gen/lavray_pb';
-import { friendlyCoreError } from '../lib/core';
+import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { formatBytes, NB } from '../lib/i18n';
@@ -69,13 +69,13 @@ export function SubscriptionsScreen(): JSX.Element {
       );
       setCounts(next);
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     }
-  }, [core]);
+  }, [core, t]);
 
   useEffect(() => {
     void reload();
-  }, [reload]);
+  }, [reload, t]);
 
   const add = useCallback(async (): Promise<void> => {
     setErr('');
@@ -104,7 +104,7 @@ export function SubscriptionsScreen(): JSX.Element {
       setAdding(false);
       await reload();
     } catch (e) {
-      setErr(friendlyCoreError(e));
+      setErr(showCoreError(e, t));
     } finally {
       setBusy('');
     }
@@ -167,7 +167,7 @@ export function SubscriptionsScreen(): JSX.Element {
           setErr(t('sub.err.badge'));
         }
       } catch (e) {
-        const msg = friendlyCoreError(e);
+        const msg = showCoreError(e, t);
         setErrors((m) => ({ ...m, [String(id)]: msg }));
         setErr(msg);
       } finally {
@@ -189,10 +189,10 @@ export function SubscriptionsScreen(): JSX.Element {
         });
         await reload();
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     },
-    [core, reload],
+    [core, reload, t],
   );
 
   const remove = useCallback(
@@ -202,10 +202,10 @@ export function SubscriptionsScreen(): JSX.Element {
         await core.subscriptions.deleteSubscription({ groupId: id });
         await reload();
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     },
-    [core, reload],
+    [core, reload, t],
   );
 
   const openUrl = useCallback((raw: string): void => {

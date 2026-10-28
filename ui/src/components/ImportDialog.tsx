@@ -25,7 +25,7 @@ const TAB_KEY: Record<Tab, 'imp.tab.link' | 'imp.tab.qr' | 'imp.tab.file'> = {
 };
 
 export function ImportDialog({ groupId, onClose, onImported }: Props): JSX.Element {
-  const { t, tf } = useI18n();
+  const { t, tf, plural } = useI18n();
   const core = useCore();
   const [tab, setTab] = useState<Tab>('link');
   const [link, setLink] = useState('');
@@ -327,7 +327,7 @@ export function ImportDialog({ groupId, onClose, onImported }: Props): JSX.Eleme
               <div className="card-h" style={{ marginBottom: 8 }}>
                 <span className="ic"><Icon name="search" /></span>
                 <h3 style={{ fontSize: '.875rem', fontWeight: 600 }}>
-                  {tf('pl.prof.one', { n: preview.length })}
+                  {plural('pl.p', preview.length)}
                 </h3>
               </div>
               <ul className="imp-prev-list">

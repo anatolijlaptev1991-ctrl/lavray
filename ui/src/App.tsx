@@ -44,7 +44,22 @@ export default function App(): JSX.Element {
 
 function AppInner(): JSX.Element {
   const { t, lang } = useI18n();
-  const [prefs] = useState(() => loadPreferences(window.localStorage));
+  // ?theme=light&lang=de — предпросмотр темы/языка для скриншот-проверок
+  // (иначе localStorage не задать в headless-браузере).
+  const [prefs] = useState(() => {
+    const base = loadPreferences(window.localStorage);
+    const params = new URLSearchParams(window.location.search);
+    const theme = params.get('theme');
+    const accent = params.get('accent');
+    return {
+      theme:
+        theme === 'light' || theme === 'dark' || theme === 'system' ? theme : base.theme,
+      accent:
+        accent === 'auto' || accent === 'amber' || accent === 'sage' || accent === 'graphite'
+          ? accent
+          : base.accent,
+    };
+  });
   // Хеш-API (как в прототипе): #screen=servers&tab=subscriptions — для
   // скриншотов/проверок; неизвестное значение игнорируется.
   const initial = ((): { section: string; tab: string } => {
@@ -125,6 +140,11 @@ function AppInner(): JSX.Element {
 
   useEffect(() => {
     // D3: выбор языка сохраняется; при первом запуске — из navigator.
+    const forced = new URLSearchParams(window.location.search).get('lang');
+    if (forced !== null && ['ru', 'zh', 'en', 'es', 'de'].includes(forced)) {
+      setLanguage(forced as 'ru' | 'zh' | 'en' | 'es' | 'de');
+      return;
+    }
     const saved = localStorage.getItem('lavray.lang');
     if (saved === null) {
       const detected = detectLanguage([...navigator.languages]);
@@ -225,11 +245,13 @@ function AppInner(): JSX.Element {
       </a>
       <header id="titlebar">
         <div className="tb-left">
+          {/* «Светофор» macOS — классы прототипа (.tl-mac/.tl.r|y|g),
+              иначе иконки имели нулевой размер и были невидимы. */}
           {adapter.os === 'macos' && (
-            <span className="tb-traffic" aria-hidden="true">
-              <i className="t-red" />
-              <i className="t-yel" />
-              <i className="t-grn" />
+            <span className="tl-mac" aria-hidden="true">
+              <i className="tl r" />
+              <i className="tl y" />
+              <i className="tl g" />
             </span>
           )}
           <span className="tb-brand">LAVRay</span>

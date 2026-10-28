@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import type { Connection } from '../gen/lavray_pb';
 import { Connection_Status } from '../gen/lavray_pb';
-import { friendlyCoreError } from '../lib/core';
+import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { formatDuration } from '../lib/i18n';
@@ -39,10 +39,10 @@ export function ConnsScreen(): JSX.Element {
         await core.connections.closeConnection({ id });
         setList((prev) => prev.filter((c) => c.id !== id));
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        setErr(showCoreError(e, t));
       }
     },
-    [core],
+    [core, t],
   );
 
   useEffect(() => {
@@ -59,13 +59,13 @@ export function ConnsScreen(): JSX.Element {
           setTruncated(snap.truncated);
         }
       } catch (e) {
-        if (!ac.signal.aborted) setErr(friendlyCoreError(e));
+        if (!ac.signal.aborted) setErr(showCoreError(e, t));
       }
     })();
     return (): void => {
       ac.abort();
     };
-  }, [core]);
+  }, [core, t]);
 
   return (
     <div className="conns">

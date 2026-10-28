@@ -754,4 +754,14 @@ export const esDict: Record<string, string> = {
   "web.login.t": "Entrar en LAVRay",
   "web.logout": "Cerrar sesión",
   "web.remember": "Recordar este dispositivo 30 días",
-};
+  "grp.name": "Nombre del grupo",
+  "mux.protocol": "Protocolo de multiplexación",
+  "mux.concurrency": "Flujos simultáneos",
+  "mux.default_on": "Activado por defecto",
+  "srv.type": "Tipo",
+  "rt.empty.t": "Presets no cargados",
+  "rt.empty.d": "Núcleo no disponible — los presets aparecerán al iniciarlo",
+  "core.unavailable": "Núcleo no disponible — la aplicación no está en ejecución o el núcleo no arrancó",
+  "mux.title": "Multiplexación",
+  "core.external": "Núcleos externos (Naive y otros)",
+}

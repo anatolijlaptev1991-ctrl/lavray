@@ -8,6 +8,7 @@ import {
   getLanguage,
   onLanguageChange,
   setLanguage as setLang,
+  pluralN,
   t as translate,
   tf as translateFormat,
   type Language,
@@ -18,6 +19,8 @@ export interface I18nApi {
   readonly lang: Language;
   readonly t: (key: MessageKey) => string;
   readonly tf: (key: MessageKey, params: Readonly<Record<string, string | number>>) => string;
+  /** Плюральная форма: plural('pl.p', 5) → «5 профилей». */
+  readonly plural: (base: string, n: number) => string;
   readonly setLanguage: (lang: Language) => void;
 }
 
@@ -30,6 +33,7 @@ export function useI18n(): I18nApi {
       translateFormat(key, params, lang),
     [lang],
   );
+  const plural = useCallback((base: string, n: number): string => pluralN(base, n, lang), [lang]);
   const setLanguage = useCallback((next: Language): void => {
     setLang(next);
     applyDocumentLanguage(document);
@@ -41,5 +45,5 @@ export function useI18n(): I18nApi {
     }
   }, []);
 
-  return { lang, t, tf, setLanguage };
+  return { lang, t, tf, plural, setLanguage };
 }

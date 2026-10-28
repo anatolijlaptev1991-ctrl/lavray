@@ -3,7 +3,7 @@
 // пустое состояние. Данные — из StatsService.Subscribe (push-кадры).
 import { useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
-import { friendlyCoreError } from '../lib/core';
+import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { formatBytes, formatSpeed } from '../lib/i18n';
@@ -61,13 +61,13 @@ export function TrafficGraph({ active }: Props): JSX.Element {
           push(upRef.current, upBps);
         }
       } catch (e) {
-        if (!ac.signal.aborted) setErr(friendlyCoreError(e));
+        if (!ac.signal.aborted) setErr(showCoreError(e, t));
       }
     })();
     return (): void => {
       ac.abort();
     };
-  }, [active, core]);
+  }, [active, core, t]);
 
   // Перерисовка: сетка, заливка загрузки, пунктир отдачи (как в прототипе).
   useEffect(() => {
@@ -149,7 +149,7 @@ export function TrafficGraph({ active }: Props): JSX.Element {
       window.removeEventListener('resize', onResize);
       window.clearInterval(id);
     };
-  }, [speed]);
+  }, [speed, t]);
 
   return (
     <div className="card traffic-card">

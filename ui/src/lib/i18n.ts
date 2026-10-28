@@ -112,6 +112,25 @@ export function t(key: MessageKey, lang: Language = current): string {
   return dict[key] ?? DICTIONARIES.en[key] ?? key;
 }
 
+/**
+ * Plural form по Intl.PluralRules: берёт ключ `<base>.<one|few|many|other>`.
+ * Прототип использовал ручной выбор по числу; здесь — ICU-категории
+ * (ru: one/few/many, en/zh/es/de: one/other).
+ */
+export function plural(base: string, n: number, lang: Language = current): string {
+  const cat = new Intl.PluralRules(locale(lang)).select(n);
+  const dict = DICTIONARIES[lang];
+  const key = `${base}.${cat}`;
+  const fallback = `${base}.other`;
+  return dict[key] ?? dict[fallback] ?? DICTIONARIES.en[key] ?? DICTIONARIES.en[fallback] ?? base;
+}
+
+/** Plural + подстановка числа: `pl.p.one` → «1 профиль». */
+export function pluralN(base: string, n: number, lang: Language = current): string {
+  const s = plural(base, n, lang);
+  return s.split('{n}').join(new Intl.NumberFormat(locale(lang)).format(n));
+}
+
 /** Translate with `{placeholder}` interpolation (prototype `tf`). */
 export function tf(key: MessageKey, params: Readonly<Record<string, string | number>>, lang: Language = current): string {
   let s = t(key, lang);

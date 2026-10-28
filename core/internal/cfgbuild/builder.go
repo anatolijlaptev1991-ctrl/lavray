@@ -163,6 +163,11 @@ func Build(req BuildRequest) (*BuildResult, error) {
 		if err != nil {
 			return nil, err
 		}
+		// T-08: «как есть» не значит «с путями к файлам» (log.output,
+		// experimental.cache_file.path, route.rule_set[].path, …).
+		if err := rejectFileKeys("", cfg); err != nil {
+			return nil, err
+		}
 	} else {
 		var err error
 		cfg, err = buildSingBoxConfig(req, st, res)
@@ -453,6 +458,10 @@ func buildChainOutbounds(chainID int, ents []*model.Profile, st *BuildSettings, 
 			var custom map[string]any
 			if err := json.Unmarshal([]byte(ent.CustomOutboundJSON), &custom); err != nil {
 				return nil, invalidArgument("custom_outbound", "profile %d: invalid JSON: %v", ent.ID, err)
+			}
+			// T-08: custom_outbound не должен приносить пути к файлам.
+			if err := rejectFileKeys("custom_outbound", custom); err != nil {
+				return nil, err
 			}
 			MergeJSON(outbound, custom)
 		}

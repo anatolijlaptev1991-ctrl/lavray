@@ -279,6 +279,11 @@ func buildCustomInternal(p *model.Profile) (map[string]any, error) {
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
 		return nil, invalidArgument("custom", "custom internal profile: outbound JSON: %v", err)
 	}
+	// T-08: outbound tor запускает executable_path, ssh читает
+	// private_key_path, tls — certificate_path: пути из чужого JSON не нужны.
+	if err := rejectFileKeys("custom", out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 

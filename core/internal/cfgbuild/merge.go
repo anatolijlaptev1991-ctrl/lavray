@@ -5,6 +5,7 @@ package cfgbuild
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -69,7 +70,21 @@ var allowedRootKeys = map[string]bool{
 	"dns":          true, // кроме запрещённых подсекций ниже (наследуено W5)
 	"outbounds":    true, // только собственный outbound профиля — по тегу
 	"log":          true, // только log.level
-	"experimental": true, // только experimental.cache_file
+	"experimental": true, // только experimental.cache_file (без path, см. cacheFileKeys)
+}
+
+// cacheFileKeys — разрешённые поля experimental.cache_file в custom_config.
+// path нет намеренно (T-08, A1-01): путь кэша задаёт LAVRay
+// (BuildSettings.CacheFilePath). Иначе sing-box открывал бы любой файл
+// пользователя, а при несовпадении формата УДАЛЯЛ его и создавал bbolt на его
+// месте. Сравнение точное: "Path" и "path+" тоже не проходят.
+var cacheFileKeys = map[string]bool{
+	"enabled":      true,
+	"cache_id":     true,
+	"store_fakeip": true,
+	"store_rdrc":   true,
+	"store_dns":    true,
+	"rdrc_timeout": true,
 }
 
 // mergeKeyBase — ключ без маркеров конкатенации ("+key"/"key+" → "key").
@@ -96,7 +111,14 @@ func MergeCustomConfig(cfg map[string]any, srcJSON string, allowedOutboundTags [
 		allowedTags[t] = true
 	}
 
-	for key, val := range src {
+	// Отсортированный обход: при нескольких нарушениях ошибка детерминирована.
+	rootKeys := make([]string, 0, len(src))
+	for key := range src {
+		rootKeys = append(rootKeys, key)
+	}
+	sort.Strings(rootKeys)
+	for _, key := range rootKeys {
+		val := src[key]
 		base := mergeKeyBase(key)
 		// C4-7: конкатенационные маркеры имеют смысл только на массивах:
 		// "+log":{...} / "route+":5 — ошибка; {"route":{"+rules":[...]}}
@@ -109,6 +131,15 @@ func MergeCustomConfig(cfg map[string]any, srcJSON string, allowedOutboundTags [
 		if !allowedRootKeys[base] {
 			// inbounds, log.output (корень), прочие неизвестные корневые ключи.
 			return invalidArgument(base, "key %q is not allowed in custom_config (allowlist: route, dns, outbounds, log.level, experimental.cache_file)", base)
+		}
+		// T-08: в разрешённых секциях, где допустимы произвольные поддеревья,
+		// ни один ключ не может задавать путь к файлу (filekeys.go). log и
+		// experimental проверяются строже — по точному списку полей.
+		switch base {
+		case "route", "dns", "outbounds":
+			if err := rejectFileKeys("", map[string]any{base: val}); err != nil {
+				return err
+			}
 		}
 		switch base {
 		case "route", "dns":
@@ -154,20 +185,44 @@ func mergeLogKey(cfg map[string]any, key string, val any) error {
 }
 
 // mergeExperimentalKey — из секции experimental разрешена только подсекция
-// cache_file; clash_api (вкл. external_ui_download_url), v2ray_api, debug —
-// INVALID_ARGUMENT (LNB-25).
+// cache_file и только поля из cacheFileKeys; clash_api (вкл.
+// external_ui_download_url), v2ray_api, debug, а также cache_file.path —
+// INVALID_ARGUMENT (LNB-25, T-08).
 func mergeExperimentalKey(cfg map[string]any, key string, val any) error {
 	obj, ok := val.(map[string]any)
 	if !ok {
 		return invalidArgument("experimental", "experimental override must be an object")
 	}
+	subs := make([]string, 0, len(obj))
 	for sub := range obj {
+		subs = append(subs, sub)
+	}
+	sort.Strings(subs)
+	for _, sub := range subs {
 		if mergeKeyBase(sub) != "cache_file" {
 			return invalidArgument(
 				"experimental."+mergeKeyBase(sub),
 				"key %q is not allowed in custom_config (only experimental.cache_file)",
 				"experimental."+mergeKeyBase(sub),
 			)
+		}
+		cacheFile, ok := obj[sub].(map[string]any)
+		if !ok {
+			return invalidArgument("experimental.cache_file", "experimental.cache_file override must be an object")
+		}
+		fields := make([]string, 0, len(cacheFile))
+		for field := range cacheFile {
+			fields = append(fields, field)
+		}
+		sort.Strings(fields)
+		for _, field := range fields {
+			if !cacheFileKeys[field] {
+				return invalidArgument(
+					"experimental.cache_file."+mergeKeyBase(field),
+					"key %q is not allowed in custom_config (cache_file accepts only enabled, cache_id, store_fakeip, store_rdrc, store_dns, rdrc_timeout; the cache file path is set by LAVRay)",
+					"experimental.cache_file."+mergeKeyBase(field),
+				)
+			}
 		}
 	}
 	MergeJSON(cfg, map[string]any{key: val})

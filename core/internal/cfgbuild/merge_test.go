@@ -142,7 +142,7 @@ func TestAllowlistAllowedKeys(t *testing.T) {
 		},
 		{
 			"experimental.cache_file",
-			`{"experimental": {"cache_file": {"enabled": true, "path": "cache.db"}}}`,
+			`{"experimental": {"cache_file": {"enabled": true, "cache_id": "lav"}}}`,
 			func(t *testing.T, cfg map[string]any) {
 				exp := cfg["experimental"].(map[string]any)
 				cf := exp["cache_file"].(map[string]any)

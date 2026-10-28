@@ -920,7 +920,10 @@ body.w-md .set-toc-jump{display:block}
   transition:transform var(--t-emph) var(--e-in),width var(--t-emph) var(--e-in),height var(--t-emph) var(--e-in)}
 .sb-item{position:relative;z-index:1}
 .sb-item.on{background:transparent;color:var(--accent);font-weight:600}
-.screen.active>*{animation:scrChild var(--t-emph) var(--e-in) both}
+/* T-06: fill-mode backwards, а не both. С forwards/both после анимации на потомке
+   экрана остаётся transform: matrix(1,0,0,1,0,0), он становится containing block
+   для position:fixed (меню, диалоги) и сдвигает их на координаты списка. */
+.screen.active>*{animation:scrChild var(--t-emph) var(--e-in) backwards}
 .screen.active>*:nth-child(2){animation-delay:32ms}.screen.active>*:nth-child(3){animation-delay:64ms}
 .screen.active>*:nth-child(4){animation-delay:96ms}.screen.active>*:nth-child(5){animation-delay:128ms}.screen.active>*:nth-child(n+6){animation-delay:160ms}
 #main[data-axis="y"]{--ax:0;--ay:1} #main[data-axis="x"]{--ax:1;--ay:0}

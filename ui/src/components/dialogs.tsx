@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { JSX } from 'react';
+import { createPortal } from 'react-dom';
 import { Group_Kind } from '../gen/lavray_pb';
 import type { Group } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
@@ -41,7 +42,11 @@ export function DialogShell({
   // latest-ref), а не при каждом ререндере родителя.
   useModal(rootRef, { onClose, autofocusRef });
 
-  return (
+  // T-06: диалог рендерится в портале на <body>, а не внутри экрана. После
+  // анимации .screen.active>* на предке остаётся transform, а он делает предка
+  // containing block для position:fixed — диалог центрировался по высоте
+  // списка серверов и уезжал за окно.
+  return createPortal(
     <div
       className="dlg-back open"
       role="presentation"
@@ -66,7 +71,8 @@ export function DialogShell({
         <div className="dlg-b">{children}</div>
         {footer !== undefined && <div className="dlg-f">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

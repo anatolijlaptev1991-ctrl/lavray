@@ -4,6 +4,7 @@
 // авто-детект URL подписки.
 import { useCallback, useRef, useState } from 'react';
 import type { JSX } from 'react';
+import { createPortal } from 'react-dom';
 import type { Profile } from '../gen/lavray_pb';
 import { friendlyCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
@@ -142,7 +143,9 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
     [doPreview],
   );
 
-  return (
+  // T-06: портал на <body> (см. DialogShell) — диалог не зависит от transform
+  // предков внутри экрана.
+  return createPortal(
     <div
       className="dlg-back open"
       role="presentation"
@@ -353,6 +356,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

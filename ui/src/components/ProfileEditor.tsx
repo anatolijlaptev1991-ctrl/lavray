@@ -4,6 +4,7 @@
 // Реализованы все внутренние типы; Naive/внешние ядра скрыты флагом ядра.
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
+import { createPortal } from 'react-dom';
 import { create } from '@bufbuild/protobuf';
 import {
   Hysteria2DetailSchema,
@@ -412,7 +413,9 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
     }
   }, [core, f, profile, groupId, onSaved, onClose, t]);
 
-  return (
+  // T-06: портал на <body> — редактор не должен центрироваться по высоте
+  // списка серверов (см. DialogShell).
+  return createPortal(
     <div className="dlg-back open" role="presentation" onClick={onClose}>
       <div
         className="dlg dlg-lg"
@@ -855,6 +858,7 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

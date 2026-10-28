@@ -10,7 +10,7 @@ import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { friendlyCoreError, showCoreError } from '../lib/core';
 import { applySystemProxy, coreModeFor, loadModes, saveModes } from '../lib/connection';
-import { TrafficGraph } from '../components/TrafficGraph';
+import { ConnRight } from '../components/ConnRight';
 import { ImportDialog } from '../components/ImportDialog';
 import { geoName } from '../lib/geo';
 
@@ -37,6 +37,9 @@ export function ConnectionScreen(): JSX.Element {
   const [actionMsg, setActionMsg] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [subs, setSubs] = useState<readonly { id: bigint; name: string }[]>([]);
+  // Активный пресет маршрутов — для карточки «Качество связи».
+  const [presetName, setPresetName] = useState('—');
+  const [presetRules, setPresetRules] = useState(0);
 
   const ready = status.state === CoreState.CONNECTED;
   const connecting = status.state === CoreState.CONNECTING;
@@ -50,6 +53,30 @@ export function ConnectionScreen(): JSX.Element {
         setSubs(res.groups.map((s) => ({ id: s.id, name: s.name })));
       } catch {
         /* ядро недоступно — кнопка будет disabled */
+      }
+    })();
+  }, [core]);
+
+  // Активный пресет маршрутов: имя и число правил для карточки «Качество
+  // связи» (прототип: hlPreset + hlRules).
+  useEffect(() => {
+    void (async (): Promise<void> => {
+      try {
+        const res = await core.routing.listPresets({});
+        const active0 = res.presets.find((p) => p.id === res.activePresetId);
+        if (active0 === undefined) return;
+        setPresetName(active0.displayName);
+        setPresetRules(
+          active0.proxyDomain.length +
+            active0.directDomain.length +
+            active0.blockDomain.length +
+            active0.proxyIp.length +
+            active0.directIp.length +
+            active0.blockIp.length +
+            active0.processRules.length,
+        );
+      } catch {
+        /* пресеты недоступны — карточка покажет «—» */
       }
     })();
   }, [core]);
@@ -389,7 +416,12 @@ export function ConnectionScreen(): JSX.Element {
           </div>
         )}
       </div>
-      <TrafficGraph active={ready} />
+      <ConnRight
+        connected={ready}
+        latencyMs={active?.testResult?.latencyMs}
+        presetName={presetName}
+        presetRules={presetRules}
+      />
       {importOpen && (
         <ImportDialog
           groupId={0n}

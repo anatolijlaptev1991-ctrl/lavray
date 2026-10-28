@@ -464,6 +464,8 @@ export const zhDict: Record<string, string> = {
   "rt.rename": "重命名",
   "rt.ro": "内置预设无法修改",
   "rt.rules": "规则",
+  "rt.ruleOne": "条规则",
+  "rt.ruleMany": "条规则",
   "rt.rulesEmpty": "暂无规则——添加第一条",
   "rt.rulesHint": "规则自上而下生效",
   "rt.saveAs": "存为预设",

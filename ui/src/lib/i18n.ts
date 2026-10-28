@@ -202,3 +202,18 @@ export function formatDuration(ms: number, lang: Language = current): string {
 export function applyDocumentLanguage(doc: Document, lang: Language = current): void {
   doc.documentElement.lang = lang === 'zh' ? 'zh-CN' : lang;
 }
+
+/**
+ * Relative time from an epoch-ms instant → "5 с назад" (прототип `relTime`).
+ * Нужен карточкам утечек/здоровья: «Проверено: 5 с назад».
+ */
+export function formatSince(thenMs: number, lang: Language = current): string {
+  const sec = Math.max(0, Math.floor((Date.now() - thenMs) / 1000));
+  const rtf = new Intl.RelativeTimeFormat(locale(lang), { numeric: 'auto' });
+  if (sec < 60) return rtf.format(-sec, 'second');
+  const min = Math.floor(sec / 60);
+  if (min < 60) return rtf.format(-min, 'minute');
+  const hours = Math.floor(min / 60);
+  if (hours < 24) return rtf.format(-hours, 'hour');
+  return rtf.format(-Math.floor(hours / 24), 'day');
+}

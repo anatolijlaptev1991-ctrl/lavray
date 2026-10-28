@@ -470,6 +470,8 @@ export const deDict: Record<string, string> = {
   "rt.rename": "Umbenennen",
   "rt.ro": "Ein integriertes Preset lässt sich nicht ändern",
   "rt.rules": "Regeln",
+  "rt.ruleOne": "Regel",
+  "rt.ruleMany": "Regeln",
   "rt.rulesEmpty": "Noch keine Regeln — füge die erste hinzu",
   "rt.rulesHint": "Regeln gelten von oben nach unten",
   "rt.saveAs": "Als Preset speichern",

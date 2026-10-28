@@ -470,6 +470,8 @@ export const enDict: Record<string, string> = {
   "rt.rename": "Rename",
   "rt.ro": "A built-in preset can’t be changed",
   "rt.rules": "Rules",
+  "rt.ruleOne": "rule",
+  "rt.ruleMany": "rules",
   "rt.rulesEmpty": "No rules yet — add the first one",
   "rt.rulesHint": "Rules apply top to bottom",
   "rt.saveAs": "Save as preset",

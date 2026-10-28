@@ -482,6 +482,8 @@ export const ruDict: Record<string, string> = {
   "rt.rename": "Переименовать",
   "rt.ro": "Встроенный пресет нельзя изменить",
   "rt.rules": "Правила",
+  "rt.ruleOne": "правило",
+  "rt.ruleMany": "правил",
   "rt.rulesEmpty": "Правил нет — добавьте первое",
   "rt.rulesHint": "Правила применяются сверху вниз",
   "rt.saveAs": "Сохранить как пресет",

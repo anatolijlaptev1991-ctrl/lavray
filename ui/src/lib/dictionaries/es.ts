@@ -470,6 +470,8 @@ export const esDict: Record<string, string> = {
   "rt.rename": "Renombrar",
   "rt.ro": "Un preset integrado no se puede modificar",
   "rt.rules": "Reglas",
+  "rt.ruleOne": "regla",
+  "rt.ruleMany": "reglas",
   "rt.rulesEmpty": "Aún no hay reglas: añade la primera",
   "rt.rulesHint": "Las reglas se aplican de arriba abajo",
   "rt.saveAs": "Guardar como preset",

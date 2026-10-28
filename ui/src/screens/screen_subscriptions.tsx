@@ -10,6 +10,7 @@ import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { formatBytes, NB } from '../lib/i18n';
 import { SubscriptionProgress_Phase } from '../gen/lavray_pb';
+import { ConfirmDialog } from '../components/dialogs';
 import { Icon } from '../components/Icon';
 
 /** Состояние ошибки подписки → ключ словаря (как subErrParts прототипа). */
@@ -48,6 +49,12 @@ export function SubscriptionsScreen(): JSX.Element {
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
   const [adding, setAdding] = useState(false);
+  // T-12: подписка, ожидающая подтверждения удаления (RPC — только после «Удалить»).
+  const [pendingDelete, setPendingDelete] = useState<{
+    id: bigint;
+    name: string;
+    count: number;
+  } | null>(null);
 
   const reload = useCallback(async (): Promise<void> => {
     try {
@@ -343,9 +350,15 @@ export function SubscriptionsScreen(): JSX.Element {
                   </button>
                   <button
                     className="btn btn-ghost btn-sm"
-                    aria-label={t('srv.delSel')}
-                    title={t('srv.delSel')}
-                    onClick={() => void remove(g.id)}
+                    aria-label={t('subs.delete')}
+                    title={t('subs.delete')}
+                    onClick={() => {
+                      setPendingDelete({
+                        id: g.id,
+                        name: g.name,
+                        count: counts[String(g.id)] ?? g.profileOrder.length,
+                      });
+                    }}
                   >
                     <Icon name="trash" />
                   </button>
@@ -408,6 +421,23 @@ export function SubscriptionsScreen(): JSX.Element {
           </button>
         )}
       </div>
+
+      {pendingDelete !== null && (
+        <ConfirmDialog
+          title={t('subs.delete')}
+          text={tf('subs.delConfirm', { name: pendingDelete.name, n: pendingDelete.count })}
+          confirmLabel={t('subs.delete')}
+          danger
+          onConfirm={() => {
+            const id = pendingDelete.id;
+            setPendingDelete(null);
+            void remove(id);
+          }}
+          onClose={() => {
+            setPendingDelete(null);
+          }}
+        />
+      )}
     </div>
   );
 }

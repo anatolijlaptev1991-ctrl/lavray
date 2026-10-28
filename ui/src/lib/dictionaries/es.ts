@@ -624,6 +624,8 @@ export const esDict: Record<string, string> = {
   "subs.add": "Añadir suscripción",
   "subs.updatedN": "Suscripciones actualizadas: {n}",
   "subs.auto": "Actualización automática",
+  "subs.delConfirm": "¿Eliminar la suscripción «{name}» y sus servidores ({n})?",
+  "subs.delete": "Eliminar suscripción",
   "subs.empty.d": "Añade el enlace de suscripción de tu proveedor y los servidores se actualizarán solos.",
   "subs.empty.t": "No hay suscripciones",
   "subs.expiry": "Caducidad",

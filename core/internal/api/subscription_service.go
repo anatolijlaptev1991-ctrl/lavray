@@ -78,6 +78,10 @@ func (s *Server) UpdateSubscriptionSettings(ctx context.Context, req *connect.Re
 }
 
 func (s *Server) DeleteSubscription(ctx context.Context, req *connect.Request[lavrayv1.DeleteSubscriptionRequest]) (*connect.Response[lavrayv1.Empty], error) {
+	// T-12: подписка — это группа; активный профиль удалять нельзя.
+	if err := s.guardActiveGroup(req.Msg.GroupId); err != nil {
+		return nil, err
+	}
 	if err := s.st.DeleteGroup(req.Msg.GroupId); err != nil {
 		return nil, mapErr(err)
 	}

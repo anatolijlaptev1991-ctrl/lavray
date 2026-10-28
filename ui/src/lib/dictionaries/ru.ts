@@ -636,6 +636,8 @@ export const ruDict: Record<string, string> = {
   "subs.add": "Добавить подписку",
   "subs.updatedN": "Обновлено подписок: {n}",
   "subs.auto": "Автообновление",
+  "subs.delConfirm": "Удалить подписку «{name}» и её серверы ({n})?",
+  "subs.delete": "Удалить подписку",
   "subs.empty.d": "Добавьте ссылку на подписку от провайдера — серверы будут обновляться сами.",
   "subs.empty.t": "Нет подписок",
   "subs.expiry": "Срок",

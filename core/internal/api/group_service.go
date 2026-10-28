@@ -5,10 +5,12 @@ package api
 
 import (
 	"context"
+	"errors"
 
 	"connectrpc.com/connect"
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
 
 func (s *Server) ListGroups(ctx context.Context, req *connect.Request[lavrayv1.ListGroupsRequest]) (*connect.Response[lavrayv1.ListGroupsResponse], error) {
@@ -55,7 +57,37 @@ func (s *Server) UpdateGroup(ctx context.Context, req *connect.Request[lavrayv1.
 	return connect.NewResponse(groupToProto(g)), nil
 }
 
+// guardActiveGroup отказывает, если в группе работает профиль активного
+// соединения (T-12, B1-19). Удаление группы каскадно убирает её профили
+// (profiles.group_id ... ON DELETE CASCADE): без этой охраны активный профиль
+// исчезал из-под работающего инстанса — статус оставался CONNECTED, GetProfile
+// отвечал NotFound, RestartProfile падал. Для DeleteProfile такая охрана уже
+// есть (A9); используют DeleteGroup и DeleteSubscription.
+func (s *Server) guardActiveGroup(groupID int64) error {
+	run := s.inst.Status().Run // nil = нет активного соединения
+	if run == nil || run.ProfileID == 0 {
+		return nil
+	}
+	// Группу берём у профиля сейчас, а не из RunInfo: профиль могли перенести.
+	p, err := s.st.GetProfile(run.ProfileID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil // профиль уже удалён — защищать нечего
+		}
+		return mapErr(err)
+	}
+	if p.GroupID != groupID {
+		return nil
+	}
+	return failedPrecondition(
+		"группа содержит активный профиль «%s» — сначала отключитесь или переключитесь на сервер из другой группы",
+		p.Name)
+}
+
 func (s *Server) DeleteGroup(ctx context.Context, req *connect.Request[lavrayv1.DeleteGroupRequest]) (*connect.Response[lavrayv1.Empty], error) {
+	if err := s.guardActiveGroup(req.Msg.Id); err != nil {
+		return nil, err
+	}
 	if err := s.st.DeleteGroup(req.Msg.Id); err != nil {
 		return nil, mapErr(err)
 	}

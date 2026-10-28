@@ -618,6 +618,8 @@ export const zhDict: Record<string, string> = {
   "subs.add": "添加订阅",
   "subs.updatedN": "已更新订阅：{n}",
   "subs.auto": "自动更新",
+  "subs.delConfirm": "删除订阅“{name}”及其服务器（{n} 个）？",
+  "subs.delete": "删除订阅",
   "subs.empty.d": "添加服务商的订阅链接，服务器会自动更新。",
   "subs.empty.t": "没有订阅",
   "subs.expiry": "有效期",

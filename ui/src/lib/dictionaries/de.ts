@@ -624,6 +624,8 @@ export const deDict: Record<string, string> = {
   "subs.add": "Abo hinzufügen",
   "subs.updatedN": "Abonnements aktualisiert: {n}",
   "subs.auto": "Auto-Update",
+  "subs.delConfirm": "Abo „{name}“ und seine Server löschen ({n})?",
+  "subs.delete": "Abo löschen",
   "subs.empty.d": "Füge den Abo-Link deines Anbieters hinzu, dann aktualisieren sich die Server von selbst.",
   "subs.empty.t": "Keine Abos",
   "subs.expiry": "Ablauf",

@@ -13,6 +13,13 @@ import type { RefObject } from 'react';
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/**
+ * Открытые диалоги; последний — верхний. Esc и Tab обрабатывает только
+ * верхний (T-12): подтверждение удаления поверх «Групп» закрывается своим Esc,
+ * не закрывая нижний диалог, и ловушка Tab не борется за фокус с нижним.
+ */
+const openModals: object[] = [];
+
 export interface ModalOptions {
   /** Вызывается по Esc. Можно передавать новую стрелку на каждый рендер. */
   readonly onClose: () => void;
@@ -29,6 +36,8 @@ export function useModal(rootRef: RefObject<HTMLElement | null>, options: ModalO
   optionsRef.current = options;
 
   useEffect(() => {
+    const token = {};
+    openModals.push(token);
     const root = rootRef.current;
     const preferred = optionsRef.current.autofocusRef?.current ?? null;
     if (preferred !== null) {
@@ -38,6 +47,7 @@ export function useModal(rootRef: RefObject<HTMLElement | null>, options: ModalO
     }
 
     const onKey = (e: KeyboardEvent): void => {
+      if (openModals[openModals.length - 1] !== token) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         optionsRef.current.onClose();
@@ -61,6 +71,8 @@ export function useModal(rootRef: RefObject<HTMLElement | null>, options: ModalO
     document.addEventListener('keydown', onKey);
     return (): void => {
       document.removeEventListener('keydown', onKey);
+      const i = openModals.indexOf(token);
+      if (i >= 0) openModals.splice(i, 1);
     };
   }, [rootRef]);
 }

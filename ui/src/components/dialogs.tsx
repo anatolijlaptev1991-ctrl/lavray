@@ -128,12 +128,14 @@ interface GroupsDialogProps {
 }
 
 export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Element {
-  const { t, plural } = useI18n();
+  const { t, tf, plural } = useI18n();
   const core = useCore();
   const [groups, setGroups] = useState<Group[]>([]);
   const [name, setName] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  // T-12: группа, ожидающая подтверждения удаления (RPC — только после «Удалить»).
+  const [pendingDelete, setPendingDelete] = useState<Group | null>(null);
   const createRef = useRef<HTMLInputElement | null>(null);
 
   const reload = useCallback(async (): Promise<void> => {
@@ -243,7 +245,7 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
               className="btn btn-ic btn-sm"
               aria-label={`${t('common.delete')} ${g.name}`}
               disabled={groups.length <= 1}
-              onClick={() => { void remove(g.id); }}
+              onClick={() => { setPendingDelete(g); }}
             >
               <Icon name="trash" />
             </button>
@@ -266,6 +268,21 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
           {t('grp.create')}
         </button>
       </div>
+      {/* T-12: подтверждение поверх диалога «Группы» (портал на <body>). */}
+      {pendingDelete !== null && (
+        <ConfirmDialog
+          title={t('grp.delete')}
+          text={tf('grp.delConfirm', { name: pendingDelete.name, n: pendingDelete.profileOrder.length })}
+          confirmLabel={t('grp.delete')}
+          danger
+          onConfirm={() => {
+            const id = pendingDelete.id;
+            setPendingDelete(null);
+            void remove(id);
+          }}
+          onClose={() => { setPendingDelete(null); }}
+        />
+      )}
     </DialogShell>
   );
 }

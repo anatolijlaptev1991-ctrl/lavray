@@ -624,6 +624,8 @@ export const enDict: Record<string, string> = {
   "subs.add": "Add subscription",
   "subs.updatedN": "Subscriptions updated: {n}",
   "subs.auto": "Auto-update",
+  "subs.delConfirm": "Delete the subscription “{name}” and its servers ({n})?",
+  "subs.delete": "Delete subscription",
   "subs.empty.d": "Add your provider’s subscription link, and servers will update on their own.",
   "subs.empty.t": "No subscriptions",
   "subs.expiry": "Expiry",

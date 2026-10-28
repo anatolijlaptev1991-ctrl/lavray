@@ -44,8 +44,9 @@ type Server struct {
 
 	// ipURL — сервис публичного IP (GetPublicIp/CheckLeaks); dial — набор
 	// номера для зондов (IPv6, порт); тесты подменяют оба.
-	ipURL string
-	dial  func(ctx context.Context, network, addr string) (net.Conn, error)
+	ipURL      string
+	ipProbeURL string // адрес-литерал для проверки «трафик идёт через туннель» (без DNS)
+	dial       func(ctx context.Context, network, addr string) (net.Conn, error)
 
 	// OnShutdown вызывается после остановки инстанса при CoreService.Shutdown
 	// (W8 headless подставит выход из процесса; здесь — только остановка).
@@ -96,6 +97,7 @@ func NewServer(d Deps) *Server {
 		inst:        inst.NewManager(d.Runner),
 		http:        httpc,
 		ipURL:       publicIPURL,
+		ipProbeURL:  "https://1.1.1.1/",
 		dial:        (&net.Dialer{}).DialContext,
 		subsRunning: map[int64]bool{},
 		subsSnap:    map[int64]*subs.Snapshot{},

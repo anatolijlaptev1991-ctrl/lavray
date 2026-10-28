@@ -10,7 +10,7 @@ import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
 
-type RunState = 'pending' | 'run' | 'ok' | 'warn' | 'err';
+type RunState = 'pending' | 'run' | 'ok' | 'warn' | 'err' | 'skip';
 
 interface Row {
   readonly kind: number;
@@ -23,7 +23,8 @@ const STATUS_TO_RUN: Record<number, RunState> = {
   [SelfCheckResult_Status.OK]: 'ok',
   [SelfCheckResult_Status.WARN]: 'warn',
   [SelfCheckResult_Status.FAIL]: 'err',
-  [SelfCheckResult_Status.UNSPECIFIED]: 'pending',
+  // UNSPECIFIED = проверка не выполнена (T-32): показываем «не проверено», не «ок».
+  [SelfCheckResult_Status.UNSPECIFIED]: 'skip',
 };
 
 const STATE_ICON: Record<RunState, Parameters<typeof Icon>[0]['name']> = {
@@ -32,6 +33,7 @@ const STATE_ICON: Record<RunState, Parameters<typeof Icon>[0]['name']> = {
   ok: 'check',
   warn: 'alert',
   err: 'x',
+  skip: 'info',
 };
 
 const STATE_LABEL: Record<RunState, string> = {
@@ -40,6 +42,7 @@ const STATE_LABEL: Record<RunState, string> = {
   ok: 'st.ok',
   warn: 'st.warn',
   err: 'st.fail',
+  skip: 'chk.st.skip',
 };
 
 /** Локализация названия проверки — по РЕАЛЬНОМУ enum контракта
@@ -49,11 +52,22 @@ const KIND_LABEL: Record<number, string> = {
   [RunSelfCheckRequest_CheckKind.SERVER_REACHABLE]: 'chk.server.t',
   [RunSelfCheckRequest_CheckKind.DNS_RESOLVES]: 'chk.dns.t',
   [RunSelfCheckRequest_CheckKind.PROXY_ACTIVE]: 'chk.proxy.t',
-  [RunSelfCheckRequest_CheckKind.CLOCK_SKEW]: 'chk.fix.time',
-  [RunSelfCheckRequest_CheckKind.SUBSCRIPTION_OK]: 'chk.fix.sub',
+  [RunSelfCheckRequest_CheckKind.CLOCK_SKEW]: 'chk.time.t',
+  [RunSelfCheckRequest_CheckKind.SUBSCRIPTION_OK]: 'chk.sub.t',
   [RunSelfCheckRequest_CheckKind.PORT_FREE]: 'chk.port.t',
-  [RunSelfCheckRequest_CheckKind.IPV6]: 'tun.ipv6',
+  [RunSelfCheckRequest_CheckKind.IPV6]: 'chk.ipv6.t',
 };
+
+/** Коды причин в detail (ядро: selfcheck.go) — переводятся через chk.d.<код>;
+ *  остальной detail (задержка, сдвиг часов, текст ошибки) показывается как есть. */
+const DETAIL_CODES = new Set([
+  'no_connection',
+  'blocked',
+  'not_applicable',
+  'no_subscription',
+  'time_unreachable',
+  'v6_direct',
+]);
 
 const FIX_LABEL: Record<string, string> = {
   // SD-05: коды по контракту (proto SelfCheckResult.fix_code).
@@ -107,7 +121,7 @@ export function DiagScreen(): JSX.Element {
               ? {
                   ...x,
                   state: STATUS_TO_RUN[r.status] ?? 'pending',
-                  detail: r.detail ?? '',
+                  detail: DETAIL_CODES.has(r.detail ?? '') ? t(`chk.d.${r.detail ?? ''}` as never) : (r.detail ?? ''),
                   fixCode: r.fixCode,
                 }
               : x,
@@ -117,7 +131,15 @@ export function DiagScreen(): JSX.Element {
       const bad = results.filter(
         (r) => r.status === SelfCheckResult_Status.FAIL || r.status === SelfCheckResult_Status.WARN,
       ).length;
-      setSummary(bad === 0 ? t('chk.sum.ok') : tf('chk.sum.bad', { n: bad }));
+      const skipped = results.filter((r) => r.status === SelfCheckResult_Status.UNSPECIFIED).length;
+      // Сводка не обещает «Проблем не найдено», если часть проверок не выполнена.
+      setSummary(
+        bad > 0
+          ? tf('chk.sum.bad', { n: bad })
+          : skipped > 0
+            ? tf('chk.sum.part', { n: skipped, total: results.length })
+            : t('chk.sum.ok'),
+      );
     } catch (e) {
       setErr(showCoreError(e, t));
     } finally {
@@ -172,8 +194,8 @@ export function DiagScreen(): JSX.Element {
         )}
         <ol className="chk-list">
           {rows.map((r) => (
-            <li className={`chk-item chk-${r.state}`} key={String(r.kind)}>
-              <span className={`chk-st chk-${r.state}`}>
+            <li className={`chk-item chk-${r.state === 'skip' ? 'pending' : r.state}`} key={String(r.kind)}>
+              <span className={`chk-st chk-${r.state === 'skip' ? 'pending' : r.state}`}>
                 <Icon name={STATE_ICON[r.state]} />
                 <span className="sr-only">{t(STATE_LABEL[r.state] as never)}</span>
               </span>

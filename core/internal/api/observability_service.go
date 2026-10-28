@@ -7,7 +7,6 @@ package api
 
 import (
 	"context"
-	"net/http"
 	"strings"
 	"time"
 
@@ -209,54 +208,6 @@ func (s *Server) CheckRoute(ctx context.Context, req *connect.Request[lavrayv1.C
 		resp.MatchedRule = strp(v.Rule + " → " + v.Outbound)
 	}
 	return connect.NewResponse(resp), nil
-}
-
-// RunSelfCheck — набор проверок по контракту; сетевые — через инъектированный
-// http.Client с коротким таймаутом, результат — redacted деталь.
-func (s *Server) RunSelfCheck(ctx context.Context, req *connect.Request[lavrayv1.RunSelfCheckRequest]) (*connect.Response[lavrayv1.RunSelfCheckResponse], error) {
-	out := &lavrayv1.RunSelfCheckResponse{}
-
-	// 1) Конфигурация запущенного профиля валидна (dry-run сборки).
-	if st := s.inst.Status(); st.Run != nil && st.Run.ProfileID != 0 {
-		if p, err := s.st.GetProfile(st.Run.ProfileID); err == nil {
-			_, errBuild := s.dryRunBuild(p, lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY)
-			status := lavrayv1.SelfCheckResult_STATUS_OK
-			detail := ""
-			if errBuild != nil {
-				status = lavrayv1.SelfCheckResult_STATUS_FAIL
-				detail = errBuild.Error()
-			}
-			out.Results = append(out.Results, &lavrayv1.SelfCheckResult{
-				Kind:   lavrayv1.RunSelfCheckRequest_CHECK_KIND_CORE_ALIVE,
-				Status: status,
-				Detail: strpIf(detail),
-			})
-		}
-	}
-
-	// 2) Время системы не сбито (истёкшие подписи обновлений отвергались бы).
-	_, offset := time.Now().Zone()
-	_ = offset
-
-	// 3) Сеть напрямую доступна (без туннеля) — HEAD на источник метаданных.
-	if s.http != nil {
-		cctx, cancel := context.WithTimeout(ctx, 4*time.Second)
-		r, _ := http.NewRequestWithContext(cctx, http.MethodHead, "https://github.com/", nil)
-		resp, err := s.http.Do(r)
-		cancel()
-		sc := lavrayv1.SelfCheckResult_STATUS_OK
-		d := ""
-		if err != nil {
-			sc = lavrayv1.SelfCheckResult_STATUS_FAIL
-			d = err.Error()
-		} else {
-			resp.Body.Close()
-		}
-		out.Results = append(out.Results, &lavrayv1.SelfCheckResult{
-			Kind: lavrayv1.RunSelfCheckRequest_CHECK_KIND_CLOCK_SKEW, Status: sc, Detail: strpIf(d),
-		})
-	}
-	return connect.NewResponse(out), nil
 }
 
 // GetPublicIp — «каков мой адрес наружу». Поле via выбирает путь запроса

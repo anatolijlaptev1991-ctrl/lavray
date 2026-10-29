@@ -2,20 +2,28 @@
 
 // autostart.ts — автозапуск приложения с системой (T-82/Э-2). Состояние не
 // хранится в настройках: оболочка читает его из ОС при каждом вызове
-// (FR-UI-013). Windows: с правами администратора автозапуск — задача
-// планировщика (приложение стартует повышенным, TUN работает сразу), без прав —
-// значение `Run` в реестре. Другие ОС и веб-панель: строку скрываем.
+// (FR-UI-013). Windows: с правами администратора из установленной версии
+// (Program Files) автозапуск — задача планировщика (приложение стартует
+// повышенным, TUN работает сразу), иначе — значение `Run` в реестре. Другие ОС
+// и веб-панель: строку скрываем.
 
 /** Чем включён автозапуск. */
 export type AutostartMethod = 'task' | 'registry';
 
+/** Пояснение оболочки к результату изменения. */
+export type AutostartNotice = 'task_needs_admin' | 'task_installed_only';
+
 export interface AutostartInfo {
   readonly enabled: boolean;
   readonly method: AutostartMethod | null;
-  /** Приложение сейчас с правами администратора: так включится задача планировщика. */
+  /** Приложение сейчас с правами администратора. */
   readonly elevated: boolean;
-  /** Что не удалось довести до конца: задачу без прав администратора не удалить. */
-  readonly needsAdmin: boolean;
+  /** Приложение установлено (Program Files): только тогда допустима задача с правами. */
+  readonly installed: boolean;
+  /** Есть ли задача планировщика, узнать не удалось (ошибка планировщика, а не «не найдено»). */
+  readonly unknown: boolean;
+  /** Что не удалось довести до конца. */
+  readonly notice: AutostartNotice | null;
 }
 
 function inShell(): boolean {
@@ -31,7 +39,9 @@ function parse(answer: unknown): AutostartInfo | null {
     enabled: a.enabled === true,
     method: a.method === 'task' || a.method === 'registry' ? a.method : null,
     elevated: a.elevated === true,
-    needsAdmin: a.notice === 'task_needs_admin',
+    installed: a.installed === true,
+    unknown: a.unknown === true,
+    notice: a.notice === 'task_needs_admin' || a.notice === 'task_installed_only' ? a.notice : null,
   };
 }
 

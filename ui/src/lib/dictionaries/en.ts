@@ -891,4 +891,7 @@ export const enDict: Record<string, string> = {
   "set.autostart.willRun": "Without administrator rights autostart is the regular kind. For TUN right after sign-in, turn it on in LAVRay running as administrator.",
   "set.autostart.needAdmin": "The LAVRay scheduled task was created with administrator rights and cannot be removed without them. Start LAVRay as administrator and try again.",
   "set.autostart.failed": "Could not change autostart",
+  "set.autostart.installedOnly": "Autostart with administrator rights is available only for the installed version (in Program Files). This copy gets the regular autostart.",
+  "set.autostart.unknown": "Could not tell whether autostart through the scheduler is on. Try again later or start LAVRay as administrator.",
+  "tun.dlg.needAdminAccount": "TUN needs an administrator account: this account is a standard one and cannot get elevated rights without an administrator password. Sign in as an administrator.",
 }

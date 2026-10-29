@@ -891,4 +891,7 @@ export const esDict: Record<string, string> = {
   "set.autostart.willRun": "Sin permisos de administrador el arranque automático es el normal. Para tener TUN nada más iniciar sesión, actívalo en LAVRay ejecutado como administrador.",
   "set.autostart.needAdmin": "La tarea programada de LAVRay se creó con permisos de administrador y no se puede quitar sin ellos. Inicia LAVRay como administrador e inténtalo de nuevo.",
   "set.autostart.failed": "No se pudo cambiar el arranque automático",
+  "set.autostart.installedOnly": "El arranque automático con permisos de administrador solo está disponible en la versión instalada (en Program Files). Esta copia usa el arranque normal.",
+  "set.autostart.unknown": "No se pudo determinar si el arranque automático mediante el programador está activado. Inténtalo más tarde o inicia LAVRay como administrador.",
+  "tun.dlg.needAdminAccount": "TUN necesita una cuenta de administrador: esta cuenta es estándar y no puede elevar permisos sin la contraseña de un administrador. Inicia sesión como administrador.",
 }

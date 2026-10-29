@@ -14,11 +14,11 @@ import {
   stubCore,
 } from '../test-utils/coreStub';
 import { createCoreClients } from './core';
+import { onTunDialogRequest, requestTunDialog, takeTunDialogRequest } from './tunRequest';
 import {
   chooseProfile,
   loadModes,
   loadSelectedProfileId,
-  markTunRelaunch,
   modesFromRemembered,
   reconnect,
   rememberModes,
@@ -27,7 +27,6 @@ import {
   saveModes,
   saveSelectedProfileId,
   sortByLatency,
-  takeTunRelaunch,
   toggleConnection,
 } from './connection';
 
@@ -116,6 +115,68 @@ describe('toggleConnection (Ctrl+D и меню титлбара)', () => {
     const empty = stubCore({ ...routes, 'ProfileService/ListProfiles': profileList() });
     expect(await toggleConnection({ core: clients(), connected: false, port: 2080 })).toBe(false);
     expect(empty.bodies('CoreService/Connect')).toEqual([]);
+  });
+});
+
+describe('toggleConnection: TUN без прав администратора (T-81, ревью)', () => {
+  const routes = {
+    'CoreService/GetStatus': idleStatus(),
+    'ProfileService/ListProfiles': profileList(profile('1', 'S1')),
+  };
+
+  beforeEach(() => {
+    (window as TauriWindow).__TAURI_INTERNALS__ = {};
+    invokeMock.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === 'is_elevated' ? false : undefined),
+    );
+  });
+
+  it('трей и Ctrl+D: показывают окно и просят диалог TUN, а не подключаются', async () => {
+    saveModes(window.localStorage, { sysProxy: false, tunMode: true });
+    const core = stubCore(routes);
+    takeTunDialogRequest(); // сбросить следы других тестов
+
+    expect(await toggleConnection({ core: clients(), connected: false, port: 2080 })).toBe(false);
+
+    expect(core.bodies('CoreService/Connect')).toEqual([]);
+    // окно могло быть скрыто в трей: его нужно показать (вызов уходит асинхронно)
+    await vi.waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('window_show');
+    });
+    expect(takeTunDialogRequest()).toBe(true);
+    expect(takeTunDialogRequest()).toBe(false); // просьба выдаётся один раз
+  });
+
+  it('без выбранного TUN, а также при правах просьбы нет', async () => {
+    saveModes(window.localStorage, { sysProxy: false, tunMode: false });
+    stubCore(routes);
+    takeTunDialogRequest();
+    expect(await toggleConnection({ core: clients(), connected: false, port: 2080 })).toBe(true);
+    expect(takeTunDialogRequest()).toBe(false);
+
+    saveModes(window.localStorage, { sysProxy: false, tunMode: true });
+    invokeMock.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === 'is_elevated' ? true : undefined),
+    );
+    stubCore(routes);
+    expect(await toggleConnection({ core: clients(), connected: false, port: 2080 })).toBe(true);
+    expect(takeTunDialogRequest()).toBe(false);
+  });
+
+  it('просьба, пришедшая до открытия экрана, ждёт его; подписчик получает новую сразу', () => {
+    takeTunDialogRequest();
+    requestTunDialog();
+    const seen: boolean[] = [];
+    const stop = onTunDialogRequest(() => {
+      seen.push(takeTunDialogRequest());
+    });
+    expect(takeTunDialogRequest()).toBe(true); // экран монтируется и забирает просьбу
+    requestTunDialog();
+    expect(seen).toEqual([true]);
+    stop();
+    requestTunDialog();
+    expect(seen).toEqual([true]);
+    takeTunDialogRequest();
   });
 });
 
@@ -222,12 +283,5 @@ describe('режимы в настройке ядра remember.modes (T-81)', ()
     stubCore({ 'SettingsService/GetSettings': new Down() });
     expect(await restoreModes(clients(), window.localStorage)).toBeNull();
     expect(window.localStorage.getItem('lavray.modes')).toBeNull();
-  });
-
-  it('метка перезапуска от администратора снимается ровно один раз', () => {
-    expect(takeTunRelaunch(window.localStorage)).toBe(false);
-    markTunRelaunch(window.localStorage);
-    expect(takeTunRelaunch(window.localStorage)).toBe(true);
-    expect(takeTunRelaunch(window.localStorage)).toBe(false);
   });
 });

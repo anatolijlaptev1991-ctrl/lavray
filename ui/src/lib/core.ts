@@ -118,9 +118,16 @@ const TRANSPORT_DOWN = /(Failed to fetch|NetworkError|fetch failed|Load failed|^
 const ACCESS_DENIED =
   /(access is denied|privilege is not held|permission denied|operation not permitted|отказано в доступе|не хватает прав)/i;
 
+// Отказ должен быть про адаптер TUN: в тексте sing-box для него есть `tun`,
+// `wintun` или «adapter». Тот же «Access is denied» про файл или порт — другая
+// причина, и совет «перезапустите от администратора» вводил бы в заблуждение.
+const TUN_ADAPTER = /(\btun\b|wintun|adapter|адаптер)/i;
+
 export interface CoreErrorContext {
-  /** Запрошен режим TUN: отказ в правах объясняется как нехватка прав у TUN. */
+  /** Запрошен режим TUN. */
   readonly tun?: boolean;
+  /** Права процесса: `true` — повышен (совет про администратора неверен), `null` — не знаем. */
+  readonly elevated?: boolean | null;
 }
 
 /**
@@ -130,9 +137,10 @@ export interface CoreErrorContext {
  * - ядро ответило `Unimplemented` — «Функция пока не реализована» (ядро живо,
  *   это заглушка RPC; раньше она маскировалась под «Ядро недоступно»);
  * - `FailedPrecondition` — «Сейчас это действие недоступно» плюс причина от ядра;
- * - отказ ОС в правах при запуске TUN — «Для TUN не хватает прав, перезапустите
- *   от администратора» (T-81): в режиме TUN (`context.tun`) узнаётся по одному
- *   тексту отказа, без контекста — только если в тексте упомянут `tun`;
+ * - отказ ОС в правах при создании адаптера TUN — «Для TUN не хватает прав,
+ *   перезапустите от администратора» (T-81): только когда запрошен режим TUN
+ *   (`context.tun`), процесс не повышен (`context.elevated !== true`), а текст
+ *   отказа говорит про адаптер TUN;
  * - прочее — сообщение как есть.
  * `tr` по умолчанию — глобальный перевод текущего языка; экраны передают свой `t`.
  */
@@ -151,7 +159,12 @@ export function friendlyCoreError(
     const reason = raw.trim();
     return reason === '' ? head : `${head}: ${reason}`;
   }
-  if (ACCESS_DENIED.test(raw) && (context.tun === true || /\btun\b/i.test(raw))) {
+  if (
+    context.tun === true &&
+    context.elevated !== true &&
+    ACCESS_DENIED.test(raw) &&
+    TUN_ADAPTER.test(raw)
+  ) {
     return tr('err.tunAccess');
   }
   return msg;

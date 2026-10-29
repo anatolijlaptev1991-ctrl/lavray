@@ -8,6 +8,7 @@ import App from './App';
 import { detectOS, osAttribute } from './platform/adapter';
 import { FIRST_ENDPOINT_WAIT_MS, followShellEndpoint } from './lib/coreEndpoint';
 import { installDropGuard } from './lib/external';
+import { applyLaunchInfo } from './lib/launch';
 
 // Нативный режим (Tauri): оболочка сообщает адрес и токен ядра командой
 // core_endpoint (она дожидается готовности ядра) и событием core-endpoint при
@@ -18,6 +19,9 @@ import { installDropGuard } from './lib/external';
 async function bootstrap(): Promise<void> {
   const tauri = (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   if (tauri !== undefined) {
+    // T-81: перезапуск от администратора открывает новый профиль WebView —
+    // язык, тема и режимы приходят от оболочки до первого рендера.
+    await applyLaunchInfo(window.localStorage);
     await Promise.race([
       followShellEndpoint(),
       new Promise<void>((resolve) => {

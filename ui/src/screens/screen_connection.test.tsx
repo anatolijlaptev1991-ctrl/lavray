@@ -312,7 +312,7 @@ describe('режимы на экране «Подключение» (T-27)', () 
   it('TUN не запустился (нет прав): прежний режим восстановлен, переключатель и выбор откатились', async () => {
     const core = stubCore({
       ...connected(),
-      'CoreService/Connect': (n) => (n === 0 ? new Failure('internal', 'access is denied') : {}),
+      'CoreService/Connect': (n) => (n === 0 ? new Failure('internal', 'start inbound/tun[tun-in]: configure tun interface: access is denied') : {}),
     });
     const view = await screen();
 

@@ -23,9 +23,17 @@ interface TunDialogProps {
 export function TunDialog({ onClose, onRelaunch }: TunDialogProps): JSX.Element {
   const { t } = useI18n();
   const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<{ readonly text: string; readonly error: boolean } | null>(
-    null,
-  );
+  // Хранится причина, а не готовый текст: смена языка переводит и сообщение.
+  const [notice, setNotice] = useState<
+    { readonly kind: 'cancelled' } | { readonly kind: 'error'; readonly code: string } | null
+  >(null);
+
+  /** Код оболочки (`unsupported`, `admin_account_required`) — готовая фраза, прочее — текст ОС. */
+  const errorText = (code: string): string => {
+    if (code === 'unsupported') return t('tun.dlg.unsupported');
+    if (code === 'admin_account_required') return t('tun.dlg.needAdminAccount');
+    return `${t('tun.dlg.failed')}: ${code}`;
+  };
 
   const relaunch = async (): Promise<void> => {
     setBusy(true);
@@ -33,16 +41,13 @@ export function TunDialog({ onClose, onRelaunch }: TunDialogProps): JSX.Element 
     try {
       const outcome = await onRelaunch();
       if (outcome === 'cancelled') {
-        setNotice({ text: t('tun.dlg.cancelled'), error: false });
+        setNotice({ kind: 'cancelled' });
         setBusy(false);
       }
       // started: окно закрывается вместе с приложением
     } catch (e) {
       const code = e instanceof Error ? e.message : String(e);
-      setNotice({
-        text: code === 'unsupported' ? t('tun.dlg.unsupported') : `${t('tun.dlg.failed')}: ${code}`,
-        error: true,
-      });
+      setNotice({ kind: 'error', code });
       setBusy(false);
     }
   };
@@ -76,16 +81,16 @@ export function TunDialog({ onClose, onRelaunch }: TunDialogProps): JSX.Element 
     >
       <p>{t('tun.dlg.d')}</p>
       <p className="hint">{t('tun.dlg.note')}</p>
-      {notice !== null &&
-        (notice.error ? (
-          <div className="banner banner-err" role="alert">
-            {notice.text}
-          </div>
-        ) : (
-          <p className="hint" role="status">
-            {notice.text}
-          </p>
-        ))}
+      {notice?.kind === 'error' && (
+        <div className="banner banner-err" role="alert">
+          {errorText(notice.code)}
+        </div>
+      )}
+      {notice?.kind === 'cancelled' && (
+        <p className="hint" role="status">
+          {t('tun.dlg.cancelled')}
+        </p>
+      )}
     </DialogShell>
   );
 }

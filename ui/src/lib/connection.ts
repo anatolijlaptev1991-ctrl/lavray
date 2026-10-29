@@ -8,6 +8,7 @@ import { create } from '@bufbuild/protobuf';
 import type { CoreClients } from './core';
 import { ConnectMode, SettingValueSchema } from '../gen/lavray_pb';
 import { tunNeedsElevation } from './elevation';
+import { requestTunDialog } from './tunRequest';
 import type { Profile } from '../gen/lavray_pb';
 
 export interface ModePreferences {
@@ -43,8 +44,6 @@ export function saveModes(storage: Storage, modes: ModePreferences): void {
 
 /** Настройка ядра с запомненными режимами (формат NekoBox: список `tun`, `system_proxy`). */
 const REMEMBER_MODES_KEY = 'remember.modes';
-/** Метка «приложение перезапускается от администратора ради TUN» (T-81). */
-const TUN_RELAUNCH_KEY = 'lavray.tunRelaunch';
 
 /** Режимы в виде списка настройки `remember.modes`. */
 export function rememberedModes(modes: ModePreferences): string[] {
@@ -98,26 +97,6 @@ export async function restoreModes(
     return modes;
   } catch {
     return null;
-  }
-}
-
-/** Отметить, что приложение перезапускается от администратора ради TUN. */
-export function markTunRelaunch(storage: Storage): void {
-  try {
-    storage.setItem(TUN_RELAUNCH_KEY, '1');
-  } catch {
-    /* приватный режим браузера — подсказка после перезапуска не покажется */
-  }
-}
-
-/** Снять отметку; `true`, если она была (подсказку показывают один раз). */
-export function takeTunRelaunch(storage: Storage): boolean {
-  try {
-    const marked = storage.getItem(TUN_RELAUNCH_KEY) !== null;
-    storage.removeItem(TUN_RELAUNCH_KEY);
-    return marked;
-  } catch {
-    return false;
   }
 }
 
@@ -306,9 +285,13 @@ export async function toggleConnection(args: {
     await disconnectAll(args.core);
     return true;
   }
-  // T-46: TUN без прав администратора не поднимется — не пытаемся; экран
-  // «Подключение» (туда переходит вызывающий) объясняет, что делать.
-  if (loadModes(window.localStorage).tunMode && (await tunNeedsElevation())) return false;
+  // T-46/T-81: TUN без прав администратора не поднимется — не пытаемся. Окно
+  // показывается (трей и Ctrl+D бывают при скрытом окне), экран «Подключение»
+  // (туда переходит вызывающий) открывает диалог перезапуска от администратора.
+  if (loadModes(window.localStorage).tunMode && (await tunNeedsElevation())) {
+    requestTunDialog();
+    return false;
+  }
   const list = await args.core.profiles.listProfiles({});
   const chosen = chooseProfile(list.profiles, loadSelectedProfileId(window.localStorage));
   if (chosen === undefined) return false;

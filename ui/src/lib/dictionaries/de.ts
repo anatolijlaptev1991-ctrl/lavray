@@ -891,4 +891,7 @@ export const deDict: Record<string, string> = {
   "set.autostart.willRun": "Ohne Administratorrechte ist der Autostart der normale. Für TUN gleich nach der Anmeldung schalte ihn in LAVRay als Administrator ein.",
   "set.autostart.needAdmin": "Die geplante Aufgabe von LAVRay wurde mit Administratorrechten angelegt und lässt sich ohne sie nicht entfernen. Starte LAVRay als Administrator und versuche es erneut.",
   "set.autostart.failed": "Autostart konnte nicht geändert werden",
+  "set.autostart.installedOnly": "Der Autostart mit Administratorrechten gibt es nur für die installierte Version (in Program Files). Diese Kopie bekommt den normalen Autostart.",
+  "set.autostart.unknown": "Es ließ sich nicht feststellen, ob der Autostart über die Aufgabenplanung aktiv ist. Versuche es später erneut oder starte LAVRay als Administrator.",
+  "tun.dlg.needAdminAccount": "TUN braucht ein Administratorkonto: Dieses Konto ist ein Standardkonto und kann ohne Administratorkennwort keine erhöhten Rechte bekommen. Melde dich als Administrator an.",
 }

@@ -22,6 +22,8 @@ const os = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
   enabled: false,
   method: null,
   elevated: false,
+  installed: true,
+  unknown: false,
   notice: null,
   ...over,
 });
@@ -86,15 +88,58 @@ describe('строка «Автозапуск» (T-82)', () => {
     expect(sw(second)?.getAttribute('aria-checked')).toBe('false');
   });
 
-  it('подсказка о способе зависит от прав: с правами — задача, без прав — обычный', async () => {
+  it('подсказка о способе зависит от прав и места установки', async () => {
     invokeMock.mockResolvedValue(os({ elevated: true }));
     const admin = await mountBare(createElement(AutostartRow));
     expect(detail(admin)).toContain('scheduled task with administrator rights');
     admin.unmount();
 
+    // с правами, но не из Program Files (portable, Загрузки): задача не создастся
+    invokeMock.mockResolvedValue(os({ elevated: true, installed: false }));
+    const portable = await mountBare(createElement(AutostartRow));
+    expect(detail(portable)).toContain('only for the installed version');
+    expect(detail(portable)).not.toContain('scheduled task with administrator rights');
+    portable.unmount();
+
     invokeMock.mockResolvedValue(os({ elevated: false }));
     const plain = await mountBare(createElement(AutostartRow));
     expect(detail(plain)).toContain('Without administrator rights autostart is the regular kind');
+  });
+
+  it('планировщик не прочитан: «неизвестно», а не «выключено»', async () => {
+    invokeMock.mockResolvedValue(os({ unknown: true }));
+    const view = await mountBare(createElement(AutostartRow));
+    expect(detail(view)).toContain('Could not tell whether autostart through the scheduler is on');
+    expect(detail(view)).not.toContain('Without administrator rights');
+    expect(sw(view)?.getAttribute('aria-checked')).toBe('false');
+    act(() => {
+      setLanguage('ru');
+    });
+    await flush();
+    expect(detail(view)).toContain('Не удалось определить, включён ли автозапуск');
+
+    // значение Run при этом есть: автозапуск включён, о задаче по-прежнему ничего не известно
+    invokeMock.mockResolvedValue(os({ unknown: true, enabled: true, method: 'registry' }));
+    const withRun = await mountBare(createElement(AutostartRow));
+    expect(sw(withRun)?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('не установленная копия с правами: включился обычный автозапуск, причина названа', async () => {
+    invokeMock.mockImplementation((cmd: string) =>
+      Promise.resolve(
+        cmd === 'set_autostart'
+          ? os({ enabled: true, method: 'registry', elevated: true, installed: false, notice: 'task_installed_only' })
+          : os({ elevated: true, installed: false }),
+      ),
+    );
+    const view = await mountBare(createElement(AutostartRow));
+
+    await click(sw(view));
+
+    expect(sw(view)?.getAttribute('aria-checked')).toBe('true');
+    expect(view.container.querySelector('.banner-warn')?.textContent).toContain(
+      'only for the installed version',
+    );
   });
 
   it('включение зовёт set_autostart и показывает ответ ОС', async () => {
@@ -162,6 +207,42 @@ describe('строка «Автозапуск» (T-82)', () => {
     );
     expect(sw(view)?.getAttribute('aria-checked')).toBe('false');
     expect(invokeMock.mock.calls.filter(([cmd]) => cmd === 'autostart_state')).toHaveLength(2);
+  });
+
+  it('повторное чтение, не удавшееся при возврате фокуса, не стирает показанную строку', async () => {
+    invokeMock.mockResolvedValue(os({ enabled: true, method: 'registry' }));
+    const view = await mountBare(createElement(AutostartRow));
+    expect(sw(view)?.getAttribute('aria-checked')).toBe('true');
+
+    invokeMock.mockRejectedValue(new Error('schtasks.exe: не запустился'));
+    await act(async () => {
+      window.dispatchEvent(new Event('focus'));
+      await Promise.resolve();
+    });
+    await flush();
+
+    expect(row(view)).not.toBeNull();
+    expect(sw(view)?.getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('ошибка изменения видна, даже если состояние потом прочитать не удалось', async () => {
+    let writes = 0;
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === 'set_autostart') {
+        writes += 1;
+        return Promise.reject(new Error('reg add: Access is denied.'));
+      }
+      // первое чтение удалось, перечитывание после сбоя — нет
+      return writes === 0 ? Promise.resolve(os()) : Promise.reject(new Error('нет ответа'));
+    });
+    const view = await mountBare(createElement(AutostartRow));
+
+    await click(sw(view));
+
+    expect(view.container.querySelector('.banner-warn')?.textContent).toBe(
+      'Could not change autostart: reg add: Access is denied.',
+    );
+    expect(row(view)).not.toBeNull(); // переключатель остался рядом с сообщением
   });
 
   it('вне Windows (supported=false), без оболочки и при сбое чтения строки нет', async () => {

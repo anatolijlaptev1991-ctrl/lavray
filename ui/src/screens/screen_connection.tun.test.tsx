@@ -8,6 +8,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { CoreContext } from '../hooks/useCore';
 import { createCoreClients, type CoreClients } from '../lib/core';
+import { applyLaunchInfo } from '../lib/launch';
+import { requestTunDialog } from '../lib/tunRequest';
 import { toggleConnection } from '../lib/connection';
 import { setLanguage } from '../lib/i18n';
 import { ConnectionScreen } from './screen_connection';
@@ -236,6 +238,14 @@ describe('TUN without administrator rights (T-46, T-81)', () => {
     // выбор TUN записан заранее: и в окне, и в настройке ядра remember.modes
     expect(stored()).toEqual({ sysProxy: false, tunMode: true });
     expect(rememberedModes()).toEqual([{ stringListValue: { items: ['tun'] } }]);
+    // у повышенного экземпляра свой профиль WebView: записи окна уходят оболочке до запуска
+    const calls = shell.invoke.mock.calls.map(([cmd]) => cmd);
+    expect(calls.indexOf('save_ui_handoff')).toBeGreaterThan(-1);
+    expect(calls.indexOf('save_ui_handoff')).toBeLessThan(calls.indexOf('relaunch_elevated'));
+    const handoff = shell.invoke.mock.calls.find(([cmd]) => cmd === 'save_ui_handoff')?.[1] as {
+      entries: Record<string, string>;
+    };
+    expect(JSON.parse(handoff.entries['lavray.modes'] ?? 'null')).toEqual({ sysProxy: false, tunMode: true });
     // приложение закрывается само: диалог остаётся занятым
     expect(document.querySelector<HTMLButtonElement>('#tunRelaunch')?.disabled).toBe(true);
     expect(connectCalls()).toBe(0);
@@ -278,15 +288,69 @@ describe('TUN without administrator rights (T-46, T-81)', () => {
     expect(dialog()).not.toBeNull();
   });
 
-  it('after the elevated relaunch TUN is on and the screen says so once', async () => {
-    window.localStorage.setItem('lavray.tunRelaunch', '1');
-    await open(true, true);
+  it('after the elevated relaunch the shell hands over the window settings and the screen says so once', async () => {
+    // новый профиль WebView пуст: настройки пришли от оболочки (launch_info), а не из localStorage
+    shell.invoke.mockReset().mockImplementation((cmd: string) => {
+      if (cmd === 'launch_info') {
+        return Promise.resolve({
+          elevated_relaunch: true,
+          handoff: { 'lavray.modes': JSON.stringify({ sysProxy: false, tunMode: true }) },
+        });
+      }
+      return Promise.resolve(cmd === 'is_elevated' ? true : null);
+    });
+    await applyLaunchInfo(window.localStorage);
+    render();
+    for (let i = 0; i < 40 && button() === null; i += 1) await pause();
     await pause(30);
     expect(document.querySelector('#stateCard > .hint')?.textContent).toBe(
       'TUN mode is on: LAVRay is running as administrator',
     );
     expect(tunSwitch()?.getAttribute('aria-checked')).toBe('true');
-    expect(window.localStorage.getItem('lavray.tunRelaunch')).toBeNull();
+
+    // второй показ экрана подсказку не повторяет
+    remount();
+    render();
+    for (let i = 0; i < 40 && button() === null; i += 1) await pause();
+    await pause(30);
+    expect(document.querySelector('#stateCard > .hint')).toBeNull();
+  });
+
+  it('a standard account is told it needs an administrator account (no UAC call is made)', async () => {
+    await open(false, false, new Error('admin_account_required'));
+    await openDialogByToggle();
+    await pressRelaunch();
+    expect(document.querySelector('.dlg-b .banner-err')?.textContent).toContain(
+      'TUN needs an administrator account',
+    );
+    expect(stored()).toEqual({ sysProxy: false, tunMode: false });
+    act(() => {
+      setLanguage('ru');
+    });
+    await pause();
+    expect(document.querySelector('.dlg-b .banner-err')?.textContent).toContain(
+      'Для TUN нужна учётная запись администратора',
+    );
+  });
+
+  it('tray Connect / Ctrl+D in TUN mode without rights open the dialog on the mounted screen', async () => {
+    await open(true, false);
+    expect(dialog()).toBeNull();
+    await act(async () => {
+      requestTunDialog();
+      await sleep(10);
+    });
+    expect(dialog()).not.toBeNull();
+    expect(shell.invoke).toHaveBeenCalledWith('window_show');
+  });
+
+  it('a tray request made before the screen exists is served when it mounts', async () => {
+    shell.invoke.mockReset().mockResolvedValue(false);
+    requestTunDialog(); // экран ещё не открыт (окно было скрыто в трей)
+    window.localStorage.setItem('lavray.modes', JSON.stringify({ sysProxy: false, tunMode: true }));
+    render();
+    for (let i = 0; i < 40 && dialog() === null; i += 1) await pause();
+    expect(dialog()).not.toBeNull();
   });
 
   it('modes lost with the window profile come back from the core setting', async () => {

@@ -26,15 +26,15 @@ import {
   disconnectAll,
   loadModes,
   loadSelectedProfileId,
-  markTunRelaunch,
   reconnect,
   rememberModes,
   restoreModes,
   saveModes,
   saveSelectedProfileId,
-  takeTunRelaunch,
 } from '../lib/connection';
 import { relaunchElevated, tunNeedsElevation } from '../lib/elevation';
+import { sendHandoff, takeRelaunched } from '../lib/launch';
+import { onTunDialogRequest, takeTunDialogRequest } from '../lib/tunRequest';
 import type { RelaunchOutcome } from '../lib/elevation';
 import { ConnRight } from '../components/ConnRight';
 import { TunAdminNotice } from '../components/TunAdminNotice';
@@ -111,13 +111,24 @@ export function ConnectionScreen(): JSX.Element {
     });
   }, [core]);
 
-  // T-81: приложение только что перезапущено от администратора ради TUN.
+  // T-81: приложение только что перезапущено от администратора ради TUN —
+  // признак даёт оболочка (`launch_info`), а не localStorage старого профиля.
   useEffect(() => {
-    if (!takeTunRelaunch(window.localStorage)) return;
+    if (!takeRelaunched()) return;
     void tunNeedsElevation().then((stillNeeds) => {
       if (!stillNeeds) setActionMsg(t('toast.tunReady'));
     });
   }, [t]);
+
+  // T-81: «Подключить» из трея и Ctrl+D в режиме TUN без прав просят диалог,
+  // пока экран ещё мог быть не открыт — запрос ждёт монтирования.
+  useEffect(() => {
+    const open = (): void => {
+      if (takeTunDialogRequest()) setTunDialog(true);
+    };
+    open();
+    return onTunDialogRequest(open);
+  }, []);
 
   // Список подписок нужен для быстрого действия «Обновить подписки»:
   // обновление идёт по groupId, а не глобально.
@@ -287,11 +298,11 @@ export function ConnectionScreen(): JSX.Element {
         setConnError(t('cx.empty.t'));
       }
     } catch (e) {
-      setConnError(showCoreError(e, t, { tun: tunMode }));
+      setConnError(showCoreError(e, t, { tun: tunMode, elevated }));
     } finally {
       setBusy(false);
     }
-  }, [core, ready, active, t, sysProxy, tunMode, applySys]);
+  }, [core, ready, active, t, sysProxy, tunMode, applySys, elevated]);
 
   // Переключатели режимов: выбор запоминается, а при активном соединении
   // применяется сразу — раньше он лишь писался в localStorage и до следующего
@@ -347,12 +358,12 @@ export function ConnectionScreen(): JSX.Element {
         setTunMode(prev.tunMode);
         saveModes(window.localStorage, prev);
         void rememberModes(core, prev);
-        setConnError(showCoreError(e, t, { tun: next }));
+        setConnError(showCoreError(e, t, { tun: next, elevated }));
       } finally {
         setBusy(false);
       }
     },
-    [core, ready, runningId, status.mode, sysProxy, tunMode, t],
+    [core, ready, runningId, status.mode, sysProxy, tunMode, t, elevated],
   );
 
   // T-81: «Перезапустить от администратора». Выбор TUN записывается заранее
@@ -362,13 +373,14 @@ export function ConnectionScreen(): JSX.Element {
     const prev = { sysProxy, tunMode };
     const next = { sysProxy, tunMode: true };
     const revert = (): void => {
-      takeTunRelaunch(window.localStorage);
       saveModes(window.localStorage, prev);
       void rememberModes(core, prev);
     };
     saveModes(window.localStorage, next);
-    markTunRelaunch(window.localStorage);
     await rememberModes(core, next);
+    // У повышенного экземпляра свой профиль WebView: язык, тема, выбор сервера
+    // и режимы переходят к нему через оболочку.
+    await sendHandoff(window.localStorage);
     try {
       const outcome = await relaunchElevated();
       if (outcome === 'cancelled') revert();
@@ -418,12 +430,12 @@ export function ConnectionScreen(): JSX.Element {
         // Остались на прежнем сервере (или без соединения): выбор возвращаем.
         setPickedId(runningId);
         saveSelectedProfileId(window.localStorage, runningId);
-        setConnError(showCoreError(e, t, { tun: modes.tunMode }));
+        setConnError(showCoreError(e, t, { tun: modes.tunMode, elevated }));
       } finally {
         setBusy(false);
       }
     },
-    [core, ready, runningId, sysProxy, status.mode, t],
+    [core, ready, runningId, sysProxy, status.mode, t, elevated],
   );
 
   const closeMenu = useCallback((restoreFocus: boolean): void => {

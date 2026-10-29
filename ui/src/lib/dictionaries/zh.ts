@@ -884,4 +884,7 @@ export const zhDict: Record<string, string> = {
   "set.autostart.willRun": "没有管理员权限时，自启为普通方式。若要登录后立即使用 TUN，请在以管理员身份运行的 LAVRay 中开启。",
   "set.autostart.needAdmin": "LAVRay 的计划任务以管理员权限创建，没有管理员权限无法删除。请以管理员身份启动 LAVRay 后重试。",
   "set.autostart.failed": "无法更改自启设置",
+  "set.autostart.installedOnly": "仅已安装的版本（位于 Program Files）可使用管理员权限自启。此副本使用普通自启。",
+  "set.autostart.unknown": "无法确定是否已通过计划任务启用自启。请稍后重试，或以管理员身份启动 LAVRay。",
+  "tun.dlg.needAdminAccount": "TUN 需要管理员账户：当前账户是标准账户，没有管理员密码无法提升权限。请使用管理员账户登录。",
 }

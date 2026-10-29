@@ -861,4 +861,10 @@ export const deDict: Record<string, string> = {
   // T-60: ключи, которых не хватало
   "web.title": "Webpanel",
   "geo.none": "Kein Land",
+  // U-02: восстановление из резервной копии с подтверждением
+  "bk.restoreTitle": "Einstellungen wiederherstellen?",
+  "bk.restoreOk": "Wiederherstellen",
+  "bk.restoreConfirm": "Einstellungen, die geändert werden: {n}. Die aktuellen Werte werden durch die Werte aus der Datei ersetzt.",
+  "bk.restorePartial": "Der Core hat diese Einstellungen nicht übernommen: {keys}",
+  "bk.restoreEmpty": "Die Datei enthält keine bekannten Einstellungen",
 }

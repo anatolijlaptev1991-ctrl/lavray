@@ -151,6 +151,13 @@ function valueOf(v: SettingValue | undefined): string | boolean | number {
   }
 }
 
+/** Значения из GetSettings в виде, с которым работает экран. */
+function valuesOf(settings: Readonly<Record<string, SettingValue>>): Record<string, string | boolean | number> {
+  const map: Record<string, string | boolean | number> = {};
+  for (const [k, v] of Object.entries(settings)) map[k] = valueOf(v);
+  return map;
+}
+
 /** Целое число из ввода; пустое поле и нечисло → null (раньше становились 0). */
 function parseInteger(raw: string | boolean | number): number | null {
   if (typeof raw === 'number') return Number.isInteger(raw) ? raw : null;
@@ -185,7 +192,7 @@ function toSettingValue(kind: SettingType, raw: string | boolean | number): Sett
 }
 
 export function SettingsScreen(): JSX.Element {
-  const { t, lang, setLanguage } = useI18n();
+  const { t, tf, lang, setLanguage } = useI18n();
   const kbd = useKbdLabel();
   const core = useCore();
   const [theme, setTheme] = useState<ThemePreference>(() => loadPreferences(window.localStorage).theme);
@@ -198,6 +205,8 @@ export function SettingsScreen(): JSX.Element {
   const [ok, setOk] = useState('');
   const [coreVersion, setCoreVersion] = useState('');
   const [confirmInsecure, setConfirmInsecure] = useState(false);
+  // Восстановление из файла ждёт подтверждения: null — диалога нет (U-02).
+  const [pendingRestore, setPendingRestore] = useState<Record<string, SettingValue> | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // Последние значения, принятые ядром: поле откатывается к ним при невалидном вводе.
   const accepted = useRef<Record<string, string | boolean | number>>({});
@@ -212,8 +221,7 @@ export function SettingsScreen(): JSX.Element {
         ]);
         setDescriptors(desc.descriptors);
         setCoreVersion(st.coreVersion);
-        const map: Record<string, string | boolean | number> = {};
-        for (const [k, v] of Object.entries(settings.values)) map[k] = valueOf(v);
+        const map = valuesOf(settings.values);
         accepted.current = map;
         setValues(map);
       } catch (e) {
@@ -261,8 +269,46 @@ export function SettingsScreen(): JSX.Element {
     [core, t],
   );
 
+  /** Перечитывает значения из ядра: поля показывают то, что реально применилось. */
+  const reloadValues = useCallback(async (): Promise<void> => {
+    const settings = await core.settings.getSettings({});
+    const map = valuesOf(settings.values);
+    accepted.current = map;
+    setValues(map);
+  }, [core]);
+
+  /** U-02: применяет подтверждённое восстановление; непринятые ядром ключи — ошибка. */
+  const applyRestore = useCallback(
+    async (payload: Record<string, SettingValue>): Promise<void> => {
+      setErr('');
+      setOk('');
+      try {
+        const res = await core.settings.setSettings({ values: payload });
+        const rejected = Object.keys(payload).filter((k) => !res.acceptedKeys.includes(k));
+        await reloadValues();
+        if (rejected.length > 0) {
+          setErr(tf('bk.restorePartial', { keys: rejected.join(', ') }));
+        } else {
+          setOk(t('bk.restored'));
+        }
+      } catch (e) {
+        setErr(showCoreError(e, t));
+      }
+    },
+    [core, reloadValues, t, tf],
+  );
+
   // T-11: стабильные колбэки — иначе перерисовка раз в секунду (опрос
   // статуса) заново вешала бы обработчики диалога подтверждения.
+  const closeRestore = useCallback((): void => {
+    setPendingRestore(null);
+  }, []);
+  const confirmRestore = useCallback((): void => {
+    if (pendingRestore === null) return;
+    setPendingRestore(null);
+    void applyRestore(pendingRestore);
+  }, [pendingRestore, applyRestore]);
+
   const closeInsecureConfirm = useCallback((): void => {
     setConfirmInsecure(false);
   }, []);
@@ -794,7 +840,10 @@ export function SettingsScreen(): JSX.Element {
                       type="file"
                       accept="application/json,.json"
                       onChange={(e) => {
-                        const f = e.target.files?.[0];
+                        const input = e.target;
+                        const f = input.files?.[0];
+                        // Сброс поля: после отмены тот же файл можно выбрать снова.
+                        input.value = '';
                         if (f === undefined) return;
                         void (async (): Promise<void> => {
                           try {
@@ -807,8 +856,13 @@ export function SettingsScreen(): JSX.Element {
                               if (d === undefined) continue;
                               payload[k] = toSettingValue(d.type, v);
                             }
-                            await core.settings.setSettings({ values: payload });
-                            setOk(t('bk.restored'));
+                            // Файл без известных настроек не открывает пустое подтверждение.
+                            if (Object.keys(payload).length === 0) {
+                              setErr(t('bk.restoreEmpty'));
+                              return;
+                            }
+                            // Применяется только после подтверждения (см. диалог внизу экрана).
+                            setPendingRestore(payload);
                           } catch (e2) {
                             setErr(showCoreError(e2, t));
                           }
@@ -978,6 +1032,15 @@ export function SettingsScreen(): JSX.Element {
           danger
           onConfirm={confirmInsecureOn}
           onClose={closeInsecureConfirm}
+        />
+      )}
+      {pendingRestore !== null && (
+        <ConfirmDialog
+          title={t('bk.restoreTitle')}
+          text={tf('bk.restoreConfirm', { n: Object.keys(pendingRestore).length })}
+          confirmLabel={t('bk.restoreOk')}
+          onConfirm={confirmRestore}
+          onClose={closeRestore}
         />
       )}
     </div>

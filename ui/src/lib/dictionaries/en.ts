@@ -861,4 +861,10 @@ export const enDict: Record<string, string> = {
   // T-60: ключи, которых не хватало
   "web.title": "Web panel",
   "geo.none": "No country",
+  // U-02: восстановление из резервной копии с подтверждением
+  "bk.restoreTitle": "Restore settings?",
+  "bk.restoreOk": "Restore",
+  "bk.restoreConfirm": "Settings to change: {n}. Current values will be replaced with the values from the file.",
+  "bk.restorePartial": "The core did not accept these settings: {keys}",
+  "bk.restoreEmpty": "The file has no known settings",
 }

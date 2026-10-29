@@ -861,4 +861,10 @@ export const esDict: Record<string, string> = {
   // T-60: ключи, которых не хватало
   "web.title": "Panel web",
   "geo.none": "Sin país",
+  // U-02: восстановление из резервной копии с подтверждением
+  "bk.restoreTitle": "¿Restaurar los ajustes?",
+  "bk.restoreOk": "Restaurar",
+  "bk.restoreConfirm": "Ajustes que se cambiarán: {n}. Los valores actuales se sustituirán por los del archivo.",
+  "bk.restorePartial": "El núcleo no aceptó estos ajustes: {keys}",
+  "bk.restoreEmpty": "El archivo no contiene ajustes conocidos",
 }

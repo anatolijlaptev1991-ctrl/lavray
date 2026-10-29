@@ -854,4 +854,10 @@ export const zhDict: Record<string, string> = {
   // T-60: ключи, которых не хватало
   "web.title": "网页面板",
   "geo.none": "无国家/地区",
+  // U-02: восстановление из резервной копии с подтверждением
+  "bk.restoreTitle": "恢复设置？",
+  "bk.restoreOk": "恢复",
+  "bk.restoreConfirm": "将更改 {n} 项设置。当前值将被文件中的值替换。",
+  "bk.restorePartial": "内核未接受这些设置：{keys}",
+  "bk.restoreEmpty": "文件中没有可识别的设置",
 }

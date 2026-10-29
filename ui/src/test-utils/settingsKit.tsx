@@ -5,7 +5,7 @@ import { act, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { create } from '@bufbuild/protobuf';
 import { vi, type Mock } from 'vitest';
-import { SettingValueSchema, type SettingValue } from '../gen/lavray_pb';
+import { SettingValueSchema, type SettingDescriptor, type SettingValue } from '../gen/lavray_pb';
 import { CoreContext } from '../hooks/useCore';
 import type { CoreClients } from '../lib/core';
 import { SettingsScreen } from '../screens/screen_settings';
@@ -20,6 +20,8 @@ export interface SettingsHarness {
   readonly container: HTMLElement;
   /** Мок RPC SetSettings: acceptedKeys = все присланные ключи. */
   readonly setSettings: Mock<(req: SetSettingsRequest) => Promise<{ acceptedKeys: string[] }>>;
+  /** Мок GetSettings: первый вызов — при монтировании, далее — перечитывание. */
+  readonly getSettings: Mock<() => Promise<{ values: Record<string, SettingValue> }>>;
   readonly unmount: () => void;
 }
 
@@ -40,10 +42,14 @@ export async function flush(): Promise<void> {
   });
 }
 
-/** Смонтировать «Настройки»; initial — то, что вернёт GetSettings. */
+/**
+ * Смонтировать «Настройки»; initial — то, что вернёт GetSettings, descriptors —
+ * то, что вернёт DescribeSettings (нужны, например, восстановлению из файла).
+ */
 export async function mountSettings(
   initial: RawSettings = {},
   coreVersion = '9.9.9-core',
+  descriptors: readonly SettingDescriptor[] = [],
 ): Promise<SettingsHarness> {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   const setSettings = vi.fn((req: SetSettingsRequest): Promise<{ acceptedKeys: string[] }> =>
@@ -51,10 +57,11 @@ export async function mountSettings(
   );
   const values: Record<string, SettingValue> = {};
   for (const [k, v] of Object.entries(initial)) values[k] = settingValue(v);
+  const getSettings = vi.fn(() => Promise.resolve({ values }));
   const fake = {
     settings: {
-      describeSettings: vi.fn(() => Promise.resolve({ descriptors: [] })),
-      getSettings: vi.fn(() => Promise.resolve({ values })),
+      describeSettings: vi.fn(() => Promise.resolve({ descriptors: [...descriptors] })),
+      getSettings,
       setSettings,
     },
     core: { getStatus: vi.fn(() => Promise.resolve({ coreVersion })) },
@@ -70,6 +77,7 @@ export async function mountSettings(
   return {
     container,
     setSettings,
+    getSettings,
     unmount: (): void => {
       act(() => {
         root.unmount();

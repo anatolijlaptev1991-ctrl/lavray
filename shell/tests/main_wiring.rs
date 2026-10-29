@@ -109,3 +109,32 @@ fn reg_output_is_decoded_with_the_oem_codepage() {
         );
     }
 }
+
+/// T-81/Э-2: «Перезапустить от администратора» зарегистрирована для UI, текущий
+/// экземпляр выходит обычным путём (`begin_quit`) только после успешного
+/// запуска второго, а второй ждёт старого до инициализации single-instance.
+#[test]
+fn relaunch_is_wired_and_waits_for_the_old_instance_before_plugins() {
+    let main_rs = source("main.rs");
+    assert!(
+        main_rs.contains("            relaunch_elevated,"),
+        "нет в generate_handler!"
+    );
+    let command = main_rs
+        .split("async fn relaunch_elevated")
+        .nth(1)
+        .and_then(|rest| rest.split("async fn autostart_state").next())
+        .expect("команда relaunch_elevated");
+    assert!(command.contains("if outcome == RelaunchOutcome::Started"));
+    assert!(command.contains("begin_quit(&app)"));
+    assert!(
+        command.contains("spawn_blocking"),
+        "UAC ждёт ответа не в потоке команд"
+    );
+
+    let wait = main_rs.find("wait_for_exit(pid)").expect("ожидание pid");
+    let plugin = main_rs
+        .find("tauri_plugin_single_instance::init")
+        .expect("плагин single-instance");
+    assert!(wait < plugin, "ждать нужно до плагина single-instance");
+}

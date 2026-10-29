@@ -18,7 +18,10 @@
 //! - `oemtext` (только Windows) — вывод консольных программ (`reg.exe`) из OEM-
 //!   кодовой страницы в строку (S-02);
 //! - [`tray`] — конфигурация меню трея (§9), проверяемая без GUI;
-//! - [`elevation`] — запущено ли приложение с повышенными правами (T-46);
+//! - [`elevation`] — запущено ли приложение с повышенными правами (T-46) и
+//!   перезапуск от администратора (T-81);
+//! - [`launch`] — аргументы запуска `--tray`, `--elevated-relaunch`,
+//!   `--wait-pid` и ожидание выхода прежнего экземпляра (T-81, T-82);
 //! - [`uiprotocol`] — протокол UI ↔ shell (команды/события, serde, версия
 //!   протокола);
 //! - [`updater`] — автомат состояний автообновления TUF-lite (§8.3), без сети.
@@ -32,6 +35,7 @@ pub mod coreproc;
 pub mod elevation;
 pub mod endpoint;
 pub mod integrity;
+pub mod launch;
 #[cfg(windows)]
 mod oemtext;
 pub mod sysproxy;

@@ -12,11 +12,15 @@
 use lavray_shell::coreproc::driver::generate_auth_token;
 use lavray_shell::coreproc::runner::{spawn_supervisor, Failure, SupervisorHandle};
 use lavray_shell::coreproc::{CoreSpawnConfig, CoreState};
-use lavray_shell::elevation::is_elevated as process_is_elevated;
+use lavray_shell::elevation::{
+    is_elevated as process_is_elevated, relaunch_elevated as relaunch, RelaunchOutcome,
+    RelaunchRequest, Runas,
+};
 use lavray_shell::endpoint::{
     EndpointEvent, EndpointHub, HostObserver, SupervisorHost, CORE_ENDPOINT_EVENT, ENDPOINT_WAIT,
 };
 use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
+use lavray_shell::launch::{wait_for_exit, LaunchArgs, WAIT_PID_TIMEOUT};
 use lavray_shell::sysproxy::{validate_port, SysProxy};
 use lavray_shell::tray::TrayUpdate;
 use lavray_shell::uiprotocol::IPC_PROTOCOL_VERSION;
@@ -53,6 +57,39 @@ struct RuntimeState {
 #[tauri::command]
 fn is_elevated() -> bool {
     process_is_elevated()
+}
+
+/// relaunch_elevated — «Перезапустить от администратора» из диалога TUN
+/// (T-81): запускает второй экземпляр через UAC и, если запуск состоялся,
+/// завершает этот обычным путём выхода (останов ядра, возврат системного
+/// прокси — как `begin_quit`). Отказ в UAC — не ошибка: ответ `cancelled`, и
+/// приложение остаётся как было. Новый экземпляр дожидается выхода этого
+/// процесса (`--wait-pid`), прежде чем занять single-instance.
+#[tauri::command]
+async fn relaunch_elevated(app: tauri::AppHandle) -> Result<RelaunchOutcome, String> {
+    let exe = std::env::current_exe().map_err(|e| format!("путь к LAVRay.exe: {e}"))?;
+    let window_hidden = app
+        .get_webview_window("main")
+        .and_then(|window| window.is_visible().ok())
+        .is_some_and(|visible| !visible);
+    // `ShellExecuteExW` ждёт ответа на запрос UAC: в фоновом потоке.
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        relaunch(
+            &Runas,
+            &RelaunchRequest {
+                exe: &exe,
+                parent_pid: std::process::id(),
+                window_hidden,
+                elevated: process_is_elevated(),
+            },
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    if outcome == RelaunchOutcome::Started {
+        begin_quit(&app);
+    }
+    Ok(outcome)
 }
 
 /// Адрес ConnectRPC-ядра для UI (вызывается фронтендом при старте).
@@ -360,6 +397,20 @@ impl SupervisorHost for ShellHost {
 }
 
 fn main() {
+    let launch = LaunchArgs::from_env();
+    // T-81: перезапуск от администратора запускает этот экземпляр, пока прежний
+    // ещё выходит. Ждём его до плагинов: single-instance иначе отдал бы
+    // аргументы старому окну и закрыл новый экземпляр.
+    if let Some(pid) = launch.wait_pid {
+        if !wait_for_exit(pid) {
+            eprintln!(
+                "LAVRay: процесс {pid} не вышел за {} с; запуск продолжается",
+                WAIT_PID_TIMEOUT.as_secs()
+            );
+        }
+    }
+    // T-82: `--tray` (автозапуск) — окно остаётся скрытым, только значок.
+    let start_hidden = launch.tray;
     let runtime = Arc::new(Mutex::new(RuntimeState::default()));
     let rt_for_setup = Arc::clone(&runtime);
     let hub = Arc::new(EndpointHub::default());
@@ -397,6 +448,11 @@ fn main() {
             // Трей (DS §9, §10): меню по TrayMenuSpec, состояние и тексты
             // присылает UI (`tray_update`); закрытие окна — в трей.
             tray_ui::install(app)?;
+            // Окно в tauri.conf.json создаётся скрытым (`visible: false`): так
+            // `--tray` не мигает окном на старте.
+            if !start_hidden {
+                tray_ui::show_main_window(app.handle());
+            }
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -427,7 +483,8 @@ fn main() {
             window_is_maximized,
             window_hide,
             window_start_drag,
-            set_system_proxy
+            set_system_proxy,
+            relaunch_elevated
         ])
         .build(tauri::generate_context!())
         .expect("LAVRay shell: failed to build tauri application")

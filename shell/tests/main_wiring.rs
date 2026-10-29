@@ -1,0 +1,38 @@
+//! Охрана проводки `src/main.rs`: GUI Tauri в тесте не поднять, а бинарник
+//! библиотечными тестами не виден (A2-23), поэтому проверяется текст — то, что
+//! уже ломалось. Логика меню трея — в `lavray_shell::tray`.
+
+/// Исходник из `shell/src` (читается во время теста).
+fn source(name: &str) -> String {
+    let path = format!("{}/src/{name}", env!("CARGO_MANIFEST_DIR"));
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("не прочитать {path}: {e}"))
+}
+
+/// F-041: меню трея строится по `TrayMenuSpec`, тексты приходят из UI (словари),
+/// а не зашиты в оболочку по-русски.
+#[test]
+fn tray_is_built_from_the_spec_without_hardcoded_labels() {
+    let main_rs = source("main.rs");
+    assert!(main_rs.contains("tray_ui::install(app)"));
+    assert!(main_rs.contains("fn tray_update"));
+    for banned in ["\"Открыть LAVRay\"", "\"Выход\""] {
+        assert!(!main_rs.contains(banned), "зашита подпись трея: {banned}");
+    }
+}
+
+/// F-086: «Выход» не спит в потоке обработчика меню, а свёрнутое окно
+/// разворачивается (`unminimize`) по «Открыть», клику и повторному запуску.
+#[test]
+fn quit_does_not_block_and_the_window_is_restored() {
+    let main_rs = source("main.rs");
+    assert!(
+        !main_rs.contains("from_millis(1200)"),
+        "пауза 1200 мс в обработчике"
+    );
+    assert!(
+        main_rs.contains("fn begin_quit"),
+        "выход — в фоновом потоке"
+    );
+    assert!(source("tray_ui.rs").contains("unminimize()"));
+    assert!(main_rs.contains("tray_ui::show_main_window(app)"));
+}

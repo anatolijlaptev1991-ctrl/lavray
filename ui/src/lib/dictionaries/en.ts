@@ -708,6 +708,8 @@ export const enDict: Record<string, string> = {
   "toast.tunReady": "TUN service installed, mode enabled",
   "toast.updated": "Updated to v1.1.0",
   "toast.window": "This is a prototype — the window stays put",
+  "tray.server": "Server: {name}",
+  "tray.show": "Open LAVRay",
   "tun.dlg.d": "In TUN mode all traffic goes through the tunnel, including games and command-line tools. LAVRay installs a system service once for this; your system will ask for administrator approval.",
   "tun.dlg.note": "You can remove the service in Settings → TUN.",
   "tun.dlg.ok": "Install service",

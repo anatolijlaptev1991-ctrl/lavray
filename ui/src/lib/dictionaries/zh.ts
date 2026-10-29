@@ -701,6 +701,8 @@ export const zhDict: Record<string, string> = {
   "toast.tunReady": "TUN 服务已安装，模式已开启",
   "toast.updated": "已更新到 v1.1.0",
   "toast.window": "这是原型——窗口不会关闭",
+  "tray.server": "服务器：{name}",
+  "tray.show": "打开 LAVRay",
   "tun.dlg.d": "TUN 模式下全部流量都经隧道，包括游戏和命令行工具。为此 LAVRay 会一次性安装系统服务；系统会请求管理员确认。",
   "tun.dlg.note": "可在“设置 → TUN”中移除服务。",
   "tun.dlg.ok": "安装服务",

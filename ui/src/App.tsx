@@ -11,9 +11,11 @@ import { ConnectMode, CoreState } from './gen/lavray_pb';
 import { useI18n, useStartupLanguage } from './hooks/useI18n';
 import { useSystemProxyApplied } from './hooks/useSystemProxy';
 import { useTrafficSpeed } from './hooks/useTraffic';
+import { useTrayBridge } from './hooks/useTrayBridge';
 import { applyDocumentLanguage, formatBytes } from './lib/i18n';
 import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
 import { loadModes, toggleConnection } from './lib/connection';
+import type { TrayAction } from './lib/tray';
 import { onTablistKeyDown } from './lib/tabs';
 import { getPlatformAdapter } from './platform/adapter';
 import { ConnectionScreen } from './screens/screen_connection';
@@ -265,6 +267,17 @@ function AppInner(): JSX.Element {
       }
     })();
   }, [core, connOn, status.inbound, selectSection]);
+
+  // Трей: состояние и тексты уходят в оболочку, а «Подключить»/«Отключить» из
+  // меню трея выполняет UI — профиль и режимы знает он.
+  const handleTrayAction = useCallback(
+    (action: TrayAction): void => {
+      if ((action === 'connect') === connOn) return; // меню могло устареть
+      handleToggleConnect();
+    },
+    [connOn, handleToggleConnect],
+  );
+  useTrayBridge(status, handleTrayAction);
 
   const handleAbout = useCallback((): void => {
     selectSection('settings');

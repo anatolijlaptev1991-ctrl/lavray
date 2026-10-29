@@ -708,6 +708,8 @@ export const deDict: Record<string, string> = {
   "toast.tunReady": "TUN-Dienst installiert, Modus aktiv",
   "toast.updated": "Auf v1.1.0 aktualisiert",
   "toast.window": "Das ist ein Prototyp — das Fenster bleibt, wo es ist",
+  "tray.server": "Server: {name}",
+  "tray.show": "LAVRay öffnen",
   "tun.dlg.d": "Im TUN-Modus läuft der gesamte Datenverkehr durch den Tunnel, auch Spiele und Konsolenwerkzeuge. Dafür installiert LAVRay einmalig einen Systemdienst; das System fragt nach Administratorbestätigung.",
   "tun.dlg.note": "Du kannst den Dienst unter Einstellungen → TUN entfernen.",
   "tun.dlg.ok": "Dienst installieren",

@@ -708,6 +708,8 @@ export const esDict: Record<string, string> = {
   "toast.tunReady": "Servicio TUN instalado, modo activado",
   "toast.updated": "Actualizado a v1.1.0",
   "toast.window": "Es un prototipo: la ventana se queda donde está",
+  "tray.server": "Servidor: {name}",
+  "tray.show": "Abrir LAVRay",
   "tun.dlg.d": "En modo TUN todo el tráfico pasa por el túnel, incluidos juegos y herramientas de consola. Para ello LAVRay instala una vez un servicio del sistema; el sistema pedirá permiso de administrador.",
   "tun.dlg.note": "Puedes quitar el servicio en Ajustes → TUN.",
   "tun.dlg.ok": "Instalar servicio",

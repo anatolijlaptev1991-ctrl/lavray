@@ -16,8 +16,9 @@ vi.mock('@tauri-apps/api/core', () => ({
   },
 }));
 vi.mock('@tauri-apps/api/event', () => ({
-  listen: (_name: string, handler: Handler): Promise<() => void> => {
-    shell.handler = handler;
+  listen: (name: string, handler: Handler): Promise<() => void> => {
+    // T-45: слушателей несколько (core-endpoint, tray-action); тест шлёт только core-endpoint.
+    if (name === 'core-endpoint') shell.handler = handler;
     return Promise.resolve((): void => undefined);
   },
 }));

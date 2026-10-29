@@ -14,11 +14,13 @@ use lavray_shell::endpoint::{
 };
 use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
 use lavray_shell::sysproxy::SysProxy;
+use lavray_shell::tray::TrayUpdate;
 use lavray_shell::uiprotocol::IPC_PROTOCOL_VERSION;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tauri::menu::{Menu, MenuItem};
-use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{Emitter, Manager};
+
+mod tray_ui;
 
 /// Версия протокола UI ↔ shell (`uiprotocol.rs`).
 #[tauri::command]
@@ -39,6 +41,19 @@ struct RuntimeState {
     /// Запрос на остановку ядра при выходе (надзиратель завершает его сам:
     /// RealCoreProcess содержит сырые handle и не Send).
     shutdown: bool,
+    /// Надзиратель закончил: ядро остановлено (выход ждёт этого флага).
+    core_stopped: bool,
+}
+
+/// Отмечает в `RuntimeState`, что надзиратель закончил (в том числе по панике).
+struct CoreStopped(Arc<Mutex<RuntimeState>>);
+
+impl Drop for CoreStopped {
+    fn drop(&mut self) {
+        let mut s = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        s.core_alive = false;
+        s.core_stopped = true;
+    }
 }
 
 /// Адрес ConnectRPC-ядра для UI (вызывается фронтендом при старте).
@@ -111,27 +126,52 @@ fn request_quit(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) {
     }
 }
 
+/// Сколько ждать остановки ядра при выходе: лестница §5 — до 15 с; окно и
+/// значок к этому моменту уже спрятаны, а Job Object всё равно убьёт ядро.
+const QUIT_CORE_WAIT: std::time::Duration = std::time::Duration::from_secs(16);
+
+/// Полный выход (пункт «Выход» трея и меню окна) в фоновом потоке: обработчик
+/// меню возвращается сразу. Раньше трей спал 1200 мс в главном потоке (A2-16).
+fn begin_quit(app: &tauri::AppHandle) {
+    static STARTED: AtomicBool = AtomicBool::new(false);
+    if STARTED.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    std::thread::spawn(move || {
+        let state = app.try_state::<Arc<Mutex<RuntimeState>>>();
+        if let Some(state) = &state {
+            // надзиратель остановит ядро лестницей §5
+            state.lock().unwrap_or_else(|e| e.into_inner()).shutdown = true;
+        }
+        tray_ui::hide(&app);
+        // Прокси снимаем до выхода: иначе в ОС остаётся прокси на мёртвый порт.
+        let _ = SysProxy::new(&data_dir()).release_on_quit();
+        let stopped = || {
+            state
+                .as_ref()
+                .is_none_or(|s| s.lock().unwrap_or_else(|e| e.into_inner()).core_stopped)
+        };
+        let deadline = std::time::Instant::now() + QUIT_CORE_WAIT;
+        while !stopped() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        app.exit(0);
+    });
+}
+
 /// quit_app — полный выход из приложения по пункту меню «Выход».
-/// Отличается от закрытия окна (которое прячет его в трей): сначала
-/// помечаем остановку ядра, ждём graceful-лестницу надзирателя, затем
-/// выходим из цикла событий.
-///
-/// Асинхронная: `sleep` в синхронной команде выполнялся на главном потоке
-/// и подвешивал UI перед закрытием. Прокси снимается ДО выхода — иначе в
-/// ОС остаётся прокси на мёртвый порт до следующего запуска.
 #[tauri::command]
 async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
-    if let Some(shared) = app.try_state::<Arc<Mutex<RuntimeState>>>() {
-        if let Ok(mut s) = shared.lock() {
-            s.shutdown = true;
-        }
-    }
-    let _ = SysProxy::new(&data_dir()).release_on_quit();
-    // Клиенту (UI) даём закрыться, а ядро гасит надзиратель своей
-    // graceful-лестницей (§5) уже после выхода цикла событий: держать
-    // главный поток сном нельзя — окно «зависает» на секунду.
-    app.exit(0);
+    begin_quit(&app);
     Ok(())
+}
+
+/// tray_update — UI сообщает состояние соединения и готовые строки меню на
+/// языке интерфейса; оболочка перерисовывает меню, значок и подсказку трея.
+#[tauri::command]
+fn tray_update(app: tauri::AppHandle, update: TrayUpdate) -> Result<(), String> {
+    tray_ui::apply(&app, Some(update))
 }
 
 /// Окно: свернуть / развернуть / скрыть в трей / перетащить.
@@ -285,6 +325,8 @@ impl SupervisorHost for ShellHost {
             s.last_error.clear();
         }
         self.emit_endpoint(endpoint);
+        // T-45: значок трея — «подключено/ожидание» по состоянию ядра.
+        tray_ui::refresh(&self.app);
     }
 
     fn core_down(&self, reason: &str) {
@@ -293,6 +335,8 @@ impl SupervisorHost for ShellHost {
             s.last_error = reason.to_string();
         }
         self.emit_endpoint(&EndpointEvent::down());
+        // T-45: ядро умерло — значок «ошибка» (или «не подключено»).
+        tray_ui::refresh(&self.app);
         // T-03: системный прокси, который ставили мы, смотрит на порт
         // умершего ядра. Возвращаем снимок (shell-lifecycle §6); у нового
         // ядра режимы выключены, пользователь включит подключение сам.
@@ -305,6 +349,7 @@ impl SupervisorHost for ShellHost {
         if let Ok(mut s) = self.shared.lock() {
             s.last_error = reason.to_string();
         }
+        tray_ui::refresh(&self.app);
     }
 
     fn pause(&self, duration: std::time::Duration) {
@@ -320,10 +365,7 @@ fn main() {
     tauri::Builder::default()
         // Сингл-инстанс (shell-lifecycle §8.1): второй запуск фокусирует окно.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
-            if let Some(w) = app.get_webview_window("main") {
-                let _ = w.show();
-                let _ = w.set_focus();
-            }
+            tray_ui::show_main_window(app); // свёрнутое окно тоже разворачиваем
         }))
         .manage(Arc::clone(&runtime))
         .manage(hub)
@@ -347,69 +389,28 @@ fn main() {
             };
             let hub = Arc::clone(&hub_for_setup);
             std::thread::spawn(move || {
+                // T-45: отметка «надзиратель закончил» — `begin_quit` ждёт её до 16 с.
+                let _stopped = CoreStopped(Arc::clone(&host.shared));
                 run_supervisor(&hub, &host, || {
                     spawn_core().map(|((url, token), process)| (url, token, process))
                 });
             });
-            // Трей (DS §10): показать окно / выйти; закрытие окна — в трей.
-            let show = MenuItem::with_id(app, "show", "Открыть LAVRay", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Выход", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
-            let mut tray = TrayIconBuilder::new()
-                .menu(&menu)
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "quit" => {
-                        // D2: перед выходом останавливаем ядро (graceful-стоп),
-                        // иначе оно убивалось вместе с процессом мимо лестницы §5.
-                        if let Some(state) = app.try_state::<Arc<Mutex<RuntimeState>>>() {
-                            if let Ok(mut s) = state.lock() {
-                                s.shutdown = true;
-                            }
-                        }
-                        // Прокси снимаем до выхода: иначе в ОС остаётся
-                        // прокси на мёртвый порт (как и в quit_app).
-                        let _ = SysProxy::new(&data_dir()).release_on_quit();
-                        // Надзиратель гасит ядро через graceful-лестницу §5.
-                        std::thread::sleep(std::time::Duration::from_millis(1200));
-                        app.exit(0);
-                    }
-                    "show" => {
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
-                    }
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        if let Some(w) = app.get_webview_window("main") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
-                    }
-                });
-            if let Some(icon) = app.default_window_icon() {
-                tray = tray.icon(icon.clone());
-            }
-            tray.build(app)?;
+            // Трей (DS §9, §10): меню по TrayMenuSpec, состояние и тексты
+            // присылает UI (`tray_update`); закрытие окна — в трей.
+            tray_ui::install(app)?;
             Ok(())
         })
-        .on_window_event(|window, event| {
+        .on_window_event(|window, event| match event {
             // D1 (аудит round 2): клик по X прячет окно в трей, а не убивает
             // приложение — иначе трей оставался без окна, а ядро гасилось
             // без graceful-teardown.
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
                 let _ = window.hide();
             }
+            // Тема окна сменилась — значок трея под другую панель задач.
+            tauri::WindowEvent::ThemeChanged(_) => tray_ui::refresh(window.app_handle()),
+            _ => {}
         })
         .invoke_handler(tauri::generate_handler![
             protocol_version,
@@ -418,6 +419,7 @@ fn main() {
             shell_error,
             request_quit,
             quit_app,
+            tray_update,
             window_minimize,
             window_toggle_maximize,
             window_is_maximized,

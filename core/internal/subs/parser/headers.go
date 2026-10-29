@@ -81,6 +81,7 @@ func ApplySubscriptionHeader(info *model.SubscriptionInfo, key, value string) er
 // (байты; expire — unix-секунды → миллисекунды).
 func applyUserInfo(info *model.SubscriptionInfo, value string) error {
 	found := false
+	firstBad := ""
 	for _, part := range strings.Split(value, ";") {
 		k, v, has := strings.Cut(part, "=")
 		if !has {
@@ -89,7 +90,13 @@ func applyUserInfo(info *model.SubscriptionInfo, value string) error {
 		v = strings.TrimSpace(v)
 		n, err := strconv.ParseInt(v, 10, 64)
 		if err != nil || n < 0 {
-			return fmt.Errorf("subscription-userinfo: %q не является числом", strings.TrimSpace(part))
+			// T-54: пустое или нечисловое значение («expire=» у бессрочной
+			// подписки, «total=inf») пропускает только своё поле, а не
+			// обрывает разбор остальных.
+			if firstBad == "" {
+				firstBad = strings.TrimSpace(part)
+			}
+			continue
 		}
 		switch strings.ToLower(strings.TrimSpace(k)) {
 		case "upload":
@@ -108,6 +115,9 @@ func applyUserInfo(info *model.SubscriptionInfo, value string) error {
 		}
 	}
 	if !found {
+		if firstBad != "" {
+			return fmt.Errorf("subscription-userinfo: %q не является числом", firstBad)
+		}
 		return fmt.Errorf("subscription-userinfo: не найдено ни одного поля (upload/download/total/expire)")
 	}
 	return nil

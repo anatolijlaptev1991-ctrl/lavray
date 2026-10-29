@@ -223,6 +223,14 @@ func agentRedactResponse(msg any) {
 		}
 	case *lavrayv1.LatencyResult:
 		m.Result = agentTestResult(m.Result)
+	case *lavrayv1.GetTailResponse:
+		// Строки журнала называют посещаемые сайты и адреса серверов: история
+		// посещений не должна уходить агенту (и дальше — провайдеру модели).
+		for _, l := range m.Lines {
+			if l != nil {
+				l.Message = agentSanitizeTextLimit(l.Message, maxAgentLogRunes)
+			}
+		}
 	}
 }
 
@@ -250,15 +258,23 @@ var reAgentURL = regexp.MustCompile(`(?i)\b[a-z][a-z0-9+.-]*://[^\s"'<>]+`)
 // maxAgentTextRunes — самый длинный текст ошибки, который получает агент.
 const maxAgentTextRunes = 240
 
+// maxAgentLogRunes — самая длинная строка журнала, которую получает агент.
+const maxAgentLogRunes = 400
+
 // agentSanitizeText скрывает в тексте ошибки секреты (общая маскировка
 // журнала) и адреса серверов, затем обрезает его.
 func agentSanitizeText(s string) string {
+	return agentSanitizeTextLimit(s, maxAgentTextRunes)
+}
+
+// agentSanitizeTextLimit — agentSanitizeText с заданным пределом длины.
+func agentSanitizeTextLimit(s string, limit int) string {
 	s = reAgentURL.ReplaceAllString(strings.TrimSpace(s), "[url]")
 	s = logs.Redact(s)
 	s = reAddress.ReplaceAllString(s, "[addr]")
 	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > maxAgentTextRunes {
-		s = string(r[:maxAgentTextRunes]) + "…"
+	if r := []rune(s); len(r) > limit {
+		s = string(r[:limit]) + "…"
 	}
 	return s
 }

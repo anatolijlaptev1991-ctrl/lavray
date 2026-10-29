@@ -461,6 +461,37 @@ func TestAgentLogTailIsCapped(t *testing.T) {
 	}
 }
 
+// Журнал для агента без посещаемых сайтов и адресов серверов; основному
+// клиенту те же строки отдаются как есть.
+func TestAgentLogTailHidesAddresses(t *testing.T) {
+	f := newAgentFixture(t)
+	f.setMode(t, AgentModeRead)
+	f.srv.logs.Logf("info", "core", "inbound connection to www.example-site.ru:443")
+	f.srv.logs.Logf("warn", "core", "dial tcp 203.0.113.7:8443: i/o timeout via [2001:db8::1]:443")
+	ctx := context.Background()
+	res, err := f.agent.logs.GetTail(ctx, connect.NewRequest(&lavrayv1.GetTailRequest{Lines: 2}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range res.Msg.Lines {
+		for _, leak := range []string{"example-site", "203.0.113.7", "2001:db8"} {
+			if strings.Contains(l.Message, leak) {
+				t.Errorf("агенту ушёл адрес %q: %q", leak, l.Message)
+			}
+		}
+		if !strings.Contains(l.Message, "[addr]") {
+			t.Errorf("адрес не заменён меткой: %q", l.Message)
+		}
+	}
+	full, err := f.main.logs.GetTail(ctx, connect.NewRequest(&lavrayv1.GetTailRequest{Lines: 2}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(full.Msg.Lines[0].Message, "www.example-site.ru") {
+		t.Errorf("основной клиент получил урезанный журнал: %q", full.Msg.Lines[0].Message)
+	}
+}
+
 // В ответах агенту нет адресов, паролей, uuid, ссылок подписок и текстов ошибок
 // с адресами; те же данные основному клиенту отдаются целиком.
 func TestAgentResponsesCarryNoSecrets(t *testing.T) {

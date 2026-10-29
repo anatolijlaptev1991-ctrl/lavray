@@ -78,6 +78,7 @@ core/        Go-ядро (CGO-free):
   internal/updates      клиент проверки обновлений TUF-lite (библиотека, к ядру не подключена)
   internal/gateway      шлюз OpenWrt: nftables-рендер, per-MAC, watchdog (пакет есть, к ядру не подключён)
   internal/headless     сервисный режим без UI (--headless): автозапуск последнего профиля, авторестарт
+  internal/mcp          MCP-сервер для ИИ-агентов (lavray-core mcp, по stdio): docs/MCP.md
   cmd/lavray-core       процесс ядра: спавн-протокол оболочки (§3)
 shell/       Rust/Tauri 2: FSM жизненного цикла, драйвер процесса ядра, IPC
 ui/          React + TS: 10 экранов, 5 языков (ru/en/zh/es/de), токены DS v1.2
@@ -155,6 +156,7 @@ python scripts/repo-stats.py    # проверяемые числа: контр�
 - [`docs/BUGS.md`](docs/BUGS.md) — каталог LNB-багов и их закрытие
 - [`docs/DESIGN-SYSTEM.md`](docs/DESIGN-SYSTEM.md) — дизайн-система v1.2
 - [`docs/UPDATE-SYSTEM.md`](docs/UPDATE-SYSTEM.md) — TUF-lite v2.0
+- [`docs/MCP.md`](docs/MCP.md) — доступ ИИ-агентов (Claude Desktop, Claude Code, Cursor)
 - [`docs/THREAT-MODEL.md`](docs/THREAT-MODEL.md) · [`docs/TEST-PLAN.md`](docs/TEST-PLAN.md)
 - [`docs/FIX-REPORT.md`](docs/FIX-REPORT.md) — приёмка аудита
 - [`docs/stage3/core-port-plan.md`](docs/stage3/core-port-plan.md) — план W1–W8

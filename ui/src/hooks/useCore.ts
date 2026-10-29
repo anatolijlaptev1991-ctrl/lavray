@@ -29,7 +29,8 @@ export function useCore(): CoreClients {
  * адрес или токен (после перезапуска ядра, T-03); страница не перезагружается.
  */
 export function useCoreClients(): CoreClients {
-  const { url, token } = useSyncExternalStore(subscribeCoreEndpoint, getCoreEndpoint);
+  // Третий аргумент — снимок для сервера (renderToString), как в useI18n и useSystemProxy.
+  const { url, token } = useSyncExternalStore(subscribeCoreEndpoint, getCoreEndpoint, getCoreEndpoint);
   return useMemo(() => createCoreClients(url, token === '' ? {} : { token }), [url, token]);
 }
 

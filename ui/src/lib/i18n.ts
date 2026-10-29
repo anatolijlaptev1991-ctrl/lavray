@@ -82,6 +82,50 @@ export function detectLanguage(nav: readonly string[]): Language {
   return 'en';
 }
 
+/** localStorage key with the chosen language (written by useI18n.setLanguage). */
+export const LANG_STORAGE_KEY = 'lavray.lang';
+
+/**
+ * Language at startup (T-37): `?lang=` (preview, never saved) → the choice
+ * saved by the previous run → the system language (saved). Decides only,
+ * applies nothing.
+ */
+export function resolveStartupLanguage(
+  search: string,
+  storage: Pick<Storage, 'getItem' | 'setItem'>,
+  navigatorLanguages: readonly string[],
+): Language {
+  const forced = new URLSearchParams(search).get('lang');
+  if (isLanguage(forced)) return forced;
+  try {
+    const saved = storage.getItem(LANG_STORAGE_KEY);
+    if (isLanguage(saved)) return saved;
+  } catch {
+    /* storage unavailable (private mode) — fall back to the system language */
+  }
+  const detected = detectLanguage(navigatorLanguages);
+  try {
+    storage.setItem(LANG_STORAGE_KEY, detected);
+  } catch {
+    /* the language just will not be remembered */
+  }
+  return detected;
+}
+
+/** Apply the startup language to the module state and to <html lang>; returns it. */
+export function initLanguage(win: Window): Language {
+  let storage: Pick<Storage, 'getItem' | 'setItem'>;
+  try {
+    storage = win.localStorage;
+  } catch {
+    storage = { getItem: (): null => null, setItem: (): void => undefined };
+  }
+  const lang = resolveStartupLanguage(win.location.search, storage, win.navigator.languages);
+  setLanguage(lang);
+  applyDocumentLanguage(win.document, lang);
+  return lang;
+}
+
 export function getLanguage(): Language {
   return current;
 }

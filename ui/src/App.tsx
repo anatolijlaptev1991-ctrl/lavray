@@ -2,17 +2,17 @@
 // титлбар по ОС, сайдбар со знаком «Отражение», шапка с вкладками, фоновое
 // поле с анимацией, статус-бар. Разметка/классы — из утверждённого прототипа;
 // стили — src/prototype.css (перенесён дословно).
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { BrandMark, Icon, type IconName } from './components/Icon';
 import { SECTIONS, type Section, type SectionTab } from './app/sections';
 import { CoreContext, useCore, useCoreClients, useCoreStatus } from './hooks/useCore';
 import { ConnectMode, CoreState } from './gen/lavray_pb';
-import { useI18n } from './hooks/useI18n';
+import { useI18n, useStartupLanguage } from './hooks/useI18n';
 import { useSystemProxyApplied } from './hooks/useSystemProxy';
 import { useTrafficSpeed } from './hooks/useTraffic';
-import { applyDocumentLanguage, detectLanguage, formatBytes, setLanguage } from './lib/i18n';
-import { applyTheme, loadPreferences, watchSystemTheme } from './lib/theme';
+import { applyDocumentLanguage, formatBytes } from './lib/i18n';
+import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
 import { loadModes, toggleConnection } from './lib/connection';
 import { getPlatformAdapter } from './platform/adapter';
 import { ConnectionScreen } from './screens/screen_connection';
@@ -39,6 +39,8 @@ const NAV_ICONS: Record<string, IconName> = {
 };
 
 export default function App(): JSX.Element {
+  // T-37: сохранённый язык применяется до первого рендера дерева.
+  useStartupLanguage();
   const clients = useCoreClients();
   return (
     <CoreContext.Provider value={clients}>
@@ -134,33 +136,20 @@ function AppInner(): JSX.Element {
     };
   }, []);
 
-  // D2 (аудит round 2): колбэк системной темы обязан читать АКТУАЛЬНЫЕ
-  // настройки, иначе смена темы ОС откатывала выбор пользователя.
-  const prefsRef = useRef(prefs);
-  prefsRef.current = prefs;
-
   useEffect(() => {
-    const apply = (): void => {
-      applyTheme({ theme: prefsRef.current.theme, accent: prefsRef.current.accent, doc: document, win: window, storage: window.localStorage });
-    };
-    apply();
-    return watchSystemTheme(window, apply);
-  }, []);
-
-  useEffect(() => {
-    // D3: выбор языка сохраняется; при первом запуске — из navigator.
-    const forced = new URLSearchParams(window.location.search).get('lang');
-    if (forced !== null && ['ru', 'zh', 'en', 'es', 'de'].includes(forced)) {
-      setLanguage(forced as 'ru' | 'zh' | 'en' | 'es' | 'de');
-      return;
-    }
-    const saved = localStorage.getItem('lavray.lang');
-    if (saved === null) {
-      const detected = detectLanguage([...navigator.languages]);
-      setLanguage(detected);
-      localStorage.setItem('lavray.lang', detected);
-    }
-  }, []);
+    // Первичная установка темы (с учётом ?theme=/?accent= для предпросмотра);
+    // здесь же выбор сохраняется, как и раньше.
+    applyTheme({ theme: prefs.theme, accent: prefs.accent, doc: document, win: window, storage: window.localStorage });
+    // T-37: смена темы ОС перекрашивает документ ТОЛЬКО при выборе «Как в
+    // системе» и ничего не записывает. Актуальный выбор читаем из хранилища:
+    // его пишет экран «Настройки», а `prefs` — начальные настройки, они
+    // устарели после первого же переключения темы.
+    return watchSystemTheme(window, () => {
+      const current = loadPreferences(window.localStorage);
+      if (current.theme !== 'system') return;
+      paintTheme({ theme: current.theme, accent: current.accent, doc: document, win: window });
+    });
+  }, [prefs]);
 
   const selectSection = useCallback((id: string): void => {
     setSectionId(id);

@@ -2,10 +2,11 @@
  * React binding for the i18n module: subscribes to language switches
  * without reloading (DS §9).
  */
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useState, useSyncExternalStore } from 'react';
 import {
   applyDocumentLanguage,
   getLanguage,
+  initLanguage,
   onLanguageChange,
   setLanguage as setLang,
   pluralN,
@@ -22,6 +23,17 @@ export interface I18nApi {
   /** Плюральная форма: plural('pl.p', 5) → «5 профилей». */
   readonly plural: (base: string, n: number) => string;
   readonly setLanguage: (lang: Language) => void;
+}
+
+/**
+ * T-37: язык запуска определяется один раз, ДО первого рендера дерева:
+ * lazy-инициализатор состояния выполняется в фазе рендера корня, раньше любого
+ * `t()` в потомках. Раньше язык ставил эффект — после первого кадра, а
+ * сохранённый выбор не читался вообще.
+ */
+export function useStartupLanguage(): Language {
+  const [lang] = useState(() => initLanguage(window));
+  return lang;
 }
 
 export function useI18n(): I18nApi {

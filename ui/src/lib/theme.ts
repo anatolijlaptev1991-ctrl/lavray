@@ -79,15 +79,25 @@ export interface ApplyOptions {
   readonly accent: AccentPreference;
 }
 
-/** Write concrete `data-theme` / `data-accent` on <html> and persist the choice. */
-export function applyTheme(opts: ApplyOptions): { theme: 'dark' | 'light'; accent: ResolvedAccent } {
+/**
+ * Write concrete `data-theme` / `data-accent` on <html> WITHOUT persisting
+ * anything (T-37): this is what the OS-theme listener uses, so that an OS
+ * change can never overwrite the user's saved choice.
+ */
+export function paintTheme(opts: Omit<ApplyOptions, 'storage'>): { theme: 'dark' | 'light'; accent: ResolvedAccent } {
   const theme = resolvedTheme(opts.theme, opts.win);
   const accent = resolvedAccent(opts.accent, theme);
   opts.doc.documentElement.dataset.theme = theme;
   opts.doc.documentElement.dataset.accent = accent;
+  return { theme, accent };
+}
+
+/** Paint `data-theme` / `data-accent` on <html> and persist the user's choice. */
+export function applyTheme(opts: ApplyOptions): { theme: 'dark' | 'light'; accent: ResolvedAccent } {
+  const painted = paintTheme(opts);
   save(opts.storage, THEME_KEY, opts.theme);
   save(opts.storage, ACCENT_KEY, opts.accent);
-  return { theme, accent };
+  return painted;
 }
 
 /**

@@ -122,6 +122,8 @@ jobs:
         run: go vet ./...
       - name: go test
         run: go test ./... -timeout 120s
+      - name: "Страж: clash_api в ядре запрещён, пока форк не пропатчен (T-47)"
+        run: go test ./internal/buildtags/ -run TestClashAPITagIsForbiddenUntilForkIsPatched -count=1
       - name: "go test: sing-box check golden (тег singbox_check)"
         # Полная проверка golden-эталонов реальным sing-box (форк 628a9ed):
         # box.New + Close. Локально без сети к прокси — выключена тегом;

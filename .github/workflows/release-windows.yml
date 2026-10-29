@@ -38,6 +38,10 @@ jobs:
           npm ci
           npm run build
 
+      - name: "Теги ядра: единый список, запрет clash_api (T-02, T-47)"
+        working-directory: core
+        run: go test ./internal/buildtags/ -count=1
+
       - name: "Ядро: сборка (CGO-free)"
         working-directory: core
         env:

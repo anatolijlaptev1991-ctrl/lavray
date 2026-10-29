@@ -8,6 +8,7 @@ import { ProfileType, TestLatencyRequest_Mode } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 import { useCore, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { useKbdLabel } from '../hooks/useKbdLabel';
 import { showCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
 import { formatMs, type MessageKey } from '../lib/i18n';
@@ -57,6 +58,7 @@ const STATUS_CHIPS: readonly { key: StatusFilter; labelKey: MessageKey }[] = [
 
 export function ServersScreen(): JSX.Element {
   const { t, tf, plural, lang } = useI18n();
+  const kbd = useKbdLabel();
   const core = useCore();
   const [search, setSearch] = useState('');
   const { profiles: allProfiles, total: allTotal, refresh } = useProfiles(search);
@@ -362,6 +364,7 @@ export function ServersScreen(): JSX.Element {
           </span>
           <input
             className="input"
+            id="profSearch"
             type="text"
             placeholder={t('prof.searchPh')}
             aria-label={t('prof.searchPh')}
@@ -371,7 +374,7 @@ export function ServersScreen(): JSX.Element {
               setSearch(e.target.value);
             }}
           />
-          <span className="kbd">Ctrl K</span>
+          <span className="kbd">{kbd('K')}</span>
         </div>
 
         <div className="chips">

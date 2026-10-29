@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import './prototype.css';
 import './base.css';
 import App from './App';
+import { detectOS, osAttribute } from './platform/adapter';
 import { FIRST_ENDPOINT_WAIT_MS, followShellEndpoint } from './lib/coreEndpoint';
 import { installDropGuard } from './lib/external';
 
@@ -27,7 +28,7 @@ async function bootstrap(): Promise<void> {
   document.documentElement.dataset.shell = tauri !== undefined ? 'native' : 'browser';
   // data-os — словарь прототипа (win/mac/linux): от него зависят шрифты
   // ОС, «светофор» macOS и кнопки управления окном (CSS §titlebar).
-  document.documentElement.dataset.os = adapterOS();
+  document.documentElement.dataset.os = osAttribute(detectOS(window));
 
   // Файл, брошенный мимо зоны импорта, не должен открыться вместо интерфейса.
   installDropGuard();
@@ -41,13 +42,6 @@ async function bootstrap(): Promise<void> {
       <App />
     </StrictMode>,
   );
-}
-
-function adapterOS(): string {
-  const ua = navigator.userAgent;
-  if (ua.includes('Mac')) return 'mac';
-  if (ua.includes('Windows')) return 'win';
-  return 'linux';
 }
 
 void bootstrap();

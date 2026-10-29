@@ -10,6 +10,7 @@ import type { Group } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { useKbdLabel } from '../hooks/useKbdLabel';
 import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
 import { LANGUAGES, LANG_NATIVE, type MessageKey } from '../lib/i18n';
@@ -296,6 +297,7 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
 
 export function HotkeysDialog({ onClose }: { readonly onClose: () => void }): JSX.Element {
   const { t } = useI18n();
+  const kbd = useKbdLabel();
   const rows: readonly (readonly [MessageKey, string])[] = [
     ['hk.search', 'K'],
     ['hk.toggle', 'D'],
@@ -311,10 +313,10 @@ export function HotkeysDialog({ onClose }: { readonly onClose: () => void }): JS
         </>
       }
     >
-      {rows.map(([key, kbd]) => (
+      {rows.map(([key, keycap]) => (
         <div className="hk-row" key={key}>
           <div className="set-txt"><div className="set-l">{t(key)}</div></div>
-          <kbd className="kbd">{kbd}</kbd>
+          <kbd className="kbd">{kbd(keycap)}</kbd>
         </div>
       ))}
     </DialogShell>

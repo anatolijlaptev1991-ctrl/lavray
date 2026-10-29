@@ -14,6 +14,7 @@ import { useTrafficSpeed } from './hooks/useTraffic';
 import { useTrayBridge } from './hooks/useTrayBridge';
 import { applyDocumentLanguage, formatSpeed } from './lib/i18n';
 import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
+import { focusWhenReady, hotkeyOf } from './lib/hotkeys';
 import { loadModes, toggleConnection } from './lib/connection';
 import type { TrayAction } from './lib/tray';
 import { onTablistKeyDown } from './lib/tabs';
@@ -90,6 +91,8 @@ function AppInner(): JSX.Element {
   const [hotkeysOpen, setHotkeysOpen] = useState(false);
   const [licensesOpen, setLicensesOpen] = useState(false);
   const [quickImport, setQuickImport] = useState<'link' | 'qr' | 'file' | null>(null);
+  // Узкий сайдбар-рельс (600…959 px): подписи разделов скрыты, видны только иконки.
+  const [rail, setRail] = useState(() => window.innerWidth >= 600 && window.innerWidth < 960);
   // Меню титлбара (прототип tbMenuItems): импорт, подключение, справка, выход.
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const adapter = useMemo(() => getPlatformAdapter(window), []);
@@ -128,6 +131,7 @@ function AppInner(): JSX.Element {
     const apply = (w: number): void => {
       document.body.classList.toggle('w-md', w >= 600 && w < 960);
       document.body.classList.toggle('w-sm', w < 600);
+      setRail(w >= 600 && w < 960);
     };
     apply(window.innerWidth);
     const onResize = (): void => {
@@ -189,8 +193,9 @@ function AppInner(): JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const mod = adapter.os === 'macos' ? e.metaKey : e.ctrlKey;
-      if (mod && !e.altKey && !e.shiftKey && e.key >= '1' && e.key <= '5') {
-        const target = SECTIONS[Number(e.key) - 1];
+      const key = hotkeyOf(e); // по физической клавише: работает и на русской раскладке
+      if (mod && !e.altKey && !e.shiftKey && key >= '1' && key <= '5') {
+        const target = SECTIONS[Number(key) - 1];
         if (target !== undefined) {
           e.preventDefault();
           selectSection(target.id);
@@ -212,7 +217,8 @@ function AppInner(): JSX.Element {
         el !== null &&
         (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
       const mod = adapter.os === 'macos' ? e.metaKey : e.ctrlKey;
-      if (mod && e.key.toLowerCase() === 'd' && !typing) {
+      const key = hotkeyOf(e);
+      if (mod && key === 'd' && !typing) {
         e.preventDefault();
         // Прототип: Ctrl+D переключает соединение, а не только открывает
         // экран. При пустом списке профилей остаётся навигация.
@@ -230,7 +236,7 @@ function AppInner(): JSX.Element {
         })();
         return;
       }
-      if (mod && e.key === ',' && !typing) {
+      if (mod && key === ',' && !typing) {
         e.preventDefault();
         selectSection('settings');
         return;
@@ -239,9 +245,12 @@ function AppInner(): JSX.Element {
         e.preventDefault();
         setHotkeysOpen(true);
       }
-      if (mod && e.key.toLowerCase() === 'k' && !typing) {
+      // Ctrl/⌘+K: список серверов и фокус в поле поиска (прототип: profSearch.focus()).
+      // Работает и из других полей ввода: сочетание с модификатором текста не печатает.
+      if (mod && !e.altKey && !e.shiftKey && key === 'k') {
         e.preventDefault();
         selectSection('servers');
+        focusWhenReady('#profSearch', true);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -392,6 +401,7 @@ function AppInner(): JSX.Element {
         <aside id="sidebar">
           <button
             className="sb-logo"
+            tabIndex={-1}
             onClick={() => {
               selectSection('connection');
             }}
@@ -404,6 +414,8 @@ function AppInner(): JSX.Element {
               <button
                 key={s.id}
                 className={`sb-item${s.id === sectionId ? ' on' : ''}`}
+                // Подсказка нужна только когда подпись скрыта (прототип: tip у .sb-item в w-md).
+                title={rail ? t(s.navKey) : undefined}
                 onClick={() => {
                   selectSection(s.id);
                 }}

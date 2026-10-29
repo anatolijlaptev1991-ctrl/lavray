@@ -10,6 +10,7 @@ import type { SettingDescriptor, SettingValue } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { useKbdLabel } from '../hooks/useKbdLabel';
 import { ConfirmDialog } from '../components/dialogs';
 import { Icon, type IconName } from '../components/Icon';
 import { withoutSecrets } from '../lib/backup';
@@ -138,6 +139,7 @@ function toSettingValue(kind: SettingType, raw: string | boolean | number): Sett
 
 export function SettingsScreen(): JSX.Element {
   const { t, lang, setLanguage } = useI18n();
+  const kbd = useKbdLabel();
   const core = useCore();
   const [theme, setTheme] = useState<ThemePreference>(() => loadPreferences(window.localStorage).theme);
   const [accent, setAccent] = useState<AccentPreference>(() => loadPreferences(window.localStorage).accent);
@@ -603,12 +605,12 @@ export function SettingsScreen(): JSX.Element {
                   ['hk.close', 'Esc'],
                   ['hk.settings', ','],
                 ] as const
-              ).map(([key, kbd]) => (
+              ).map(([key, keycap]) => (
                 <div className="hk-row" key={key}>
                   <div className="set-txt">
                     <div className="set-l">{t(key)}</div>
                   </div>
-                  <kbd className="kbd">{kbd}</kbd>
+                  <kbd className="kbd">{kbd(keycap)}</kbd>
                 </div>
               ))}
             </div>

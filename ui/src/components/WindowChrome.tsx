@@ -144,7 +144,7 @@ function ChromeButtons({ platform }: { readonly platform: 'win' | 'mac' | 'linux
     })();
   };
 
-  // Развернуть/восстановить: состояние берём из返回值 команды, а не только
+  // Развернуть/восстановить: состояние берём из ответа команды, а не только
   // из события Resized (на части WM оно приходит с задержкой).
   const toggleMax = (): void => {
     void (async (): Promise<void> => {
@@ -164,6 +164,7 @@ function ChromeButtons({ platform }: { readonly platform: 'win' | 'mac' | 'linux
       <span className="tl-mac" aria-hidden="false">
         <button
           className="tl r"
+          tabIndex={-1}
           aria-label={t('tb.close')}
           title={t('tb.close')}
           onClick={() => {
@@ -172,6 +173,7 @@ function ChromeButtons({ platform }: { readonly platform: 'win' | 'mac' | 'linux
         />
         <button
           className="tl y"
+          tabIndex={-1}
           aria-label={t('tb.min')}
           title={t('tb.min')}
           onClick={() => {
@@ -180,6 +182,7 @@ function ChromeButtons({ platform }: { readonly platform: 'win' | 'mac' | 'linux
         />
         <button
           className="tl g"
+          tabIndex={-1}
           aria-label={t(maximized ? 'tb.restore' : 'tb.max')}
           title={t(maximized ? 'tb.restore' : 'tb.max')}
           onClick={toggleMax}
@@ -192,6 +195,7 @@ function ChromeButtons({ platform }: { readonly platform: 'win' | 'mac' | 'linux
       <div className="caps-linux">
         <button
           className="cap-btn cap-round"
+          tabIndex={-1}
           aria-label={t('tb.close')}
           title={t('tb.close')}
           onClick={() => {
@@ -208,6 +212,7 @@ function ChromeButtons({ platform }: { readonly platform: 'win' | 'mac' | 'linux
     <div className="caps-win">
       <button
         className="cap-btn"
+        tabIndex={-1}
         aria-label={t('tb.min')}
         title={t('tb.min')}
         onClick={() => {
@@ -218,6 +223,7 @@ function ChromeButtons({ platform }: { readonly platform: 'win' | 'mac' | 'linux
       </button>
       <button
         className="cap-btn"
+        tabIndex={-1}
         aria-label={t(maximized ? 'tb.restore' : 'tb.max')}
         title={t(maximized ? 'tb.restore' : 'tb.max')}
         onClick={toggleMax}
@@ -226,6 +232,7 @@ function ChromeButtons({ platform }: { readonly platform: 'win' | 'mac' | 'linux
       </button>
       <button
         className="cap-btn cap-close"
+        tabIndex={-1}
         aria-label={t('tb.close')}
         title={t('tb.close')}
         onClick={() => {

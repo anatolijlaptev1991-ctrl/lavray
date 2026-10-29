@@ -1,3 +1,5 @@
+use sha2::{Digest, Sha256};
+use std::io::Read;
 use std::path::Path;
 
 fn main() {
@@ -11,5 +13,32 @@ fn main() {
         let _ = std::fs::create_dir_all("binaries");
         let _ = std::fs::write(core, b"#!/bin/sh\nexit 1\n");
     }
+    // T-44: SHA-256 поставляемого ядра вшивается в оболочку, перед запуском
+    // она сверяет с ним файл (shell/src/integrity.rs). Нет файла — пустая
+    // строка, оболочка такое ядро не запустит.
+    let on_windows = std::env::var("CARGO_CFG_TARGET_OS").is_ok_and(|os| os == "windows");
+    let shipped = Path::new(if on_windows {
+        "binaries/lavray-core.exe"
+    } else {
+        "binaries/lavray-core"
+    });
+    println!("cargo:rerun-if-changed={}", shipped.display());
+    println!(
+        "cargo:rustc-env=LAVRAY_CORE_SHA256={}",
+        sha256_file(shipped).unwrap_or_default()
+    );
     tauri_build::build()
+}
+
+fn sha256_file(path: &Path) -> std::io::Result<String> {
+    let mut file = std::fs::File::open(path)?;
+    let mut hasher = Sha256::new();
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let n = file.read(&mut buf)?;
+        if n == 0 {
+            return Ok(format!("{:x}", hasher.finalize()));
+        }
+        hasher.update(&buf[..n]);
+    }
 }

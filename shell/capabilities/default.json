@@ -1,17 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Минимальные права главного окна LAVRay: события ядра и управление своим окном. Команды ядра (core_endpoint и пр.) объявлены в приложении и не требуют отдельных permissions.",
+  "description": "Права главного окна LAVRay: подписка на события оболочки (core-endpoint, resize) и перетаскивание безрамочного окна за заголовок. Команды оболочки (core_endpoint, window_*, set_system_proxy и др.) объявлены в приложении и отдельных permissions не требуют.",
   "windows": ["main"],
   "permissions": [
-    "core:default",
-    "core:window:allow-show",
-    "core:window:allow-hide",
-    "core:window:allow-set-focus",
-    "core:window:allow-start-dragging",
-    "core:window:allow-internal-toggle-maximize",
     "core:event:allow-listen",
     "core:event:allow-unlisten",
-    "core:event:allow-emit"
+    "core:window:allow-start-dragging",
+    "core:window:allow-internal-toggle-maximize"
   ]
 }

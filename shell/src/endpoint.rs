@@ -23,8 +23,6 @@ pub const BACKOFF_MAX: Duration = Duration::from_secs(30);
 pub const KILL_GRACE: Duration = Duration::from_secs(5);
 /// `last_error`, когда ядро умерло само.
 pub const REASON_CORE_DIED: &str = "ядро неожиданно завершилось — перезапуск";
-/// `last_error`, когда ядро не запустилось.
-pub const REASON_SPAWN_FAILED: &str = "ядро lavray-core не найдено или не стартовало";
 
 /// Содержимое события `core-endpoint` и ответа `core_endpoint`.
 #[derive(Clone, PartialEq, Eq, serde::Serialize)]
@@ -151,11 +149,12 @@ pub trait SupervisorHost {
 pub fn run_supervisor<P: Watched>(
     hub: &EndpointHub,
     host: &dyn SupervisorHost,
-    mut spawn: impl FnMut() -> Option<(String, String, P)>,
+    mut spawn: impl FnMut() -> Result<(String, String, P), String>,
 ) {
     let mut backoff = BACKOFF_START;
     while !host.quitting() {
-        if let Some((url, token, mut process)) = spawn() {
+        let started = spawn();
+        if let Ok((url, token, mut process)) = started {
             backoff = BACKOFF_START;
             let endpoint = hub.publish(url, token);
             host.core_up(&endpoint);
@@ -172,8 +171,8 @@ pub fn run_supervisor<P: Watched>(
             }
             hub.clear();
             host.core_down(REASON_CORE_DIED);
-        } else {
-            host.spawn_failed(REASON_SPAWN_FAILED);
+        } else if let Err(reason) = started {
+            host.spawn_failed(&reason);
         }
         if host.quitting() {
             break;
@@ -241,7 +240,9 @@ mod tests {
             self.log.borrow_mut().push(format!("down {reason}"));
         }
 
-        fn spawn_failed(&self, _reason: &str) {}
+        fn spawn_failed(&self, reason: &str) {
+            self.log.borrow_mut().push(format!("spawn_failed {reason}"));
+        }
 
         fn pause(&self, duration: Duration) {
             self.pauses.borrow_mut().push(duration);
@@ -267,9 +268,8 @@ mod tests {
             ("tcp://127.0.0.1:50001", "tokenA", process(3)),
         ];
         run_supervisor(&hub, &host, || {
-            starts
-                .pop()
-                .map(|(url, token, p)| (url.to_string(), token.to_string(), p))
+            let (url, token, p) = starts.pop().ok_or("больше ядер нет")?;
+            Ok((url.to_string(), token.to_string(), p))
         });
         assert_eq!(
             *host.log.borrow(),
@@ -293,10 +293,15 @@ mod tests {
         run_supervisor::<FakeProcess>(&hub, &host, || {
             attempts.set(attempts.get() + 1);
             host.quit.set(attempts.get() >= 8);
-            None
+            Err("ядро изменено".to_string())
         });
         let secs: Vec<u64> = host.pauses.borrow().iter().map(Duration::as_secs).collect();
         assert_eq!(secs, [1, 2, 4, 8, 16, 30, 30]);
+        assert_eq!(
+            host.log.borrow()[0],
+            "spawn_failed ядро изменено",
+            "причина доходит до UI"
+        );
     }
 
     #[test]

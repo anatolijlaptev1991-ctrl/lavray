@@ -11,6 +11,7 @@
 //!   (продакшн-реализация — позже, в тестах — [`coreproc::MockCoreProcess`]);
 //! - [`endpoint`] — адрес/токен ядра для UI, событие `core-endpoint` и цикл
 //!   надзирателя, перезапускающий ядро и снимающий системный прокси (T-03);
+//! - [`integrity`] — сверка SHA-256 ядра с вшитым при сборке (T-44);
 //! - [`tray`] — конфигурация меню трея (§9), проверяемая без GUI;
 //! - [`uiprotocol`] — протокол UI ↔ shell (команды/события, serde, версия
 //!   протокола);
@@ -23,6 +24,7 @@
 
 pub mod coreproc;
 pub mod endpoint;
+pub mod integrity;
 pub mod sysproxy;
 pub mod tray;
 pub mod uiprotocol;

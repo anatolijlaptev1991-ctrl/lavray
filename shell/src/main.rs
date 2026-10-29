@@ -12,6 +12,7 @@ use lavray_shell::coreproc::{CoreProcess, CoreSpawnConfig, CoreState, SecretToke
 use lavray_shell::endpoint::{
     run_supervisor, EndpointEvent, EndpointHub, SupervisorHost, CORE_ENDPOINT_EVENT, ENDPOINT_WAIT,
 };
+use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
 use lavray_shell::sysproxy::SysProxy;
 use lavray_shell::uiprotocol::IPC_PROTOCOL_VERSION;
 use std::sync::{Arc, Mutex};
@@ -100,13 +101,6 @@ fn set_system_proxy(
         sp.disable()?;
         Ok(String::new())
     }
-}
-
-/// recover_system_proxy — откат незакрытого снимка после падения прошлой
-/// сессии (FR-UI-259: «система не остаётся с прокси на мёртвый порт»).
-#[tauri::command]
-fn recover_system_proxy() -> Result<bool, String> {
-    SysProxy::new(&data_dir()).recover_if_needed()
 }
 
 /// request_quit — попросить надзирателя остановить ядро перед выходом (D2).
@@ -215,9 +209,12 @@ fn data_dir() -> std::path::PathBuf {
     std::env::temp_dir().join("lavray")
 }
 
-fn spawn_core() -> Option<((String, String), RealCoreProcess)> {
-    let exe = std::env::current_exe().ok()?;
-    let dir = exe.parent()?.to_path_buf();
+fn spawn_core() -> Result<((String, String), RealCoreProcess), String> {
+    let exe = std::env::current_exe().map_err(|e| format!("путь к LAVRay.exe: {e}"))?;
+    let dir = exe
+        .parent()
+        .ok_or("у LAVRay.exe нет каталога")?
+        .to_path_buf();
     let core_name = if cfg!(windows) {
         "lavray-core.exe"
     } else {
@@ -227,40 +224,39 @@ fn spawn_core() -> Option<((String, String), RealCoreProcess)> {
     // Раньше первым шёл каталог рядом с exe — в portable-режиме это позволяло
     // подменить lavray-core.exe без каких-либо проверок. .is_file() вместо
     // .exists() (каталог с таким именем больше не считается бинарником).
-    let core_bin = [
-        dir.join("binaries").join(core_name),
-        dir.join("resources").join("binaries").join(core_name),
-        dir.join("resources").join(core_name),
-    ]
-    .into_iter()
-    .find(|p| p.is_file())?;
+    // T-44: найденный файл сверяется с SHA-256, вшитым при сборке; подменённое
+    // или устаревшее ядро не запускается (A2-07).
+    let core_bin = find_trusted_core(
+        &[
+            dir.join("binaries").join(core_name),
+            dir.join("resources").join("binaries").join(core_name),
+            dir.join("resources").join(core_name),
+        ],
+        CORE_SHA256,
+    )?;
     // D5: данные — в пользовательском каталоге на всех ОС. APPDATA есть
     // только на Windows; на macOS/Linux каталог рядом с .app//opt был бы
     // read-only, а create_dir_all тихо возвращал None.
     let data_dir = data_dir();
-    std::fs::create_dir_all(&data_dir).ok()?;
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|e| format!("каталог данных {}: {e}", data_dir.display()))?;
 
-    let token = generate_auth_token().ok()?;
+    let token = generate_auth_token().map_err(|e| format!("токен ядра: {e}"))?;
     // listen_socket — TCP-addrs строка "127.0.0.1:0" (§3.1: порт выделяет ОС).
     let cfg = CoreSpawnConfig {
         binary: core_bin,
         data_dir,
         listen_socket: std::path::PathBuf::from("127.0.0.1:0"),
-        auth_token: SecretToken::from_base64url(token.expose()).ok()?,
+        auth_token: SecretToken::from_base64url(token.expose()).map_err(|e| e.to_string())?,
         extra_args: vec![],
     };
     let mut proc = RealCoreProcess::new();
-    if let Err(e) = proc.spawn(&cfg) {
-        eprintln!("LAVRay: не удалось запустить ядро: {e}");
-        return None;
-    }
-    match proc.wait_ready(std::time::Duration::from_secs(10)) {
-        Ok(endpoint) => Some(((endpoint.transport_url, token.expose().to_string()), proc)),
-        Err(e) => {
-            eprintln!("LAVRay: ядро не сообщило готовность: {e}");
-            None
-        }
-    }
+    proc.spawn(&cfg)
+        .map_err(|e| format!("не удалось запустить ядро: {e}"))?;
+    let endpoint = proc
+        .wait_ready(std::time::Duration::from_secs(10))
+        .map_err(|e| format!("ядро не сообщило готовность: {e}"))?;
+    Ok(((endpoint.transport_url, token.expose().to_string()), proc))
 }
 
 /// Окружение надзирателя: состояние оболочки, событие UI, системный прокси.
@@ -427,8 +423,7 @@ fn main() {
             window_is_maximized,
             window_hide,
             window_start_drag,
-            set_system_proxy,
-            recover_system_proxy
+            set_system_proxy
         ])
         .build(tauri::generate_context!())
         .expect("LAVRay shell: failed to build tauri application")

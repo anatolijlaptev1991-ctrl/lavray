@@ -306,9 +306,11 @@ func applyStreamSettings(out map[string]any, s *model.StreamSettings, st *BuildS
 	if s == nil {
 		return
 	}
+	transportType := ""
 	if caps.transport {
 		if tr := buildTransport(s); tr != nil {
 			out["transport"] = tr
+			transportType, _ = tr["type"].(string)
 		}
 	}
 	// L10 аудита №1: непустой RealityPublicKey сам по себе включает reality.
@@ -318,7 +320,7 @@ func applyStreamSettings(out map[string]any, s *model.StreamSettings, st *BuildS
 	if caps.tls {
 		realityRequested := s.Security == "reality" || s.RealityPublicKey != ""
 		if s.Security == "tls" || realityRequested {
-			if tls := buildTLS(s, st); len(tls) > 0 {
+			if tls := buildTLS(s, st, transportType); len(tls) > 0 {
 				out["tls"] = tls
 			}
 		}
@@ -396,7 +398,7 @@ func buildTransport(s *model.StreamSettings) map[string]any {
 
 // buildTLS — ветка security == "tls" | "reality" (у модели reality —
 // самостоятельное значение security при непустом pbk, FR-UI-090i).
-func buildTLS(s *model.StreamSettings, st *BuildSettings) map[string]any {
+func buildTLS(s *model.StreamSettings, st *BuildSettings, transportType string) map[string]any {
 	tls := map[string]any{"enabled": true}
 	if s.AllowInsecure || st.AllowInsecureDefault {
 		tls["insecure"] = true
@@ -407,8 +409,9 @@ func buildTLS(s *model.StreamSettings, st *BuildSettings) map[string]any {
 	if cert := strings.TrimSpace(s.Certificate); cert != "" {
 		tls["certificate"] = cert
 	}
-	if alpn := strings.TrimSpace(s.ALPN); alpn != "" {
-		tls["alpn"] = splitCSV(alpn)
+	reality := strings.TrimSpace(s.RealityPublicKey) != ""
+	if alpn := alpnForTransport(transportType, splitCSV(strings.TrimSpace(s.ALPN)), reality); len(alpn) > 0 {
+		tls["alpn"] = alpn
 	}
 	fp := s.UTLSFingerprint
 	if pbk := strings.TrimSpace(s.RealityPublicKey); pbk != "" {
@@ -426,6 +429,41 @@ func buildTLS(s *model.StreamSettings, st *BuildSettings) map[string]any {
 		tls["utls"] = map[string]any{"enabled": true, "fingerprint": fp}
 	}
 	return tls
+}
+
+// alpnForTransport приводит ALPN из ссылки к тому, что транспорт реально
+// говорит по проводу (0.2.1). Клиент WebSocket и httpupgrade в sing-box всегда
+// поднимает апгрейд как HTTP/1.1 и ставит ALPN http/1.1 лишь при пустом списке,
+// а uTLS подменяет расширение на заданные протоколы. Ссылка с alpn=h2 (панели
+// ставят её на ws по умолчанию) договаривалась о h2, апгрейд HTTP/1.1 шёл по
+// соединению h2, и сервер его рвал, хотя ядро стартовало и интерфейс писал
+// «Подключено». Xray для WebSocket всегда шлёт http/1.1.
+//   - ws, httpupgrade: h2 и h3 убираются; если ничего не осталось, ALPN не
+//     задаётся (sing-box поставит http/1.1);
+//   - grpc, http (h2-транспорт): заданный ALPN без h2 заменяется на ["h2"];
+//   - quic, tcp без обфускации и REALITY: как в ссылке.
+func alpnForTransport(transportType string, list []any, reality bool) []any {
+	if reality || len(list) == 0 {
+		return list
+	}
+	switch transportType {
+	case "ws", "httpupgrade":
+		kept := make([]any, 0, len(list))
+		for _, p := range list {
+			if p != "h2" && p != "h3" {
+				kept = append(kept, p)
+			}
+		}
+		return kept
+	case "grpc", "http":
+		for _, p := range list {
+			if p == "h2" {
+				return list
+			}
+		}
+		return []any{"h2"}
+	}
+	return list
 }
 
 // splitCSV — «a,b,c» → ["a","b","c"] (без пустых элементов).

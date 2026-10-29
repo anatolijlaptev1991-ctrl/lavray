@@ -66,3 +66,9 @@
   where: builder.go
   what: custom_outbound может переопределить tag/detour цепочечного outbound (как в оракуле); broken-link возможность задокументирована, запрет — кандидат W5
   refs: [ревью N6]
+
+- id: alpn-by-transport
+  where: outbounds.go / alpnForTransport
+  what: "ALPN из ссылки приводится к транспорту: ws и httpupgrade — без h2/h3 (пусто → ALPN не задан, sing-box ставит http/1.1); grpc и http — ALPN без h2 заменяется на [h2]; quic, tcp и REALITY — как в ссылке (вектор G06)"
+  why: "оракул передавал alpn как есть; клиент WebSocket в sing-box поднимает апгрейд только как HTTP/1.1, а ссылка с alpn=h2 договаривала h2 — сервер рвал соединение при «Подключено» (живой отказ 0.2.0). Xray для WebSocket всегда шлёт http/1.1"
+  refs: [0.2.1, сквозной тест TestE2EVMessWebSocketTLSALPNh2]

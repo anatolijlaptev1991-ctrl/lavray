@@ -269,3 +269,37 @@ func TestStopTestsCancelsRealInstances(t *testing.T) {
 		t.Fatal("соединение через туннель не оборвано: инстанс не закрыт")
 	}
 }
+
+// Несколько настоящих инстансов одновременно: у каждого свой реестр и свой
+// box, общего состояния нет; сервер профиля видит все запросы.
+func TestURLTestRunsRealInstancesInParallel(t *testing.T) {
+	e := newStopEnv(t)
+	socks := testsocks.Start(t)
+	target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(50 * time.Millisecond)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer target.Close()
+	setStrSetting(t, e.s, "test.url", target.URL)
+	setIntSetting(t, e.s, "test.concurrent", 4)
+	const n = 8
+	ids := make([]int64, 0, n)
+	for i := 0; i < n; i++ {
+		ids = append(ids, socksProfile(t, e, socks.Port()))
+	}
+
+	frames, err := runTest(t, e, &lavrayv1.TestLatencyRequest{
+		ProfileIds: ids, Mode: lavrayv1.TestLatencyRequest_MODE_URL_TEST,
+	})
+	if err != nil || len(frames) != n {
+		t.Fatalf("кадров %d, ошибка %v", len(frames), err)
+	}
+	for _, f := range frames {
+		if f.Result.GetLatencyMs() <= 0 || f.Result.GetLastError() != "" {
+			t.Errorf("профиль %d: %+v", f.ProfileId, f.Result)
+		}
+	}
+	if got := len(socks.TCPDestinations()); got != n {
+		t.Fatalf("сервер профиля увидел %d запросов, ожидалось %d", got, n)
+	}
+}

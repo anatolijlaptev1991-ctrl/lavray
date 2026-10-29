@@ -255,6 +255,7 @@ export const enDict: Record<string, string> = {
   "ed.utls": "uTLS fingerprint",
   "ed.uuid": "UUID",
   "ed.zeroRtt": "Zero-RTT handshake",
+  "err.copied": "Details copied",
   "err.copyDetails": "Copy details",
   "err.retry": "Retry",
   "filter.all": "All",

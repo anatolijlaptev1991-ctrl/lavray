@@ -255,6 +255,7 @@ export const ruDict = {
   "ed.utls": "Отпечаток uTLS",
   "ed.uuid": "UUID",
   "ed.zeroRtt": "Zero-RTT рукопожатие",
+  "err.copied": "Детали скопированы",
   "err.copyDetails": "Копировать детали",
   "err.retry": "Повторить",
   "filter.all": "Все",

@@ -6,11 +6,13 @@ import type { Mock, MockInstance } from 'vitest';
 import { act, createElement } from 'react';
 import { create } from '@bufbuild/protobuf';
 import { createRoot } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
 import App from '../App';
 import { ImportContentResponse_ContentKind, ImportContentResponseSchema } from '../gen/lavray_pb';
 import { ConnectionScreen } from '../screens/screen_connection';
 import { ServersScreen } from '../screens/screen_servers';
-import { setLanguage } from '../lib/i18n';
+import { setLanguage, t, tf } from '../lib/i18n';
+import { CoreContext } from '../hooks/useCore';
 import type { CoreClients } from '../lib/core';
 import {
   DEFAULT_GROUP_ID,
@@ -240,5 +242,178 @@ describe('T-19: ссылка на подписку и Happ', () => {
     const t = await openWithKind(ImportContentResponse_ContentKind.SHARE_LINKS, 'https://1.2.3.4:8443');
     expect(footer(t.dialog)).toEqual(['Cancel', 'Add']);
     expect(t.dialog.querySelector('#impName')).toBeNull();
+  });
+});
+
+const CLIP_LINK = 'vless://12345678-90ab-cdef-1234-567890abcdef@nl01.example.net:443?security=tls#Amsterdam-a1b2';
+const HAPP_LINK = 'happ://crypt3/AAAABBBBCCCC-broken';
+
+interface Fake {
+  readonly clients: CoreClients;
+  readonly importContent: Mock<(req: { content: string }) => Promise<{ parsedProfiles: never[]; customFieldWarnings: never[] }>>;
+}
+
+function fakeClients(rejectWith?: Error): Fake {
+  const importContent = vi.fn((_req: { content: string }) =>
+    rejectWith === undefined
+      ? Promise.resolve({ parsedProfiles: [], customFieldWarnings: [] })
+      : Promise.reject(rejectWith),
+  );
+  const clients = { profiles: { importContent } } as unknown as CoreClients;
+  return { clients, importContent };
+}
+
+function setClipboard(value: unknown): void {
+  Object.defineProperty(navigator, 'clipboard', { value, configurable: true });
+}
+
+describe('ImportDialog (T-67)', () => {
+  let root: Root | undefined;
+  let container: HTMLDivElement;
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    setLanguage('ru');
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root?.unmount();
+    });
+    container.remove();
+    setClipboard(undefined);
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    vi.restoreAllMocks();
+  });
+
+  async function flush(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  async function open(fake: Fake): Promise<void> {
+    act(() => {
+      root?.render(
+        createElement(
+          CoreContext.Provider,
+          { value: fake.clients },
+          createElement(ImportDialog, { groupId: 10n, onClose: vi.fn(), onImported: vi.fn() }),
+        ),
+      );
+    });
+    await flush();
+  }
+
+  const text = (el: Element | null | undefined): string => (el?.textContent ?? '').trim();
+  const link = (): HTMLInputElement => document.getElementById('impLink') as HTMLInputElement;
+  const button = (label: string): HTMLButtonElement | undefined =>
+    Array.from(document.querySelectorAll('button')).find((b) => text(b) === label);
+
+  function typeLink(value: string): void {
+    act(() => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set?.call(link(), value);
+      link().dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+
+  async function click(el: HTMLElement | undefined): Promise<void> {
+    await act(async () => {
+      el?.click();
+      await Promise.resolve();
+    });
+    await flush();
+  }
+
+  it('в буфере ссылка — плашка с маской, «Вставить» подставляет ссылку в поле', async () => {
+    setClipboard({ readText: vi.fn(() => Promise.resolve(`  ${CLIP_LINK}\n`)), writeText: vi.fn() });
+    await open(fakeClients());
+    const banner = document.querySelector('.banner-warn');
+    expect(banner).not.toBeNull();
+    const expected = tf('imp.clip', { link: 'vless://…a1b2' });
+    expect(text(banner?.querySelector('.bn-t span'))).toBe(expected);
+    expect(text(banner)).toContain(t('imp.clipNote'));
+    // ссылку целиком (хост, uuid) плашка не показывает
+    expect(text(banner)).not.toContain('nl01.example.net');
+    expect(link().value).toBe('');
+
+    await click(button(t('imp.clipPaste')));
+    expect(link().value).toBe(CLIP_LINK);
+    expect(document.querySelector('.banner-warn')).toBeNull();
+  });
+
+  it('«Скрыть» убирает плашку и ничего не вставляет', async () => {
+    setClipboard({ readText: vi.fn(() => Promise.resolve(CLIP_LINK)) });
+    await open(fakeClients());
+    expect(document.querySelector('.banner-warn')).not.toBeNull();
+    await click(button(t('imp.clipHide')));
+    expect(document.querySelector('.banner-warn')).toBeNull();
+    expect(link().value).toBe('');
+  });
+
+  it('плашки нет: Clipboard API недоступен, в буфере не ссылка, доступ запрещён', async () => {
+    setClipboard(undefined);
+    await open(fakeClients());
+    expect(document.querySelector('.banner-warn')).toBeNull();
+
+    act(() => {
+      root?.unmount();
+    });
+    root = createRoot(container);
+    setClipboard({ readText: vi.fn(() => Promise.resolve('просто текст, не ссылка')) });
+    await open(fakeClients());
+    expect(document.querySelector('.banner-warn')).toBeNull();
+
+    act(() => {
+      root?.unmount();
+    });
+    root = createRoot(container);
+    setClipboard({ readText: vi.fn(() => Promise.reject(new Error('NotAllowedError'))) });
+    await open(fakeClients());
+    expect(document.querySelector('.banner-warn')).toBeNull();
+  });
+
+  it('ошибка Happ: карточка с деталями, «Копировать детали» и «Повторить»', async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    setClipboard({ readText: vi.fn(() => Promise.resolve('')), writeText });
+    const fake = fakeClients(new Error('[invalid_argument] happ: decrypt failed — tag mismatch'));
+    await open(fake);
+    typeLink(HAPP_LINK);
+    await click(button(t('imp.do')));
+
+    const card = document.querySelector('.errcard');
+    expect(card).not.toBeNull();
+    expect(text(card?.querySelector('.t'))).toBe(t('imp.happErrT'));
+    expect(text(card?.querySelector('.ctx'))).toBe(t('imp.happErrCtx'));
+    const details = card?.querySelector('.d')?.textContent ?? '';
+    expect(details).toContain('decrypt failed');
+    expect(details).toContain(`source: happ://… · ${String(HAPP_LINK.length)} B`);
+    expect(details).not.toContain('AAAABBBBCCCC'); // ссылка целиком в детали не попадает
+    // вместо общей красной плашки — только карточка
+    expect(document.querySelector('.banner-err')).toBeNull();
+
+    await click(button(t('err.copyDetails')));
+    expect(writeText).toHaveBeenCalledWith(details);
+    expect(text(document.querySelector('.toast-ok'))).toBe(t('err.copied'));
+
+    await click(button(t('err.retry')));
+    expect(fake.importContent).toHaveBeenCalledTimes(2);
+    expect(fake.importContent.mock.calls[1]?.[0].content).toBe(HAPP_LINK);
+
+    // правка ссылки убирает карточку
+    typeLink(`${HAPP_LINK}x`);
+    expect(document.querySelector('.errcard')).toBeNull();
+  });
+
+  it('не-Happ ссылка с ошибкой по-прежнему даёт общую плашку, без карточки Happ', async () => {
+    const fake = fakeClients(new Error('[invalid_argument] unsupported link'));
+    await open(fake);
+    typeLink('vless://broken');
+    await click(button(t('imp.do')));
+    expect(document.querySelector('.errcard')).toBeNull();
+    expect(text(document.querySelector('.banner-err'))).toContain('unsupported link');
   });
 });

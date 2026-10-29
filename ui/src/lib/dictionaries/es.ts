@@ -255,6 +255,7 @@ export const esDict: Record<string, string> = {
   "ed.utls": "Huella uTLS",
   "ed.uuid": "UUID",
   "ed.zeroRtt": "Handshake Zero-RTT",
+  "err.copied": "Detalles copiados",
   "err.copyDetails": "Copiar detalles",
   "err.retry": "Reintentar",
   "filter.all": "Todos",

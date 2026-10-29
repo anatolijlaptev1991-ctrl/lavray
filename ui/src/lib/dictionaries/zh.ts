@@ -255,6 +255,7 @@ export const zhDict: Record<string, string> = {
   "ed.utls": "uTLS 指纹",
   "ed.uuid": "UUID",
   "ed.zeroRtt": "Zero-RTT 握手",
+  "err.copied": "详情已复制",
   "err.copyDetails": "复制详情",
   "err.retry": "重试",
   "filter.all": "全部",

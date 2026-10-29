@@ -2,12 +2,12 @@
 // FR-UI-114…129): вкладки «Ссылка / QR-код / Файл», двухфазный импорт
 // (preview → подтверждение), предупреждения о выброшенных custom-полях,
 // авто-детект URL подписки.
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { createPortal } from 'react-dom';
 import { ImportContentResponse_ContentKind } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
-import { friendlyCoreError } from '../lib/core';
+import { CORE_UNAVAILABLE, friendlyCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useModal } from '../hooks/useModal';
@@ -35,6 +35,15 @@ const TAB_KEY: Record<Tab, 'imp.tab.link' | 'imp.tab.qr' | 'imp.tab.file'> = {
 };
 
 const TABS: readonly Tab[] = ['link', 'qr', 'file'];
+/** Схемы ссылок, которые понимает импорт (FR-UI-120) и happ://: по ним плашка узнаёт ссылку в буфере. */
+const CLIP_LINK = /^(?:vless|vmess|trojan|ss|hysteria2|hy2|tuic|socks(?:4a?|5)?|https?|happ|nekoray):\/\/\S+/i;
+const HAPP_LINK = /^happ:\/\//i;
+
+/** «vless://…a1b2»: схема и последние 4 символа; остальное в плашке не показываем. */
+function maskLink(raw: string): string {
+  const scheme = /^([a-z0-9+.-]+):\/\//i.exec(raw)?.[1] ?? '';
+  return `${scheme}://…${raw.slice(-4)}`;
+}
 
 export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported }: Props): JSX.Element {
   const { t, tf, plural } = useI18n();
@@ -49,6 +58,9 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
+  // Ссылка из буфера обмена (плашка «Вставить?») и детали ошибки Happ (карточка).
+  const [clip, setClip] = useState<string | null>(null);
+  const [happErr, setHappErr] = useState<string | null>(null);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const firstFieldRef = useRef<HTMLInputElement | null>(null);
 
@@ -57,10 +69,27 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
   // ререндере родителя.
   useModal(dialogRef, { onClose, autofocusRef: firstFieldRef });
 
+  // Плашка «В буфере обмена ссылка — вставить?»: буфер читаем один раз, когда
+  // открывается окно (текст imp.clipNote); без Clipboard API или без доступа — молча.
+  useEffect(() => {
+    const clipboard = (navigator as { clipboard?: Clipboard }).clipboard;
+    if (clipboard === undefined) return;
+    void (async (): Promise<void> => {
+      try {
+        const raw = (await clipboard.readText()).trim();
+        if (raw.length <= 100_000 && CLIP_LINK.test(raw)) setClip(raw);
+      } catch {
+        /* доступ к буферу запрещён: плашку не показываем */
+      }
+    })();
+  }, []);
+
+
   const doPreview = useCallback(
     async (content: string): Promise<void> => {
       setErr('');
       setOk('');
+      setHappErr(null);
       setBusy(true);
       setPreview(null);
       try {
@@ -77,13 +106,30 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
         // Подписку определяет ядро (в том числе Happ-ссылку и URL с портом).
         setIsSubscription(res.kind === ImportContentResponse_ContentKind.SUBSCRIPTION_URL);
       } catch (e) {
-        setErr(friendlyCoreError(e));
+        const message = friendlyCoreError(e);
+        if (HAPP_LINK.test(content.trim()) && message !== CORE_UNAVAILABLE) {
+          // Ссылку целиком в детали не кладём: только размер (прототип #happErrD).
+          const size = new TextEncoder().encode(content.trim()).length;
+          setHappErr(`${message}\nsource: happ://… · ${String(size)} B`);
+        } else {
+          setErr(message);
+        }
       } finally {
         setBusy(false);
       }
     },
     [core],
   );
+
+  const copyHappDetails = useCallback(async (): Promise<void> => {
+    if (happErr === null) return;
+    try {
+      await navigator.clipboard.writeText(happErr);
+      setOk(t('err.copied'));
+    } catch (e) {
+      setErr(friendlyCoreError(e));
+    }
+  }, [happErr, t]);
 
   const doCommit = useCallback(async (): Promise<void> => {
     setErr('');
@@ -202,6 +248,36 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
           {tab === 'link' && (
             <div className="imp-pane" role="tabpanel" id="impPane-link" aria-labelledby="impTab-link">
               <div className="imp-col">
+                {clip !== null && link === '' && (
+                  <div className="banner banner-warn" style={{ margin: 0 }}>
+                    <span className="ic"><Icon name="copy" /></span>
+                    <div className="bn-t">
+                      <span>{tf('imp.clip', { link: maskLink(clip) })}</span>
+                      <span className="cap">{t('imp.clipNote')}</span>
+                    </div>
+                    <div className="bn-acts">
+                      <button
+                        className="btn btn-sec btn-sm"
+                        onClick={() => {
+                          setLink(clip);
+                          setClip(null);
+                          setPreview(null);
+                          firstFieldRef.current?.focus();
+                        }}
+                      >
+                        {t('imp.clipPaste')}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => {
+                          setClip(null);
+                        }}
+                      >
+                        {t('imp.clipHide')}
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <div className="field">
                   <label className="req" htmlFor="impLink">{t('imp.link')}</label>
                   <input
@@ -215,6 +291,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
                       setLink(e.target.value);
                       setPreview(null);
                       setIsSubscription(false);
+                      setHappErr(null);
                     }}
                   />
                 </div>
@@ -245,6 +322,26 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
 
                 {hint !== '' && <p className="cap">{hint}</p>}
                 <p className="cap">{t('imp.hint')}</p>
+
+                {happErr !== null && (
+                  <div className="errcard" role="alert">
+                    <div className="t">
+                      <span className="ic"><Icon name="alert" /></span>
+                      <span>{t('imp.happErrT')}</span>
+                    </div>
+                    <span className="ctx">{t('imp.happErrCtx')}</span>
+                    <div className="d">{happErr}</div>
+                    <div className="acts">
+                      <button className="btn btn-sec btn-sm" onClick={() => void copyHappDetails()}>
+                        <Icon name="copy" />
+                        <span>{t('err.copyDetails')}</span>
+                      </button>
+                      <button className="btn btn-pri btn-sm" disabled={busy} onClick={() => void doPreview(link)}>
+                        {t('err.retry')}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}

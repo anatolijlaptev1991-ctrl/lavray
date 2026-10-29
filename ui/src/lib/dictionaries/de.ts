@@ -255,6 +255,7 @@ export const deDict: Record<string, string> = {
   "ed.utls": "uTLS-Fingerabdruck",
   "ed.uuid": "UUID",
   "ed.zeroRtt": "Zero-RTT-Handshake",
+  "err.copied": "Details kopiert",
   "err.copyDetails": "Details kopieren",
   "err.retry": "Erneut versuchen",
   "filter.all": "Alle",

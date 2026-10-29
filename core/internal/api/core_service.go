@@ -49,7 +49,7 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 	}
 	switch mode {
 	case lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TPROXY, lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TUN:
-		return nil, nil, invalidArg("режимы шлюза (GATEWAY_*) доступны только в сборке OpenWrt (W8); на десктопе — SYSTEM_PROXY/TUN")
+		return nil, nil, invalidArg("режим шлюза доступен только в сборке для роутера; на компьютере — системный прокси или TUN")
 	}
 
 	// Режим TUN без прав: понятная причина вместо сырой ошибки sing-box
@@ -196,7 +196,7 @@ func (s *Server) dryRunBuild(profile *model.Profile, mode lavrayv1.ConnectMode) 
 		}
 	}
 	if mode == lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TPROXY || mode == lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TUN {
-		return nil, invalidArg("режимы шлюза доступны только в сборке OpenWrt (W8)")
+		return nil, invalidArg("режим шлюза доступен только в сборке для роутера")
 	}
 	st := s.buildSettings(mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN)
 	if mode != lavrayv1.ConnectMode_CONNECT_MODE_TUN {

@@ -14,6 +14,8 @@ import { formatMs } from '../lib/i18n';
 import { isTestDown, isTestNotApplicable } from '../lib/testResult';
 import { ProfileEditor } from '../components/ProfileEditor';
 import { ImportDialog } from '../components/ImportDialog';
+import { ContextMenu } from '../components/ContextMenu';
+import type { MenuAnchor } from '../components/ContextMenu';
 import { ConfirmDialog, GroupsDialog } from '../components/dialogs';
 import { Icon } from '../components/Icon';
 
@@ -67,13 +69,10 @@ export function ServersScreen(): JSX.Element {
   // Направление сортировки (прототип .sortdir): по задержке — по возрастанию,
   // повторный клик переворачивает.
   const [sortAsc, setSortAsc] = useState(true);
-  // Меню режима теста (.split-btn ▾): задержка или полный тест.
-  const [testMenuAt, setTestMenuAt] = useState<{ x: number; y: number } | null>(null);
-  // Меню строки профиля (прототип profileMenu): копировать ссылку, QR, тест.
-  const [rowMenu, setRowMenu] = useState<{
-    profile: Profile;
-    at: { x: number; y: number };
-  } | null>(null);
+  // Меню режима теста (.split-btn ▾).
+  const [testMenu, setTestMenu] = useState<MenuAnchor | null>(null);
+  // Меню строки профиля (прототип profileMenu): копировать ссылку, тест, удалить.
+  const [rowMenu, setRowMenu] = useState<(MenuAnchor & { profile: Profile }) | null>(null);
   const [compact, setCompact] = useState(false);
   const [groupBySub, setGroupBySub] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -305,12 +304,14 @@ export function ServersScreen(): JSX.Element {
         // Удаление сервера необратимо — прототип всегда спрашивает.
         setConfirmDelete({ ids: [p.id], count: 1 });
       },
-      onRowMenu: (at: { x: number; y: number }): void => {
-        setRowMenu({ profile: p, at });
+      menuOpen: rowMenu?.profile.id === p.id,
+      // Повторный клик по «≡» закрывает меню своей строки.
+      onRowMenu: (anchor: MenuAnchor): void => {
+        setRowMenu((cur) => (cur?.profile.id === p.id ? null : { ...anchor, profile: p }));
       },
       typeLabel: TYPE_LABEL[p.type] ?? '?',
     }),
-    [compact, selected, latency, toggleSelect, toggleFav],
+    [compact, selected, latency, rowMenu, toggleSelect, toggleFav],
   );
 
   return (
@@ -477,17 +478,17 @@ export function ServersScreen(): JSX.Element {
           <button
             className="btn btn-sec btn-ic"
             aria-haspopup="menu"
-            aria-expanded={testMenuAt !== null}
+            aria-expanded={testMenu !== null}
             aria-label={t('test.more')}
             title={t('test.more')}
             disabled={testing || profiles.length === 0}
             onClick={(e) => {
-              if (testMenuAt !== null) {
-                setTestMenuAt(null);
+              if (testMenu !== null) {
+                setTestMenu(null);
                 return;
               }
               const r = e.currentTarget.getBoundingClientRect();
-              setTestMenuAt({ x: r.left - 140, y: r.bottom + 4 });
+              setTestMenu({ at: { x: r.left - 140, y: r.bottom + 4 }, trigger: e.currentTarget });
             }}
           >
             <Icon name="chevron-down" size={16} />
@@ -661,37 +662,33 @@ export function ServersScreen(): JSX.Element {
       )}
       {/* Меню режима теста (прототип #testMore). Пункт «Полный тест: UDP и
           скорость» скрыт до T-84 — ядро отвечает на него ошибкой. */}
-      {testMenuAt !== null && (
-        <div
-          className="menu"
-          role="menu"
-          style={{ left: testMenuAt.x, top: testMenuAt.y }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') setTestMenuAt(null);
+      {testMenu !== null && (
+        <ContextMenu
+          anchor={testMenu}
+          onClose={() => {
+            setTestMenu(null);
           }}
         >
           <button
             className="menu-item"
             role="menuitem"
             onClick={() => {
-              setTestMenuAt(null);
+              setTestMenu(null);
               void testLatency(profiles.map((p) => p.id));
             }}
           >
             <Icon name="gauge" size={16} />
             <span>{t('test.latency')}</span>
           </button>
-        </div>
+        </ContextMenu>
       )}
 
       {/* Меню строки профиля (прототип profileMenu). */}
       {rowMenu !== null && (
-        <div
-          className="menu"
-          role="menu"
-          style={{ left: rowMenu.at.x, top: rowMenu.at.y }}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') setRowMenu(null);
+        <ContextMenu
+          anchor={rowMenu}
+          onClose={() => {
+            setRowMenu(null);
           }}
         >
           <button
@@ -731,7 +728,7 @@ export function ServersScreen(): JSX.Element {
             <Icon name="trash" size={16} />
             <span>{t('common.delete')}</span>
           </button>
-        </div>
+        </ContextMenu>
       )}
 
       {confirmDelete !== null && (
@@ -763,8 +760,10 @@ interface RowProps {
   readonly onEdit: () => void;
   readonly onFav: () => void;
   readonly onDelete: () => void;
-  /** Меню строки (копировать ссылку / QR / тест): прототип profileMenu. */
-  readonly onRowMenu: (at: { x: number; y: number }) => void;
+  /** Меню строки открыто: aria-expanded у кнопки «≡». */
+  readonly menuOpen: boolean;
+  /** Меню строки (копировать ссылку / тест / удалить): прототип profileMenu. */
+  readonly onRowMenu: (anchor: MenuAnchor) => void;
   readonly typeLabel: string;
 }
 
@@ -777,17 +776,39 @@ function ProfileRow({
   onEdit,
   onFav,
   onDelete,
+  menuOpen,
   onRowMenu,
   typeLabel,
 }: RowProps): JSX.Element {
   const { t, tf, lang } = useI18n();
+  const moreRef = useRef<HTMLButtonElement | null>(null);
+  // Меню строки привязано к кнопке «≡» (прототип: row.querySelector('[data-menu-p]').click()).
+  const openMenu = (): void => {
+    const btn = moreRef.current;
+    if (btn === null) return;
+    const r = btn.getBoundingClientRect();
+    onRowMenu({ at: { x: r.left - 160, y: r.bottom + 4 }, trigger: btn });
+  };
   const ms = p.testResult?.latencyMs;
   const na = isTestNotApplicable(p.testResult);
   const delay =
     latencyLabel ?? (na ? t('test.na') : ms !== undefined && ms > 0 ? formatMs(ms, lang) : '—');
   const down = isTestDown(p.testResult);
   return (
-    <li className={`prow${checked ? ' sel' : ''}`}>
+    <li
+      className={`prow${checked ? ' sel' : ''}`}
+      onKeyDown={(e) => {
+        // Shift+F10 и клавиша ContextMenu открывают меню строки.
+        if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') {
+          e.preventDefault();
+          openMenu();
+        }
+      }}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        openMenu();
+      }}
+    >
       <input
         type="checkbox"
         className="prow-chk"
@@ -820,10 +841,9 @@ function ProfileRow({
         aria-label={t('aria.menu')}
         title={t('aria.menu')}
         aria-haspopup="menu"
-        onClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          onRowMenu({ x: r.left - 160, y: r.bottom + 4 });
-        }}
+        aria-expanded={menuOpen}
+        ref={moreRef}
+        onClick={openMenu}
       >
         <Icon name="menu" size={16} />
       </button>

@@ -714,6 +714,8 @@ export const deDict: Record<string, string> = {
   "tun.exclApps": "Aus dem Tunnel lassen: Apps",
   "tun.exclHint": "Ein Wert pro Zeile",
   "tun.ipv6": "IPv6 durch den Tunnel",
+  "tun.kill": "Strikte Route erzwingen (Kill-Switch)",
+  "tun.kill.d": "Schaltet die strikte Route immer ein, auch wenn „Strikte Route“ aus ist. Das Sperren des gesamten Datenverkehrs bei Tunnelausfall ist noch nicht umgesetzt.",
   "tun.mtu": "MTU",
   "tun.mtuErr": "MTU muss zwischen 1280 und 9000 liegen",
   "tun.removeService": "Dienst entfernen",

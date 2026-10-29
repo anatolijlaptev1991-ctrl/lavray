@@ -714,6 +714,8 @@ export const enDict: Record<string, string> = {
   "tun.exclApps": "Keep out of the tunnel: apps",
   "tun.exclHint": "One value per line",
   "tun.ipv6": "IPv6 through the tunnel",
+  "tun.kill": "Forced strict route (kill switch)",
+  "tun.kill.d": "Always turns strict route on, even if “Strict route” is off. Blocking all traffic when the tunnel drops is not implemented yet.",
   "tun.mtu": "MTU",
   "tun.mtuErr": "MTU must be from 1280 to 9000",
   "tun.removeService": "Remove service",

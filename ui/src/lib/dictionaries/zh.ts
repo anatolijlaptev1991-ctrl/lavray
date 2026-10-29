@@ -707,6 +707,8 @@ export const zhDict: Record<string, string> = {
   "tun.exclApps": "排除应用",
   "tun.exclHint": "每行一个",
   "tun.ipv6": "IPv6 经隧道",
+  "tun.kill": "强制严格路由（kill switch）",
+  "tun.kill.d": "始终启用严格路由，即使“严格路由”已关闭。隧道中断时阻断全部流量的功能尚未实现。",
   "tun.mtu": "MTU",
   "tun.mtuErr": "MTU 须在 1280–9000 之间",
   "tun.removeService": "移除服务",

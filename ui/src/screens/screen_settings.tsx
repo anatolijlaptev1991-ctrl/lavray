@@ -29,10 +29,8 @@ interface Section {
 
 const SECTIONS: readonly Section[] = [
   { id: 'general', icon: 'settings', titleKey: 'sec.general' },
-  { id: 'behavior', icon: 'sliders', titleKey: 'sec.behavior' },
   { id: 'network', icon: 'globe', titleKey: 'sec.network' },
   { id: 'tun', icon: 'route', titleKey: 'sec.tun' },
-  { id: 'integration', icon: 'monitor', titleKey: 'sec.integration' },
   { id: 'hotkeys', icon: 'keyboard', titleKey: 'sec.hotkeys' },
   { id: 'appearance', icon: 'sun', titleKey: 'sec.appearance' },
   { id: 'backup', icon: 'save', titleKey: 'sec.backup' },
@@ -58,6 +56,10 @@ const TUN_ROWS: readonly Row[] = [
   { key: 'tun.impl', type: SettingType.INT, labelKey: 'tun.stack', descKey: 'tun.stack.d' },
   { key: 'tun.mtu', type: SettingType.INT, labelKey: 'tun.mtu' },
   { key: 'tun.strict_route', type: SettingType.BOOL, labelKey: 'tun.strict' },
+  // T-35: tun.kill_switch (FR-UI-275) сейчас лишь принудительно включает
+  // strict_route (cfgbuild/inbounds.go); раньше он был подписан «Строгий
+  // маршрут», как и tun.strict_route, и лежал в «Системной интеграции».
+  { key: 'tun.kill_switch', type: SettingType.BOOL, labelKey: 'tun.kill', descKey: 'tun.kill.d' },
   { key: 'tun.ipv6', type: SettingType.BOOL, labelKey: 'tun.ipv6' },
   { key: 'tun.fake_dns', type: SettingType.BOOL, labelKey: 'dns.fakeip', descKey: 'dns.fakeip.d' },
   { key: 'tun.bypass_process', type: SettingType.STRING, labelKey: 'tun.exclApps', descKey: 'tun.exclHint' },
@@ -434,74 +436,6 @@ export function SettingsScreen(): JSX.Element {
                   </select>
                 </div>
               </div>
-              <div className="set-row">
-                <div className="set-txt">
-                  <div className="set-l">{t('set.startMin')}</div>
-                </div>
-                <div className="set-ctl">
-                  <button
-                    className={`sw${values['ui.start_minimal'] === true ? ' on' : ''}`}
-                    role="switch"
-                    aria-checked={values['ui.start_minimal'] === true}
-                    aria-label={t('set.startMin')}
-                    onClick={() => {
-                      void save('ui.start_minimal', SettingType.BOOL, values['ui.start_minimal'] !== true);
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {visibleSections.some((s) => s.id === 'behavior') && (
-            <div
-              className="card set-card"
-              data-sec="behavior"
-              ref={(el) => {
-                cardRefs.current.behavior = el;
-              }}
-            >
-              <h2>
-                <span className="ic">
-                  <Icon name="sliders" />
-                </span>
-                <span>{t('sec.behavior')}</span>
-              </h2>
-              <div className="set-row">
-                <div className="set-txt">
-                  <div className="set-l">{t('conn.traffic')}</div>
-                  <div className="set-d">{t('set.rememberScreen')}</div>
-                </div>
-                <div className="set-ctl">
-                  <button
-                    className={`sw${values['ui.conn_stat'] === true ? ' on' : ''}`}
-                    role="switch"
-                    aria-checked={values['ui.conn_stat'] === true}
-                    aria-label={t('conn.traffic')}
-                    onClick={() => {
-                      void save('ui.conn_stat', SettingType.BOOL, values['ui.conn_stat'] !== true);
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="set-row">
-                <div className="set-txt">
-                  <div className="set-l">{t('set.tray')}</div>
-                </div>
-                <div className="set-ctl">
-                  <button
-                    className={`sw${values['ui.start_minimal'] === true ? ' on' : ''}`}
-                    role="switch"
-                    aria-checked={values['ui.start_minimal'] === true}
-                    aria-label={t('set.tray')}
-                    onClick={() => {
-                      // D7: скрытие консоли TUN — чужой ключ; для трея
-                      // используем shell-owned ui.start_minimal.
-                      void save('ui.start_minimal', SettingType.BOOL, values['ui.start_minimal'] !== true);
-                    }}
-                  />
-                </div>
-              </div>
             </div>
           )}
 
@@ -644,35 +578,6 @@ export function SettingsScreen(): JSX.Element {
                   </div>
                 ),
               )}
-            </div>
-          )}
-
-          {visibleSections.some((s) => s.id === 'integration') && (
-            <div
-              className="card set-card"
-              data-sec="integration"
-              ref={(el) => {
-                cardRefs.current.integration = el;
-              }}
-            >
-              <h2>
-                <span className="ic">
-                  <Icon name="monitor" />
-                </span>
-                <span>{t('sec.integration')}</span>
-              </h2>
-              {boolRow({
-                key: 'tun.enabled',
-                type: SettingType.BOOL,
-                labelKey: 'mode.tun',
-                descKey: 'tun.dlg.d',
-              })}
-              {boolRow({
-                key: 'tun.kill_switch',
-                type: SettingType.BOOL,
-                labelKey: 'tun.strict',
-                descKey: 'tun.strict.d',
-              })}
             </div>
           )}
 

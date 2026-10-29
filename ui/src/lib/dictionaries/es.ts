@@ -714,6 +714,8 @@ export const esDict: Record<string, string> = {
   "tun.exclApps": "Fuera del túnel: apps",
   "tun.exclHint": "Un valor por línea",
   "tun.ipv6": "IPv6 por el túnel",
+  "tun.kill": "Ruta estricta forzada (kill switch)",
+  "tun.kill.d": "Activa siempre la ruta estricta, aunque «Ruta estricta» esté desactivada. El bloqueo de todo el tráfico al caer el túnel aún no está implementado.",
   "tun.mtu": "MTU",
   "tun.mtuErr": "El MTU debe ir de 1280 a 9000",
   "tun.removeService": "Quitar servicio",

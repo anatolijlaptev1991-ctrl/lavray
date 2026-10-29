@@ -74,6 +74,10 @@ a:hover{color:var(--accent-h); text-decoration:underline}
 :where(button,a,select,summary,[tabindex],[role="button"],[role="tab"],[role="menuitem"],[role="menuitemradio"],[role="radio"],[role="switch"]):focus-visible{
   outline:2px solid var(--accent)!important;outline-offset:2px!important}
 .input:focus-visible,.select:focus-visible,.textarea:focus-visible{outline:2px solid var(--accent);outline-offset:0;border-color:var(--accent)}
+/* T-61: чекбоксы и скрытые input[type=file] тоже показывают фокус с клавиатуры.
+   Сам file-input прозрачен или спрятан, поэтому кольцо рисуется у его label. */
+input[type="checkbox"]:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+label:has(> input[type="file"]:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
 ::selection{background:var(--accent-soft); color:var(--t1)}
 svg.ic{width:18px;height:18px;flex:none;display:block}
 svg.ic-16{width:16px;height:16px}
@@ -1189,13 +1193,14 @@ html[data-shell="native"][data-os="mac"] #app { height: 100vh; }
   border:1px solid var(--b-subtle);border-radius:var(--r-lg);transition:border-color var(--t-micro) var(--ease)}
 .prow:hover{border-color:var(--b-strong)}
 .prow.sel{border-color:var(--accent)}
-.prow-chk{flex:none;width:15px;height:15px;accent-color:var(--accent);cursor:pointer}
-.prow-fav{flex:none;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;
+/* T-61: цели не меньше 24x24 px (WCAG 2.5.8): было 15x15 у чекбокса и 22x22 у избранного. */
+.prow-chk{flex:none;width:24px;height:24px;margin:0;accent-color:var(--accent);cursor:pointer}
+.prow-fav{flex:none;display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;
   border-radius:var(--r-sm);color:var(--t3)}
 .prow-fav .ic{width:13px;height:13px}
 .prow-fav.on{color:var(--accent);background:var(--accent-soft)}
 .prow-fav:hover{color:var(--accent)}
-.prow-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:start;background:none;border:0;cursor:pointer}
+.prow-main{flex:1;min-width:0;min-height:24px;display:flex;flex-direction:column;gap:2px;text-align:start;background:none;border:0;cursor:pointer}
 .prow-name{font-size:.8125rem;font-weight:600;color:var(--t1);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prow-addr{font-size:.6875rem;color:var(--t3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prow-type{flex:none;font-size:.6875rem;color:var(--t3);min-width:52px;text-align:end}

@@ -274,7 +274,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
                     <input
                       type="file"
                       accept="image/*"
-                      style={{ display: 'none' }}
+                      className="sr-only"
                       onChange={(e) => {
                         const f = e.target.files?.[0];
                         if (f === undefined) return;
@@ -304,7 +304,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
                 <input
                   type="file"
                   accept=".txt,.json,.yaml,.yml,.conf,*/*"
-                  style={{ display: 'none' }}
+                  className="sr-only"
                   onChange={(e) => {
                     const f = e.target.files?.[0];
                     if (f !== undefined) void readFile(f);

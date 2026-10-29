@@ -13,12 +13,17 @@ import type { RefObject } from 'react';
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
+/** Запись об открытом диалоге (T-12): корневой элемент нужен для возврата фокуса. */
+interface OpenModal {
+  readonly rootRef: RefObject<HTMLElement | null>;
+}
+
 /**
  * Открытые диалоги; последний — верхний. Esc и Tab обрабатывает только
  * верхний (T-12): подтверждение удаления поверх «Групп» закрывается своим Esc,
  * не закрывая нижний диалог, и ловушка Tab не борется за фокус с нижним.
  */
-const openModals: object[] = [];
+const openModals: OpenModal[] = [];
 
 export interface ModalOptions {
   /** Вызывается по Esc. Можно передавать новую стрелку на каждый рендер. */
@@ -45,8 +50,8 @@ export function useModal(rootRef: RefObject<HTMLElement | null>, options: ModalO
   }
 
   useEffect(() => {
-    const token = {};
-    openModals.push(token);
+    const entry: OpenModal = { rootRef };
+    openModals.push(entry);
     const root = rootRef.current;
     const preferred = optionsRef.current.autofocusRef?.current ?? null;
     if (preferred !== null) {
@@ -56,7 +61,7 @@ export function useModal(rootRef: RefObject<HTMLElement | null>, options: ModalO
     }
 
     const onKey = (e: KeyboardEvent): void => {
-      if (openModals[openModals.length - 1] !== token) return;
+      if (openModals[openModals.length - 1] !== entry) return;
       if (e.key === 'Escape') {
         e.preventDefault();
         optionsRef.current.onClose();
@@ -86,11 +91,18 @@ export function useModal(rootRef: RefObject<HTMLElement | null>, options: ModalO
     document.addEventListener('keydown', onKey);
     return (): void => {
       document.removeEventListener('keydown', onKey);
-      const i = openModals.indexOf(token);
+      const i = openModals.indexOf(entry);
       if (i >= 0) openModals.splice(i, 1);
       // Возврат фокуса на кнопку-открывалку (прототип closeDlg).
       const opener = openerRef.current;
-      if (opener?.isConnected === true) opener.focus();
+      if (opener?.isConnected === true) {
+        opener.focus();
+      } else {
+        // T-61: открывалки больше нет (закрытое меню, удалённая строка) —
+        // фокус в верхний из оставшихся диалогов, иначе в основную область.
+        const below = openModals[openModals.length - 1]?.rootRef.current;
+        (below ?? document.getElementById('main'))?.focus({ preventScroll: true });
+      }
     };
   }, [rootRef]);
 }

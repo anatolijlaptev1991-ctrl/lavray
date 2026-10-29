@@ -55,6 +55,10 @@ pub trait Observer {
     fn on_state(&mut self, state: CoreState);
     /// Ядро готово: адрес и токен (токен новый при каждом запуске).
     fn on_ready(&mut self, endpoint: &CoreEndpoint, token: &SecretToken);
+    /// Агентский токен этого запуска ядра (MCP); вызывается перед `on_ready`,
+    /// если запуск его передавал. Наблюдателям, которым он не нужен, достаточно
+    /// умолчания.
+    fn on_agent_token(&mut self, _token: &SecretToken) {}
     fn on_failure(&mut self, failure: &Failure);
 }
 
@@ -226,6 +230,9 @@ where
         match self.sup.wait_ready() {
             Ok(endpoint) => {
                 if let Some(config) = &self.config {
+                    if let Some(agent) = &config.agent_token {
+                        self.observer.on_agent_token(agent);
+                    }
                     self.observer.on_ready(&endpoint, &config.auth_token);
                 }
                 self.ready_at = Some(self.sup.now());
@@ -485,6 +492,7 @@ mod tests {
                 listen_socket: PathBuf::from("127.0.0.1:0"),
                 data_dir: PathBuf::from("data"),
                 auth_token: SecretToken::from_base64url(format!("{calls:A>43}")).unwrap(),
+                agent_token: None,
                 extra_args: Vec::new(),
             })
         };

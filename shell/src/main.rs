@@ -9,6 +9,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use lavray_shell::agent::{AgentAccess, AgentMode};
 use lavray_shell::autostart::{self, AutostartState};
 use lavray_shell::coreproc::driver::generate_auth_token;
 use lavray_shell::coreproc::runner::{spawn_supervisor, Failure, SupervisorHandle};
@@ -179,6 +180,24 @@ async fn set_autostart(enabled: bool) -> Result<AutostartState, String> {
         .map_err(|e| e.to_string())?
 }
 
+/// agent_access_set — режим доступа ИИ-агентов (настройка ядра `agent.mode`):
+/// окно сообщает его при каждой загрузке и при каждом изменении. Оболочка
+/// создаёт, перезаписывает или удаляет `agent-endpoint.json`; ядро режим
+/// применяет само и сразу, перезапуск не нужен.
+#[tauri::command]
+fn agent_access_set(agent: tauri::State<'_, Arc<AgentAccess>>, mode: String) -> Result<(), String> {
+    let mode =
+        AgentMode::parse(&mode).ok_or_else(|| format!("неизвестный режим агентов: {mode}"))?;
+    agent.set_mode(mode)
+}
+
+/// agent_core_path — полный путь к `lavray-core.exe` рядом с установленным
+/// приложением, для настройки MCP-клиентов (Claude Desktop, Claude Code, Cursor).
+#[tauri::command]
+fn agent_core_path() -> Result<String, String> {
+    Ok(locate_core()?.display().to_string())
+}
+
 /// Адрес ConnectRPC-ядра для UI (вызывается фронтендом при старте).
 ///
 /// Ждёт готовности ядра до `ENDPOINT_WAIT`: раньше при холодном старте UI
@@ -276,6 +295,15 @@ fn begin_quit(app: &tauri::AppHandle) {
             supervisor.stop(); // лестница §5
         }
         tray_ui::hide(&app);
+        // Файл с агентским токеном убирается до выхода: ядра больше не будет.
+        if let Some(agent) = app.try_state::<Arc<AgentAccess>>() {
+            if let Err(e) = agent.shutdown() {
+                eprintln!(
+                    "LAVRay: не удалось удалить {}: {e}",
+                    lavray_shell::agent::FILE_NAME
+                );
+            }
+        }
         // Прокси снимаем до выхода: иначе в ОС остаётся прокси на мёртвый порт.
         let _ = SysProxy::new(&data_dir()).release_on_quit();
         let stopped = || supervisor.as_ref().is_none_or(|s| s.is_stopped());
@@ -374,11 +402,9 @@ fn data_dir() -> std::path::PathBuf {
     std::env::temp_dir().join("lavray")
 }
 
-/// Конфигурация запуска ядра (§3): бинарник рядом с приложением, каталог
-/// данных (его же получает ядро флагом `--data`), новый токен (в stdin ядру).
-/// Надзиратель зовёт её перед каждым (пере)запуском; `Err` — почему ядро не
-/// собрать.
-fn core_spawn_config() -> Result<CoreSpawnConfig, String> {
+/// Путь к доверенному `lavray-core` (T-44): только в установленных ресурсах и
+/// только с вшитой при сборке суммой SHA-256.
+fn locate_core() -> Result<std::path::PathBuf, String> {
     let exe = std::env::current_exe().map_err(|e| format!("путь к LAVRay.exe: {e}"))?;
     let dir = exe
         .parent()
@@ -395,14 +421,23 @@ fn core_spawn_config() -> Result<CoreSpawnConfig, String> {
     // .exists() (каталог с таким именем больше не считается бинарником).
     // T-44: найденный файл сверяется с SHA-256, вшитым при сборке; подменённое
     // или устаревшее ядро не запускается (A2-07).
-    let core_bin = find_trusted_core(
+    find_trusted_core(
         &[
             dir.join("binaries").join(core_name),
             dir.join("resources").join("binaries").join(core_name),
             dir.join("resources").join(core_name),
         ],
         CORE_SHA256,
-    )?;
+    )
+}
+
+/// Конфигурация запуска ядра (§3): бинарник рядом с приложением, каталог
+/// данных (его же получает ядро флагом `--data`), новый токен (в stdin ядру) и
+/// новый агентский токен MCP (второй строкой stdin; в файл он попадёт, только
+/// пока доступ агентов включён). Надзиратель зовёт её перед каждым
+/// (пере)запуском; `Err` — почему ядро не собрать.
+fn core_spawn_config() -> Result<CoreSpawnConfig, String> {
+    let core_bin = locate_core()?;
     // D5: данные — в пользовательском каталоге на всех ОС. APPDATA есть
     // только на Windows; на macOS/Linux каталог рядом с .app//opt был бы
     // read-only, а create_dir_all тихо возвращал None.
@@ -415,6 +450,7 @@ fn core_spawn_config() -> Result<CoreSpawnConfig, String> {
         // §3.1: порт выделяет ОС («127.0.0.1:0»).
         listen_socket: std::path::PathBuf::from("127.0.0.1:0"),
         auth_token: generate_auth_token().map_err(|e| format!("токен ядра: {e}"))?,
+        agent_token: Some(generate_auth_token().map_err(|e| format!("агентский токен: {e}"))?),
         extra_args: vec![],
     })
 }
@@ -423,6 +459,7 @@ fn core_spawn_config() -> Result<CoreSpawnConfig, String> {
 struct ShellHost {
     app: tauri::AppHandle,
     shared: Arc<Mutex<RuntimeState>>,
+    agent: Arc<AgentAccess>,
 }
 
 impl ShellHost {
@@ -472,6 +509,21 @@ impl SupervisorHost for ShellHost {
             s.last_error = reason.to_string();
         }
         tray_ui::refresh(&self.app);
+    }
+
+    fn agent_core_up(&self, url: &str, agent_token: &str) {
+        if let Err(e) = self.agent.core_up(url, agent_token) {
+            eprintln!("LAVRay: доступ агентов (MCP): {e}");
+        }
+    }
+
+    fn agent_core_down(&self) {
+        if let Err(e) = self.agent.core_down() {
+            eprintln!(
+                "LAVRay: не удалось удалить {}: {e}",
+                lavray_shell::agent::FILE_NAME
+            );
+        }
     }
 
     fn failure(&self, failure: &Failure) {
@@ -567,6 +619,14 @@ fn main() {
                 Err(e) => eprintln!("LAVRay: не удалось восстановить прокси: {e}"),
             }
 
+            // Файл с агентским токеном прошлого запуска (приложение закрыли
+            // аварийно) недействителен: ядра с этим токеном уже нет.
+            let agent = Arc::new(AgentAccess::new(data_dir(), token::user_sid()));
+            if let Err(e) = agent.remove_stale() {
+                eprintln!("LAVRay: не удалось удалить устаревший файл доступа агентов: {e}");
+            }
+            app.manage(Arc::clone(&agent));
+
             // Надзор за ядром (A2-11): цикл `coreproc::runner` ведёт CoreSupervisor
             // (backoff 1/2/4/8/15 с, RateLimited после 3 падений за 60 с) и
             // тестируется без GUI; здесь только среда. T-03: при каждом запуске
@@ -575,6 +635,7 @@ fn main() {
             let host = ShellHost {
                 app: app.handle().clone(),
                 shared: Arc::clone(&rt_for_setup),
+                agent: Arc::clone(&agent),
             };
             let observer = HostObserver::new(Arc::clone(&hub_for_setup), host);
             app.manage(Arc::new(spawn_supervisor(core_spawn_config, observer)?));
@@ -623,16 +684,23 @@ fn main() {
             ui_state_set,
             window_show,
             autostart_state,
-            set_autostart
+            set_autostart,
+            agent_access_set,
+            agent_core_path
         ])
         .build(context)
         .unwrap_or_else(|e| {
             msgbox::show(&msgbox::window_failed(&e.to_string()));
             std::process::exit(1);
         })
-        .run(|_app, event| {
+        .run(|app, event| {
             on_run_event(&event, || {
                 let _ = SysProxy::new(&data_dir()).release_on_quit();
+                // Выход сеанса Windows тоже сюда: файл с агентским токеном не
+                // должен пережить приложение.
+                if let Some(agent) = app.try_state::<Arc<AgentAccess>>() {
+                    let _ = agent.shutdown();
+                }
             });
         });
 }

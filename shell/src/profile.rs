@@ -25,13 +25,16 @@ mod tests {
 
     #[test]
     fn only_an_elevated_instance_gets_its_own_webview_directory() {
+        // Сравнение по компонентам: тесты оболочки идут и на Linux CI, где `\`
+        // в строке пути не разделитель.
         let local = Path::new(r"C:\Users\u\AppData\Local");
         assert_eq!(webview_data_dir(local, "io.example.app", false), None);
-        assert_eq!(
-            webview_data_dir(local, "io.example.app", true),
-            Some(PathBuf::from(
-                r"C:\Users\u\AppData\Local\io.example.app\EBWebView-admin"
-            ))
+        let dir = webview_data_dir(local, "io.example.app", true).unwrap();
+        assert!(dir.starts_with(local), "{}", dir.display());
+        assert!(
+            dir.ends_with(Path::new("io.example.app").join("EBWebView-admin")),
+            "{}",
+            dir.display()
         );
     }
 }

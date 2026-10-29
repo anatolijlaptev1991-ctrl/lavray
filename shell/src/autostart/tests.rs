@@ -496,10 +496,15 @@ fn task_xml_has_the_logon_trigger_sid_and_battery_flags() {
         "<MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>",
         r#"<Command>"C:\Program Files\LAVRay\LAVRay.exe"</Command>"#,
         "<Arguments>--tray</Arguments>",
-        r"<WorkingDirectory>C:\Program Files\LAVRay</WorkingDirectory>",
     ] {
         assert!(xml.contains(needed), "нет {needed} в XML:\n{xml}");
     }
+    // Каталог exe выделяет Path::parent, а на Linux CI `\` не разделитель.
+    #[cfg(windows)]
+    assert!(
+        xml.contains(r"<WorkingDirectory>C:\Program Files\LAVRay</WorkingDirectory>"),
+        "нет WorkingDirectory в XML:\n{xml}"
+    );
     assert!(xml.starts_with(r#"<?xml version="1.0" encoding="UTF-16"?>"#));
     assert_eq!(xml.matches("<LogonTrigger>").count(), 1);
     assert_eq!(

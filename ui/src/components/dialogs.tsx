@@ -23,6 +23,8 @@ interface ShellProps {
   readonly footer?: ReactNode;
   readonly onClose: () => void;
   readonly autofocusRef?: React.RefObject<HTMLElement | null>;
+  /** false — клик по затемнению не закрывает диалог (формы и мастер: не терять ввод). */
+  readonly dismissOnBackdrop?: boolean;
 }
 
 /** Оболочка диалога: focus-trap, Esc, клик по фону. */
@@ -34,6 +36,7 @@ export function DialogShell({
   footer,
   onClose,
   autofocusRef,
+  dismissOnBackdrop = true,
 }: ShellProps): JSX.Element {
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -51,7 +54,7 @@ export function DialogShell({
       className="dlg-back open"
       role="presentation"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (dismissOnBackdrop && e.target === e.currentTarget) onClose();
       }}
     >
       <div
@@ -481,16 +484,36 @@ export function OnboardingDialog({
     [core, t],
   );
 
+  // T-40: мастер на общей оболочке DialogShell (портал на <body>, фокус при
+  // открытии, ловушка Tab, Esc = «Пропустить», возврат фокуса). Клик по
+  // затемнению мастер не закрывает, как и раньше. Отступы тела не менялись,
+  // чтобы diff остался читаемым.
   return (
-    <div className="dlg-back open" role="presentation">
-      <div className="dlg dlg-md" role="dialog" aria-modal="true" aria-labelledby="onbTitle">
-        <div className="dlg-h">
-          <h2 id="onbTitle">{t('onb.title')}</h2>
-          <button className="btn btn-ic btn-sm" aria-label={t('onb.skip')} title={t('onb.skip')} onClick={onClose}>
-            <Icon name="x" />
-          </button>
-        </div>
-        <div className="dlg-b">
+    <DialogShell
+      titleId="onbTitle"
+      title={t('onb.title')}
+      size="md"
+      onClose={onClose}
+      dismissOnBackdrop={false}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>{t('onb.skip')}</button>
+          <span className="flex1" />
+          {step > 1 && (
+            <button className="btn btn-sec" onClick={() => { setStep((v) => v - 1); }}>
+              {t('common.back')}
+            </button>
+          )}
+          {step < 4 ? (
+            <button className="btn btn-pri" onClick={() => { setStep((v) => v + 1); }}>
+              {t('common.next')}
+            </button>
+          ) : (
+            <button className="btn btn-pri" onClick={onClose}>{t('common.next')}</button>
+          )}
+        </>
+      }
+    >
           <p className="t2">{t('onb.sub')}</p>
           <p className="cap" style={{ marginTop: 4 }}>
             {tf('onb.stepOf', { n: step, total: 4 })}
@@ -679,24 +702,6 @@ export function OnboardingDialog({
               </dl>
             </div>
           )}
-        </div>
-        <div className="dlg-f">
-          <button className="btn btn-ghost" onClick={onClose}>{t('onb.skip')}</button>
-          <span className="flex1" />
-          {step > 1 && (
-            <button className="btn btn-sec" onClick={() => { setStep((v) => v - 1); }}>
-              {t('common.back')}
-            </button>
-          )}
-          {step < 4 ? (
-            <button className="btn btn-pri" onClick={() => { setStep((v) => v + 1); }}>
-              {t('common.next')}
-            </button>
-          ) : (
-            <button className="btn btn-pri" onClick={onClose}>{t('common.next')}</button>
-          )}
-        </div>
-      </div>
-    </div>
+    </DialogShell>
   );
 }

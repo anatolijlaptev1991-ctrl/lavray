@@ -2,9 +2,8 @@
 // создание/правка сервера, типоспецифичные поля по типу, транспорт и TLS
 // (ws/grpc/http/h2, REALITY), название/группа/заметки.
 // Реализованы все внутренние типы; Naive/внешние ядра скрыты флагом ядра.
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
-import { createPortal } from 'react-dom';
 import { create } from '@bufbuild/protobuf';
 import {
   Hysteria2DetailSchema,
@@ -28,6 +27,7 @@ import { friendlyCoreError } from '../lib/core';
 import { mergeDetail, mergeStream } from '../lib/profileMerge';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { DialogShell } from '../components/dialogs';
 import { Icon } from '../components/Icon';
 
 interface Props {
@@ -323,6 +323,7 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
   const [f, setF] = useState<Form>(() => (profile === null ? emptyForm(ProfileType.VMESS) : fromProfile(profile)));
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  const nameRef = useRef<HTMLInputElement | null>(null); // T-40: начальный фокус
 
   useEffect(() => {
     setF(profile === null ? emptyForm(ProfileType.VMESS) : fromProfile(profile));
@@ -385,28 +386,32 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
     }
   }, [core, f, profile, groupId, onSaved, onClose, t]);
 
-  // T-06: портал на <body> — редактор не должен центрироваться по высоте
-  // списка серверов (см. DialogShell).
-  return createPortal(
-    <div className="dlg-back open" role="presentation" onClick={onClose}>
-      <div
-        className="dlg dlg-lg"
-        role="dialog"
-        aria-modal="true"
-        aria-label={profile === null ? t('quick.import') : t('common.edit')}
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
-      >
-        <div className="dlg-h">
-          <h2>{profile === null ? t('quick.import') : t('common.edit')}</h2>
-          <button className="btn btn-ic btn-sm" aria-label={t('common.close')} onClick={onClose}>
-            <Icon name="x" />
+  // T-40: общая оболочка DialogShell (портал на <body>, фокус при открытии,
+  // ловушка Tab, Esc, возврат фокуса). Клик по затемнению редактор не
+  // закрывает: случайный клик терял несохранённый ввод (C1-22). Отступы тела
+  // формы не менялись, чтобы diff остался читаемым.
+  return (
+    <DialogShell
+      titleId="edTitle"
+      title={profile === null ? t('quick.import') : t('common.edit')}
+      size="lg"
+      onClose={onClose}
+      autofocusRef={nameRef}
+      dismissOnBackdrop={false}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>
+            {t('common.cancel')}
           </button>
-        </div>
-
+          <span className="flex1" />
+          <button className="btn btn-pri" disabled={busy} onClick={() => void save()}>
+            {t('common.save')}
+          </button>
+        </>
+      }
+    >
         {err !== '' && (
-          <div className="banner banner-err" role="alert">
+          <div className="banner banner-err" role="alert" style={{ marginBottom: 10 }}>
             <span className="ic">
               <Icon name="alert" />
             </span>
@@ -414,7 +419,6 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
           </div>
         )}
 
-        <div className="dlg-b">
           <div className="form-grid">
             <label className="field">
               <span className="cap">{t('srv.type')}</span>
@@ -439,6 +443,7 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
               <span className="cap">{t('imp.name')}</span>
               <input
                 className="input"
+                ref={nameRef}
                 value={f.name}
                 onChange={(e) => {
                   set('name', e.target.value);
@@ -819,18 +824,6 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
               }}
             />
           </label>
-        </div>
-
-        <div className="dlg-f">
-          <button className="btn btn-ghost" onClick={onClose}>
-            {t('common.cancel')}
-          </button>
-          <button className="btn btn-pri" disabled={busy} onClick={() => void save()}>
-            {t('common.save')}
-          </button>
-        </div>
-      </div>
-    </div>,
-    document.body,
+    </DialogShell>
   );
 }

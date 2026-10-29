@@ -35,6 +35,15 @@ export function useModal(rootRef: RefObject<HTMLElement | null>, options: ModalO
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
+  // T-40: кнопку-открывалку запоминаем ДО монтирования (в render-фазе): атрибут
+  // autoFocus дочерних элементов срабатывает раньше эффектов, и к моменту
+  // useEffect фокус уже внутри диалога.
+  const openerRef = useRef<HTMLElement | null | undefined>(undefined);
+  if (openerRef.current === undefined) {
+    const active = document.activeElement;
+    openerRef.current = active instanceof HTMLElement && active !== document.body ? active : null;
+  }
+
   useEffect(() => {
     const token = {};
     openModals.push(token);
@@ -60,10 +69,16 @@ export function useModal(rootRef: RefObject<HTMLElement | null>, options: ModalO
       const first = nodes[0];
       const last = nodes[nodes.length - 1];
       if (first === undefined || last === undefined) return;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
+      const active = document.activeElement;
+      // Фокус мог оказаться вне диалога (например, на <body> после перерисовки):
+      // Tab возвращает его внутрь, а не уводит на страницу под диалогом.
+      const inside = active !== null && dlg.contains(active);
+      if (e.shiftKey) {
+        if (!inside || active === first || active === dlg) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (!inside || active === last) {
         e.preventDefault();
         first.focus();
       }
@@ -73,6 +88,9 @@ export function useModal(rootRef: RefObject<HTMLElement | null>, options: ModalO
       document.removeEventListener('keydown', onKey);
       const i = openModals.indexOf(token);
       if (i >= 0) openModals.splice(i, 1);
+      // Возврат фокуса на кнопку-открывалку (прототип closeDlg).
+      const opener = openerRef.current;
+      if (opener?.isConnected === true) opener.focus();
     };
   }, [rootRef]);
 }

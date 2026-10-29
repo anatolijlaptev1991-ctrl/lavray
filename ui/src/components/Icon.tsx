@@ -47,7 +47,9 @@ export type IconName =
   | 'restore'
   | 'power'
   | 'star'
-  | 'dots';
+  | 'dots'
+  | 'arrup'
+  | 'arrdown';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
@@ -288,6 +290,18 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
       <circle cx="12" cy="12" r="1" />
       <circle cx="19" cy="12" r="1" />
       <circle cx="5" cy="12" r="1" />
+    </>
+  ),
+  arrup: (
+    <>
+      <path d="M12 19V5" />
+      <path d="m5 12 7-7 7 7" />
+    </>
+  ),
+  arrdown: (
+    <>
+      <path d="M12 5v14" />
+      <path d="m19 12-7 7-7-7" />
     </>
   ),
 };

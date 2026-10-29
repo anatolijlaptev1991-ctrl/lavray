@@ -210,7 +210,8 @@ describe('T-40: редактор профиля и онбординг на Dialo
       openFromButton('editor');
       const dlg = dialog();
       const main = dlg.querySelector('.form-grid'); // первая сетка: тип, название, адрес, порт
-      expect(main?.querySelectorAll('select')).toHaveLength(1);
+      // T-66: тип выбирается плитками (radiogroup), а не select; плитки — вне первой сетки.
+      expect(dlg.querySelectorAll('[role="radio"]').length).toBeGreaterThan(0);
       expect(main?.querySelectorAll('input')).toHaveLength(3);
       expect(dlg.querySelector('textarea')).not.toBeNull();
       const footer = Array.from(dlg.querySelectorAll('.dlg-f button')).map((b) => b.textContent);

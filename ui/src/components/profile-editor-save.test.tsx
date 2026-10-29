@@ -208,14 +208,16 @@ describe('T-10: редактор не стирает поля вне формы 
     const saved = await renameAndSave(hysteria2(), (dlg) => {
       const pass = dlg.querySelector<HTMLInputElement>('input[type="password"]');
       if (pass) setNativeValue(pass, 'new-pass');
-      const sni = Array.from(dlg.querySelectorAll<HTMLLabelElement>('label.field'))
-        .find((l) => l.querySelector('.cap')?.textContent === 'SNI')
-        ?.querySelector('input');
+      // T-66: подпись связана с полем через htmlFor, а не через обёртку label.field.
+      const sni = Array.from(dlg.querySelectorAll<HTMLLabelElement>('label'))
+        .find((l) => l.textContent === 'SNI')
+        ?.control as HTMLInputElement | null | undefined;
       if (sni) setNativeValue(sni, '');
     });
     if (saved.detail.case !== 'hysteria2') throw new Error('ожидался hysteria2');
     expect(saved.detail.value.password).toBe('new-pass');
-    expect(saved.detail.value.sni).toBeUndefined();
+    // T-66: пустое необязательное поле пишется явно (''), а не пропускается.
+    expect(saved.detail.value.sni).toBe('');
     expect(saved.detail.value.obfsPassword).toBe('salamander-secret');
   });
 
@@ -253,9 +255,9 @@ describe('T-10: редактор не стирает поля вне формы 
 
   it('VLESS: очищенный в форме Public key REALITY очищается, а не возвращается из старого профиля', async () => {
     const saved = await renameAndSave(vless(), (dlg) => {
-      const pbk = Array.from(dlg.querySelectorAll<HTMLLabelElement>('label.field'))
-        .find((l) => l.querySelector('.cap')?.textContent === 'Public key')
-        ?.querySelector('input');
+      const pbk = Array.from(dlg.querySelectorAll<HTMLLabelElement>('label'))
+        .find((l) => l.textContent === 'Public key')
+        ?.control as HTMLInputElement | null | undefined;
       if (pbk) setNativeValue(pbk, '');
     });
     expect(saved.stream?.realityPublicKey).toBeUndefined();

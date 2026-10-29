@@ -178,13 +178,13 @@ jobs:
           ls -la /tmp/lavray-core
           # В бинарнике записаны ровно эти теги.
           go version -m /tmp/lavray-core | grep -F -- "-tags=$TAGS"
-      - name: "Реальный раннер: REALITY и uTLS стартуют (T-02)"
+      - name: "Реальный раннер: туннель переживает отмену Start (T-01), REALITY и uTLS стартуют (T-02)"
         env:
           CGO_ENABLED: '0'
           GOFLAGS: -mod=mod
         run: |
           TAGS="$(tr -d '[:space:]' < BUILD_TAGS)"
-          go test -tags "$TAGS" ./internal/inst/ -run TestSingBoxRunnerStartsUTLSProfiles -count=1 -timeout 120s
+          go test -tags "$TAGS" ./internal/inst/ -count=1 -timeout 180s
       - name: Smoke - ядро поднимается, healthz, auth и RPC
         shell: bash
         run: |

@@ -4,9 +4,9 @@
 
 ### Установка
 
-**Установщик:** `LAVRay_0.1.0_x64-setup.exe` — per-machine в `C:\Program Files\LAVRay`, ярлык в меню «Пуск».
+**Установщик:** `LAVRay-0.1.0-x64-setup.exe` — per-machine в `C:\Program Files\LAVRay`, ярлык в меню «Пуск».
 
-**Portable:** `LAVRay-portable-x64.zip` — распакуйте и запустите `LAVRay.exe` (ядро в `binaries\`).
+**Portable:** `LAVRay-0.1.0-portable-x64.zip` — распакуйте и запустите `LAVRay.exe` (ядро в `binaries\`).
 
 > ⚠️ **Сборка не подписана.** SmartScreen: «Подробнее» → «Выполнить в любом случае».
 > Проверка подлинности: `SHA256SUMS.txt`.

@@ -15,6 +15,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # T-57: имена ассетов задаются здесь, один раз; те же имена — в заметках
+      # релиза (docs/RELEASE-NOTES-windows-v<версия>.md) и в README
+      # платформенных репозиториев. Тег обязан совпасть с версией сборки.
+      - name: "Версия и имена ассетов"
+        shell: pwsh
+        run: |
+          $ver = (Get-Content shell/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$ver") {
+            throw "тег $env:GITHUB_REF_NAME не равен v$ver из shell/tauri.conf.json"
+          }
+          "VERSION=$ver" >> $env:GITHUB_ENV
+          "SETUP_NAME=LAVRay-$ver-x64-setup.exe" >> $env:GITHUB_ENV
+          "PORTABLE_NAME=LAVRay-$ver-portable-x64.zip" >> $env:GITHUB_ENV
+
       - uses: actions/setup-go@v5
         with:
           go-version-file: core/go.mod
@@ -71,6 +85,14 @@ jobs:
           cargo install tauri-cli --version "^2" --locked
           cargo tauri build --bundles nsis
 
+      - name: "Установщик под именем релиза"
+        shell: pwsh
+        run: |
+          $nsis = @(Get-ChildItem 'shell\target\release\bundle\nsis' -Filter '*-setup.exe')
+          if ($nsis.Count -ne 1) { throw "ожидался один установщик NSIS, найдено $($nsis.Count)" }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item $nsis[0].FullName "dist\$env:SETUP_NAME"
+
       - name: "Portable ZIP (exe + ядро + LICENSE)"
         shell: pwsh
         run: |
@@ -81,12 +103,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$dir\binaries" | Out-Null
           Copy-Item 'shell\binaries\lavray-core.exe' "$dir\binaries\lavray-core.exe"
           Copy-Item 'LICENSE' "$dir\LICENSE"
-          Compress-Archive -Path "$dir\*" -DestinationPath 'dist\LAVRay-portable-x64.zip' -Force
+          Compress-Archive -Path "$dir\*" -DestinationPath "dist\$env:PORTABLE_NAME" -Force
 
       - name: "Checksums SHA256"
         shell: pwsh
         run: |
-          $files = Get-ChildItem dist -Recurse -File | Where-Object { $_.Extension -in '.exe','.zip' }
+          $files = Get-ChildItem dist -File | Where-Object { $_.Extension -in '.exe','.zip' }
           $lines = foreach ($f in $files) {
             $h = (Get-FileHash $f.FullName -Algorithm SHA256).Hash.ToLower()
             "$h  $($f.Name)"
@@ -98,8 +120,8 @@ jobs:
         with:
           name: LAVRay-windows
           path: |
-            shell/target/release/bundle/nsis/*.exe
-            dist/LAVRay-portable-x64.zip
+            dist/${{ env.SETUP_NAME }}
+            dist/${{ env.PORTABLE_NAME }}
             dist/SHA256SUMS.txt
 
       - name: "Прикрепить к релизу основного репо (при теге)"
@@ -107,8 +129,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            shell/target/release/bundle/nsis/*.exe
-            dist/LAVRay-portable-x64.zip
+            dist/${{ env.SETUP_NAME }}
+            dist/${{ env.PORTABLE_NAME }}
             dist/SHA256SUMS.txt
           generate_release_notes: true
 
@@ -120,6 +142,15 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/') && env.PLATFORM_REPO_TOKEN != ''
         env:
           PLATFORM_REPO_TOKEN: ${{ secrets.PLATFORM_REPO_TOKEN }}
+          GH_TOKEN: ${{ secrets.PLATFORM_REPO_TOKEN }}
         shell: bash
         run: |
-          gh release view "$GITHUB_REF_NAME" --repo anatolijlaptev1991-ctrl/lavray-windows >/dev/null 2>&1             && gh release upload "$GITHUB_REF_NAME"                  shell/target/release/bundle/nsis/*.exe                  dist/LAVRay-portable-x64.zip dist/SHA256SUMS.txt                  --repo anatolijlaptev1991-ctrl/lavray-windows --clobber             || gh release create "$GITHUB_REF_NAME"                  shell/target/release/bundle/nsis/*.exe                  dist/LAVRay-portable-x64.zip dist/SHA256SUMS.txt                  --repo anatolijlaptev1991-ctrl/lavray-windows                  --title "LAVRay $GITHUB_REF_NAME для Windows"                  --notes-file ../_release_notes_windows.md
+          repo=anatolijlaptev1991-ctrl/lavray-windows
+          assets=("dist/$SETUP_NAME" "dist/$PORTABLE_NAME" dist/SHA256SUMS.txt)
+          if gh release view "$GITHUB_REF_NAME" --repo "$repo" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" --repo "$repo" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "${assets[@]}" --repo "$repo" \
+              --title "LAVRay $GITHUB_REF_NAME для Windows" \
+              --notes-file "docs/RELEASE-NOTES-windows-v${VERSION}.md"
+          fi

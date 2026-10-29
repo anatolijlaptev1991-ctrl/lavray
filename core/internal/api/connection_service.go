@@ -71,7 +71,7 @@ func (s *Server) connTracker() ConnectionTracker { return s.conns }
 func (s *Server) ListConnections(ctx context.Context, req *connect.Request[lavrayv1.ListConnectionsRequest]) (*connect.Response[lavrayv1.ListConnectionsResponse], error) {
 	tr := s.connTracker()
 	if tr == nil {
-		return nil, failedPrecondition("трекер соединений не сконфигурирован (clash-api — W8)")
+		return nil, failedPrecondition("список соединений пока недоступен в этой версии LAVRay")
 	}
 	msg := req.Msg
 	outFilter := strings.ToLower(optStr(msg.OutboundFilter))

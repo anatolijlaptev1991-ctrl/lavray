@@ -53,6 +53,7 @@ fn fake_config(tag: &str, argv: Vec<String>) -> CoreSpawnConfig {
         listen_socket: PathBuf::from("/nonexistent/lavray-it.sock"),
         data_dir: temp_data_dir(tag),
         auth_token: SecretToken::from_base64url("A".repeat(43)).unwrap(),
+        agent_token: None,
         extra_args: argv,
     }
 }
@@ -169,6 +170,67 @@ fn driver_ready_then_kill_leaves_no_process() {
     assert!(!driver.is_running(), "после kill процесса нет");
     assert!(driver.exit_status().is_some(), "exit-статус зафиксирован");
     assert_eq!(driver.kill(KILL_BUDGET), Ok(()), "kill идемпотентен");
+    cleanup(&config);
+}
+
+/// Фейк «пишущий stdin»: печатает ready-строку и складывает всё, что оболочка
+/// прислала в stdin, в файл (по EOF он дописывается и закрывается).
+fn record_stdin_argv(url: &str, file: &std::path::Path) -> Vec<String> {
+    let file = file.display().to_string();
+    #[cfg(unix)]
+    {
+        vec![
+            "-c".to_owned(),
+            format!("printf 'LAVRAY_CORE_READY {url}\\n'; cat > '{file}'"),
+        ]
+    }
+    #[cfg(windows)]
+    {
+        vec![
+            "/C".to_owned(),
+            "echo".to_owned(),
+            "LAVRAY_CORE_READY".to_owned(),
+            url.to_owned(),
+            "&".to_owned(),
+            "findstr".to_owned(),
+            "/R".to_owned(),
+            ".".to_owned(),
+            ">".to_owned(),
+            file,
+        ]
+    }
+}
+
+/// Агентский токен MCP доходит до процесса второй строкой stdin, а в командной
+/// строке (видна всем пользователям системы) нет ни его, ни основного токена.
+#[test]
+fn agent_token_reaches_the_core_as_the_second_stdin_line() {
+    let main = "M".repeat(43);
+    let agent = "G".repeat(43);
+    let dir = temp_data_dir("agent-token");
+    std::fs::create_dir_all(&dir).unwrap();
+    let recorded = dir.join("stdin.txt");
+
+    let mut driver = test_driver();
+    let mut config = fake_config("agent-token", record_stdin_argv(FAKE_URL, &recorded));
+    config.auth_token = SecretToken::from_base64url(main.clone()).unwrap();
+    config.agent_token = Some(SecretToken::from_base64url(agent.clone()).unwrap());
+
+    driver.spawn(&config).unwrap();
+    driver.wait_ready(WAIT_READY).unwrap();
+    // EOF на stdin: фейк дописывает файл и выходит сам
+    driver.kill(KILL_BUDGET).unwrap();
+
+    let text = std::fs::read_to_string(&recorded).expect("фейк записал stdin");
+    let lines: Vec<&str> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .collect();
+    assert_eq!(lines, [main.as_str(), agent.as_str()], "stdin: {text:?}");
+
+    let argv = lavray_shell::coreproc::driver::spawn_args(&config).join(" ");
+    assert!(!argv.contains(&main) && !argv.contains(&agent));
     cleanup(&config);
 }
 

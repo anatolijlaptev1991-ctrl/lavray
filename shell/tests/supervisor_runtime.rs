@@ -60,6 +60,7 @@ fn a_core_dying_right_after_ready_is_restarted_only_twice() {
                 listen_socket: PathBuf::from("127.0.0.1:0"),
                 data_dir: data_dir.clone(),
                 auth_token: generate_auth_token().map_err(|e| e.to_string())?,
+                agent_token: None,
                 extra_args: argv.clone(),
             })
         },

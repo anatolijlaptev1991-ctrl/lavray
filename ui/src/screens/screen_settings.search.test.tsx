@@ -12,7 +12,7 @@ import { mountSettings, type SettingsHarness } from '../test-utils/settingsKit';
 vi.mock('../lib/version', () => ({ APP_VERSION: '9.9.9-test' }));
 
 /** Разделы экрана в порядке отображения (после T-35 — без «Поведения» и «Системной интеграции»). */
-const SECTION_IDS = ['general', 'network', 'tun', 'hotkeys', 'appearance', 'backup', 'core', 'about'];
+const SECTION_IDS = ['general', 'network', 'tun', 'hotkeys', 'appearance', 'backup', 'core', 'agents', 'about'];
 
 /** [раздел, ключ подписи строки этого раздела] — запрос берётся из словаря, а не зашит. */
 const ROW_OF_SECTION: readonly (readonly [string, MessageKey])[] = [
@@ -23,6 +23,7 @@ const ROW_OF_SECTION: readonly (readonly [string, MessageKey])[] = [
   ['appearance', 'set.accent'],
   ['backup', 'bk.restore'],
   ['core', 'set.coreVersion'],
+  ['agents', 'agent.mode.l'],
   ['about', 'about.bug'],
 ];
 

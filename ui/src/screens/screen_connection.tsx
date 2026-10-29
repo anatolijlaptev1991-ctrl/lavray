@@ -31,6 +31,7 @@ import {
   restoreModes,
   saveModes,
   saveSelectedProfileId,
+  trackOwnChange,
 } from '../lib/connection';
 import { relaunchElevated, tunNeedsElevation } from '../lib/elevation';
 import { takeRelaunched } from '../lib/launch';
@@ -289,12 +290,15 @@ export function ConnectionScreen(): JSX.Element {
           setTunDialog(true);
           return;
         }
-        await core.core.connect({
-          profileId: active.id,
-          mode: coreModeFor({ sysProxy, tunMode }),
+        // Своё подключение: окно само ставит прокси, «следование за ядром» не вмешивается.
+        await trackOwnChange(async () => {
+          await core.core.connect({
+            profileId: active.id,
+            mode: coreModeFor({ sysProxy, tunMode }),
+          });
+          // Системный прокси — независимо от TUN (оба режима сразу).
+          await applySys(sysProxy);
         });
-        // Системный прокси — независимо от TUN (оба режима сразу).
-        await applySys(sysProxy);
       } else {
         setConnError(t('cx.empty.t'));
       }

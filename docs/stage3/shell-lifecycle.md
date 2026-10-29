@@ -95,7 +95,10 @@ rate-limit ≥3 падения за 60 с; `t_disconnect_rpc` 10 с (LNB-06);
    (THREAT-MODEL §3).
 2. Токен: 32 байта CSPRNG → base64url (fix mt19937, LNB-18); передаётся в
    **stdin** + `\n`; stdin держится открытым (закрытие = смерть родителя,
-   страховка). Токен никогда в argv (ps), логах, событиях.
+   страховка). Токен никогда в argv (ps), логах, событиях. Второй строкой stdin
+   (сразу за основным токеном, необязательно) идёт агентский токен MCP — отдельный
+   токен с правами белого списка `agent.mode`; его оболочка пишет в
+   `agent-endpoint.json` только пока доступ агентов включён (`docs/MCP.md`).
 3. Spawn `lavray-core serve` (cwd = каталог данных, права 0700):
    Windows: `CREATE_NO_WINDOW` + Job Object `KILL_ON_JOB_CLOSE`;
    Unix: `setsid` process group (kill по pgid, не по имени — LNB-09).

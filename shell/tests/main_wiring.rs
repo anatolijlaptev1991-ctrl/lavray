@@ -254,3 +254,57 @@ fn ui_state_file_is_opened_to_the_user_when_an_elevated_process_writes_it() {
         "признак берётся из флага, не из файла"
     );
 }
+
+/// MCP: команды доступа агентов зарегистрированы; каждый запуск ядра получает
+/// свой агентский токен; устаревший файл убирается до запуска ядра, а при выходе
+/// (меню, завершение сеанса Windows) файл удаляется.
+#[test]
+fn agent_access_is_wired_to_the_core_lifecycle() {
+    let main_rs = source("main.rs");
+    for needed in [
+        "            agent_access_set,",
+        "            agent_core_path",
+    ] {
+        assert!(
+            main_rs.contains(needed),
+            "нет в generate_handler!: {needed}"
+        );
+    }
+    let config = main_rs
+        .split("fn core_spawn_config")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("core_spawn_config");
+    assert!(
+        config.contains("agent_token: Some(generate_auth_token()"),
+        "каждый запуск ядра получает новый агентский токен"
+    );
+
+    let stale = main_rs.find("remove_stale()").expect("очистка файла");
+    let supervisor = main_rs
+        .find("spawn_supervisor(core_spawn_config")
+        .expect("надзор");
+    assert!(
+        stale < supervisor,
+        "файл прошлого запуска убирается до ядра"
+    );
+
+    let quit = main_rs
+        .split("fn begin_quit")
+        .nth(1)
+        .and_then(|rest| rest.split("\n}\n").next())
+        .expect("begin_quit");
+    assert!(quit.contains("agent.shutdown()"), "выход убирает файл");
+    let exit = main_rs
+        .split("on_run_event(&event, ||")
+        .nth(1)
+        .expect("Exit");
+    assert!(exit.contains("agent.shutdown()"), "Exit убирает файл");
+
+    for line in main_rs.lines().filter(|l| l.contains("println!")) {
+        assert!(
+            !line.contains("agent_token") && !line.contains("token}"),
+            "токен в журнале: {line}"
+        );
+    }
+}

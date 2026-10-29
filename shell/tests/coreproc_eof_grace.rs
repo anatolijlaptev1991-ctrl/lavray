@@ -45,6 +45,7 @@ fn cleanup_after_eof_core(marker: &Path) -> CoreSpawnConfig {
         listen_socket: PathBuf::from("unused"),
         data_dir: std::env::temp_dir().join(format!("lavray-eof-grace-{}", std::process::id())),
         auth_token: SecretToken::from_base64url("A".repeat(43)).unwrap(),
+        agent_token: None,
         extra_args: args,
     }
 }

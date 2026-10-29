@@ -11,7 +11,9 @@ import { SECTIONS, type Section, type SectionTab } from './app/sections';
 import { CoreContext, useCore, useCoreClients, useCoreStatus } from './hooks/useCore';
 import { ConnectMode, CoreState } from './gen/lavray_pb';
 import { useI18n, useStartupLanguage } from './hooks/useI18n';
+import { useAgentAccessSync } from './hooks/useAgentAccess';
 import { useSystemProxyApplied } from './hooks/useSystemProxy';
+import { useSystemProxyFollow } from './hooks/useSystemProxyFollow';
 import { useTrafficSpeed } from './hooks/useTraffic';
 import { useTrayBridge } from './hooks/useTrayBridge';
 import { applyDocumentLanguage, formatSpeed } from './lib/i18n';
@@ -101,6 +103,10 @@ function AppInner(): JSX.Element {
   const status = useCoreStatus();
   const core = useCore();
   const connOn = status.state === CoreState.CONNECTED;
+  // MCP: окно ставит/снимает системный прокси, когда ядро подключил другой клиент,
+  // и сообщает оболочке режим доступа агентов.
+  useSystemProxyFollow(status);
+  useAgentAccessSync();
 
   const section: Section | undefined = useMemo(
     () => SECTIONS.find((s) => s.id === sectionId) ?? SECTIONS[0],

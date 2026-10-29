@@ -154,11 +154,23 @@ fn write_atomic(
     bytes: &[u8],
     owner_sid: Option<&str>,
 ) -> Result<(), String> {
+    write_atomic_with(dir, name, bytes, |tmp| create_new(tmp, owner_sid))
+}
+
+/// То же с собственным способом создания временного файла: `create` создаёт
+/// новый файл по пути (права, дескриптор безопасности). Файл `agent-endpoint.json`
+/// задаёт так защищённый дескриптор (`agent`).
+pub(crate) fn write_atomic_with(
+    dir: &Path,
+    name: &str,
+    bytes: &[u8],
+    create: impl FnOnce(&Path) -> std::io::Result<File>,
+) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let tmp = temp_path(dir, name)?;
     let target = dir.join(name);
     let result = (|| -> std::io::Result<()> {
-        let mut file = create_new(&tmp, owner_sid)?;
+        let mut file = create(&tmp)?;
         file.write_all(bytes)?;
         file.sync_all()?;
         drop(file); // закрыть до переименования
@@ -174,15 +186,7 @@ fn write_atomic(
 #[cfg(windows)]
 mod acl {
     use std::fs::File;
-    use std::os::windows::ffi::OsStrExt;
-    use std::os::windows::io::FromRawHandle;
     use std::path::Path;
-    use windows_sys::Win32::Foundation::{LocalFree, GENERIC_WRITE, INVALID_HANDLE_VALUE};
-    use windows_sys::Win32::Security::Authorization::{
-        ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
-    };
-    use windows_sys::Win32::Security::SECURITY_ATTRIBUTES;
-    use windows_sys::Win32::Storage::FileSystem::{CreateFileW, CREATE_NEW, FILE_ATTRIBUTE_NORMAL};
 
     /// SDDL файла: полный доступ пользователю, администраторам и SYSTEM.
     /// Унаследованные от каталога записи добавляются к явным.
@@ -192,52 +196,7 @@ mod acl {
 
     /// Создать новый файл (`CREATE_NEW`) с явной защитой из [`sddl`].
     pub fn create_new_for_user(path: &Path, sid: &str) -> std::io::Result<File> {
-        let descriptor: Vec<u16> = sddl(sid).encode_utf16().chain(std::iter::once(0)).collect();
-        let mut security: *mut core::ffi::c_void = std::ptr::null_mut();
-        // SAFETY: строка нуль-терминирована, `security` получает дескриптор,
-        // выделенный системой (освобождается `LocalFree` ниже).
-        let converted = unsafe {
-            ConvertStringSecurityDescriptorToSecurityDescriptorW(
-                descriptor.as_ptr(),
-                SDDL_REVISION_1,
-                &mut security,
-                std::ptr::null_mut(),
-            )
-        };
-        if converted == 0 {
-            return Err(std::io::Error::last_os_error());
-        }
-        let attributes = SECURITY_ATTRIBUTES {
-            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
-            lpSecurityDescriptor: security,
-            bInheritHandle: 0,
-        };
-        let wide: Vec<u16> = path
-            .as_os_str()
-            .encode_wide()
-            .chain(std::iter::once(0))
-            .collect();
-        // SAFETY: путь нуль-терминирован, атрибуты и дескриптор живут до
-        // конца вызова; без общего доступа, пока идёт запись.
-        let handle = unsafe {
-            CreateFileW(
-                wide.as_ptr(),
-                GENERIC_WRITE,
-                0,
-                &attributes,
-                CREATE_NEW,
-                FILE_ATTRIBUTE_NORMAL,
-                std::ptr::null_mut(),
-            )
-        };
-        let error = std::io::Error::last_os_error();
-        // SAFETY: дескриптор выделен системой и больше не нужен.
-        unsafe { LocalFree(security) };
-        if handle == INVALID_HANDLE_VALUE {
-            return Err(error);
-        }
-        // SAFETY: хэндл только что открыт и принадлежит `File`.
-        Ok(unsafe { File::from_raw_handle(handle) })
+        crate::private_file::create_new_with_sddl(path, &sddl(sid))
     }
 }
 

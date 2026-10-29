@@ -36,6 +36,10 @@ type Deps struct {
 	Logs   *logs.Mux    // nil → свой на 1000 строк
 	Runner inst.Runner  // nil → inst.NopRunner (сборка без singbox_run)
 	HTTP   *http.Client // клиент подписок (туннель sub_use_proxy соберёт cmd; nil → дефолт)
+	// TunCheck — проверка прав на TUN перед стартом в режиме TUN: ошибка
+	// возвращается клиенту как есть (cmd подставляет проверку повышения на
+	// Windows; nil — не проверять).
+	TunCheck func() error
 }
 
 // Server — реализация сервисов W6. Один экземпляр на процесс; горутинно-
@@ -86,6 +90,13 @@ type Server struct {
 
 	// ---- обновления: доступ к общему клиенту сериализуется ----
 	updMu sync.Mutex
+
+	// ---- агентский доступ (MCP): токен этого запуска, режим — agent.mode ----
+	agentMu    sync.RWMutex
+	agentToken string
+
+	// tunCheck — проверка прав на TUN перед стартом (nil — не проверять).
+	tunCheck func() error
 }
 
 // NewServer создаёт сервер зависимостями (Deps.Store обязателен).
@@ -117,6 +128,7 @@ func NewServer(d Deps) *Server {
 		ipProbeURL:  "https://1.1.1.1/",
 		dial:        (&net.Dialer{}).DialContext,
 		appVersion:  version.Version,
+		tunCheck:    d.TunCheck,
 		subsRunning: map[int64]bool{},
 		subsSnap:    map[int64]*subs.Snapshot{},
 		setSubs:     map[chan *lavrayv1.SettingsChanged]struct{}{},
@@ -126,7 +138,7 @@ func NewServer(d Deps) *Server {
 // HandlerOptions — опции всех хендлеров (интерсептор recover+map).
 func (s *Server) HandlerOptions() []connect.HandlerOption {
 	return []connect.HandlerOption{
-		connect.WithInterceptors(newInterceptor(s.logs)),
+		connect.WithInterceptors(newInterceptor(s.logs, s.AgentMode)),
 		connect.WithReadMaxBytes(MaxRequestBytes), // T-50: лимит тела запроса
 	}
 }

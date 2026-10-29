@@ -155,7 +155,7 @@ type statsSvc struct{ *Server }
 
 func (s statsSvc) Subscribe(ctx context.Context, req *connect.Request[lavrayv1.SubscribeStatsRequest], stream *connect.ServerStream[lavrayv1.StatsSnapshot]) error {
 	if s.traffic == nil {
-		return failedPrecondition("источник статистики не сконфигурирован (clash-api — W8)")
+		return failedPrecondition("статистика трафика пока недоступна в этой версии LAVRay")
 	}
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()

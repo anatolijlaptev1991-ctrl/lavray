@@ -265,6 +265,10 @@ pub struct CoreSpawnConfig {
     /// Передаётся ТОЛЬКО в stdin ядра + `\n`; НИКОГДА в argv/env/логи/события
     /// (LNB-18) — обёртка [`SecretToken`] редактирует Debug/Display.
     pub auth_token: SecretToken,
+    /// Агентский токен MCP (доступ ИИ-агентов к ядру). Передаётся так же, как
+    /// основной: второй строкой stdin сразу за ним; в argv и env его нет.
+    /// `None` — ядро агентский доступ не получает.
+    pub agent_token: Option<SecretToken>,
     /// Дополнительный argv. Пусто — стандартный набор §3.3
     /// `serve --listen-socket <listen_socket>`; непустое значение ПОЛНОСТЬЮ
     /// заменяет argv (будущие режимы `--config` §8.1 / `--port 0` §3.1 и
@@ -889,6 +893,7 @@ mod tests {
             listen_socket: PathBuf::from("/tmp/lavray-XXXX/ctrl.sock"),
             data_dir: PathBuf::from("/tmp/lavray-data"),
             auth_token: SecretToken::from_base64url("A".repeat(AUTH_TOKEN_B64_LEN)).unwrap(),
+            agent_token: None,
             extra_args: Vec::new(),
         }
     }

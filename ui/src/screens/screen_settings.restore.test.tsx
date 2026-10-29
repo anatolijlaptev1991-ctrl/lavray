@@ -118,4 +118,20 @@ describe('U-02: восстановление из резервной копии'
     expect(h.setSettings).not.toHaveBeenCalled();
     expect(document.querySelector('[role="alert"]')?.textContent).toBe(t('bk.restoreEmpty'));
   });
+
+  it('доступ агентов (MCP) из файла не включается: agent.mode при восстановлении пропускается', async () => {
+    const withAgents = [...DESCRIPTORS, desc('agent.mode', SettingType.STRING)];
+    h = await mountSettings({ 'inbound.port': 2080 }, '9.9.9-core', withAgents);
+    await chooseFile(h, JSON.stringify({ 'inbound.port': 3000, 'agent.mode': 'control' }));
+    expect(dialog()?.textContent ?? '').toContain(tf('bk.restoreConfirm', { n: 1 }));
+    clickButton(dialogButton(t('bk.restoreOk')));
+    await flush();
+    const sent = h.setSettings.mock.calls[0]?.[0].values ?? {};
+    expect(Object.keys(sent)).toEqual(['inbound.port']);
+
+    // файл только с режимом агентов — как пустой
+    await chooseFile(h, JSON.stringify({ 'agent.mode': 'control' }));
+    expect(dialog()).toBeNull();
+    expect(h.setSettings).toHaveBeenCalledTimes(1);
+  });
 });

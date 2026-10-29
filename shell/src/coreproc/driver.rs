@@ -33,8 +33,8 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use super::logs::{FloodGate, LogLine, LogRing};
 use super::{
-    CoreEndpoint, CoreProcess, CoreProcessError, CoreSpawnConfig, SecretToken, AUTH_TOKEN_BYTES,
-    T_EOF_GRACE, T_KILL_GRACE, T_SIGTERM_WAIT,
+    CoreEndpoint, CoreProcess, CoreProcessError, CoreSpawnConfig, SecretToken, AUTH_TOKEN_B64_LEN,
+    AUTH_TOKEN_BYTES, T_EOF_GRACE, T_KILL_GRACE, T_SIGTERM_WAIT,
 };
 
 /// Префикс ready-строки ядра (§3.4): `LAVRAY_CORE_READY <transport-url>`.
@@ -330,13 +330,12 @@ impl CoreProcess for RealCoreProcess {
             CoreProcessError::Spawn(format!("{}: {err}", config.binary.display()))
         })?;
 
-        // §3.2: токен → stdin + '\n'. stdin НЕ закрываем (EOF = смерть
-        // оболочки — страховка для ядра, §3.2/§5).
+        // §3.2: токен → stdin + перевод строки; второй строкой — агентский токен MCP
+        // (если есть). stdin НЕ закрываем (EOF = смерть оболочки — страховка
+        // для ядра, §3.2/§5).
         if let Some(stdin) = child.stdin.as_mut() {
-            let written = stdin
-                .write_all(config.auth_token.expose().as_bytes())
-                .and_then(|()| stdin.write_all(b"\n"))
-                .and_then(|()| stdin.flush());
+            let payload = stdin_payload(config);
+            let written = stdin.write_all(&payload).and_then(|()| stdin.flush());
             if let Err(err) = written {
                 // EPIPE: ядро умерло, не прочитав stdin (падение на старте —
                 // обычный сценарий, не ошибка spawn). Продолжаем: wait_ready
@@ -491,6 +490,19 @@ pub fn spawn_args(config: &CoreSpawnConfig) -> Vec<String> {
     ["serve", "--listen-socket", &listen, "--data", &data]
         .map(str::to_owned)
         .to_vec()
+}
+
+/// Что оболочка пишет в stdin ядра: основной токен и, если есть, агентский —
+/// каждый своей строкой. Одним куском: ядро читает обе строки одним буфером.
+fn stdin_payload(config: &CoreSpawnConfig) -> Vec<u8> {
+    let mut payload = Vec::with_capacity(2 * (AUTH_TOKEN_B64_LEN + 1));
+    payload.extend_from_slice(config.auth_token.expose().as_bytes());
+    payload.push(b'\n');
+    if let Some(agent) = &config.agent_token {
+        payload.extend_from_slice(agent.expose().as_bytes());
+        payload.push(b'\n');
+    }
+    payload
 }
 
 /// Исход ожидания ready (внутренний, чтобы обойти заимствования `running`).
@@ -946,6 +958,7 @@ mod tests {
             listen_socket: std::path::PathBuf::from("127.0.0.1:0"),
             data_dir: std::path::PathBuf::from("data-dir"),
             auth_token: SecretToken::from_base64url("A".repeat(43)).unwrap(),
+            agent_token: None,
             extra_args: vec![],
         };
         let expected = [
@@ -958,6 +971,39 @@ mod tests {
         assert_eq!(spawn_args(&config), expected);
         config.extra_args = vec!["-c".to_owned()];
         assert_eq!(spawn_args(&config), ["-c"]);
+    }
+
+    /// Оба токена идут в stdin отдельными строками (основной первым) и не
+    /// попадают в командную строку процесса, где их видят все пользователи
+    /// системы.
+    #[test]
+    fn tokens_go_to_stdin_and_never_to_argv() {
+        let main = "M".repeat(43);
+        let agent = "G".repeat(43);
+        let mut config = CoreSpawnConfig {
+            binary: std::path::PathBuf::from("lavray-core"),
+            listen_socket: std::path::PathBuf::from("127.0.0.1:0"),
+            data_dir: std::path::PathBuf::from("data-dir"),
+            auth_token: SecretToken::from_base64url(main.clone()).unwrap(),
+            agent_token: Some(SecretToken::from_base64url(agent.clone()).unwrap()),
+            extra_args: vec![],
+        };
+        assert_eq!(
+            String::from_utf8(stdin_payload(&config)).unwrap(),
+            format!("{main}\n{agent}\n")
+        );
+        let argv = spawn_args(&config).join(" ");
+        assert!(!argv.contains(&main) && !argv.contains(&agent), "{argv}");
+        // без агентского токена — одна строка, как было до MCP
+        config.agent_token = None;
+        assert_eq!(
+            String::from_utf8(stdin_payload(&config)).unwrap(),
+            format!("{main}\n")
+        );
+        assert!(
+            !format!("{config:?}").contains(&agent),
+            "Debug редактирован"
+        );
     }
 
     /// Драйвер без процесса: kill идемпотентен, wait_ready — NotRunning.

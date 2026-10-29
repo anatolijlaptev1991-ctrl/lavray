@@ -123,6 +123,11 @@ pub trait SupervisorHost {
     fn spawn_failed(&self, reason: &str);
     /// Любой сбой: причина и хвост кольца логов ядра для диагностики (T-56).
     fn failure(&self, failure: &Failure);
+    /// Ядро запущено, и у него есть агентский токен (MCP): адрес и токен этого
+    /// запуска. Основной токен ядра сюда не приходит.
+    fn agent_core_up(&self, _url: &str, _agent_token: &str) {}
+    /// Ядра больше нет (умерло, остановлено, выход): агентский токен недействителен.
+    fn agent_core_down(&self) {}
 }
 
 /// Адаптер `coreproc::runner::Observer` к оболочке: публикует адрес и токен
@@ -135,6 +140,8 @@ pub struct HostObserver<H: SupervisorHost> {
     /// Ядро только что умерло: ближайший сбой — сообщение о смерти, а не об
     /// ошибке запуска.
     death_pending: bool,
+    /// Агентский токен запуска, который сейчас поднимается (MCP).
+    agent_token: Option<String>,
 }
 
 impl<H: SupervisorHost> HostObserver<H> {
@@ -144,6 +151,7 @@ impl<H: SupervisorHost> HostObserver<H> {
             host,
             up: false,
             death_pending: false,
+            agent_token: None,
         }
     }
 }
@@ -158,10 +166,12 @@ impl<H: SupervisorHost> Observer for HostObserver<H> {
             CoreState::Stopping => {
                 self.up = false;
                 self.hub.clear();
+                self.host.agent_core_down();
             }
             CoreState::Stopped => {
                 self.up = false;
                 self.hub.close();
+                self.host.agent_core_down();
             }
             // Ядро было готово и перестало: убрать адрес, сообщить UI и
             // вернуть прокси ДО запуска нового ядра.
@@ -169,10 +179,17 @@ impl<H: SupervisorHost> Observer for HostObserver<H> {
                 if std::mem::take(&mut self.up) {
                     self.death_pending = true;
                     self.hub.clear();
+                    // Агентский токен умершего ядра недействителен: файл с ним
+                    // убирается до запуска нового ядра.
+                    self.host.agent_core_down();
                     self.host.core_down(REASON_CORE_DIED);
                 }
             }
         }
+    }
+
+    fn on_agent_token(&mut self, token: &SecretToken) {
+        self.agent_token = Some(token.expose().to_owned());
     }
 
     fn on_ready(&mut self, endpoint: &CoreEndpoint, token: &SecretToken) {
@@ -182,6 +199,9 @@ impl<H: SupervisorHost> Observer for HostObserver<H> {
         self.up = true;
         self.death_pending = false;
         self.host.core_up(&event);
+        if let Some(agent) = self.agent_token.take() {
+            self.host.agent_core_up(&event.url, &agent);
+        }
     }
 
     fn on_failure(&mut self, failure: &Failure) {
@@ -197,6 +217,7 @@ impl<H: SupervisorHost> Drop for HostObserver<H> {
     /// ожидающие `core_endpoint` получают `None`.
     fn drop(&mut self) {
         self.hub.close();
+        self.host.agent_core_down();
     }
 }
 
@@ -218,6 +239,8 @@ mod tests {
         log: Vec<String>,
         failures: Vec<Failure>,
         states: Vec<CoreState>,
+        /// События агентского доступа: «up адрес токен» и «down».
+        agent: Vec<String>,
     }
 
     /// Окружение, записывающее действия адаптера.
@@ -246,6 +269,15 @@ mod tests {
 
         fn failure(&self, failure: &Failure) {
             self.0.borrow_mut().failures.push(failure.clone());
+        }
+
+        fn agent_core_up(&self, url: &str, agent_token: &str) {
+            let line = format!("up {url} {agent_token}");
+            self.0.borrow_mut().agent.push(line);
+        }
+
+        fn agent_core_down(&self) {
+            self.0.borrow_mut().agent.push("down".to_owned());
         }
     }
 
@@ -293,6 +325,7 @@ mod tests {
                 listen_socket: PathBuf::from("127.0.0.1:0"),
                 data_dir: PathBuf::from("data"),
                 auth_token: SecretToken::from_base64url(token(calls)).unwrap(),
+                agent_token: Some(SecretToken::from_base64url(agent_token(calls)).unwrap()),
                 extra_args: Vec::new(),
             })
         };
@@ -326,6 +359,10 @@ mod tests {
 
     fn token(n: usize) -> String {
         format!("{n:A>43}")
+    }
+
+    fn agent_token(n: usize) -> String {
+        format!("{n:G>43}")
     }
 
     #[test]
@@ -369,6 +406,39 @@ mod tests {
             out.hub.wait_ready(Duration::from_secs(5)).is_none(),
             "после выхода ожидающие не ждут: хаб закрыт"
         );
+    }
+
+    #[test]
+    fn agent_token_follows_the_core_and_main_token_never_reaches_the_agent_file() {
+        let process = MockCoreProcess {
+            ready_results: vec![
+                endpoint("tcp://127.0.0.1:50001"),
+                endpoint("tcp://127.0.0.1:50002"),
+            ],
+            alive_results: vec![true, true, false],
+            ..MockCoreProcess::default()
+        };
+        let out = simulate(process, |seen| ups(seen) >= 2);
+        // запуск → смерть (файл убирается до нового запуска) → запуск → выход
+        // (Stopping, Stopped и конец надзора убирают файл по разу: повтор безвреден)
+        assert_eq!(
+            out.seen.agent,
+            [
+                format!("up tcp://127.0.0.1:50001 {}", agent_token(1)),
+                "down".to_owned(),
+                format!("up tcp://127.0.0.1:50002 {}", agent_token(2)),
+                "down".to_owned(),
+                "down".to_owned(),
+                "down".to_owned(),
+            ],
+            "у каждого запуска свой агентский токен; на остановке и выходе файл убирается"
+        );
+        for line in &out.seen.agent {
+            assert!(
+                !line.contains(&token(1)) && !line.contains(&token(2)),
+                "основной токен ядра агентам не отдаётся: {line}"
+            );
+        }
     }
 
     #[test]

@@ -28,6 +28,8 @@
 //! - [`profile`] — отдельный каталог данных WebView повышенного экземпляра (T-81);
 //! - [`ui_state`] — общий файл настроек UI `ui-state.json` для обоих профилей
 //!   WebView (T-81);
+//! - [`agent`] — доступ ИИ-агентов (MCP): агентский токен ядра и файл
+//!   `agent-endpoint.json` с защищённым дескриптором (MCP);
 //! - [`msgbox`] — сообщения до появления окна (T-81);
 //! - [`autostart`] — автозапуск с системой: задача планировщика или `Run`
 //!   в реестре, команды — через внедряемый исполнитель (T-82);
@@ -40,6 +42,7 @@
 //! §3.2; CoreService.Disconnect/Shutdown для лестницы §5) — будущий
 //! `src/ipc.rs` по дереву §10, реализация при врезке реального ядра.
 
+pub mod agent;
 pub mod autostart;
 pub mod coreproc;
 pub mod elevation;
@@ -49,6 +52,7 @@ pub mod launch;
 pub mod msgbox;
 #[cfg(windows)]
 mod oemtext;
+mod private_file;
 pub mod profile;
 pub mod single_instance;
 pub mod sysproxy;

@@ -13,6 +13,7 @@ import {
 } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
+import { useTunBlocked } from '../hooks/useTunBlocked';
 import { useI18n } from '../hooks/useI18n';
 import { showCoreError } from '../lib/core';
 import {
@@ -27,6 +28,7 @@ import {
   saveSelectedProfileId,
 } from '../lib/connection';
 import { ConnRight } from '../components/ConnRight';
+import { TunAdminNotice } from '../components/TunAdminNotice';
 import { ImportDialog } from '../components/ImportDialog';
 import { ProfileMenu } from '../components/ProfileMenu';
 import type { ProfileMenuAnchor } from '../components/ProfileMenu';
@@ -70,6 +72,8 @@ export function ConnectionScreen(): JSX.Element {
 
   const ready = status.state === CoreState.CONNECTED;
   const connecting = status.state === CoreState.CONNECTING;
+  // T-46: TUN выбран, а прав администратора нет — подключаться бессмысленно.
+  const tunBlocked = useTunBlocked(tunMode);
 
   // Список подписок нужен для быстрого действия «Обновить подписки»:
   // обновление идёт по groupId, а не глобально.
@@ -431,7 +435,7 @@ export function ConnectionScreen(): JSX.Element {
             <button
               className={`btn btn-lg ${ready ? 'btn-danger-solid' : 'btn-pri'}`}
               onClick={() => void toggle()}
-              disabled={busy || connecting}
+              disabled={busy || connecting || (tunBlocked && !ready)}
             >
               <Icon name="plug" />
               {ready ? t('conn.disconnect') : t('conn.connect')}
@@ -473,6 +477,7 @@ export function ConnectionScreen(): JSX.Element {
                 </div>
               </div>
               <p className="hint">{t('mode.both.hint')}</p>
+              {tunBlocked && <TunAdminNotice />}
             </div>
 
             <dl className="cx-meta">

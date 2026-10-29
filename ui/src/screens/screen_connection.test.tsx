@@ -360,6 +360,8 @@ describe('режимы на экране «Подключение» (T-27)', () 
 
     expect(stored()).toEqual({ sysProxy: false, tunMode: true });
     expect(lifecycle(core)).toEqual([]);
-    expect(invokeMock).not.toHaveBeenCalled();
+    // T-46: выбранный TUN в оболочке спрашивает права (`is_elevated`, только чтение).
+    // Команд, меняющих систему (прокси и т.п.), по-прежнему не уходит.
+    expect(invokeMock.mock.calls.filter(([cmd]) => cmd !== 'is_elevated')).toEqual([]);
   });
 });

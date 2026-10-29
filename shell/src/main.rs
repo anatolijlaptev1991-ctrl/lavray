@@ -9,6 +9,7 @@
 
 use lavray_shell::coreproc::driver::{generate_auth_token, RealCoreProcess};
 use lavray_shell::coreproc::{CoreProcess, CoreSpawnConfig, CoreState, SecretToken};
+use lavray_shell::elevation::is_elevated as process_is_elevated;
 use lavray_shell::endpoint::{
     run_supervisor, EndpointEvent, EndpointHub, SupervisorHost, CORE_ENDPOINT_EVENT, ENDPOINT_WAIT,
 };
@@ -54,6 +55,13 @@ impl Drop for CoreStopped {
         s.core_alive = false;
         s.core_stopped = true;
     }
+}
+
+/// is_elevated — запущено ли приложение с правами администратора/root (T-46):
+/// UI проверяет это до подключения в режиме TUN.
+#[tauri::command]
+fn is_elevated() -> bool {
+    process_is_elevated()
 }
 
 /// Адрес ConnectRPC-ядра для UI (вызывается фронтендом при старте).
@@ -414,6 +422,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             protocol_version,
+            is_elevated,
             core_state,
             core_endpoint,
             shell_error,

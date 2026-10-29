@@ -377,6 +377,7 @@ export const deDict: Record<string, string> = {
   "mode.title": "Modus",
   "mode.tun": "TUN — gesamter Datenverkehr",
   "mode.tun.hint": "Der gesamte Datenverkehr dieses Computers, auch Spiele und Konsolenwerkzeuge. Braucht einen Systemdienst.",
+  "mode.tun.needAdmin": "Für TUN starte LAVRay als Administrator",
   "nav.connection": "Verbindung",
   "nav.diag": "Diagnose",
   "nav.log": "Protokoll",

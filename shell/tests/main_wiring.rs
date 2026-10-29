@@ -36,3 +36,14 @@ fn quit_does_not_block_and_the_window_is_restored() {
     assert!(source("tray_ui.rs").contains("unminimize()"));
     assert!(main_rs.contains("tray_ui::show_main_window(app)"));
 }
+
+/// F-042: UI спрашивает оболочку о правах до подключения в режиме TUN.
+#[test]
+fn elevation_command_is_registered_for_the_ui() {
+    let main_rs = source("main.rs");
+    assert!(main_rs.contains("fn is_elevated"));
+    assert!(
+        main_rs.contains("            is_elevated,"),
+        "нет в generate_handler!"
+    );
+}

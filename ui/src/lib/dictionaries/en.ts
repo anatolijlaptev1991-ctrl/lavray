@@ -377,6 +377,7 @@ export const enDict: Record<string, string> = {
   "mode.title": "Mode",
   "mode.tun": "TUN — all traffic",
   "mode.tun.hint": "All traffic of this computer, including games and command-line tools. Needs a system service.",
+  "mode.tun.needAdmin": "To use TUN, run LAVRay as administrator",
   "nav.connection": "Connection",
   "nav.diag": "Diagnostics",
   "nav.log": "Log",

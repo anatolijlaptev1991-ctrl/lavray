@@ -377,6 +377,7 @@ export const ruDict: Record<string, string> = {
   "mode.title": "Режим",
   "mode.tun": "TUN — весь трафик",
   "mode.tun.hint": "Весь трафик компьютера, включая игры и консольные утилиты. Нужна системная служба.",
+  "mode.tun.needAdmin": "Для TUN запустите LAVRay от имени администратора",
   "nav.connection": "Подключение",
   "nav.diag": "Диагностика",
   "nav.log": "Журнал",

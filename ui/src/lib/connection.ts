@@ -4,6 +4,7 @@
 // оба могут быть включены одновременно.
 import type { CoreClients } from './core';
 import { ConnectMode } from '../gen/lavray_pb';
+import { tunNeedsElevation } from './elevation';
 import type { Profile } from '../gen/lavray_pb';
 
 export interface ModePreferences {
@@ -222,6 +223,9 @@ export async function toggleConnection(args: {
     await disconnectAll(args.core);
     return true;
   }
+  // T-46: TUN без прав администратора не поднимется — не пытаемся; экран
+  // «Подключение» (туда переходит вызывающий) объясняет, что делать.
+  if (loadModes(window.localStorage).tunMode && (await tunNeedsElevation())) return false;
   const list = await args.core.profiles.listProfiles({});
   const chosen = chooseProfile(list.profiles, loadSelectedProfileId(window.localStorage));
   if (chosen === undefined) return false;

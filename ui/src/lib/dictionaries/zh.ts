@@ -377,6 +377,7 @@ export const zhDict: Record<string, string> = {
   "mode.title": "模式",
   "mode.tun": "TUN — 全部流量",
   "mode.tun.hint": "整台电脑的全部流量，包括游戏和命令行工具。需要系统服务。",
+  "mode.tun.needAdmin": "使用 TUN 需要以管理员身份运行 LAVRay",
   "nav.connection": "连接",
   "nav.diag": "诊断",
   "nav.log": "日志",

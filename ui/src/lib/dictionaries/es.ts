@@ -377,6 +377,7 @@ export const esDict: Record<string, string> = {
   "mode.title": "Modo",
   "mode.tun": "TUN — todo el tráfico",
   "mode.tun.hint": "Todo el tráfico del equipo, incluidos juegos y herramientas de consola. Requiere un servicio del sistema.",
+  "mode.tun.needAdmin": "Para usar TUN, ejecuta LAVRay como administrador",
   "nav.connection": "Conexión",
   "nav.diag": "Diagnóstico",
   "nav.log": "Registro",

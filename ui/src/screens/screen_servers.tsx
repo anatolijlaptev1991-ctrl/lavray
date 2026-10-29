@@ -4,9 +4,9 @@
 // выделение, тест задержки с прогрессом, гео-группировка.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
-import { ProfileType, TestLatencyRequest_Mode } from '../gen/lavray_pb';
+import { CoreState, Group_Kind, ProfileType, TestLatencyRequest_Mode } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
-import { useCore, useProfiles } from '../hooks/useCore';
+import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useKbdLabel } from '../hooks/useKbdLabel';
 import { showCoreError } from '../lib/core';
@@ -20,19 +20,40 @@ import type { MenuAnchor } from '../components/ContextMenu';
 import { ConfirmDialog, GroupsDialog } from '../components/dialogs';
 import { Icon } from '../components/Icon';
 
-const TYPE_LABEL: Record<number, string> = {
-  [ProfileType.SOCKS]: 'SOCKS',
-  [ProfileType.HTTP]: 'HTTP',
-  [ProfileType.SHADOWSOCKS]: 'SS',
-  [ProfileType.TROJAN]: 'Trojan',
-  [ProfileType.VMESS]: 'VMess',
-  [ProfileType.VLESS]: 'VLESS',
-  [ProfileType.HYSTERIA2]: 'Hy2',
-  [ProfileType.TUIC]: 'TUIC',
-  [ProfileType.CHAIN]: 'Chain',
-  [ProfileType.CUSTOM_OUTBOUND]: 'Custom',
-  [ProfileType.CUSTOM_CONFIG]: 'Config',
+/** Бейдж типа (прототип .badge.bt-*, нейтральный: цвет — только у статусов). */
+interface TypeInfo {
+  readonly cls: string;
+  readonly label?: string;
+  readonly labelKey?: MessageKey;
+}
+
+const TYPE_INFO: Record<number, TypeInfo> = {
+  [ProfileType.SOCKS]: { cls: 'socks', label: 'SOCKS5' },
+  [ProfileType.HTTP]: { cls: 'https', label: 'HTTPS' },
+  [ProfileType.SHADOWSOCKS]: { cls: 'ss', label: 'Shadowsocks' },
+  [ProfileType.TROJAN]: { cls: 'trojan', label: 'Trojan' },
+  [ProfileType.VMESS]: { cls: 'vmess', label: 'VMess' },
+  [ProfileType.VLESS]: { cls: 'vless', label: 'VLESS' },
+  [ProfileType.HYSTERIA2]: { cls: 'hy2', label: 'Hysteria2' },
+  [ProfileType.TUIC]: { cls: 'tuic', label: 'TUIC' },
+  [ProfileType.CHAIN]: { cls: 'chain', labelKey: 'ed.t.chain' },
+  [ProfileType.CUSTOM_OUTBOUND]: { cls: 'json', labelKey: 'ed.t.json' },
+  [ProfileType.CUSTOM_CONFIG]: { cls: 'json', labelKey: 'ed.t.json' },
 };
+
+function typeBadge(type: ProfileType, t: (key: MessageKey) => string): { cls: string; label: string } {
+  const info = TYPE_INFO[type];
+  if (info === undefined) return { cls: 'unknown', label: '?' };
+  return { cls: info.cls, label: info.labelKey === undefined ? (info.label ?? '?') : t(info.labelKey) };
+}
+
+/** Значение фильтра «Добавлены вручную»: серверы групп, не являющихся подписками. */
+const MANUAL_FILTER = 'manual';
+
+/** Числовой id группы из значения фильтра; null для 'all' и 'manual'. */
+function numericGroupId(filter: string): bigint | null {
+  return /^\d+$/.test(filter) ? BigInt(filter) : null;
+}
 
 const PROTO_OPTIONS: readonly { value: string; label: string }[] = [
   { value: 'all', label: '' },
@@ -60,9 +81,10 @@ export function ServersScreen(): JSX.Element {
   const { t, tf, plural, lang } = useI18n();
   const kbd = useKbdLabel();
   const core = useCore();
+  const status = useCoreStatus();
   const [search, setSearch] = useState('');
   const { profiles: allProfiles, total: allTotal, refresh } = useProfiles(search);
-  const [groups, setGroups] = useState<{ id: bigint; name: string }[]>([]);
+  const [groups, setGroups] = useState<{ id: bigint; name: string; kind: Group_Kind }[]>([]);
   const [targetGroup, setTargetGroup] = useState('');
   const [groupFilter, setGroupFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
@@ -75,6 +97,8 @@ export function ServersScreen(): JSX.Element {
   const [testMenu, setTestMenu] = useState<MenuAnchor | null>(null);
   // Меню строки профиля (прототип profileMenu): копировать ссылку, тест, удалить.
   const [rowMenu, setRowMenu] = useState<(MenuAnchor & { profile: Profile }) | null>(null);
+  // Меню «Переместить в группу…» полосы выделения (прототип #selMove): общий ContextMenu (T-39).
+  const [moveMenu, setMoveMenu] = useState<MenuAnchor | null>(null);
   const [compact, setCompact] = useState(false);
   const [groupBySub, setGroupBySub] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -97,7 +121,7 @@ export function ServersScreen(): JSX.Element {
     void (async (): Promise<void> => {
       try {
         const res = await core.profiles.listGroups({});
-        const list = res.groups.map((g) => ({ id: g.id, name: g.name }));
+        const list = res.groups.map((g) => ({ id: g.id, name: g.name, kind: g.kind }));
         setGroups(list);
         setTargetGroup((cur) => {
           if (cur !== '') return cur;
@@ -110,9 +134,19 @@ export function ServersScreen(): JSX.Element {
     })();
   }, [core, t]);
 
+  // Подписочные группы; все остальные серверы считаются добавленными вручную.
+  const subscriptionIds = useMemo(
+    () => new Set(groups.filter((g) => g.kind === Group_Kind.SUBSCRIPTION).map((g) => String(g.id))),
+    [groups],
+  );
+
   const profiles = useMemo(() => {
     let list = allProfiles;
-    if (groupFilter !== 'all') list = list.filter((p) => String(p.groupId) === groupFilter);
+    if (groupFilter === MANUAL_FILTER) {
+      list = list.filter((p) => !subscriptionIds.has(String(p.groupId)));
+    } else if (groupFilter !== 'all') {
+      list = list.filter((p) => String(p.groupId) === groupFilter);
+    }
     if (protoFilter !== 'all') list = list.filter((p) => String(p.type) === protoFilter);
     if (statusFilter === 'fav') list = list.filter((p) => p.favorite);
     if (statusFilter === 'fast') {
@@ -139,13 +173,29 @@ export function ServersScreen(): JSX.Element {
       sorted.sort((a, b) => dir * a.name.localeCompare(b.name, lang));
     }
     return sorted;
-  }, [allProfiles, groupFilter, protoFilter, statusFilter, sortKey, sortAsc, lang]);
+  }, [allProfiles, groupFilter, subscriptionIds, protoFilter, statusFilter, sortKey, sortAsc, lang]);
+
+  // Группа для «Добавить/Импорт»: открытая вкладка/фильтр с конкретной
+  // группой, иначе первая группа списка (для 'all' и 'manual').
+  const activeGroupId = useMemo(
+    () => numericGroupId(groupFilter) ?? BigInt(targetGroup === '' ? '0' : targetGroup),
+    [groupFilter, targetGroup],
+  );
+
+  // Активный сервер для бейджа «Активен» (прототип: точка зелёная при
+  // подключении, жёлтая при установке соединения).
+  const live =
+    status.state === CoreState.CONNECTED ||
+    status.state === CoreState.CONNECTING ||
+    status.state === CoreState.RECONNECTING;
+  const activeId = live ? (status.activeProfileId ?? 0n) : 0n;
+  const activeDot = status.state === CoreState.CONNECTED ? 'ok' : 'warn';
 
   // Группа для импорта: вкладка/фильтр, иначе первая группа списка. «0» (пункт
   // «Добавлены вручную») и ещё не загруженный список групп — это «группы нет»:
   // ничего не передаём, ядро кладёт профили в «Default» (T-07).
   const importGroupId = ((): bigint | undefined => {
-    const raw = groupFilter !== 'all' ? groupFilter : targetGroup;
+    const raw = numericGroupId(groupFilter) !== null ? groupFilter : targetGroup;
     return raw === '' || raw === '0' ? undefined : BigInt(raw);
   })();
 
@@ -239,6 +289,28 @@ export function ServersScreen(): JSX.Element {
     [core, refresh, t],
   );
 
+  /** MoveProfiles: выделенные серверы → выбранная группа (прототип #selMove). */
+  const moveSelected = useCallback(
+    async (targetGroupId: bigint): Promise<void> => {
+      const ids = [...selected].map((s) => BigInt(s));
+      if (ids.length === 0) return;
+      setErr('');
+      try {
+        await core.profiles.moveProfiles({ ids, targetGroupId });
+        setSelected(new Set());
+        refresh();
+      } catch (e) {
+        setErr(showCoreError(e, t));
+      }
+    },
+    [core, selected, refresh, t],
+  );
+
+  // Меню «Переместить» закрывается, когда выделение снято (клик снаружи — в ContextMenu).
+  useEffect(() => {
+    if (selected.size === 0) setMoveMenu(null);
+  }, [selected]);
+
   const toggleFav = useCallback(
     async (p: Profile): Promise<void> => {
       try {
@@ -311,9 +383,11 @@ export function ServersScreen(): JSX.Element {
       onRowMenu: (anchor: MenuAnchor): void => {
         setRowMenu((cur) => (cur?.profile.id === p.id ? null : { ...anchor, profile: p }));
       },
-      typeLabel: TYPE_LABEL[p.type] ?? '?',
+      badge: typeBadge(p.type, t),
+      active: activeId !== 0n && p.id === activeId,
+      activeDot,
     }),
-    [compact, selected, latency, rowMenu, toggleSelect, toggleFav],
+    [compact, selected, latency, rowMenu, toggleSelect, toggleFav, t, activeId, activeDot],
   );
 
   return (
@@ -337,11 +411,12 @@ export function ServersScreen(): JSX.Element {
               className={`srv-gtab${groupFilter === String(g.id) ? ' on' : ''}`}
               role="tab"
               aria-selected={groupFilter === String(g.id)}
+              title={g.name}
               onClick={() => {
                 setGroupFilter(String(g.id));
               }}
             >
-              {g.name}
+              <span className="srv-gtab-name">{g.name}</span>
             </button>
           ))}
           <button
@@ -391,45 +466,49 @@ export function ServersScreen(): JSX.Element {
           ))}
         </div>
 
-        <label className="cap" htmlFor="protoSel">
-          {t('filter.proto')}
-        </label>
-        <select
-          className="select"
-          id="protoSel"
-          value={protoFilter}
-          onChange={(e) => {
-            setProtoFilter(e.target.value);
-          }}
-        >
-          {PROTO_OPTIONS.map((o) => (
-            <option key={o.value} value={o.value}>
-              {o.value === 'all' ? t('filter.protoAny') : o.label}
-            </option>
-          ))}
-        </select>
+        <div className="prof-filter">
+          <label className="cap" htmlFor="protoSel">
+            {t('filter.proto')}
+          </label>
+          <select
+            className="select"
+            id="protoSel"
+            value={protoFilter}
+            onChange={(e) => {
+              setProtoFilter(e.target.value);
+            }}
+          >
+            {PROTO_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.value === 'all' ? t('filter.protoAny') : o.label}
+              </option>
+            ))}
+          </select>
+        </div>
 
         {/* Фильтр по подписке (прототип #subSel): серверов может быть
             несколько сотен из разных подписок. */}
-        <label className="cap" htmlFor="subSel">
-          {t('filter.sub')}
-        </label>
-        <select
-          className="select"
-          id="subSel"
-          value={groupFilter}
-          onChange={(e) => {
-            setGroupFilter(e.target.value);
-          }}
-        >
-          <option value="all">{t('filter.subAny')}</option>
-          <option value="0">{t('srv.manual')}</option>
-          {groups.map((g) => (
-            <option key={String(g.id)} value={String(g.id)}>
-              {g.name}
-            </option>
-          ))}
-        </select>
+        <div className="prof-filter">
+          <label className="cap" htmlFor="subSel">
+            {t('filter.sub')}
+          </label>
+          <select
+            className="select"
+            id="subSel"
+            value={groupFilter}
+            onChange={(e) => {
+              setGroupFilter(e.target.value);
+            }}
+          >
+            <option value="all">{t('filter.subAny')}</option>
+            <option value={MANUAL_FILTER}>{t('srv.manual')}</option>
+            {groups.map((g) => (
+              <option key={String(g.id)} value={String(g.id)}>
+                {g.name}
+              </option>
+            ))}
+          </select>
+        </div>
 
         <button
           className="btn btn-ghost btn-sm"
@@ -539,7 +618,7 @@ export function ServersScreen(): JSX.Element {
         </button>
         <button
           className="btn btn-pri"
-          disabled={targetGroup === '' && groupFilter === 'all'}
+          disabled={targetGroup === '' && numericGroupId(groupFilter) === null}
           onClick={() => {
             setEditing(null);
           }}
@@ -556,32 +635,60 @@ export function ServersScreen(): JSX.Element {
           <Icon name="copy" />
           <span>{t('common.copyLink')}</span>
         </button>
-        {selected.size > 0 && (
-          <>
-            <span className="cap mono">{tf('srv.selected', { n: selected.size })}</span>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() => {
-                setSelected(new Set());
-              }}
-            >
-              {t('srv.selClear')}
-            </button>
-            <button
-              className="btn btn-danger btn-sm"
-              onClick={() => {
-                setConfirmDelete({
-                  ids: [...selected].map((s) => BigInt(s)),
-                  count: selected.size,
-                });
-              }}
-            >
-              <Icon name="trash" />
-              <span>{t('srv.delSel')}</span>
-            </button>
-          </>
-        )}
       </div>
+
+      {/* Полоса выделения (прототип #selBar): проверить, переместить в группу,
+          удалить, снять выделение. */}
+      {selected.size > 0 && (
+        <div className="selbar" role="toolbar" aria-label={tf('srv.selected', { n: selected.size })}>
+          <span className="cap">{tf('srv.selected', { n: selected.size })}</span>
+          <button
+            className="btn btn-sec btn-sm"
+            disabled={testing}
+            onClick={() => {
+              void testLatency([...selected].map((s) => BigInt(s)));
+            }}
+          >
+            {t('test.latency')}
+          </button>
+          <button
+            className="btn btn-sec btn-sm"
+            id="selMove"
+            aria-haspopup="menu"
+            aria-expanded={moveMenu !== null}
+            onClick={(e) => {
+              if (moveMenu !== null) {
+                setMoveMenu(null);
+                return;
+              }
+              const r = e.currentTarget.getBoundingClientRect();
+              setMoveMenu({ at: { x: r.left, y: r.bottom + 4 }, trigger: e.currentTarget });
+            }}
+          >
+            {t('srv.move')}
+          </button>
+          <button
+            className="btn btn-danger btn-sm"
+            onClick={() => {
+              setConfirmDelete({
+                ids: [...selected].map((s) => BigInt(s)),
+                count: selected.size,
+              });
+            }}
+          >
+            {t('srv.delSel')}
+          </button>
+          <span className="flex1" />
+          <button
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setSelected(new Set());
+            }}
+          >
+            {t('srv.selClear')}
+          </button>
+        </div>
+      )}
 
       {msg !== '' && <div className="toast-ok" role="status">{msg}</div>}
       {err !== '' && (
@@ -654,9 +761,7 @@ export function ServersScreen(): JSX.Element {
       {editing !== undefined && (
         <ProfileEditor
           profile={editing}
-          groupId={BigInt(
-            groupFilter !== 'all' ? groupFilter : targetGroup === '' ? '0' : targetGroup,
-          )}
+          groupId={activeGroupId}
           onClose={() => {
             setEditing(undefined);
           }}
@@ -683,6 +788,34 @@ export function ServersScreen(): JSX.Element {
             <Icon name="gauge" size={16} />
             <span>{t('test.latency')}</span>
           </button>
+        </ContextMenu>
+      )}
+
+      {/* Меню «Переместить в группу…» (прототип #selMove). Подписочные группы
+          исключены: ручной сервер внутри подписки сотрёт следующее обновление. */}
+      {moveMenu !== null && (
+        <ContextMenu
+          anchor={moveMenu}
+          onClose={() => {
+            setMoveMenu(null);
+          }}
+        >
+          {groups
+            .filter((g) => g.kind !== Group_Kind.SUBSCRIPTION)
+            .map((g) => (
+              <button
+                key={String(g.id)}
+                className="menu-item"
+                role="menuitem"
+                onClick={() => {
+                  setMoveMenu(null);
+                  void moveSelected(g.id);
+                }}
+              >
+                <Icon name="layers" size={16} />
+                <span>{g.name}</span>
+              </button>
+            ))}
         </ContextMenu>
       )}
 
@@ -767,7 +900,11 @@ interface RowProps {
   readonly menuOpen: boolean;
   /** Меню строки (копировать ссылку / тест / удалить): прототип profileMenu. */
   readonly onRowMenu: (anchor: MenuAnchor) => void;
-  readonly typeLabel: string;
+  /** Бейдж типа: подпись и суффикс класса (.badge.bt-<cls>). */
+  readonly badge: { readonly cls: string; readonly label: string };
+  /** Сервер подключён/подключается прямо сейчас — бейдж «Активен». */
+  readonly active: boolean;
+  readonly activeDot: 'ok' | 'warn';
 }
 
 function ProfileRow({
@@ -781,7 +918,9 @@ function ProfileRow({
   onDelete,
   menuOpen,
   onRowMenu,
-  typeLabel,
+  badge,
+  active,
+  activeDot,
 }: RowProps): JSX.Element {
   const { t, tf, lang } = useI18n();
   const moreRef = useRef<HTMLButtonElement | null>(null);
@@ -799,7 +938,7 @@ function ProfileRow({
   const down = isTestDown(p.testResult);
   return (
     <li
-      className={`prow${checked ? ' sel' : ''}`}
+      className={`prow${checked ? ' sel' : ''}${active ? ' active' : ''}`}
       onKeyDown={(e) => {
         // Shift+F10 и клавиша ContextMenu открывают меню строки.
         if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') {
@@ -827,18 +966,32 @@ function ProfileRow({
         title={p.favorite ? t('prof.favRm') : t('prof.favAdd')}
         onClick={onFav}
       >
-        <Icon name="check" />
+        <Icon name="star" />
       </button>
-      <button className="prow-main" onClick={onEdit} title={t('common.edit')}>
-        <span className="prow-name">{p.name}</span>
-        {!compact && (
+      <button className="prow-main" onClick={onEdit} title={p.name}>
+        <span className="prow-title">
+          <span className="prow-name">{p.name}</span>
+          <span className={`badge bt-${badge.cls}`}>{badge.label}</span>
+          {!compact &&
+            p.tags.map((tag) => (
+              <span className="p-tag" key={tag}>
+                {tag}
+              </span>
+            ))}
+          {active && (
+            <span className="badge badge-ok">
+              <span className={`dot ${activeDot}`} />
+              {t('srv.active')}
+            </span>
+          )}
+        </span>
+        {!compact && p.address !== '' && (
           <span className="prow-addr mono">
             {p.address}:{String(p.port)}
           </span>
         )}
       </button>
-      {!compact && <span className="prow-type mono">{typeLabel}</span>}
-      <span className={`prow-lat mono${down ? ' err' : ''}`}>{delay}</span>
+      <span className={`prow-lat mono${down ? ' err' : delay === '—' ? ' na' : ''}`}>{delay}</span>
       <button
         className="prow-more btn btn-ic btn-sm"
         aria-label={t('aria.menu')}
@@ -848,7 +1001,7 @@ function ProfileRow({
         ref={moreRef}
         onClick={openMenu}
       >
-        <Icon name="menu" size={16} />
+        <Icon name="dots" size={16} />
       </button>
       <button
         className="prow-del btn btn-ic btn-sm"

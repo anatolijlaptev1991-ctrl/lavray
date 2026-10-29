@@ -1217,6 +1217,27 @@ html[data-shell="native"][data-os="mac"] #app { height: 100vh; }
   .prow-type{display:none}
   .prow-lat{min-width:48px;font-size:.6875rem}
 }
+/* T-65: «Серверы» без горизонтальной прокрутки страницы. Длинное имя
+   подписки раздувало select#subSel до 773 px (width:auto = самая длинная
+   опция); теперь select не шире строки и не шире 22rem, имя вкладки группы
+   и имя сервера обрезаются многоточием (полное имя — в title). */
+.prof-toolbar .select{max-width:min(100%,22rem);min-width:0}
+.prof-filter{display:flex;align-items:center;gap:8px;min-width:0;max-width:100%}
+.prof-filter .select{flex:0 1 auto;max-width:22rem}
+.srv-gtab{max-width:min(100%,16rem)}
+.srv-gtab-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.prow-title{display:flex;align-items:center;gap:8px;min-width:0}
+.prow-title .prow-name{flex:0 1 auto;min-width:0}
+.prow-title .badge,.prow-title .p-tag{flex:none}
+.prow-lat.na{color:var(--t3)}
+.prow-fav.on{color:var(--warn);background:transparent}
+.prow-fav.on .ic{fill:currentColor}
+.prow-fav:hover{color:var(--warn)}
+@media (max-width:600px){
+  .prow-title{flex-wrap:wrap;row-gap:2px}
+  .prow-title .prow-name{flex:0 1 100%}
+  .prow-del{display:none} /* «Удалить» остаётся в меню строки и в полосе выделения */
+}
 
 /* ============ недостающие базовые классы (аудит round 3) ============ */
 .muted{color:var(--t3)}

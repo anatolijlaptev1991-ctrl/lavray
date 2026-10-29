@@ -2,10 +2,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MockInstance } from 'vitest';
 import { act, createElement } from 'react';
+import { createRoot } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
 import { create } from '@bufbuild/protobuf';
-import { ExportLinksResponseSchema, LatencyResultSchema, TestLatencyRequest_Mode } from '../gen/lavray_pb';
-import type { LatencyResult } from '../gen/lavray_pb';
-import { setLanguage } from '../lib/i18n';
+import {
+  CoreState,
+  CoreStatusSchema,
+  ExportLinksResponseSchema,
+  GroupSchema,
+  Group_Kind,
+  LatencyResultSchema,
+  ProfileSchema,
+  ProfileType,
+  TestLatencyRequest_Mode,
+} from '../gen/lavray_pb';
+import type { Group, LatencyResult, Profile } from '../gen/lavray_pb';
+import { CoreContext } from '../hooks/useCore';
+import { setLanguage, t } from '../lib/i18n';
 import {
   buttonByText,
   click,
@@ -291,5 +304,217 @@ describe('T-39: меню строки и режима теста с клавиа
     expect(el.style.left).toBe('182px'); // 400 − 210 − 8
     expect(el.style.top).toBe('172px'); // 300 − 120 − 8
     t.unmount();
+  });
+});
+
+const DEFAULT_GROUP = 10n;
+const SUB_GROUP = 20n;
+const WORK_GROUP = 30n;
+const LONG_NAME =
+  '🇷🇺 Москва — очень длинное название сервера: премиум, 10 Гбит/с, без логов, anycast, резерв №2 [Reality+Vision]';
+
+function group(id: bigint, name: string, kind: Group_Kind): Group {
+  return create(GroupSchema, { id, name, kind });
+}
+
+function profile(id: number, name: string, groupId: bigint, type = ProfileType.VLESS): Profile {
+  // у цепочки и custom-профиля адреса нет (он внутри JSON/узлов цепочки)
+  const hasAddr = type !== ProfileType.CHAIN && type !== ProfileType.CUSTOM_OUTBOUND;
+  return create(ProfileSchema, {
+    id: BigInt(id),
+    groupId,
+    type,
+    name,
+    address: hasAddr ? `h${String(id)}.example.org` : '',
+    port: hasAddr ? 443 : 0,
+    tags: id === 1 ? ['work'] : [],
+  });
+}
+
+interface Fake {
+  readonly clients: CoreClients;
+  readonly moveProfiles: ReturnType<typeof vi.fn>;
+}
+
+function fakeClients(state: CoreState, activeProfileId: bigint): Fake {
+  const groups = [
+    group(DEFAULT_GROUP, 'Default', Group_Kind.BASIC),
+    group(SUB_GROUP, 'Provider sub', Group_Kind.SUBSCRIPTION),
+    group(WORK_GROUP, 'Work', Group_Kind.BASIC),
+  ];
+  const profiles = [
+    profile(1, 'Manual one', DEFAULT_GROUP),
+    profile(2, 'From subscription', SUB_GROUP, ProfileType.TROJAN),
+    profile(3, 'Work server', WORK_GROUP, ProfileType.HYSTERIA2),
+    profile(4, LONG_NAME, DEFAULT_GROUP, ProfileType.CHAIN),
+  ];
+  const moveProfiles = vi.fn(() => Promise.resolve({}));
+  const clients = {
+    profiles: {
+      listGroups: () => Promise.resolve({ groups }),
+      listProfiles: () => Promise.resolve({ profiles, total: BigInt(profiles.length) }),
+      moveProfiles,
+    },
+    core: {
+      getStatus: () => Promise.resolve(create(CoreStatusSchema, { state, activeProfileId })),
+    },
+  } as unknown as CoreClients;
+  return { clients, moveProfiles };
+}
+
+describe('ServersScreen (T-65)', () => {
+  let root: Root | undefined;
+  let container: HTMLDivElement;
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    setLanguage('ru');
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+  });
+
+  afterEach(() => {
+    act(() => {
+      root?.unmount();
+    });
+    container.remove();
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+    vi.restoreAllMocks();
+  });
+
+  async function flush(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
+  async function mount(fake: Fake): Promise<void> {
+    act(() => {
+      root?.render(
+        createElement(CoreContext.Provider, { value: fake.clients }, createElement(ServersScreen)),
+      );
+    });
+    await flush();
+  }
+
+  const text = (el: Element | null | undefined): string => (el?.textContent ?? '').trim();
+
+  const rowNames = (): string[] =>
+    Array.from(container.querySelectorAll('.prow .prow-name')).map((e) => e.textContent ?? '');
+
+  function pickFilter(label: string): void {
+    const select = container.querySelector<HTMLSelectElement>('#subSel');
+    const option = Array.from(select?.options ?? []).find((o) => o.text === label);
+    expect(option, `пункт «${label}» в #subSel`).toBeDefined();
+    act(() => {
+      if (select === null || option === undefined) return;
+      select.value = option.value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+
+  function checkRow(name: string): void {
+    const row = Array.from(container.querySelectorAll('.prow')).find(
+      (r) => r.querySelector('.prow-name')?.textContent === name,
+    );
+    const box = row?.querySelector<HTMLInputElement>('.prow-chk');
+    expect(box, `чекбокс строки «${name}»`).toBeTruthy();
+    act(() => {
+      box?.click();
+    });
+  }
+
+  const button = (label: string): HTMLButtonElement | undefined =>
+    Array.from(container.querySelectorAll('button')).find((b) => text(b) === label);
+
+  it('фильтр «Добавлены вручную» показывает серверы групп без подписки (раньше был пуст)', async () => {
+    await mount(fakeClients(CoreState.IDLE, 0n));
+    expect(rowNames()).toHaveLength(4);
+    pickFilter(t('srv.manual'));
+    expect(rowNames().sort()).toEqual(['Manual one', 'Work server', LONG_NAME].sort());
+  });
+
+  it('при фильтре «вручную» «Добавить» открывает редактор, а не падает на BigInt', async () => {
+    await mount(fakeClients(CoreState.IDLE, 0n));
+    pickFilter(t('srv.manual'));
+    act(() => {
+      button(t('prof.add'))?.click();
+    });
+    expect(container.ownerDocument.querySelector('[role="dialog"]')).not.toBeNull();
+  });
+
+  it('полоса выделения: проверить, переместить, удалить, снять', async () => {
+    await mount(fakeClients(CoreState.IDLE, 0n));
+    expect(container.querySelector('.selbar')).toBeNull();
+    checkRow('Manual one');
+    const bar = container.querySelector('.selbar');
+    expect(bar?.getAttribute('role')).toBe('toolbar');
+    const labels = Array.from(bar?.querySelectorAll('button') ?? []).map((b) => text(b));
+    expect(labels).toEqual([t('test.latency'), t('srv.move'), t('srv.delSel'), t('srv.selClear')]);
+    act(() => {
+      button(t('srv.selClear'))?.click();
+    });
+    expect(container.querySelector('.selbar')).toBeNull();
+  });
+
+  it('«Переместить в группу…» вызывает MoveProfiles для выделенных серверов', async () => {
+    const fake = fakeClients(CoreState.IDLE, 0n);
+    await mount(fake);
+    checkRow('Manual one');
+    checkRow('Work server');
+    act(() => {
+      button(t('srv.move'))?.click();
+    });
+    const items = Array.from(container.querySelectorAll('.menu [role="menuitem"]')).map((b) => text(b));
+    // подписочная группа в меню не предлагается: обновление подписки стёрло бы сервер
+    expect(items).toEqual(['Default', 'Work']);
+    await act(async () => {
+      Array.from(container.querySelectorAll<HTMLElement>('.menu [role="menuitem"]'))
+        .find((b) => text(b) === 'Default')
+        ?.click();
+      await Promise.resolve();
+    });
+    expect(fake.moveProfiles).toHaveBeenCalledTimes(1);
+    expect(fake.moveProfiles).toHaveBeenCalledWith({
+      ids: [1n, 3n],
+      targetGroupId: DEFAULT_GROUP,
+    });
+  });
+
+  it('строка: нейтральный бейдж типа, у подключённого сервера — «Активен»', async () => {
+    await mount(fakeClients(CoreState.CONNECTED, 1n));
+    const badges = Array.from(container.querySelectorAll('.prow .badge[class*="bt-"]')).map(
+      (b) => b.textContent,
+    );
+    expect(badges.sort()).toEqual(['Hysteria2', 'Trojan', 'VLESS', t('ed.t.chain')].sort());
+    const active = container.querySelectorAll('.prow.active');
+    expect(active).toHaveLength(1);
+    expect(active[0]?.querySelector('.badge-ok')?.textContent).toBe(t('srv.active'));
+    expect(active[0]?.querySelector('.p-tag')?.textContent).toBe('work');
+  });
+
+  it('у цепочки адреса нет: строка не показывает «:0»', async () => {
+    await mount(fakeClients(CoreState.IDLE, 0n));
+    const addrs = Array.from(container.querySelectorAll('.prow-addr')).map((e) => text(e));
+    expect(addrs).toHaveLength(3); // 4 строки, у цепочки адреса нет
+    expect(addrs.every((a) => a.endsWith(':443'))).toBe(true);
+  });
+
+  it('без подключения бейджа «Активен» нет', async () => {
+    await mount(fakeClients(CoreState.IDLE, 1n));
+    expect(container.querySelector('.prow.active')).toBeNull();
+    expect(container.querySelector('.prow .badge-ok')).toBeNull();
+  });
+
+  it('длинное имя: полное имя доступно в title, а не только в усечённом тексте', async () => {
+    await mount(fakeClients(CoreState.IDLE, 0n));
+    const main = Array.from(container.querySelectorAll<HTMLElement>('.prow-main')).find(
+      (b) => b.querySelector('.prow-name')?.textContent === LONG_NAME,
+    );
+    expect(main?.getAttribute('title')).toBe(LONG_NAME);
+    // вкладка группы: имя обёрнуто в .srv-gtab-name (там работает text-overflow), полное — в title
+    const tab = container.querySelector('.srv-gtab[title="Provider sub"]');
+    expect(tab?.querySelector('.srv-gtab-name')?.textContent).toBe('Provider sub');
   });
 });

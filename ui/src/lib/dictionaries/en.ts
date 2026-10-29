@@ -552,6 +552,7 @@ export const enDict: Record<string, string> = {
   "set.insecure.confirm.t": "Turn off certificate verification?",
   "set.insecure.d": "Certificates are not verified for any TLS server, even if the profile asks for verification: the connection can be impersonated and the traffic intercepted. Enable it only for your own servers with a self-signed certificate.",
   "set.insecure.on": "Certificate verification is off for all servers. The connection is not protected against server impersonation.",
+  "set.intErr": "Enter a whole number",
   "set.lan": "Access from local network",
   "set.lanAddr": "Address for other devices: {addr}",
   "set.lanD": "Other devices can use this computer’s proxy",

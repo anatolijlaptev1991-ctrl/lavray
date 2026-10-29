@@ -552,6 +552,7 @@ export const esDict: Record<string, string> = {
   "set.insecure.confirm.t": "¿Desactivar la verificación de certificados?",
   "set.insecure.d": "No se verifica el certificado de ningún servidor TLS, aunque el perfil pida verificación: la conexión puede suplantarse y el tráfico, interceptarse. Actívalo solo para tus propios servidores con certificado autofirmado.",
   "set.insecure.on": "La verificación de certificados está desactivada para todos los servidores. La conexión no está protegida frente a la suplantación del servidor.",
+  "set.intErr": "Introduce un número entero",
   "set.lan": "Acceso desde la red local",
   "set.lanAddr": "Dirección para otros dispositivos: {addr}",
   "set.lanD": "Otros dispositivos podrán usar el proxy de este equipo",

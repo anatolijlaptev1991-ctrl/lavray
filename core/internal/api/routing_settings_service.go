@@ -256,56 +256,73 @@ func settingTypeToProto(t model.SettingType) lavrayv1.SettingType {
 func (s *Server) DescribeSettings(ctx context.Context, req *connect.Request[lavrayv1.DescribeSettingsRequest]) (*connect.Response[lavrayv1.DescribeSettingsResponse], error) {
 	out := &lavrayv1.DescribeSettingsResponse{}
 	for _, d := range model.SettingDescriptors() {
-		out.Descriptors = append(out.Descriptors, &lavrayv1.SettingDescriptor{
-			Key:  d.Key,
-			Type: settingTypeToProto(d.Type),
-		})
+		sd := &lavrayv1.SettingDescriptor{
+			Key:                    d.Key,
+			Type:                   settingTypeToProto(d.Type),
+			GroupId:                d.GroupID,
+			RequiresProfileRestart: d.RequiresProfileRestart,
+			RequiresAppRestart:     d.RequiresAppRestart,
+			ShellOwned:             d.ShellOwned,
+			DefaultValueJson:       strpIf(d.DefaultValue),
+			DeprecatedBy:           strpIf(d.DeprecatedBy),
+		}
+		out.Descriptors = append(out.Descriptors, sd)
 	}
 	return connect.NewResponse(out), nil
 }
 
+// GetSettings отдаёт сохранённые значения, а для ключей без записи — значение
+// по умолчанию из дескриптора (T-34): свежая установка показывает порт 2080, а
+// не пустое поле, которое раньше превращалось в 0.
 func (s *Server) GetSettings(ctx context.Context, req *connect.Request[lavrayv1.GetSettingsRequest]) (*connect.Response[lavrayv1.GetSettingsResponse], error) {
 	all, err := s.st.Settings()
 	if err != nil {
 		return nil, mapErr(err)
+	}
+	for _, d := range model.SettingDescriptors() {
+		if _, stored := all[d.Key]; !stored && d.DefaultValue != "" {
+			all[d.Key] = d.DefaultValue
+		}
 	}
 	want := map[string]bool{}
 	for _, k := range req.Msg.Keys {
 		want[k] = true
 	}
 	out := &lavrayv1.GetSettingsResponse{Values: map[string]*lavrayv1.SettingValue{}}
-	keys := make([]string, 0, len(all))
-	for k := range all {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
+	for k, raw := range all {
 		if len(want) > 0 && !want[k] {
 			continue
 		}
 		// A4 (аудит №4): тип значения — из дескриптора. Сырой JSON в
 		// stringValue приводил к тому, что клиент видел "\"192.168.1.5\""
 		// и молча сбрасывал int/bool в дефолты.
-		out.Values[k] = typedSettingValue(k, all[k])
+		out.Values[k] = typedSettingValue(k, raw)
 	}
 	return connect.NewResponse(out), nil
 }
 
+// SetSettings сначала проверяет ВСЕ значения (тип, диапазон, адрес — см.
+// settings_validate.go) и только потом пишет: невалидный запрос не меняет ничего.
+// Ответ сообщает, нужен ли перезапуск профиля или приложения.
 func (s *Server) SetSettings(ctx context.Context, req *connect.Request[lavrayv1.SetSettingsRequest]) (*connect.Response[lavrayv1.SetSettingsResponse], error) {
-	known := map[string]bool{}
-	for _, d := range model.SettingDescriptors() {
-		known[d.Key] = true
-	}
-	resp := &lavrayv1.SetSettingsResponse{}
 	keys := make([]string, 0, len(req.Msg.Values))
 	for k := range req.Msg.Values {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	type pending struct{ key, raw string }
+	var writes []pending
+	resp := &lavrayv1.SetSettingsResponse{}
 	for _, k := range keys {
 		v := req.Msg.Values[k]
-		if !known[k] && !strings.HasPrefix(k, "dns.") {
+		d, known := descriptorMap[k]
+		if !known && !strings.HasPrefix(k, "dns.") {
 			continue // неизвестный ключ не применяется и не попадает в accepted (LNB-30-класс: не молча — список accepted честный)
+		}
+		if known {
+			if err := validateSetting(k, d, v); err != nil {
+				return nil, err
+			}
 		}
 		// F6 (аудит №7): значения хранятся СТРОГО как JSON — геттеры
 		// (settingStr/Bool/Int) делают json.Unmarshal, поэтому "1"/"0" и
@@ -327,7 +344,7 @@ func (s *Server) SetSettings(ctx context.Context, req *connect.Request[lavrayv1.
 		case *lavrayv1.SettingValue_JsonValue:
 			raw = kind.JsonValue
 		case *lavrayv1.SettingValue_StringListValue:
-			b, err := json.Marshal(kind.StringListValue)
+			b, err := json.Marshal(kind.StringListValue.GetItems())
 			if err != nil {
 				return nil, mapErr(err)
 			}
@@ -335,10 +352,19 @@ func (s *Server) SetSettings(ctx context.Context, req *connect.Request[lavrayv1.
 		default:
 			continue
 		}
-		if err := s.st.SetSetting(k, raw); err != nil {
+		writes = append(writes, pending{k, raw})
+		resp.AcceptedKeys = append(resp.AcceptedKeys, k)
+		if d.RequiresProfileRestart && s.inst.Status().State != instStateIdle {
+			resp.NeedsProfileRestart = true
+		}
+		if d.RequiresAppRestart {
+			resp.NeedsAppRestart = true
+		}
+	}
+	for _, w := range writes {
+		if err := s.st.SetSetting(w.key, w.raw); err != nil {
 			return nil, mapErr(err)
 		}
-		resp.AcceptedKeys = append(resp.AcceptedKeys, k)
 	}
 	return connect.NewResponse(resp), nil
 }

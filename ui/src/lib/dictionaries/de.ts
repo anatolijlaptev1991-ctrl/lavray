@@ -552,6 +552,7 @@ export const deDict: Record<string, string> = {
   "set.insecure.confirm.t": "Zertifikatsprüfung ausschalten?",
   "set.insecure.d": "Bei keinem TLS-Server wird das Zertifikat geprüft, auch wenn das Profil eine Prüfung verlangt: Die Verbindung kann vorgetäuscht und der Datenverkehr abgefangen werden. Nur für eigene Server mit selbstsigniertem Zertifikat aktivieren.",
   "set.insecure.on": "Die Zertifikatsprüfung ist für alle Server aus. Die Verbindung ist nicht gegen vorgetäuschte Server geschützt.",
+  "set.intErr": "Geben Sie eine ganze Zahl ein",
   "set.lan": "Zugriff aus dem lokalen Netzwerk",
   "set.lanAddr": "Adresse für andere Geräte: {addr}",
   "set.lanD": "Andere Geräte können den Proxy dieses Computers nutzen",

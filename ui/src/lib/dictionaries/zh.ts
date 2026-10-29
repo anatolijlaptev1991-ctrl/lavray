@@ -545,6 +545,7 @@ export const zhDict: Record<string, string> = {
   "set.insecure.confirm.t": "关闭证书验证？",
   "set.insecure.d": "所有使用 TLS 的服务器都不会验证证书，即使配置要求验证：连接可能被冒充，流量可能被截获。仅对使用自签名证书的自有服务器启用。",
   "set.insecure.on": "已对所有服务器关闭证书验证。连接无法防止服务器被冒充。",
+  "set.intErr": "请输入整数",
   "set.lan": "允许局域网访问",
   "set.lanAddr": "其他设备地址：{addr}",
   "set.lanD": "其他设备可以使用这台电脑的代理",

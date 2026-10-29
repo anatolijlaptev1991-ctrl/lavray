@@ -101,6 +101,13 @@ function valueOf(v: SettingValue | undefined): string | boolean | number {
   }
 }
 
+/** Целое число из ввода; пустое поле и нечисло → null (раньше становились 0). */
+function parseInteger(raw: string | boolean | number): number | null {
+  if (typeof raw === 'number') return Number.isInteger(raw) ? raw : null;
+  const text = String(raw).trim();
+  return /^-?\d+$/.test(text) ? Number(text) : null;
+}
+
 function toSettingValue(kind: SettingType, raw: string | boolean | number): SettingValue {
   switch (kind) {
     case SettingType.BOOL:
@@ -141,6 +148,8 @@ export function SettingsScreen(): JSX.Element {
   const [coreVersion, setCoreVersion] = useState('');
   const [confirmInsecure, setConfirmInsecure] = useState(false);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // Последние значения, принятые ядром: поле откатывается к ним при невалидном вводе.
+  const accepted = useRef<Record<string, string | boolean | number>>({});
 
   useEffect(() => {
     void (async (): Promise<void> => {
@@ -154,6 +163,7 @@ export function SettingsScreen(): JSX.Element {
         setCoreVersion(st.coreVersion);
         const map: Record<string, string | boolean | number> = {};
         for (const [k, v] of Object.entries(settings.values)) map[k] = valueOf(v);
+        accepted.current = map;
         setValues(map);
       } catch (e) {
         setErr(showCoreError(e, t));
@@ -164,6 +174,19 @@ export function SettingsScreen(): JSX.Element {
   const save = useCallback(
     async (key: string, kind: SettingType, raw: string | boolean | number): Promise<void> => {
       setErr('');
+      const revert = (): void => {
+        setValues((prev) => ({ ...prev, [key]: accepted.current[key] ?? '' }));
+      };
+      if (kind === SettingType.INT) {
+        // Пустое или нечисловое поле в ядро не отправляется (раньше уходил 0).
+        const n = parseInteger(raw);
+        const isPort = key === 'inbound.port';
+        if (n === null || (isPort && (n < 1 || n > 65535))) {
+          setErr(`${key}: ${t(isPort ? 'set.portErr' : 'set.intErr')}`);
+          revert();
+          return;
+        }
+      }
       setValues((prev) => ({ ...prev, [key]: raw }));
       try {
         const res = await core.settings.setSettings({
@@ -171,14 +194,17 @@ export function SettingsScreen(): JSX.Element {
         });
         if (!res.acceptedKeys.includes(key)) {
           setErr(`${key}: ${t('set.portErr')}`);
+          revert();
           return;
         }
+        accepted.current = { ...accepted.current, [key]: raw };
         setOk(t('common.save'));
         window.setTimeout(() => {
           setOk('');
         }, 1500);
       } catch (e) {
         setErr(showCoreError(e, t));
+        revert();
       }
     },
     [core, t],

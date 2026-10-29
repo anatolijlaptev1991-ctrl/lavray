@@ -198,8 +198,9 @@ func authMiddleware(next http.Handler, token string, mux *logs.Mux) http.Handler
 			return
 		}
 		// Fail-closed: пустой токен = отказ всем (оболочка не передала секрет).
-		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if token == "" || got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+		// T-53: схема «Bearer» обязательна; голый токен в заголовке не принимается.
+		got, hasScheme := bearerToken(r.Header.Get("Authorization"))
+		if token == "" || !hasScheme || got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
 			http.Error(w, `{"code":"unauthenticated"}`, http.StatusUnauthorized)
 			return
 		}

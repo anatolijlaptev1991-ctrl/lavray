@@ -207,6 +207,9 @@ func TestGetStatus(t *testing.T) {
 		server["id"] != float64(e.nl.ID) || st["connection_mode"] != "system_proxy" {
 		t.Errorf("после подключения: %v", st)
 	}
+	if !strings.Contains(res.Text, "время соединения: ") {
+		t.Errorf("время соединения в тексте: %q", res.Text)
+	}
 	if _, ok := st["connected_since"].(string); !ok {
 		t.Errorf("нет connected_since: %v", st)
 	}

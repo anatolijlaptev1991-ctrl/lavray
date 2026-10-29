@@ -232,7 +232,7 @@ func connectTool(ctx context.Context, s *Session, args json.RawMessage) (ToolRes
 	if err := startConnect(ctx, s, target.Id); err != nil {
 		return ToolResult{}, err
 	}
-	return connectedResult(ctx, s, "Подключение к "+serverLabel(target)+" выполнено.")
+	return connectedResult(ctx, s, "")
 }
 
 // ---- disconnect ------------------------------------------------------------

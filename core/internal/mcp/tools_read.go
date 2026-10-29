@@ -126,7 +126,7 @@ func statusView(st *lavrayv1.CoreStatus, accessMode string, now time.Time) (map[
 				up = 0
 			}
 			out["uptime_seconds"] = int64(up.Seconds())
-			fmt.Fprintf(&text, ", подключено %s назад", up.Truncate(time.Second))
+			fmt.Fprintf(&text, ", время соединения: %s", durationText(up))
 		}
 		text.WriteString(".")
 	} else {
@@ -136,6 +136,18 @@ func statusView(st *lavrayv1.CoreStatus, accessMode string, now time.Time) (map[
 		fmt.Fprintf(&text, " Последняя ошибка: %v.", e)
 	}
 	return out, text.String()
+}
+
+// durationText — время соединения по-русски: «45 с», «12 мин», «3 ч 5 мин».
+func durationText(d time.Duration) string {
+	switch secs := int64(d.Seconds()); {
+	case secs < 60:
+		return fmt.Sprintf("%d с", secs)
+	case secs < 3600:
+		return fmt.Sprintf("%d мин", secs/60)
+	default:
+		return fmt.Sprintf("%d ч %d мин", secs/3600, secs%3600/60)
+	}
 }
 
 func getStatus(ctx context.Context, s *Session, args json.RawMessage) (ToolResult, error) {

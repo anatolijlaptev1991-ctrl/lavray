@@ -23,6 +23,9 @@ pub const ARG_WAIT_PID: &str = "--wait-pid";
 pub const WAIT_PID_TIMEOUT: Duration = Duration::from_secs(20);
 /// Период опроса «процесс ещё жив».
 pub const WAIT_PID_POLL: Duration = Duration::from_millis(100);
+/// Пауза после выхода прежнего процесса: его процессы WebView2 закрываются чуть
+/// позже, а новый экземпляр (с другим уровнем прав) уже открывает тот же профиль.
+pub const WAIT_PID_SETTLE: Duration = Duration::from_millis(500);
 
 /// Разобранные аргументы командной строки.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -105,17 +108,21 @@ pub fn wait_until_gone(
     true
 }
 
-/// Дождаться выхода процесса `pid` (до [`WAIT_PID_TIMEOUT`]). `false` — он всё
-/// ещё жив: запуск продолжается, single-instance сам передаст управление
-/// старому окну.
+/// Дождаться выхода процесса `pid` (до [`WAIT_PID_TIMEOUT`]) и выдержать паузу
+/// [`WAIT_PID_SETTLE`]. `false` — он всё ещё жив: запуск продолжается,
+/// single-instance сам передаст управление старому окну.
 pub fn wait_for_exit(pid: u32) -> bool {
-    wait_until_gone(
+    let gone = wait_until_gone(
         pid,
         WAIT_PID_TIMEOUT,
         WAIT_PID_POLL,
         process_alive,
         std::thread::sleep,
-    )
+    );
+    if gone {
+        std::thread::sleep(WAIT_PID_SETTLE);
+    }
+    gone
 }
 
 /// Жив ли процесс `pid`. Нет доступа к процессу — считаем живым: ждать

@@ -15,12 +15,15 @@ import { ConfirmDialog } from '../components/dialogs';
 import { Icon, type IconName } from '../components/Icon';
 import { withoutSecrets } from '../lib/backup';
 import {
+  ACCENTS,
+  THEMES,
   applyTheme,
   loadPreferences,
   type AccentPreference,
   type ThemePreference,
 } from '../lib/theme';
 import { LANGUAGES, LANG_NATIVE, type Language, type MessageKey } from '../lib/i18n';
+import { APP_VERSION } from '../lib/version';
 
 interface Section {
   readonly id: string;
@@ -82,6 +85,50 @@ const CORE_ROWS: readonly Row[] = [
   { key: INSECURE_TLS_KEY, type: SettingType.BOOL, labelKey: 'set.insecure', descKey: 'set.insecure.d' },
   { key: 'enable_external_cores', type: SettingType.BOOL, labelKey: 'core.external' },
 ];
+
+/** Список горячих клавиш раздела: [ключ подписи, клавиша]. */
+const HOTKEYS = [
+  ['hk.search', 'K'],
+  ['hk.toggle', 'D'],
+  ['hk.close', 'Esc'],
+  ['hk.settings', ','],
+] as const;
+
+interface SearchRow {
+  readonly labelKey: MessageKey;
+  readonly descKey?: MessageKey;
+}
+
+/**
+ * T-71: подписи ВСЕХ строк каждого раздела — по ним ищет «Поиск по
+ * настройкам». Раньше искало только по сетевым, TUN- и «ядерным» строкам,
+ * поэтому «язык», «тема», «резервная копия» не находились. Новая строка в
+ * разделе должна попасть и сюда.
+ */
+const SECTION_SEARCH: Readonly<Record<string, readonly SearchRow[]>> = {
+  general: [{ labelKey: 'set.lang', descKey: 'set.langD' }],
+  network: [{ labelKey: 'set.local' }, ...NETWORK_ROWS],
+  tun: TUN_ROWS,
+  hotkeys: [{ labelKey: 'set.hotkeysD' }, ...HOTKEYS.map(([labelKey]) => ({ labelKey }))],
+  appearance: [
+    { labelKey: 'set.theme' },
+    ...THEMES.map((th) => ({ labelKey: `theme.${th}` as MessageKey })),
+    { labelKey: 'set.accent' },
+    ...ACCENTS.map((ac) => ({ labelKey: `accent.${ac}` as MessageKey })),
+  ],
+  backup: [
+    { labelKey: 'bk.export', descKey: 'bk.hint' },
+    { labelKey: 'bk.restore', descKey: 'bk.restoreD' },
+  ],
+  core: [{ labelKey: 'mux.title' }, { labelKey: 'set.appVersion' }, { labelKey: 'set.coreVersion' }, ...CORE_ROWS],
+  about: [
+    { labelKey: 'about.desc' },
+    { labelKey: 'about.repo' },
+    { labelKey: 'about.bug' },
+    { labelKey: 'about.license' },
+    { labelKey: 'lic.title' },
+  ],
+};
 
 function valueOf(v: SettingValue | undefined): string | boolean | number {
   const c = v?.value;
@@ -277,9 +324,17 @@ export function SettingsScreen(): JSX.Element {
     (id: string, titleKey: MessageKey): boolean => {
       if (q === '') return true;
       if (t(titleKey).toLowerCase().includes(q)) return true;
-      const rows = id === 'network' ? NETWORK_ROWS : id === 'tun' ? TUN_ROWS : id === 'core' ? CORE_ROWS : [];
-      return rows.some((r) => matches(r.labelKey, r.descKey));
+      return (SECTION_SEARCH[id] ?? []).some((r) => matches(r.labelKey, r.descKey));
     },
+    [q, t, matches],
+  );
+  // Запрос совпал с названием раздела — показываем его строки целиком, иначе
+  // только подходящие (раньше раздел «Сеть и прокси» по запросу «сеть» терял все поля).
+  const filterRows = useCallback(
+    (titleKey: MessageKey, rows: readonly Row[]): readonly Row[] =>
+      q === '' || t(titleKey).toLowerCase().includes(q)
+        ? rows
+        : rows.filter((r) => matches(r.labelKey, r.descKey)),
     [q, t, matches],
   );
 
@@ -460,7 +515,7 @@ export function SettingsScreen(): JSX.Element {
                   <div className="set-l">{t('set.local')}</div>
                 </div>
               </div>
-              {NETWORK_ROWS.filter((r) => matches(r.labelKey, r.descKey)).map((r) => (
+              {filterRows('sec.network', NETWORK_ROWS).map((r) => (
                 <div className="set-row" key={r.key}>
                   <div className="set-txt">
                     <label className="set-l" htmlFor={r.key}>
@@ -523,7 +578,7 @@ export function SettingsScreen(): JSX.Element {
                 </span>
                 <span>{t('sec.tun')}</span>
               </h2>
-              {TUN_ROWS.filter((r) => matches(r.labelKey, r.descKey)).map((r) =>
+              {filterRows('sec.tun', TUN_ROWS).map((r) =>
                 r.type === SettingType.BOOL ? (
                   boolRow(r)
                 ) : (
@@ -598,14 +653,7 @@ export function SettingsScreen(): JSX.Element {
                 <span>{t('sec.hotkeys')}</span>
               </h2>
               <p className="hint">{t('set.hotkeysD')}</p>
-              {(
-                [
-                  ['hk.search', 'K'],
-                  ['hk.toggle', 'D'],
-                  ['hk.close', 'Esc'],
-                  ['hk.settings', ','],
-                ] as const
-              ).map(([key, keycap]) => (
+              {HOTKEYS.map(([key, keycap]) => (
                 <div className="hk-row" key={key}>
                   <div className="set-txt">
                     <div className="set-l">{t(key)}</div>
@@ -795,7 +843,7 @@ export function SettingsScreen(): JSX.Element {
                   <div className="set-l">{t('set.appVersion')}</div>
                 </div>
                 <div className="set-ctl">
-                  <span className="mono">v0.1.0</span>
+                  <span className="mono">v{APP_VERSION}</span>
                 </div>
               </div>
               <div className="set-row">
@@ -806,7 +854,7 @@ export function SettingsScreen(): JSX.Element {
                   <span className="mono">{coreVersion === '' ? '—' : coreVersion}</span>
                 </div>
               </div>
-              {CORE_ROWS.filter((r) => matches(r.labelKey, r.descKey)).map((r) =>
+              {filterRows('sec.core', CORE_ROWS).map((r) =>
                 r.key === INSECURE_TLS_KEY ? (
                   insecureRow(r)
                 ) : r.type === SettingType.BOOL ? (
@@ -855,7 +903,7 @@ export function SettingsScreen(): JSX.Element {
               <div className="set-row" style={{ borderTop: 'none' }}>
                 <div className="set-txt">
                   <div className="set-l">
-                    LAVRay <span className="mono muted">v0.1.0</span>
+                    LAVRay <span className="mono muted">v{APP_VERSION}</span>
                   </div>
                   <div className="set-d">{t('about.desc')}</div>
                 </div>

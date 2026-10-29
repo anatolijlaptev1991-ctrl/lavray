@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // core.ts — ConnectRPC-клиент LAVRay-ядра (ui/src/lib). Один транспорт на
 // приложение: createConnectTransport (connect-web) на адрес ядра. В нативном
 // режиме адрес даёт оболочка (Tauri IPC: localhost-порт named-pipe-моста);

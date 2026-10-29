@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! T-57 (A2-24): release-сборка не принимает заглушку вместо ядра.
 include!("../build_guard.rs");
 

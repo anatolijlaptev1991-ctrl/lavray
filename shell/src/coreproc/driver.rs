@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Рантайм-драйвер ядра: продакшн-реализация [`CoreProcess`] (§3/§5).
 //!
 //! - §3 spawn: argv `serve --listen-socket <path>` (порт/сокет выделяет ОС,

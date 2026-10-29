@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package model
 
 // StreamSettings — V2Ray Stream Settings (порт fmt/V2RayStreamSettings.hpp;

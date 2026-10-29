@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // headless_test.go — цикл авторестарта: первый запуск, смерть, рестарт,
 // выход по ctx; лимит попыток.
 package headless

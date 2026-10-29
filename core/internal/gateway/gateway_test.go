@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // gateway_test.go — nft-рендер (golden-инварианты), watchdog-переходы,
 // per-MAC-политики. Платформо-независимо: Applier-мок.
 package gateway

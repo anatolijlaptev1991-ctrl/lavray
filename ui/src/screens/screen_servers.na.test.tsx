@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // T-23: в списке серверов результат «тест не применим» (n/a от ядра) —
 // это «н/д», а не ✕ «недоступен»; фильтр «Недоступные» его не включает.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

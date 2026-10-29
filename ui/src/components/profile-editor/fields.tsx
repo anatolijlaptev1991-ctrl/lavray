@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // fields.tsx — поля формы редактора профиля (разметка .field из прототипа:
 // <label for> + контрол + .field-err; ошибка помечает поле aria-invalid).
 import type { JSX, Ref } from 'react';

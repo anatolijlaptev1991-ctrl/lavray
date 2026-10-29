@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // presetNames.test.tsx — названия пресетов на экранах «Правила», «Подключение»
 // и в онбординге (T-41). Ответ ListPresets — как его отдаёт ядро: displayName
 // встроенного пресета — ключ «preset.<id>».

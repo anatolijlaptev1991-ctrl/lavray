@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // messages.test.tsx — T-59: тексты ошибок и сообщения об успехе на экранах.
 // Монтируются настоящие компоненты; методы RPC-клиентов подменяются.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

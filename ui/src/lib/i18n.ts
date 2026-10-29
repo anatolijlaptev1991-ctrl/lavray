@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * LAVRay i18n infrastructure (stage-3 scaffold).
  *

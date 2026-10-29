@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Правило «с каким ядром можно собирать оболочку». Подключается через include!
 // в build.rs и в tests/build_guard.rs: сам build.rs тестами не запускается.
 

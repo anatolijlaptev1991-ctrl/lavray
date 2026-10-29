@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Конечный автомат (FSM) жизненного цикла Go-ядра `lavray-core`.
 //!
 //! Спек: `docs/stage3/shell-lifecycle.md` §2 (диаграмма, состояния, тайминги),

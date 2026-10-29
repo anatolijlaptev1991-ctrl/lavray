@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Регрессия T-03: оболочка перезапускает ядро на новом порту с новым токеном,
 // а UI раньше читал адрес один раз и после этого был мёртв.
 import { beforeEach, describe, expect, it, vi } from 'vitest';

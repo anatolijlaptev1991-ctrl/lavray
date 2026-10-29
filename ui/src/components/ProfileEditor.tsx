@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // profile_editor.tsx — редактор профиля (FR-UI-080…101):
 // создание/правка сервера, типоспецифичные поля по типу, транспорт и TLS
 // (ws/grpc/http/h2, REALITY), цепочка, «Свой JSON», название/заметки.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { describe, expect, it } from 'vitest';
 import { TEST_NA_PREFIX, isTestDown, isTestNotApplicable } from './testResult';
 

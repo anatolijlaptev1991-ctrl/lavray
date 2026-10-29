@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // tunnel_http.go — HTTP-клиент «через туннель» (T-16): подписки, публичный IP
 // и проверки идут через mixed-вход РАБОТАЮЩЕГО инстанса, когда он поднят.
 package api

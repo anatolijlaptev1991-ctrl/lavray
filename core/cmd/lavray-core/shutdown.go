@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // shutdown.go — выход процесса ядра (T-52): запрос выхода по RPC Shutdown и
 // штатная остановка sing-box перед выходом по любой причине.
 package main

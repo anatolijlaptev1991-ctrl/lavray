@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Словарь zh — перенесён дословно из design/prototype.html (I18N.zh);
 // машинная генерация 2026-10-24 из принятого прототипа v1.2, не редактировать руками.
 export const zhDict: Record<string, string> = {

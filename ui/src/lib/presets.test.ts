@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // presets.test.ts — названия и описания пресетов берутся из словаря (T-41).
 import { describe, expect, it } from 'vitest';
 import { create } from '@bufbuild/protobuf';

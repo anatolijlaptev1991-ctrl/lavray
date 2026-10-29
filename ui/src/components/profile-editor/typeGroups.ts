@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // typeGroups.ts — состав плиток выбора типа профиля (прототип #dlgEditor:
 // «Популярные», «Другие», «Особые»). AnyTLS/WireGuard/SSH из прототипа не
 // показываем: этих типов нет в ядре.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // outbounds.go — профиль модели → sing-box outbound JSON (порт
 // fmt/Bean2CoreObj_box.cpp: SocksHttpBean/ShadowSocksBean/VMessBean/
 // TrojanVLESSBean/QUICBean/CustomBean + V2rayStreamSettings).

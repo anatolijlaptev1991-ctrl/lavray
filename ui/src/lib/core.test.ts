@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // core.test.ts — ConnectRPC-клиент против живого ядра (go test уже
 // прогоняет те же RPC в internal/api; здесь — типы/транспорт-мок fetch).
 import { describe, expect, it, vi } from 'vitest';

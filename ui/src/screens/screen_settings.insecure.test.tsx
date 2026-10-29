@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // T-11: переключатель security.allow_insecure_default отключает проверку
 // TLS-сертификатов у ВСЕХ серверов (core/internal/cfgbuild/outbounds.go:
 // `s.AllowInsecure || st.AllowInsecureDefault`). Он обязан называться честно,

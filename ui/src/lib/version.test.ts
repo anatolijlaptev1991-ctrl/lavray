@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // T-71: версия приложения в «Настройках» — из ui/package.json, а не литерал.
 import { describe, expect, it } from 'vitest';
 import { version } from '../../package.json';

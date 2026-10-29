@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_subscriptions.external.test.tsx — T-58: кнопка «Открыть» (↗) на карточке
 // подписки открывает ссылку через оболочку, а не window.open (в WebView2 он
 // молча гасится). Ядро — мок fetch, оболочка — мок invoke.

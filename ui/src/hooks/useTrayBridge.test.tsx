@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // useTrayBridge.test.tsx — T-45: UI присылает оболочке состояние и строки
 // меню трея из словарей, а выбор «Подключить»/«Отключить» доходит до UI.
 // Оболочка (Tauri) заменена моками invoke/listen.

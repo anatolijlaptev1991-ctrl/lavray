@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // T-38: клавиши вкладок (WAI-ARIA tabs; прототип initTabs, design/prototype.html:4521-4530).
 import { describe, expect, it } from 'vitest';
 import { nextTabIndex } from './tabs';

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Словарь ru — перенесён дословно из design/prototype.html (I18N.ru);
 // машинная генерация 2026-10-24 из принятого прототипа v1.2, не редактировать руками.
 export const ruDict = {

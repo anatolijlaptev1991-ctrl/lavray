@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // subscription_settings_test.go — регрессия T-21: интервал и User-Agent
 // подписки сохраняются через UpdateGroup и доходят до запроса к провайдеру;
 // clear_before (и глобальный sub.clear) очищают группу перед применением

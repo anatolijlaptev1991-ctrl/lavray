@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // settings_validate.go — проверка значений SetSettings (T-34): тип по
 // дескриптору, диапазоны портов и MTU, адрес, список допустимых значений.
 // Невалидное значение отвергается целиком (INVALID_ARGUMENT) до записи.

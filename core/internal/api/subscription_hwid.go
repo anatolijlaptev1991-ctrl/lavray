@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // subscription_hwid.go — постоянный HWID установки для заголовка x-hwid
 // (D-02, FR-UI-265).
 //

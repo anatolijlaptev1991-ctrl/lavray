@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // ProfileEditor.test.tsx — регрессия T-66: типы «Цепочка» и «Свой JSON» (группа
 // «Особые»), поля Hy2/TUIC/SS, allowInsecure, подписи из словаря, название.
 // @testing-library в проекте не установлен — react-dom/client + act и обычный DOM.

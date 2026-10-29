@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package cfgbuild — конфигбилдер LAVRay (W4: §3.4 шаги 1–3; W5: шаги 4–7
 // плана core-port-plan.md): allowlist-мерж custom_config, outbounds из
 // профилей всех типов модели, цепочки с тегами proxy/g-/c-, inbounds

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // useTrayBridge.ts — состояние подключения и строки меню → трей оболочки;
 // выбор «Подключить»/«Отключить» в трее → действие UI (T-45).
 import { useEffect, useMemo, useRef } from 'react';

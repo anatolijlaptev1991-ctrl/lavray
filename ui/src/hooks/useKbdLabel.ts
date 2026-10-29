@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // useKbdLabel.ts — подписи сочетаний клавиш для ОС хоста и языка интерфейса.
 import { useCallback, useMemo } from 'react';
 import { kbdLabel } from '../lib/hotkeys';

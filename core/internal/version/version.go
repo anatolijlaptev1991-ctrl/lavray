@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package version — единственный источник версии LAVRay для ядра: «Версия
 // ядра» в UI (CoreStatus.core_version), самопроверка, текущая версия
 // приложения в CheckUpdates и User-Agent подписок. Раньше их было два

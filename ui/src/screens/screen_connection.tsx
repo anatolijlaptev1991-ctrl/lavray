@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_connection.tsx — «Подключение» по прототипу v1.2 (design/prototype.html
 // 1082-1127 + CSS .cx-card/.cx-top/.cx-main/.cx-meta/.cx-qa): карточка
 // состояния со знаком «Отражение», пикер сервера, кнопка подключения,

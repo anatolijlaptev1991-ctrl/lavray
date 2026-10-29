@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package api
 
 // core_service.go — CoreService (W6): Connect/Disconnect/RestartProfile/

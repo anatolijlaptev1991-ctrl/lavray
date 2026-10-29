@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package store — SQLite-хранилище LAVRay (modernc.org/sqlite, CGO-free;
 // core-port-plan §5). Режим WAL; одна операция UI — одна транзакция.
 //

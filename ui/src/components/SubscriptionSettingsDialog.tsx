@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // SubscriptionSettingsDialog.tsx — «Настройки подписки» (прототип dlgSubSet,
 // FR-UI-263). Интервал автообновления и User-Agent — настройки самой подписки
 // (Group.update_interval_min / user_agent, пишутся через UpdateGroup);

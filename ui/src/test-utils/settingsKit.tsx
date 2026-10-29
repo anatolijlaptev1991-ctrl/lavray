@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // settingsKit.tsx — общий стенд для тестов экрана «Настройки»: монтирует
 // SettingsScreen с поддельным клиентом ядра (без сети). Настройки отдаёт
 // getSettings, записи фиксирует мок setSettings.

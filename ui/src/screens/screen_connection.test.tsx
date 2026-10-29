@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_connection.test.tsx — регрессионные тесты экрана «Подключение».
 // Ядро — заглушка на уровне fetch (test-utils/coreStub.ts), ответы дословные.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

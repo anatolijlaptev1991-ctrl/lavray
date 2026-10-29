@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // T-38 (C1-04, C2-03): вкладки «Ссылка / QR-код / Файл» диалога импорта
 // переключаются стрелками, Home и End; у вкладок есть id и aria-controls,
 // у панелей — aria-labelledby (прототип: dlgImport, #impTabs, #impPane-*).

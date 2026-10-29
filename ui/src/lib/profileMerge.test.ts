@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // profileMerge.test.ts — T-10 (F-006, B1-01): значения формы накладываются на
 // исходный профиль, поля вне формы не стираются, а поля формы можно очистить.
 import { describe, expect, it } from 'vitest';

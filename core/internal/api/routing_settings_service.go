@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // routing_settings_service.go — RoutingService (builtin-пресеты + активный),
 // DnsService и SettingsService (W6). Пользовательские пресеты,
 // подписочные стримы и SubscribeSettings — W7 (unimplemented.go).

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package inst
 
 // D-03: Manager.closed читали под m.mu (Start), а писали под m.subMu

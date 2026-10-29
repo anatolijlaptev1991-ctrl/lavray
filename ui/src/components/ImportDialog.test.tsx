@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // ImportDialog.test.tsx — импорт: группа назначения (T-07).
 // Диалог, открытый из «Подключения» или меню титлбара, не знает группу и
 // не должен слать targetGroupId=0 (ядро отвечало invalid_argument).

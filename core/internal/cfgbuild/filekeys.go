@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // filekeys.go — запрет путей к файлам в пользовательском и импортированном
 // JSON (T-08, A1-01): custom_config, custom_outbound_json, internal-full,
 // custom-outbound.

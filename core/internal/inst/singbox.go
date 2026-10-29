@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //go:build singbox_run
 
 // singbox.go — реальный раннер sing-box (форк 628a9ed, см. NEKO_PATCHES.md).

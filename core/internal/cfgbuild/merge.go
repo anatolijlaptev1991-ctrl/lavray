@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // merge.go — MergeJson (порт db/ConfigBuilder.cpp:32–68) и allowlist-мерж
 // пользовательского custom_config (core-port-plan §3.1.1, LNB-25).
 package cfgbuild

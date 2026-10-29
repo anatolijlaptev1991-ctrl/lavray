@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // observability_service.go — LogService + StatsService + DiagnosticsService
 // (W7). ConnectionService — connection_service.go. Тонкие обёртки над
 // logs.Mux / inst-событиями / cfgbuild dry-run; источники статистики и

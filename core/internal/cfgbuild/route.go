@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // route.go — route-секция из пресета (порт Routing-части BuildConfigSingBox,
 // ConfigBuilder.cpp:660–757) + experimental.cache_file. Порядок правил —
 // (обновление bd56088): sniff → dns-hijack → CUSTOM пресета (пины

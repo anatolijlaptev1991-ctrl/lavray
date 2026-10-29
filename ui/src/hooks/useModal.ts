@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // useModal.ts — поведение модального диалога: фокус при открытии, Esc,
 // ловушка Tab. Общий код для DialogShell и ImportDialog.
 //

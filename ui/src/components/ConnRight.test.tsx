@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // ConnRight.test.tsx — карточки «Проверка утечек» и «Качество связи» (T-36):
 // неизмеренное — «не проверено»/«—», измеренное — из CheckLeaks ядра.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

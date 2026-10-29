@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_dns.tsx — «DNS» по прототипу v1.2 (DS §8, FR-UI-148…156):
 // режимы разрешения (авто/DoH/DoT/FakeIP/локальный/через туннель),
 // advanced-редактор JSON с валидацией и форматированием, баннер

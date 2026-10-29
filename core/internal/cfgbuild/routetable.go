@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // routetable.go — тестер маршрута (T-30): правила активного пресета из того же
 // routeRules, что строит конфиг, и их оценка по семантике sing-box 1.14
 // (route/rule/rule_abstract.go). Работает без запущенного профиля.

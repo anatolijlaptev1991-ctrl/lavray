@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Интеграционные тесты рантайм-драйвера ядра (`coreproc::driver`) с
 //! ФЕЙК-ядром: платформенный интерпретатор (`/bin/sh` / `cmd.exe`) + скрипт
 //! через `CoreSpawnConfig::extra_args` (полный override argv — интерфейс

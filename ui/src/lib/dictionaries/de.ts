@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Словарь de — перенесён дословно из design/prototype.html (I18N.de);
 // машинная генерация 2026-10-24 из принятого прототипа v1.2, не редактировать руками.
 export const deDict: Record<string, string> = {

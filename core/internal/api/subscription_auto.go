@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // subscription_auto.go — автообновление подписок по таймеру (FR-UI-126, T-20):
 // обновление одной группы без стрима и планировщик (internal/subs.Scheduler),
 // подключённый к настройкам и журналу сервера.

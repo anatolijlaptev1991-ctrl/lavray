@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // dead-code.test.ts — T-62: в UI нет неподключённых модулей, стилей и диалогов.
 // Раньше Header/Sidebar/ScreenStub/Toast, tokens.css/app.css, LogExportDialog и
 // PresetSaveDialog лежали в дереве, но нигде не использовались: правка такого

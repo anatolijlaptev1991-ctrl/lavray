@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // profile_service.go — ProfileService (W6): CRUD, метаданные, перемещение,
 // клонирование, порядок, экспорт ссылок и двухфазный импорт контента
 // (FR-UI-116/190/191/257, LNB-25). Остальные RPC сервиса — unimplemented.go.

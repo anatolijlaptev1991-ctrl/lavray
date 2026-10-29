@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package parser
 
 // sing-box JSON-подписка (FR-UI-264, W3): автопроба — JSON-объект с массивом

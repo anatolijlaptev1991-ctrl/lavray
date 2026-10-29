@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // external.test.ts — T-58: внешние ссылки открываются в системном браузере
 // только по http(s); файл, брошенный мимо зоны импорта, не уводит окно.
 import { afterEach, describe, expect, it, vi } from 'vitest';

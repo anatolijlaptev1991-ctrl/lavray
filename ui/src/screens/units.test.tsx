@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // units.test.tsx — T-60: единицы и числа берутся из словаря и склоняются
 // по правилам языка (раньше: «0 Б/s», «1 ms», «Сервер: 26», «3 правил»).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

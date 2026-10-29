@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package model — каноническая модель данных LAVRay: bean-иерархия профилей
 // (порт fmt/*Bean.hpp из nekoray, см. docs/stage3/core-port-plan.md §5),
 // группы и скелет карты настроек.

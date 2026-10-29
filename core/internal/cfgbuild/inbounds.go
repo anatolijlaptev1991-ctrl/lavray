@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // inbounds.go — генерация inbounds (порт BuildConfigSingBox,
 // ConfigBuilder.cpp:393–450): mixed-слушатель по настройкам inbound.*
 // (auth опционален; FR-UI-279: не-loopback адрес требует пары user/pass,

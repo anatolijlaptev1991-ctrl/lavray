@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // TunAdminNotice.tsx — предупреждение «Для TUN запустите LAVRay от имени
 // администратора» на экране «Подключение» (T-46). Разметка баннера — как в
 // ImportDialog (banner banner-warn).

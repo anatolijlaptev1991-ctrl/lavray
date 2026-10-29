@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package api — ConnectRPC-реализации контракта lavray.v1 (W6,
 // core-port-plan §9 W6): Core/Profile(+Group)/Subscription/Routing/Dns/
 // Settings — рабочие; Log/Stats/Connection/Diagnostics/Gateway/Update/

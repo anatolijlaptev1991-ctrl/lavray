@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Охрана конфигурации оболочки (T-58): Tauri читает `tauri.conf.json` и
 //! `capabilities/*.json` при сборке, а неверное значение компилятором Rust не
 //! ловится и проявляется только в окне.

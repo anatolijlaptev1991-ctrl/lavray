@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // test_service.go — TestLatency/StopTests/ClearTestResults/ResetTraffic
 // (FR-UI-200…209, 211). TCP-пинг реальный: dial address:port с таймаутом и
 // конкурентностью из запроса. URL/Full-режимы выносятся на уровень выше

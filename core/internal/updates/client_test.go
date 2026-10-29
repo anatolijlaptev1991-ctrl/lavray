@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // client_test.go — негативные сценарии UPDATE-SYSTEM §7 + ротация/отзыв
 // ключей SECURITY.md §4. Все метаданные генерируются на лету: ключи ed25519,
 // подписи envelope, строгий порядок проверки.

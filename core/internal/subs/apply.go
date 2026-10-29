@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package subs
 
 // Дифф-флоу обновления подписки (FR-UI-258, LNB-29): разбор — в промежуточном

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // ContextMenu.tsx — всплывающее меню по openMenu() прототипа
 // (design/prototype.html ~3600–3647): при открытии фокус на первом пункте;
 // ↑/↓ по кругу, Home/End, переход по первой букве; Esc закрывает и возвращает

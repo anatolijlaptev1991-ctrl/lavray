@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // route_check.go — чтение гео-наборов для тестера маршрута (T-30).
 package api
 

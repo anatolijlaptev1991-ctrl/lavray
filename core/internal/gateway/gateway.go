@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package gateway — шлюз OpenWrt (W8, OPENWRT-GATEWAY §3–5): nftables-
 // include для fw4 (tproxy), политики per-MAC, watchdog связи. Всё платформо-
 // зависимое — за интерфейсами: рендер nft-конфига детерминирован (golden),

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // presets.ts — названия и описания пресетов маршрутов через словарь.
 // Для встроенного пресета ядро отдаёт displayName ключом локализации
 // («preset.lav-ru», core/internal/api/convert.go: presetToProto), для своего —

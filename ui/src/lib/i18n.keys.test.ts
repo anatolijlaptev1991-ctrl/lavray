@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // i18n.keys.test.ts — T-60: MessageKey — union ключей словаря ru, а все
 // статические ключи из исходников UI существуют в словарях всех языков.
 import { describe, expect, it } from 'vitest';

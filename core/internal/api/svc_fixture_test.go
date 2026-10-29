@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // svc_fixture_test.go — общая оснастка тестов сервисов ядра: Server на
 // временном хранилище и FakeRunner, фальшивый «mixed-in» (HTTP-прокси).
 package api

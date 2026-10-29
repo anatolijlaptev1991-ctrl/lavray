@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // T-37: paintTheme красит <html> и НИЧЕГО не сохраняет (его зовёт слушатель
 // темы ОС), applyTheme — красит и сохраняет выбор пользователя.
 import { afterEach, describe, expect, it, vi } from 'vitest';

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // geo.ts — страны в UI: ISO-код → эмодзи-флаг и локализованное название.
 // Источник кодов — ядро (Profile.geo, FR-UI-008); здесь только отображение.
 import { locale, t, type Language } from './i18n';

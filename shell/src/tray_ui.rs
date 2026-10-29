@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Рантайм трея: значок и меню по `TrayMenuSpec`; что показать, решает
 //! `lavray_shell::tray::view` (проверяется тестами), здесь только вызовы Tauri.
 //! Менять значок можно лишь в главном потоке (`run_on_main_thread`): так

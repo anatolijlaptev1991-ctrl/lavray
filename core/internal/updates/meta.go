@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package updates — TUF-lite клиент обновлений LAVRay (UPDATE-SYSTEM v2.0,
 // core-port-plan §9 W8): четыре подписанных документа root/timestamp/
 // manifest/sources, верификация ed25519 по ролям корня, монотонный serial

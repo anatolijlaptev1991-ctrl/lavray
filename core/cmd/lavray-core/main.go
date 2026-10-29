@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // lavray-core — процесс Go-ядра LAVRay (оболочка Tauri спавнит его с
 // `serve --listen-socket <path>`; спека — docs/stage3/shell-lifecycle §3):
 //

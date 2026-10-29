@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package store
 
 // Целостность и версия схемы БД (T-50, A1-15, FR-UI-260 «битый файл — понятная

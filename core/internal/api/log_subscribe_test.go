@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // log_subscribe_test.go — регрессия T-70: LogService.Subscribe выполняет
 // контракт tail_lines («сколько истории отдать сразу, 0 = нет») и фильтрует
 // историю теми же условиями, что и живой поток. Раньше при tail_lines=0 ядро

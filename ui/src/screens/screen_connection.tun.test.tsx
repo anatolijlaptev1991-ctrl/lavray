@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_connection.tun.test.tsx — T-46: без прав администратора режим TUN
 // объясняет, что делать, и не пытается подключаться. Ядро — мок fetch,
 // оболочка — мок invoke.

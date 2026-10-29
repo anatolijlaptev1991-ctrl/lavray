@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Точка входа LAVRay shell (Tauri 2).
 //!
 //! Спек §10: single instance, deep-link, трей, окна, онбординг — итерации

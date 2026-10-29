@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // subscription_service.go — SubscriptionService (W6+, аудит №7 F1): реальное
 // обновление подписки через subs.Subscriber — fetch → parse → diff →
 // подтверждение при деструктивном изменении → apply с автооткатом. Стрим

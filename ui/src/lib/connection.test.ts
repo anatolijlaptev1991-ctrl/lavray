@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // connection.test.ts — выбор сервера, порядок меню и перезапуск соединения.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { create } from '@bufbuild/protobuf';

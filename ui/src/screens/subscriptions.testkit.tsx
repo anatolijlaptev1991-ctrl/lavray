@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // subscriptions.testkit.tsx — общие заготовки тестов экрана «Подписки»
 // (создаёт T-18; используют тесты T-21 и T-68). Не тест: vitest берёт *.test.tsx.
 import { afterEach, beforeEach, expect, vi } from 'vitest';

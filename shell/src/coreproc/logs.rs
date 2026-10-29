@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Пайп логов ядра (§4).
 //!
 //! stdout/stderr ядра читаются построчно → ring на 200 строк (пост-мортем

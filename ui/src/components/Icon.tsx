@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * Inline SVG icons — Lucide style: 24 grid, stroke 1.75, currentColor
  * (paths copied from design/prototype.html `IC` map; DS §5).

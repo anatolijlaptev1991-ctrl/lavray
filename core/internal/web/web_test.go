@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // web_test.go — панель: вход/брутфорс/CSRF/Origin/bind/сессии (FR-UI-278).
 package web
 

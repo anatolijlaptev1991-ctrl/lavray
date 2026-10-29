@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // useTunBlocked.ts — режим TUN включён, а прав администратора нет (T-46).
 import { useEffect, useState } from 'react';
 import { isElevated } from '../lib/elevation';

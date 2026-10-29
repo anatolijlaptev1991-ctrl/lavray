@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package subs
 
 // Атомарность Apply и ручные серверы (T-51, A1-16, B1-27, B1-35).

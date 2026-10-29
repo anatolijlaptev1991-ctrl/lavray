@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package inst
 
 // sblog.go — журнал sing-box → журнал ядра (T-33, B2-12, D1-04). Без тега

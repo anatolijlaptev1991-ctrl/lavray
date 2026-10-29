@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // dialogs.test.tsx — проверка переноса из Happ/v2rayN и независимых режимов
 // в онбординге (DOM-проверка вместо визуальной: шаги мастера интерактивны).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package parser разбирает содержимое ответа подписки в профили
 // (W3, core-port-plan §4.1). Поддерживаемые форматы с авто-детекцией:
 //

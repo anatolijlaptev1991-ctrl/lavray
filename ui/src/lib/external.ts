@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // external.ts — внешние ссылки и перетаскивание файлов в окне Tauri (T-58).
 // WebView2 молча гасит window.open, а перетаскивание файла отдаёт
 // оболочке; здесь UI открывает ссылки через плагин opener оболочки (scope

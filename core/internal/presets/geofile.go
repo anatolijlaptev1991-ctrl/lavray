@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package presets
 
 // GeoFile возвращает встроенную копию гео-набора (rel вида

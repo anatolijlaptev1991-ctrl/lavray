@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Backoff-стратегия рестартов ядра.
 //!
 //! Спек: `docs/stage3/shell-lifecycle.md` §2.2 — «backoff 1/2/4/8/15 с

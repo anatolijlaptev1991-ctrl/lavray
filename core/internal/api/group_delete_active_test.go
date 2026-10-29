@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package api
 
 // group_delete_active_test.go — T-12 (F-004, B1-19): DeleteGroup и

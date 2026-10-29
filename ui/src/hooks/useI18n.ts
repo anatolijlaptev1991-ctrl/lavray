@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * React binding for the i18n module: subscribes to language switches
  * without reloading (DS §9).

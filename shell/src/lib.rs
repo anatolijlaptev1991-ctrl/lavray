@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Библиотечная часть оболочки LAVRay (этап 3, скаффолд).
 //!
 //! Спек: `docs/stage3/shell-lifecycle.md` (§10 — каркас крейта). GUI-часть

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // dialog-portal.test.tsx — T-06 (F-047): диалоги рендерятся в портале на
 // <body>, а не внутри экрана. После анимации .screen.active>* на предке
 // остаётся transform, он делает предка containing block для position:fixed, и

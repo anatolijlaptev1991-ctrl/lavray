@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // App.connection.test.tsx — горячие клавиши и статус-бар настоящего приложения.
 // App сам создаёт клиентов, поэтому ядро подменено на уровне fetch.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

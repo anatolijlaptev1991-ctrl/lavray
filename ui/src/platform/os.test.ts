@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // os.test.ts — T-63: ОС определяется в одном месте (platform/adapter.ts).
 import { describe, expect, it } from 'vitest';
 import { detectOS, osAttribute } from './adapter';

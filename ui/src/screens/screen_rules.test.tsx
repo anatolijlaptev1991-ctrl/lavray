@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_rules.test.tsx — регрессия T-69: повторный ввод существующей записи не
 // удаляет её, ✕ на чипе удаляет, пустой набор показывает «Правил нет».
 // @testing-library в проекте не установлен — react-dom/client + act и обычный DOM.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Вывод консольных программ Windows в строку (S-02).
 //!
 //! `reg.exe` пишет в stdout/stderr в OEM-кодовой странице (на русской Windows

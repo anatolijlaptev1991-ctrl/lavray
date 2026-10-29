@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // hotkeys.test.ts — T-63: клавиша сочетания определяется в любой раскладке,
 // подписи сочетаний содержат модификатор ОС.
 import { describe, expect, it } from 'vitest';

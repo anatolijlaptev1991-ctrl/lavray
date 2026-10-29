@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // T-13: экспорт настроек не должен уносить секреты.
 import { describe, expect, it } from 'vitest';
 import { isSecretSettingKey, withoutSecrets } from './backup';

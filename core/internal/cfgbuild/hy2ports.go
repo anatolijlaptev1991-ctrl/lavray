@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // hy2ports.go — перевод строки server_ports профиля в формат sing-box 1.14.
 //
 // В форке sing-box поле hysteria2 server_ports — список строк-диапазонов

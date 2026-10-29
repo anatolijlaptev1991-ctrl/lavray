@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package inst — менеджер инстанса sing-box (W6, core-port-plan §6.1):
 // ОДИН активный инстанс под мьютексом (fix AUDIT §7.1.1), FSM состояний
 // (FR-UI-261), таймауты Connect 15 с / Disconnect 10 с (LNB-06), Start поверх

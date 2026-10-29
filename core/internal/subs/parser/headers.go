@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package parser
 
 // Заголовки подписки FR-UI-262: HTTP-заголовки ответа (разбирает subscriber)

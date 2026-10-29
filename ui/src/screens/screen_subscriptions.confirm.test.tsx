@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_subscriptions.confirm.test.tsx — регрессия T-18: деструктивное
 // обновление подписки (кадр CONFIRM_REQUIRED) подтверждается диалогом, а
 // «Обновить» шлёт UpdateSubscription с confirmDestructive=true. Раньше UI звал

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // WindowChrome.tsx — собственный хром окна Tauri (DS §3: per-OS chrome).
 // Прототип рисует титлбар с кнопками окна (.caps-win/.caps-linux/.tl-mac);
 // окно Tauri создаётся без системной рамки, иначе заголовок дублируется

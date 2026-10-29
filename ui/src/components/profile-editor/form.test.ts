@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // form.test.ts — регрессия T-66: форма редактора ↔ Profile для Hy2, TUIC, SS,
 // цепочки и «Своего JSON» (раньше этих полей и типов в редакторе не было).
 import { describe, expect, it } from 'vitest';

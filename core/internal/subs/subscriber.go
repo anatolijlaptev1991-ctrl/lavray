@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package subs — каркас обновления подписок LAVRay (W3): fetch с лимитами и
 // заголовками, разбор (internal/subs/parser), дифф-флоу со снапшотом/откатом
 // (FR-UI-258) и защитой от деструктивных обновлений (LNB-29).

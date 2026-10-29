@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // subscription_confirm_test.go — регрессия T-18: после кадра
 // PHASE_CONFIRM_REQUIRED поток UpdateSubscription обязан закончиться штатно
 // (код OK), а не FAILED_PRECONDITION: клиент читает кадры циклом, и ошибка в

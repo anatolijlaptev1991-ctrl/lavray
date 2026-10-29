@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // groups.ts — правила работы с группами серверов, общие для экранов и диалогов.
 import { Group_Kind } from '../gen/lavray_pb';
 import type { MessageKey } from './i18n';

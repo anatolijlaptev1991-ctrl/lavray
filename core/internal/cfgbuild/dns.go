@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // dns.go — DNS-секция из пресета (порт makeDnsServer + DNS-часть
 // BuildConfigSingBox, ConfigBuilder.cpp:533–658): 3 режима —
 //   - simple: строки remote/direct (+underlying) → типизированные серверы

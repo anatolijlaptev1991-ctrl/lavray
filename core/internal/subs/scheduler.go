@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package subs
 
 // scheduler.go — автообновление подписок по таймеру (FR-UI-126, T-20, B1-08).

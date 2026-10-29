@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // WindowChrome.tab-order.test.tsx — T-63: кнопки окна вне порядка Tab (прототип:
 // tabindex="-1" у #wbMin/#wbMax/#wbClose/#wbCloseL; kbd_probe: window-buttons-not-tabbable).
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // App.hotkeys.test.tsx — T-63: горячие клавиши на любой раскладке, подписи
 // сочетаний с модификатором, Ctrl+K фокусирует поиск, подсказки у иконок рельса.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';

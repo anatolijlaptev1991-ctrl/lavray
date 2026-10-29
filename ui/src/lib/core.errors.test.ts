@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // core.errors.test.ts — T-59: friendlyCoreError отдаёт готовую фразу на языке
 // интерфейса и никогда не отдаёт ключ словаря; Unimplemented и
 // FailedPrecondition не маскируются под «Ядро недоступно».

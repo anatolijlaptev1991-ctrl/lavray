@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_subscriptions.settings.test.tsx — регрессия T-21: у карточки подписки
 // есть шестерёнка «Настройки подписки» (прототип dlgSubSet): интервал и
 // User-Agent пишутся в группу через UpdateGroup, «через туннель» и HWID — в

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package api
 
 // convert.go — конвертация контрактов lavray.v1 (internal/gen/lavrayv1) ↔

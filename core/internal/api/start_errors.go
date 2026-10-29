@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package api
 
 // Понятные ошибки и предупреждения запуска (T-55, B1-36, B1-21).

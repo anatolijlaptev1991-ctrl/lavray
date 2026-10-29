@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! A2-12: после EOF на stdin драйвер даёт ядру время на самостоятельный выход.
 //! Ядро по EOF останавливает sing-box (снимает TUN) и выходит само; раньше за
 //! одним `try_wait` сразу шёл SIGTERM/TerminateJobObject (на Windows — hard-kill

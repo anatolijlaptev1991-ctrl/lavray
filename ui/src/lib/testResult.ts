@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // testResult.ts — разбор результата теста задержки, пришедшего от ядра.
 
 /**

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // lifecycle.go — остановка инстанса при выходе процесса ядра (T-52).
 package api
 

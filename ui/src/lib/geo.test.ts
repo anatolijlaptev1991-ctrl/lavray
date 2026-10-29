@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // geo.test.ts — T-60: названия стран на всех пяти языках и подпись «без страны».
 import { describe, expect, it } from 'vitest';
 import { geoName, groupByGeo } from './geo';

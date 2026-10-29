@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package api
 
 // MaxRequestBytes — предел размера ОДНОГО сообщения запроса RPC (T-50, A1-14).

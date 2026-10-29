@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package happ
 
 // verifiedVectors are 38 synthetic links generated from the published keys

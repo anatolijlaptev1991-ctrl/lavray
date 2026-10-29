@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * LAVRay platform adapter (stage-3 scaffold).
  *

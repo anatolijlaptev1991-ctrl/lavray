@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // ChainField.tsx — узлы цепочки (прототип chainEditorHtml): упорядоченный
 // список профилей с «выше / ниже / убрать» и добавлением узла из списка.
 // Порядок сверху вниз = порядок трафика (ChainDetail.profile_ids). Цепочку в

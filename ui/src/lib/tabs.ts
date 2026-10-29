@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * Клавиатура вкладок по WAI-ARIA (T-38). Повторяет `initTabs` прототипа
  * (design/prototype.html:4521-4530): ←/→ — предыдущая/следующая вкладка по

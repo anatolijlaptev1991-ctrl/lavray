@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // update_service.go — UpdateService (W8): TUF-lite клиент (internal/updates)
 // поверх settings-состояния update.*. CheckUpdates — полная верификация
 // root→timestamp→manifest; DownloadUpdates/ApplyUpdates — стримы событий

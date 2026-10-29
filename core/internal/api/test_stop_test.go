@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package api
 
 // test_stop_test.go — D-05: остановленный (StopTests) или оборванный тест не

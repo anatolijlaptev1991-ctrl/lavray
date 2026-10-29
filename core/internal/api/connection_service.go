@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // connection_service.go — ConnectionService (W7): трекер активных
 // соединений за интерфейсом ConnectionTracker (clash-api инстанса —
 // W8-релиз; тесты — детерминированный трекер). List/Watch/Close.

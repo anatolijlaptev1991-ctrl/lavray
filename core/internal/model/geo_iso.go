@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package model
 
 // Вспомогательные таблицы DetectGeo (T-54, B2-21): ложные срабатывания

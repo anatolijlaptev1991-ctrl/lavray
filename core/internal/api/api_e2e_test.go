@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // api_e2e_test.go — e2e W6: полный цикл через connect-клиента поверх
 // httptest-сервера (без сети): Profile CRUD/Import/Export, Routing,
 // Settings, recover-интерсептор.

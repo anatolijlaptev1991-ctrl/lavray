@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // TypeFields.tsx — типоспецифичные поля редактора профиля: SOCKS/HTTP,
 // Shadowsocks, VMess, VLESS/Trojan, Hysteria2, TUIC, цепочка, «Свой JSON» и
 // блок «Транспорт и TLS». Подписи — из словаря (ключи ed.*); технические токены

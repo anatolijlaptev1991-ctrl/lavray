@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // ImportDialog.tsx — импорт профилей по прототипу v1.2 (dlgImport,
 // FR-UI-114…129): вкладки «Ссылка / QR-код / Файл», двухфазный импорт
 // (preview → подтверждение), предупреждения о выброшенных custom-полях,

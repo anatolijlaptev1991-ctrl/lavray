@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 use sha2::{Digest, Sha256};
 use std::io::Read;
 use std::path::Path;

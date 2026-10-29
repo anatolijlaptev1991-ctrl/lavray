@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vitest/config';
 

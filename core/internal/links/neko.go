@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package links
 
 // neko-ссылки — FR-UI-191: nekoray://<type>#<base64url(JSON bean)> — полное

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_rules.tsx — «Маршрутизация» по прототипу v1.2 (DS §8):
 // тестер маршрута (CheckRoute), сетка пресетов с активацией, редактор
 // списков правил (proxy/direct/block: домены и IP) и default outbound.

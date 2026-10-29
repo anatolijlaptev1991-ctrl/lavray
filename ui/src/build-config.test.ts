@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // build-config.test.ts — T-62: релизная сборка не публикует карты исходников.
 // Конфиг читается как текст: импорт vite.config.ts в среде jsdom падает
 // внутри esbuild («TextEncoder … instanceof Uint8Array»).

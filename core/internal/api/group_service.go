@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // group_service.go — GroupService (аудит №4 A2): список/создание/правка/
 // удаление/порядок групп. Без ListGroups UI не мог узнать id встроенной
 // группы и слал импорт в несуществующую group_id=1.

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // geo_test.go — определение страны по имени/адресу (группировка по странам).
 package model
 

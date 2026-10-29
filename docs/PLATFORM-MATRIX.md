@@ -7,9 +7,9 @@
 | Функция | Windows 10/11 | macOS 13+ | Ubuntu 22.04/24.04 GNOME (X11/Wayland) | KDE (Linux) | OpenWrt (веб-режим) |
 |---|---|---|---|---|---|
 | Системный прокси | да (WinINET; формат строки настраивается) | да (networksetup по каждому network service) | условие: gsettings; в остальных средах — только переменные окружения | условие: kwriteconfig + D-Bus | нет (вместо него режим шлюза TProxy/TUN) |
-| TUN | да — системная служба, согласие один раз (FR-UI-269) | условие: привилегированный помощник SMAppService (Network Extension — v1.x) | условие: systemd-служба с `AmbientCapabilities=CAP_NET_ADMIN`; в AppImage — только с помощником (setcap на read-only squashfs невозможен) | как GNOME | да — режим шлюза; на роутере прав не требует |
+| TUN | да — приложение (и ядро) запущено от администратора, как в NekoBox: «Перезапустить от администратора» из диалога (UAC), службы нет | условие: привилегированный помощник SMAppService (Network Extension — v1.x) | условие: systemd-служба с `AmbientCapabilities=CAP_NET_ADMIN`; в AppImage — только с помощником (setcap на read-only squashfs невозможен) | как GNOME | да — режим шлюза; на роутере прав не требует |
 | Трей | да (цветной значок, состояния знака) | да (template-значок, только альфа) | условие: без расширения AppIndicator в «чистом» GNOME трея нет — закрытие окна = выход с предупреждением | да (KStatusNotifier) | нет |
-| Автозапуск | да (HKCU Run / служба) | условие: SMAppService LoginItems (LSSharedFileList — устарел, DROP FR-UI-224/macOS) | да (~/.config/autostart) | да | да (procd/init.d) |
+| Автозапуск | да (без прав — HKCU Run; с правами администратора — задача планировщика, TUN работает сразу после входа; флаг `--tray`) | условие: SMAppService LoginItems (LSSharedFileList — устарел, DROP FR-UI-224/macOS) | да (~/.config/autostart) | да | да (procd/init.d) |
 | Глобальные горячие клавиши | да (выключены по умолчанию) | да | условие: на Wayland — портал GlobalShortcuts; на X11 — да | условие: как GNOME (Wayland — портал) | нет |
 | Уведомления ОС | да | да | условие: X11 — да; Wayland — портал notifications | да | нет (уведомления только в панели) |
 | Процессные правила (по приложению) | да (`*.exe`, бейдж платформы в UI) | да (имена процессов без `.exe`) | да | да | нет (процессов клиентских приложений нет; правило помечается «Не действует на роутере») |
@@ -17,7 +17,7 @@
 | Обновления приложения | да — NSIS per-machine + rollback-помощник | условие: только из «Программ»; v1 — неподписанные .dmg, инструкция обхода Gatekeeper в README (решение владельца 2026-10-23); при покупке Developer ID → подпись + notarization | условие: `.deb` — apt-репозиторий `signed-by`; AppImage — встроенный updater без TUN | как GNOME (.deb) | да — два фида: ipk+usign (24.10), apk+подпись (25.12+); watchdog-откат |
 | Deep link `lavray://import` | да | да | да | да | нет |
 | Шрифт интерфейса | Segoe UI Variable | SF Pro (`-apple-system`) | Cantarell / Noto Sans | как GNOME | Inter (веб) |
-| Системная служба для TUN | да (служба Windows) | да (SMAppService) | да (systemd unit) | да | не нужна (сам root-контекст) |
+| Системная служба для TUN | нет в 0.1.x (Windows: запуск от администратора) | да (SMAppService) | да (systemd unit) | да | не нужна (сам root-контекст) |
 | Веб-панель | нет (режим приложения; IPC без TCP) | нет | нет | нет | да — вход по паролю, HTTPS, привязка к LAN |
 | IPv6 | да | да | да | да | условие: включается явно отдельной цепочкой (по умолчанию выключено) |
 

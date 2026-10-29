@@ -6,10 +6,11 @@ import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { Icon } from './Icon';
 import { TrafficGraph } from './TrafficGraph';
-import { GetPublicIpRequest_Via } from '../gen/lavray_pb';
+import type { LeakReport } from '../gen/lavray_pb';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { formatSince } from '../lib/i18n';
+import { leakRows } from '../lib/leaks';
 
 export interface ConnRightProps {
   readonly connected: boolean;
@@ -20,12 +21,6 @@ export interface ConnRightProps {
   readonly presetRules: number;
 }
 
-interface Row {
-  readonly kind: 'ok' | 'warn';
-  readonly label: string;
-  readonly value: string;
-}
-
 export function ConnRight({
   connected,
   latencyMs,
@@ -34,75 +29,45 @@ export function ConnRight({
 }: ConnRightProps): JSX.Element {
   const { t, tf, lang } = useI18n();
   const core = useCore();
-  const [rows, setRows] = useState<readonly Row[]>([]);
+  const [report, setReport] = useState<LeakReport | null>(null);
   const [busy, setBusy] = useState(false);
   const [checkedAt, setCheckedAt] = useState<number | null>(null);
   const [err, setErr] = useState('');
 
-  // Проверка утечек: публичный IP напрямую и через туннель. Совпадение
-  // означает, что трафик идёт мимо туннеля.
+  // Проверка утечек: один вызов CheckLeaks; строки собирает leakRows из того,
+  // что ядро действительно измерило.
   const runLeakCheck = useCallback(async (): Promise<void> => {
     setBusy(true);
     setErr('');
     try {
-      const [direct, tunnel] = await Promise.all([
-        core.diagnostics.getPublicIp({ via: GetPublicIpRequest_Via.DIRECT }),
-        core.diagnostics.getPublicIp({ via: GetPublicIpRequest_Via.THROUGH_TUNNEL }),
-      ]);
-      const ip = tunnel.ip ?? '—';
-      const next: Row[] = [
-        {
-          kind: tunnel.ip !== undefined && tunnel.ip !== '' ? 'ok' : 'warn',
-          label: t('leak.ip'),
-          value: ip,
-        },
-        {
-          kind: 'ok',
-          label: t('leak.direct'),
-          value: t('leak.hidden'),
-        },
-        {
-          kind: 'ok',
-          label: t('leak.dns'),
-          value: t('leak.noLeak'),
-        },
-        {
-          kind: 'ok',
-          label: t('leak.ipv6'),
-          value: t('leak.ipv6.tunnel'),
-        },
-      ];
-      // Если прямой и туннельный IP совпали — утечка.
-      if (direct.ip !== undefined && direct.ip !== '' && direct.ip === tunnel.ip) {
-        next[0] = {
-          kind: 'warn',
-          label: t('leak.ip'),
-          value: ip,
-        };
-      }
-      setRows(next);
+      setReport(await core.diagnostics.checkLeaks({}));
       setCheckedAt(Date.now());
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
-  }, [core, t]);
+  }, [core]);
 
   // При подключении проверка запускается сама — как в прототипе.
   useEffect(() => {
     if (connected) {
       void runLeakCheck();
     } else {
-      setRows([]);
+      setReport(null);
       setCheckedAt(null);
     }
   }, [connected, runLeakCheck]);
+  const rows = report === null ? [] : leakRows(report, t);
 
   const relTime = (ms: number): string => formatSince(ms, lang);
 
+  // latency_ms ядра: 0 — не измерялась, <0 — сервер недоступен; показываем
+  // только реальный замер. Потери и время DNS ядро не измеряет: «—».
   const latency =
-    connected && latencyMs !== undefined ? `${String(latencyMs)} ${t('unit.ms')}` : '—';
+    connected && latencyMs !== undefined && latencyMs > 0
+      ? `${String(latencyMs)} ${t('unit.ms')}`
+      : '—';
 
   return (
     <div className="conn-right">
@@ -117,11 +82,16 @@ export function ConnRight({
           <ul className="leak-list">
             {rows.map((r) => (
               <li className="leak-row" key={r.label}>
-                <span className={`lk-st lk-${r.kind}`}>
-                  <Icon name={r.kind === 'ok' ? 'check' : 'alert'} size={16} />
-                  <span className="sr-only">{t(r.kind === 'ok' ? 'st.ok' : 'st.warn')}</span>
+                <span className={`lk-st lk-${r.kind}${r.kind === 'info' ? ' t3' : ''}`}>
+                  <Icon
+                    name={r.kind === 'ok' ? 'check' : r.kind === 'warn' ? 'alert' : 'info'}
+                    size={16}
+                  />
+                  {r.kind !== 'info' && (
+                    <span className="sr-only">{t(r.kind === 'ok' ? 'st.ok' : 'st.warn')}</span>
+                  )}
                 </span>
-                <span className="lk-k">{r.label}</span>
+                <span className="lk-k">{t(r.label)}</span>
                 <span className="lk-v">{r.value}</span>
               </li>
             ))}
@@ -163,13 +133,15 @@ export function ConnRight({
           </div>
           <div className="hl-cell">
             <span className="cap">{t('health.loss')}</span>
-            <span className="val">
-              <span className="mono">{connected ? '0 %' : '—'}</span>
+            <span className="val" title={t('st.na')}>
+              <span className="mono">—</span>
             </span>
           </div>
           <div className="hl-cell">
             <span className="cap">{t('health.dns')}</span>
-            <span className="val">{connected ? `${String(12)} ${t('unit.ms')}` : '—'}</span>
+            <span className="val" title={t('st.na')}>
+              —
+            </span>
           </div>
           <div className="hl-cell">
             <span className="cap">{t('health.lastCheck')}</span>

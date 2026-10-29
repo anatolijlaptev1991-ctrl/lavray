@@ -13,6 +13,7 @@ import { useI18n } from '../hooks/useI18n';
 import { useKbdLabel } from '../hooks/useKbdLabel';
 import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
+import { loadModes, saveModes } from '../lib/connection';
 import { LANGUAGES, LANG_NATIVE, type MessageKey } from '../lib/i18n';
 import { presetTitle } from '../lib/presets';
 
@@ -367,8 +368,12 @@ export function OnboardingDialog({
   const [step, setStep] = useState(1);
   const [presets, setPresets] = useState<{ id: string; displayName: string }[]>([]);
   const [presetId, setPresetId] = useState('');
-  const [sysProxy, setSysProxy] = useState(true);
-  const [tunMode, setTunMode] = useState(false);
+  // T-73: переключатели стартуют с сохранённых режимов (при повторном
+  // открытии мастера из меню), а не с зашитых значений.
+  const [sysProxy, setSysProxy] = useState(() => loadModes(window.localStorage).sysProxy);
+  const [tunMode, setTunMode] = useState(() => loadModes(window.localStorage).tunMode);
+  // T-73: нажали «Перенести из NekoBox» — показываем, что функции пока нет.
+  const [nekoSoon, setNekoSoon] = useState(false);
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -396,6 +401,14 @@ export function OnboardingDialog({
   );
   const chosenPreset = presets.find((p) => p.id === presetId);
 
+  // T-73: «Готово» сохраняет выбранные режимы (раньше выбор терялся: в
+  // lavray.modes ничего не попадало) и закрывает мастер. «Пропустить» и Esc
+  // режимы не трогают.
+  const finish = (): void => {
+    saveModes(window.localStorage, { sysProxy, tunMode });
+    onClose();
+  };
+
   // T-40: мастер на общей оболочке DialogShell (портал на <body>, фокус при
   // открытии, ловушка Tab, Esc = «Пропустить», возврат фокуса). Клик по
   // затемнению мастер не закрывает, как и раньше. Отступы тела не менялись,
@@ -421,7 +434,7 @@ export function OnboardingDialog({
               {t('common.next')}
             </button>
           ) : (
-            <button className="btn btn-pri" onClick={onClose}>{t('common.next')}</button>
+            <button className="btn btn-pri" onClick={finish}>{t('onb.finish')}</button>
           )}
         </>
       }
@@ -523,11 +536,22 @@ export function OnboardingDialog({
                   <Icon name="download" />
                   <span>{t('onb.src.v2ray')}</span>
                 </button>
-                <span className="onb-src muted" title={t('onb.neko.found')}>
+                {/* Перенос из NekoBox пока не подключён к ядру (эпик T-78): честная
+                    кнопка «Скоро». Раньше здесь был span с подсказкой-шаблоном
+                    «Найдено: {servers}, {subs}», которую никто не раскрывал. */}
+                <button
+                  type="button"
+                  className="onb-src onb-src-btn"
+                  aria-disabled="true"
+                  title={t('onb.neko.soonHint')}
+                  onClick={() => { setNekoSoon(true); }}
+                >
                   <Icon name="layers" />
                   <span>{t('onb.src.neko')}</span>
-                </span>
+                  <span className="badge badge-soft">{t('onb.neko.soon')}</span>
+                </button>
               </div>
+              {nekoSoon && <p className="cap" role="status" style={{ marginTop: 8 }}>{t('onb.neko.soonHint')}</p>}
               <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={() => { setStep(3); }}>
                 {t('onb.later')}
               </button>

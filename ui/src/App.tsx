@@ -490,7 +490,8 @@ function AppInner(): JSX.Element {
                 : undefined
             }
           >
-            {sectionId === 'connection' && <ConnectionScreen />}
+            {/* T-73: после мастера экран перечитывает режимы из localStorage (key). */}
+            {sectionId === 'connection' && <ConnectionScreen key={onboarding ? 'onboarding' : 'ready'} />}
             {sectionId === 'servers' &&
               (tab?.id === 'subscriptions' ? <SubscriptionsScreen /> : <ServersScreen />)}
             {sectionId === 'rules' && (tab?.id === 'dns' ? <DnsScreen /> : <RulesScreen />)}
@@ -508,6 +509,7 @@ function AppInner(): JSX.Element {
           onClose={() => {
             setOnboarding(false);
             window.localStorage.setItem('lavray.onboarded', '1');
+            setModes(loadModes(window.localStorage)); // чипы статус-бара без ожидания опроса
           }}
           onOpenImport={(tab) => { setQuickImport(tab ?? 'link'); }}
         />

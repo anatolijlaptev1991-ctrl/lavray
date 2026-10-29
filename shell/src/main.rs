@@ -7,11 +7,12 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use lavray_shell::coreproc::driver::{generate_auth_token, RealCoreProcess};
-use lavray_shell::coreproc::{CoreProcess, CoreSpawnConfig, CoreState, SecretToken};
+use lavray_shell::coreproc::driver::generate_auth_token;
+use lavray_shell::coreproc::runner::{spawn_supervisor, Failure, SupervisorHandle};
+use lavray_shell::coreproc::{CoreSpawnConfig, CoreState};
 use lavray_shell::elevation::is_elevated as process_is_elevated;
 use lavray_shell::endpoint::{
-    run_supervisor, EndpointEvent, EndpointHub, SupervisorHost, CORE_ENDPOINT_EVENT, ENDPOINT_WAIT,
+    EndpointEvent, EndpointHub, HostObserver, SupervisorHost, CORE_ENDPOINT_EVENT, ENDPOINT_WAIT,
 };
 use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
 use lavray_shell::sysproxy::SysProxy;
@@ -37,24 +38,12 @@ struct RuntimeState {
     core_url: String,
     /// Последняя известная причина отказа (показывается UI/логом).
     last_error: String,
-    /// D3: ядро живо (обновляется потоком-надзирателем).
+    /// Ядро живо (Ready/Connected): обновляет наблюдатель надзирателя.
     core_alive: bool,
-    /// Запрос на остановку ядра при выходе (надзиратель завершает его сам:
-    /// RealCoreProcess содержит сырые handle и не Send).
-    shutdown: bool,
-    /// Надзиратель закончил: ядро остановлено (выход ждёт этого флага).
-    core_stopped: bool,
-}
-
-/// Отмечает в `RuntimeState`, что надзиратель закончил (в том числе по панике).
-struct CoreStopped(Arc<Mutex<RuntimeState>>);
-
-impl Drop for CoreStopped {
-    fn drop(&mut self) {
-        let mut s = self.0.lock().unwrap_or_else(|e| e.into_inner());
-        s.core_alive = false;
-        s.core_stopped = true;
-    }
+    /// Состояние FSM ядра §2.2: Spawning, Ready, Crashed, RateLimited, …
+    core_state: CoreState,
+    /// Хвост кольца логов ядра на момент последнего сбоя (диагностика).
+    core_log: Vec<String>,
 }
 
 /// is_elevated — запущено ли приложение с правами администратора/root (T-46):
@@ -81,20 +70,28 @@ async fn core_endpoint(
     Ok(ready.map(|ep| (ep.url, ep.token)).unwrap_or_default())
 }
 
+/// Состояние ядра §2.2 (Spawning, Ready, Crashed, RateLimited, …).
 #[tauri::command]
 fn core_state(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> CoreState {
-    let s = shared.lock().unwrap_or_else(|e| e.into_inner());
-    if s.core_url.is_empty() {
-        if s.last_error.is_empty() {
-            CoreState::Idle
-        } else {
-            CoreState::SpawnErr
-        }
-    } else if s.core_alive {
-        CoreState::Ready
-    } else {
-        CoreState::Crashed
-    }
+    shared.lock().unwrap_or_else(|e| e.into_inner()).core_state
+}
+
+/// core_log_tail — последние строки stdout/stderr ядра на момент сбоя (кольцо
+/// §4): по ним видно, почему ядро не стартует или упало.
+#[tauri::command]
+fn core_log_tail(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> Vec<String> {
+    shared
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .core_log
+        .clone()
+}
+
+/// restart_core — ручной «Перезапустить» из RateLimited (рестарты прекращены)
+/// или после ошибки запуска.
+#[tauri::command]
+fn restart_core(supervisor: tauri::State<'_, Arc<SupervisorHandle>>) {
+    supervisor.manual_restart();
 }
 
 /// set_system_proxy — включить/выключить системный прокси (F5, FR-UI-221/222).
@@ -128,10 +125,8 @@ fn set_system_proxy(
 
 /// request_quit — попросить надзирателя остановить ядро перед выходом (D2).
 #[tauri::command]
-fn request_quit(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) {
-    if let Ok(mut s) = shared.lock() {
-        s.shutdown = true;
-    }
+fn request_quit(supervisor: tauri::State<'_, Arc<SupervisorHandle>>) {
+    supervisor.stop();
 }
 
 /// Сколько ждать остановки ядра при выходе: лестница §5 — до 15 с; окно и
@@ -147,19 +142,14 @@ fn begin_quit(app: &tauri::AppHandle) {
     }
     let app = app.clone();
     std::thread::spawn(move || {
-        let state = app.try_state::<Arc<Mutex<RuntimeState>>>();
-        if let Some(state) = &state {
-            // надзиратель остановит ядро лестницей §5
-            state.lock().unwrap_or_else(|e| e.into_inner()).shutdown = true;
+        let supervisor = app.try_state::<Arc<SupervisorHandle>>();
+        if let Some(supervisor) = &supervisor {
+            supervisor.stop(); // лестница §5
         }
         tray_ui::hide(&app);
         // Прокси снимаем до выхода: иначе в ОС остаётся прокси на мёртвый порт.
         let _ = SysProxy::new(&data_dir()).release_on_quit();
-        let stopped = || {
-            state
-                .as_ref()
-                .is_none_or(|s| s.lock().unwrap_or_else(|e| e.into_inner()).core_stopped)
-        };
+        let stopped = || supervisor.as_ref().is_none_or(|s| s.is_stopped());
         let deadline = std::time::Instant::now() + QUIT_CORE_WAIT;
         while !stopped() && std::time::Instant::now() < deadline {
             std::thread::sleep(std::time::Duration::from_millis(50));
@@ -229,8 +219,6 @@ fn shell_error(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> String {
         .clone()
 }
 
-/// spawn_core — запуск lavray-core (рядом с shell-бинарником) по спеке §3:
-/// токен в stdin, ждём LAVRAY_CORE_READY, адрес отдаём UI.
 /// data_dir — пользовательский каталог данных на всех ОС (D5): Windows —
 /// %APPDATA%\LAVRay, macOS — ~/Library/Application Support/LAVRay,
 /// Linux — $XDG_DATA_HOME/lavray (по умолчанию ~/.local/share/lavray).
@@ -257,7 +245,11 @@ fn data_dir() -> std::path::PathBuf {
     std::env::temp_dir().join("lavray")
 }
 
-fn spawn_core() -> Result<((String, String), RealCoreProcess), String> {
+/// Конфигурация запуска ядра (§3): бинарник рядом с приложением, каталог
+/// данных (его же получает ядро флагом `--data`), новый токен (в stdin ядру).
+/// Надзиратель зовёт её перед каждым (пере)запуском; `Err` — почему ядро не
+/// собрать.
+fn core_spawn_config() -> Result<CoreSpawnConfig, String> {
     let exe = std::env::current_exe().map_err(|e| format!("путь к LAVRay.exe: {e}"))?;
     let dir = exe
         .parent()
@@ -288,23 +280,14 @@ fn spawn_core() -> Result<((String, String), RealCoreProcess), String> {
     let data_dir = data_dir();
     std::fs::create_dir_all(&data_dir)
         .map_err(|e| format!("каталог данных {}: {e}", data_dir.display()))?;
-
-    let token = generate_auth_token().map_err(|e| format!("токен ядра: {e}"))?;
-    // listen_socket — TCP-addrs строка "127.0.0.1:0" (§3.1: порт выделяет ОС).
-    let cfg = CoreSpawnConfig {
+    Ok(CoreSpawnConfig {
         binary: core_bin,
         data_dir,
+        // §3.1: порт выделяет ОС («127.0.0.1:0»).
         listen_socket: std::path::PathBuf::from("127.0.0.1:0"),
-        auth_token: SecretToken::from_base64url(token.expose()).map_err(|e| e.to_string())?,
+        auth_token: generate_auth_token().map_err(|e| format!("токен ядра: {e}"))?,
         extra_args: vec![],
-    };
-    let mut proc = RealCoreProcess::new();
-    proc.spawn(&cfg)
-        .map_err(|e| format!("не удалось запустить ядро: {e}"))?;
-    let endpoint = proc
-        .wait_ready(std::time::Duration::from_secs(10))
-        .map_err(|e| format!("ядро не сообщило готовность: {e}"))?;
-    Ok(((endpoint.transport_url, token.expose().to_string()), proc))
+    })
 }
 
 /// Окружение надзирателя: состояние оболочки, событие UI, системный прокси.
@@ -322,8 +305,10 @@ impl ShellHost {
 }
 
 impl SupervisorHost for ShellHost {
-    fn quitting(&self) -> bool {
-        self.shared.lock().map(|s| s.shutdown).unwrap_or(true)
+    fn state_changed(&self, state: CoreState) {
+        let mut s = self.shared.lock().unwrap_or_else(|e| e.into_inner());
+        s.core_state = state;
+        s.core_alive = matches!(state, CoreState::Ready | CoreState::Connected);
     }
 
     fn core_up(&self, endpoint: &EndpointEvent) {
@@ -360,8 +345,12 @@ impl SupervisorHost for ShellHost {
         tray_ui::refresh(&self.app);
     }
 
-    fn pause(&self, duration: std::time::Duration) {
-        std::thread::sleep(duration);
+    fn failure(&self, failure: &Failure) {
+        // T-56: причина и хвост кольца логов ядра — для `shell_error` и
+        // `core_log_tail` (релизная сборка stderr не выводит).
+        let mut s = self.shared.lock().unwrap_or_else(|e| e.into_inner());
+        s.last_error.clone_from(&failure.message);
+        s.core_log.clone_from(&failure.log_tail);
     }
 }
 
@@ -386,23 +375,17 @@ fn main() {
                 Err(e) => eprintln!("LAVRay: не удалось восстановить прокси: {e}"),
             }
 
-            // D3 (аудит round 2): надзор. Процесс живёт в отдельном потоке
-            // (сырые handle не Send) и перезапускается с backoff, если ядро
-            // умерло не по команде. T-03: цикл — `endpoint::run_supervisor`
-            // (тестируется без GUI); при каждом запуске и при смерти ядра UI
-            // получает событие `core-endpoint`, при смерти снимается прокси.
+            // Надзор за ядром (A2-11): цикл `coreproc::runner` ведёт CoreSupervisor
+            // (backoff 1/2/4/8/15 с, RateLimited после 3 падений за 60 с) и
+            // тестируется без GUI; здесь только среда. T-03: при каждом запуске
+            // и при смерти ядра UI получает событие `core-endpoint`, при смерти
+            // снимается системный прокси (`HostObserver` поверх `ShellHost`).
             let host = ShellHost {
                 app: app.handle().clone(),
                 shared: Arc::clone(&rt_for_setup),
             };
-            let hub = Arc::clone(&hub_for_setup);
-            std::thread::spawn(move || {
-                // T-45: отметка «надзиратель закончил» — `begin_quit` ждёт её до 16 с.
-                let _stopped = CoreStopped(Arc::clone(&host.shared));
-                run_supervisor(&hub, &host, || {
-                    spawn_core().map(|((url, token), process)| (url, token, process))
-                });
-            });
+            let observer = HostObserver::new(Arc::clone(&hub_for_setup), host);
+            app.manage(Arc::new(spawn_supervisor(core_spawn_config, observer)?));
             // Трей (DS §9, §10): меню по TrayMenuSpec, состояние и тексты
             // присылает UI (`tray_update`); закрытие окна — в трей.
             tray_ui::install(app)?;
@@ -429,6 +412,8 @@ fn main() {
             request_quit,
             quit_app,
             tray_update,
+            core_log_tail,
+            restart_core,
             window_minimize,
             window_toggle_maximize,
             window_is_maximized,

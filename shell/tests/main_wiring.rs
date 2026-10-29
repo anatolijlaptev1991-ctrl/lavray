@@ -47,3 +47,24 @@ fn elevation_command_is_registered_for_the_ui() {
         "нет в generate_handler!"
     );
 }
+
+/// F-082/F-083 (A2-11, A2-21): ядро ведёт цикл из библиотеки (`coreproc::runner`
+/// поверх `CoreSupervisor`), а не самописный цикл без предела рестартов; кольцо
+/// логов ядра и ручной перезапуск доступны UI.
+#[test]
+fn main_uses_the_library_supervisor_and_exposes_diagnostics() {
+    let main_rs = source("main.rs");
+    assert!(main_rs.contains("spawn_supervisor("));
+    for banned in ["backoff * 2", "fn spawn_core("] {
+        assert!(
+            !main_rs.contains(banned),
+            "остался самописный цикл: {banned}"
+        );
+    }
+    for needed in ["            core_log_tail,", "            restart_core,"] {
+        assert!(
+            main_rs.contains(needed),
+            "нет в generate_handler!: {needed}"
+        );
+    }
+}

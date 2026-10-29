@@ -318,17 +318,7 @@ impl CoreProcess for RealCoreProcess {
         })?;
 
         let mut cmd = Command::new(&config.binary);
-        let args: Vec<String> = if config.extra_args.is_empty() {
-            // §3.1/§3.3: порт/сокет выделяет ОС — оболочка ничего не слушает.
-            vec![
-                "serve".to_owned(),
-                "--listen-socket".to_owned(),
-                config.listen_socket.display().to_string(),
-            ]
-        } else {
-            config.extra_args.clone()
-        };
-        cmd.args(&args)
+        cmd.args(spawn_args(config))
             .current_dir(&config.data_dir)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -461,6 +451,18 @@ impl CoreProcess for RealCoreProcess {
     fn kill(&mut self, graceful_deadline: Duration) -> Result<(), CoreProcessError> {
         self.shutdown(graceful_deadline, self.timeouts.eof_grace)
     }
+
+    fn is_alive(&mut self) -> bool {
+        self.is_running()
+    }
+
+    fn log_lines(&self, n: usize) -> Vec<String> {
+        self.log_tail(n).into_iter().map(|line| line.text).collect()
+    }
+
+    fn exit_info(&self) -> Option<String> {
+        self.exit_status().map(|status| status.to_string())
+    }
 }
 
 impl Drop for RealCoreProcess {
@@ -471,6 +473,22 @@ impl Drop for RealCoreProcess {
         let budget = self.timeouts.sigterm_wait + self.timeouts.kill_grace;
         let _ = self.shutdown(budget, self.timeouts.eof_grace);
     }
+}
+
+/// argv ядра: `serve --listen-socket <сокет> --data <каталог>`. Каталог данных
+/// ядра — тот же, что у оболочки (снимок прокси): иначе на macOS и в Linux с
+/// `XDG_DATA_HOME` у ядра свой `defaultDataDir()` и данные расходятся (A2-22).
+/// Непустой `extra_args` заменяет argv целиком (фейк-ядра тестов).
+pub fn spawn_args(config: &CoreSpawnConfig) -> Vec<String> {
+    if !config.extra_args.is_empty() {
+        return config.extra_args.clone();
+    }
+    // §3.1/§3.3: порт/сокет выделяет ОС — оболочка ничего не слушает.
+    let listen = config.listen_socket.display().to_string();
+    let data = config.data_dir.display().to_string();
+    ["serve", "--listen-socket", &listen, "--data", &data]
+        .map(str::to_owned)
+        .to_vec()
 }
 
 /// Исход ожидания ready (внутренний, чтобы обойти заимствования `running`).
@@ -916,6 +934,28 @@ mod tests {
         assert_eq!(t.eof_grace, T_EOF_GRACE);
         assert_eq!(t.sigterm_wait, T_SIGTERM_WAIT);
         assert_eq!(t.kill_grace, T_KILL_GRACE);
+    }
+
+    /// A2-22: ядру передаётся каталог данных оболочки; `extra_args` заменяет argv.
+    #[test]
+    fn default_argv_passes_the_shell_data_dir_to_the_core() {
+        let mut config = CoreSpawnConfig {
+            binary: std::path::PathBuf::from("lavray-core"),
+            listen_socket: std::path::PathBuf::from("127.0.0.1:0"),
+            data_dir: std::path::PathBuf::from("data-dir"),
+            auth_token: SecretToken::from_base64url("A".repeat(43)).unwrap(),
+            extra_args: vec![],
+        };
+        let expected = [
+            "serve",
+            "--listen-socket",
+            "127.0.0.1:0",
+            "--data",
+            "data-dir",
+        ];
+        assert_eq!(spawn_args(&config), expected);
+        config.extra_args = vec!["-c".to_owned()];
+        assert_eq!(spawn_args(&config), ["-c"]);
     }
 
     /// Драйвер без процесса: kill идемпотентен, wait_ready — NotRunning.

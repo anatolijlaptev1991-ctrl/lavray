@@ -1,28 +1,24 @@
-//! Адрес и токен ядра для UI + цикл надзирателя (T-03).
+//! Адрес и токен ядра для UI + адаптер надзирателя (T-03, T-56).
 //!
 //! Упавшее ядро оболочка поднимает на НОВОМ порту с НОВЫМ токеном. UI узнаёт
 //! об этом командой `core_endpoint` (ждёт готовности ядра) и событием
 //! `core-endpoint` (при каждом запуске и при смерти ядра; пустой `url` =
 //! «ядра нет»). При смерти ядра возвращается системный прокси (shell-lifecycle
-//! §6). Модуль не зависит от Tauri: цикл проверяется на подставном процессе.
+//! §6). Цикл надзора — `coreproc::runner` (T-56: backoff, предел рестартов);
+//! [`HostObserver`] переводит его события в публикацию адреса, события UI и
+//! возврат прокси. Модуль не зависит от Tauri: адаптер проверяется на моке
+//! процесса.
 
-use std::sync::{Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use crate::coreproc::GRACEFUL_SHUTDOWN_TOTAL;
+use crate::coreproc::runner::{Failure, Observer};
+use crate::coreproc::{CoreEndpoint, CoreState, SecretToken};
 
 /// Имя события Tauri с адресом ядра.
 pub const CORE_ENDPOINT_EVENT: &str = "core-endpoint";
 /// Сколько `core_endpoint` ждёт готовности ядра (больше `T_SPAWN` = 10 с).
 pub const ENDPOINT_WAIT: Duration = Duration::from_secs(15);
-/// Период проверки «ядро живо».
-pub const POLL_INTERVAL: Duration = Duration::from_millis(500);
-/// Пауза перед первым перезапуском; дальше удваивается до `BACKOFF_MAX`.
-pub const BACKOFF_START: Duration = Duration::from_secs(1);
-/// Потолок паузы между перезапусками.
-pub const BACKOFF_MAX: Duration = Duration::from_secs(30);
-/// Время на мягкое завершение ядра при выходе (§5). T-52: весь бюджет лестницы, 15 с (было 5).
-pub const KILL_GRACE: Duration = GRACEFUL_SHUTDOWN_TOTAL;
 /// `last_error`, когда ядро умерло само.
 pub const REASON_CORE_DIED: &str = "ядро неожиданно завершилось — перезапуск";
 
@@ -112,198 +108,306 @@ impl EndpointHub {
     }
 }
 
-/// Запущенный процесс ядра глазами надзирателя.
-pub trait Watched {
-    /// Процесс ещё жив.
-    fn is_running(&mut self) -> bool;
-    /// Остановить процесс (мягко до `grace`, затем жёстко).
-    fn kill(&mut self, grace: Duration);
-}
-
-impl Watched for crate::coreproc::driver::RealCoreProcess {
-    fn is_running(&mut self) -> bool {
-        crate::coreproc::driver::RealCoreProcess::is_running(self)
-    }
-
-    fn kill(&mut self, grace: Duration) {
-        let _ = crate::coreproc::CoreProcess::kill(self, grace);
-    }
-}
-
 /// Окружение надзирателя: состояние оболочки, события UI, системный прокси.
 pub trait SupervisorHost {
-    /// Пользователь выходит из приложения.
-    fn quitting(&self) -> bool;
+    /// Состояние FSM ядра изменилось (любое, в том числе Spawning и Stopping).
+    fn state_changed(&self, state: CoreState);
     /// Ядро запущено: записать состояние, отправить UI событие.
     fn core_up(&self, endpoint: &EndpointEvent);
     /// Ядро умерло само: записать причину, отправить UI
     /// [`EndpointEvent::down`], вернуть системный прокси из снимка.
     fn core_down(&self, reason: &str);
-    /// Ядро не запустилось.
+    /// Ядро не запустилось (сборка конфигурации, spawn, ожидание READY).
     fn spawn_failed(&self, reason: &str);
-    /// Пауза (в тестах — без ожидания).
-    fn pause(&self, duration: Duration);
+    /// Любой сбой: причина и хвост кольца логов ядра для диагностики (T-56).
+    fn failure(&self, failure: &Failure);
 }
 
-/// Цикл надзирателя: запустить ядро, опубликовать адрес, следить за
-/// процессом; после смерти — `hub.clear()`, `host.core_down`, пауза и новый
-/// запуск. Возвращается только при выходе из приложения.
-pub fn run_supervisor<P: Watched>(
-    hub: &EndpointHub,
-    host: &dyn SupervisorHost,
-    mut spawn: impl FnMut() -> Result<(String, String, P), String>,
-) {
-    let mut backoff = BACKOFF_START;
-    while !host.quitting() {
-        let started = spawn();
-        if let Ok((url, token, mut process)) = started {
-            backoff = BACKOFF_START;
-            let endpoint = hub.publish(url, token);
-            host.core_up(&endpoint);
-            loop {
-                host.pause(POLL_INTERVAL);
-                if host.quitting() {
-                    process.kill(KILL_GRACE);
-                    hub.close();
-                    return;
-                }
-                if !process.is_running() {
-                    break;
+/// Адаптер `coreproc::runner::Observer` к оболочке: публикует адрес и токен
+/// в [`EndpointHub`], а хосту отдаёт события жизни ядра (T-03 поверх T-56).
+pub struct HostObserver<H: SupervisorHost> {
+    hub: Arc<EndpointHub>,
+    host: H,
+    /// Адрес опубликован: ядро готово и его ещё не потеряли.
+    up: bool,
+    /// Ядро только что умерло: ближайший сбой — сообщение о смерти, а не об
+    /// ошибке запуска.
+    death_pending: bool,
+}
+
+impl<H: SupervisorHost> HostObserver<H> {
+    pub fn new(hub: Arc<EndpointHub>, host: H) -> Self {
+        Self {
+            hub,
+            host,
+            up: false,
+            death_pending: false,
+        }
+    }
+}
+
+impl<H: SupervisorHost> Observer for HostObserver<H> {
+    fn on_state(&mut self, state: CoreState) {
+        self.host.state_changed(state);
+        match state {
+            CoreState::Ready | CoreState::Connected => {}
+            // Выход из приложения: ядра больше не будет. Событие `down` и
+            // возврат прокси здесь не нужны, выход делает это сам.
+            CoreState::Stopping => {
+                self.up = false;
+                self.hub.clear();
+            }
+            CoreState::Stopped => {
+                self.up = false;
+                self.hub.close();
+            }
+            // Ядро было готово и перестало: убрать адрес, сообщить UI и
+            // вернуть прокси ДО запуска нового ядра.
+            _ => {
+                if std::mem::take(&mut self.up) {
+                    self.death_pending = true;
+                    self.hub.clear();
+                    self.host.core_down(REASON_CORE_DIED);
                 }
             }
-            hub.clear();
-            host.core_down(REASON_CORE_DIED);
-        } else if let Err(reason) = started {
-            host.spawn_failed(&reason);
         }
-        if host.quitting() {
-            break;
-        }
-        host.pause(backoff);
-        backoff = (backoff * 2).min(BACKOFF_MAX);
     }
-    hub.close();
+
+    fn on_ready(&mut self, endpoint: &CoreEndpoint, token: &SecretToken) {
+        let event = self
+            .hub
+            .publish(endpoint.transport_url.clone(), token.expose().to_owned());
+        self.up = true;
+        self.death_pending = false;
+        self.host.core_up(&event);
+    }
+
+    fn on_failure(&mut self, failure: &Failure) {
+        self.host.failure(failure);
+        if !std::mem::take(&mut self.death_pending) {
+            self.host.spawn_failed(&failure.message);
+        }
+    }
+}
+
+impl<H: SupervisorHost> Drop for HostObserver<H> {
+    /// Надзор закончен (выход или паника потока): ядра больше не будет,
+    /// ожидающие `core_endpoint` получают `None`.
+    fn drop(&mut self) {
+        self.hub.close();
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::cell::{Cell, RefCell};
+    use crate::coreproc::backoff::FixedJitter;
+    use crate::coreproc::runner::{run, Command, Waiter, POLL_INTERVAL};
+    use crate::coreproc::{
+        CoreProcessError, CoreSpawnConfig, CoreSupervisor, MockClock, MockCoreProcess,
+    };
+    use std::cell::RefCell;
+    use std::path::PathBuf;
     use std::rc::Rc;
-    use std::sync::Arc;
 
-    /// Подставное ядро: «живёт» заданное число проверок.
-    struct FakeProcess {
-        polls_left: u32,
-        killed: Rc<Cell<bool>>,
-    }
-
-    impl Watched for FakeProcess {
-        fn is_running(&mut self) -> bool {
-            self.polls_left = self.polls_left.saturating_sub(1);
-            self.polls_left > 0
-        }
-
-        fn kill(&mut self, _grace: Duration) {
-            self.killed.set(true);
-        }
-    }
-
-    /// Окружение, записывающее действия надзирателя.
+    /// Что видел хост: события жизни ядра, сбои и состояния FSM.
     #[derive(Default)]
-    struct FakeHost {
-        log: RefCell<Vec<String>>,
-        pauses: RefCell<Vec<Duration>>,
-        quit: Cell<bool>,
-        /// Выйти из приложения на первой паузе после N-го запуска ядра.
-        quit_after_ups: Cell<usize>,
+    struct Seen {
+        log: Vec<String>,
+        failures: Vec<Failure>,
+        states: Vec<CoreState>,
     }
 
-    impl FakeHost {
-        fn ups(&self) -> usize {
-            self.log
-                .borrow()
-                .iter()
-                .filter(|l| l.starts_with("up"))
-                .count()
-        }
-    }
+    /// Окружение, записывающее действия адаптера.
+    struct FakeHost(Rc<RefCell<Seen>>);
 
     impl SupervisorHost for FakeHost {
-        fn quitting(&self) -> bool {
-            self.quit.get()
+        fn state_changed(&self, state: CoreState) {
+            self.0.borrow_mut().states.push(state);
         }
 
         fn core_up(&self, endpoint: &EndpointEvent) {
-            self.log.borrow_mut().push(format!("up {}", endpoint.url));
+            let line = format!("up {} {}", endpoint.url, endpoint.token);
+            self.0.borrow_mut().log.push(line);
         }
 
         fn core_down(&self, reason: &str) {
-            self.log.borrow_mut().push(format!("down {reason}"));
+            self.0.borrow_mut().log.push(format!("down {reason}"));
         }
 
         fn spawn_failed(&self, reason: &str) {
-            self.log.borrow_mut().push(format!("spawn_failed {reason}"));
+            self.0
+                .borrow_mut()
+                .log
+                .push(format!("spawn_failed {reason}"));
         }
 
-        fn pause(&self, duration: Duration) {
-            self.pauses.borrow_mut().push(duration);
-            if self.quit_after_ups.get() > 0 && self.ups() >= self.quit_after_ups.get() {
-                self.quit.set(true);
-            }
+        fn failure(&self, failure: &Failure) {
+            self.0.borrow_mut().failures.push(failure.clone());
         }
+    }
+
+    /// Ожидание без сна: двигает часы, пишет паузы и то, виден ли UI адрес ядра
+    /// в этот момент; остановку подаёт `quit` (получает число запусков ядра).
+    struct Script<Q> {
+        clock: MockClock,
+        hub: Arc<EndpointHub>,
+        seen: Rc<RefCell<Seen>>,
+        waits: Vec<(Duration, bool)>,
+        quit: Q,
+    }
+
+    impl<Q: FnMut(&Seen) -> bool> Waiter for Script<Q> {
+        fn wait(&mut self, delay: Duration) -> Option<Command> {
+            self.waits.push((delay, self.hub.current().is_some()));
+            assert!(self.waits.len() < 5_000, "цикл не останавливается");
+            self.clock.advance(delay);
+            (self.quit)(&self.seen.borrow()).then_some(Command::Stop)
+        }
+    }
+
+    struct Outcome {
+        hub: Arc<EndpointHub>,
+        seen: Seen,
+        waits: Vec<(Duration, bool)>,
+    }
+
+    fn ups(seen: &Seen) -> usize {
+        seen.log.iter().filter(|l| l.starts_with("up ")).count()
+    }
+
+    /// Прогон `runner::run` с адаптером на моке процесса; токен у каждого
+    /// запуска свой (по номеру вызова фабрики), `quit` решает, когда выходить.
+    fn simulate(process: MockCoreProcess, quit: impl FnMut(&Seen) -> bool) -> Outcome {
+        let hub = Arc::new(EndpointHub::default());
+        let seen = Rc::new(RefCell::new(Seen::default()));
+        let clock = MockClock::at(Instant::now());
+        let mut sup = CoreSupervisor::new(process, clock.clone());
+        let mut calls = 0usize;
+        let mut factory = move || {
+            calls += 1;
+            Ok(CoreSpawnConfig {
+                binary: PathBuf::from("lavray-core"),
+                listen_socket: PathBuf::from("127.0.0.1:0"),
+                data_dir: PathBuf::from("data"),
+                auth_token: SecretToken::from_base64url(token(calls)).unwrap(),
+                extra_args: Vec::new(),
+            })
+        };
+        let mut waiter = Script {
+            clock,
+            hub: Arc::clone(&hub),
+            seen: Rc::clone(&seen),
+            waits: Vec::new(),
+            quit,
+        };
+        let mut observer = HostObserver::new(Arc::clone(&hub), FakeHost(Rc::clone(&seen)));
+        run(
+            &mut sup,
+            &mut factory,
+            &mut observer,
+            &mut waiter,
+            &mut FixedJitter { value: 0.5 },
+        );
+        drop(observer);
+        let waits = std::mem::take(&mut waiter.waits);
+        drop(waiter);
+        let seen = Rc::try_unwrap(seen).ok().unwrap().into_inner();
+        Outcome { hub, seen, waits }
+    }
+
+    fn endpoint(url: &str) -> Result<CoreEndpoint, CoreProcessError> {
+        Ok(CoreEndpoint {
+            transport_url: url.to_owned(),
+        })
+    }
+
+    fn token(n: usize) -> String {
+        format!("{n:A>43}")
     }
 
     #[test]
     fn restarted_core_gets_new_endpoint_and_proxy_is_released_in_between() {
-        let hub = EndpointHub::default();
-        let host = FakeHost::default();
-        host.quit_after_ups.set(2);
-        let killed = Rc::new(Cell::new(false));
-        let process = |polls| FakeProcess {
-            polls_left: polls,
-            killed: Rc::clone(&killed),
-        };
-        // стек: первым запускается ядро №1 (умирает на 3-й проверке)
-        let mut starts = vec![
-            ("tcp://127.0.0.1:50002", "tokenB", process(u32::MAX)),
-            ("tcp://127.0.0.1:50001", "tokenA", process(3)),
-        ];
-        run_supervisor(&hub, &host, || {
-            let (url, token, p) = starts.pop().ok_or("больше ядер нет")?;
-            Ok((url.to_string(), token.to_string(), p))
-        });
-        assert_eq!(
-            *host.log.borrow(),
-            [
-                "up tcp://127.0.0.1:50001".to_string(),
-                format!("down {REASON_CORE_DIED}"),
-                "up tcp://127.0.0.1:50002".to_string(),
+        // ядро №1 умирает на 3-й проверке живости, ядро №2 живёт до выхода
+        let process = MockCoreProcess {
+            ready_results: vec![
+                endpoint("tcp://127.0.0.1:50001"),
+                endpoint("tcp://127.0.0.1:50002"),
             ],
-            "прокси снимается (down) ДО запуска нового ядра; UI получает оба адреса"
+            alive_results: vec![true, true, false],
+            ..MockCoreProcess::default()
+        };
+        let out = simulate(process, |seen| ups(seen) >= 2);
+        assert_eq!(
+            out.seen.log,
+            [
+                format!("up tcp://127.0.0.1:50001 {}", token(1)),
+                format!("down {REASON_CORE_DIED}"),
+                format!("up tcp://127.0.0.1:50002 {}", token(2)),
+            ],
+            "прокси снимается (down) ДО запуска нового ядра; у каждого запуска свой токен"
         );
-        assert!(host.pauses.borrow().contains(&BACKOFF_START));
-        assert!(killed.get(), "при выходе живое ядро останавливается");
-        assert!(hub.current().is_none(), "после выхода адреса нет");
+        let pause = out.waits.iter().find(|(d, _)| *d != POLL_INTERVAL).unwrap();
+        assert!(
+            !pause.1,
+            "пока ядро мертво и ждёт перезапуска, адреса в хабе нет"
+        );
+        assert!(
+            out.seen.states.contains(&CoreState::Crashed),
+            "хост видит и сами состояния FSM"
+        );
+        assert!(
+            out.seen.failures[0]
+                .message
+                .contains("неожиданно завершилось"),
+            "причина смерти и хвост логов уходят в диагностику"
+        );
+        assert!(out.hub.current().is_none(), "после выхода адреса нет");
+        assert!(
+            out.hub.wait_ready(Duration::from_secs(5)).is_none(),
+            "после выхода ожидающие не ждут: хаб закрыт"
+        );
     }
 
     #[test]
-    fn spawn_failures_back_off_1_2_4_8_16_then_30_seconds() {
-        let hub = EndpointHub::default();
-        let host = FakeHost::default();
-        let attempts = Cell::new(0);
-        run_supervisor::<FakeProcess>(&hub, &host, || {
-            attempts.set(attempts.get() + 1);
-            host.quit.set(attempts.get() >= 8);
-            Err("ядро изменено".to_string())
-        });
-        let secs: Vec<u64> = host.pauses.borrow().iter().map(Duration::as_secs).collect();
-        assert_eq!(secs, [1, 2, 4, 8, 16, 30, 30]);
-        assert_eq!(
-            host.log.borrow()[0],
-            "spawn_failed ядро изменено",
-            "причина доходит до UI"
+    fn exit_closes_the_hub_without_reporting_the_core_as_dead() {
+        let out = simulate(MockCoreProcess::default(), |seen| ups(seen) >= 1);
+        assert_eq!(out.seen.log.len(), 1, "только запуск: {:?}", out.seen.log);
+        assert!(
+            out.seen
+                .states
+                .ends_with(&[CoreState::Stopping, CoreState::Stopped]),
+            "ядро остановлено лестницей §5: {:?}",
+            out.seen.states
         );
+        assert!(out.hub.current().is_none());
+        assert!(out.hub.wait_ready(Duration::from_secs(5)).is_none());
+    }
+
+    #[test]
+    fn spawn_failures_reach_the_host_and_never_publish_an_address() {
+        let fail = || Err(CoreProcessError::Spawn("ядро изменено".to_owned()));
+        let process = MockCoreProcess {
+            spawn_results: vec![fail(), fail(), fail(), fail()],
+            ..MockCoreProcess::default()
+        };
+        // 4 неудачных запуска подряд ведут в RateLimited (T-56); дальше цикл
+        // ждёт ручного перезапуска, и тест подаёт выход.
+        let out = simulate(process, |seen| {
+            seen.states.contains(&CoreState::RateLimited)
+        });
+        assert!(
+            out.seen.log.iter().all(|l| l.starts_with("spawn_failed ")),
+            "ядро не поднялось: {:?}",
+            out.seen.log
+        );
+        assert!(
+            out.seen.log[0].contains("ядро изменено"),
+            "причина доходит до UI: {}",
+            out.seen.log[0]
+        );
+        assert_eq!(out.seen.failures.len(), out.seen.log.len());
+        assert!(out.hub.current().is_none());
     }
 
     #[test]

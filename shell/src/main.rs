@@ -364,6 +364,9 @@ fn main() {
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             tray_ui::show_main_window(app); // свёрнутое окно тоже разворачиваем
         }))
+        // Внешние ссылки (target=_blank) — в системный браузер, только http/https
+        // (scope в capabilities/default.json).
+        .plugin(tauri_plugin_opener::init())
         .manage(Arc::clone(&runtime))
         .manage(hub)
         .setup(move |app| {

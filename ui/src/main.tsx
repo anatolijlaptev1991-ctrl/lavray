@@ -4,6 +4,7 @@ import './prototype.css';
 import './base.css';
 import App from './App';
 import { FIRST_ENDPOINT_WAIT_MS, followShellEndpoint } from './lib/coreEndpoint';
+import { installDropGuard } from './lib/external';
 
 // Нативный режим (Tauri): оболочка сообщает адрес и токен ядра командой
 // core_endpoint (она дожидается готовности ядра) и событием core-endpoint при
@@ -27,6 +28,9 @@ async function bootstrap(): Promise<void> {
   // data-os — словарь прототипа (win/mac/linux): от него зависят шрифты
   // ОС, «светофор» macOS и кнопки управления окном (CSS §titlebar).
   document.documentElement.dataset.os = adapterOS();
+
+  // Файл, брошенный мимо зоны импорта, не должен открыться вместо интерфейса.
+  installDropGuard();
 
   const container = document.getElementById('root');
   if (container === null) {

@@ -13,6 +13,7 @@ import { SubscriptionProgress_Phase } from '../gen/lavray_pb';
 import { ConfirmDialog } from '../components/dialogs';
 import { Icon } from '../components/Icon';
 import { SubscriptionSettingsDialog } from '../components/SubscriptionSettingsDialog';
+import { openExternal } from '../lib/external';
 
 /** Состояние ошибки подписки → ключ словаря (как subErrParts прототипа). */
 function subErrKey(
@@ -240,7 +241,8 @@ export function SubscriptionsScreen(): JSX.Element {
   );
 
   const openUrl = useCallback((raw: string): void => {
-    if (raw !== '') window.open(raw, '_blank', 'noopener,noreferrer');
+    // В окне Tauri window.open молча гасится — открываем через оболочку (T-58).
+    if (raw !== '') void openExternal(raw);
   }, []);
 
   return (

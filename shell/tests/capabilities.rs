@@ -5,12 +5,15 @@ use std::fs;
 
 /// Права, которыми UI действительно пользуется: события оболочки
 /// (`core-endpoint`, resize) и перетаскивание безрамочного окна за заголовок
-/// (`data-tauri-drag-region`). Остальное — команды оболочки без ACL.
-const ALLOWED: [&str; 4] = [
+/// (`data-tauri-drag-region`). Остальное — команды оболочки без ACL. T-58:
+/// `opener:allow-open-url` — единственное право плагина opener, с областью
+/// только `https://*` и `http://*` (её проверяет `config_lint`).
+const ALLOWED: [&str; 5] = [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
     "core:window:allow-start-dragging",
     "core:window:allow-internal-toggle-maximize",
+    "opener:allow-open-url",
 ];
 
 fn read(rel: &str) -> String {
@@ -24,7 +27,8 @@ fn capabilities_contain_only_the_permissions_the_ui_uses() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|p| p.as_str().unwrap())
+        // право — строка или объект с областью: {"identifier": …, "allow": […]}
+        .map(|p| p.as_str().or_else(|| p["identifier"].as_str()).unwrap())
         .collect();
     for permission in &granted {
         assert!(

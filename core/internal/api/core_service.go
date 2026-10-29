@@ -103,6 +103,8 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 	if mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN {
 		modeStr = "tun"
 	}
+	// Итог проверки связи прежнего запуска к новому не относится.
+	s.resetHealth()
 	startCtx, cancel := context.WithTimeout(ctx, inst.StartTimeout) // LNB-06
 	defer cancel()
 	err = s.inst.Start(startCtx, inst.RunInfo{
@@ -123,6 +125,7 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 	// Секреты конфига никогда не логируются (LNB-01/28): журнал получает
 	// только факт запуска; полный конфиг — GetRuntimeConfig (redacted).
 	s.logs.Logf(logs.LevelInfo, logs.SourceCore, "инстанс запущен: профиль %d (%s), режим %s", profile.ID, profile.Type, modeStr)
+	s.startHealthCheck() // 0.2.1: «Подключено» ещё не значит «трафик идёт»
 	return s.coreStatus(), warnings, nil
 }
 
@@ -224,6 +227,7 @@ func (s *Server) dryRunBuild(profile *model.Profile, mode lavrayv1.ConnectMode) 
 // Disconnect — FR-UI-033. Финальная статистика (final_stats) заполняет W7
 // (clash-api/tracker); здесь — остановка с таймаутом LNB-06.
 func (s *Server) Disconnect(ctx context.Context, req *connect.Request[lavrayv1.DisconnectRequest]) (*connect.Response[lavrayv1.DisconnectResponse], error) {
+	s.resetHealth()
 	stopCtx, cancel := context.WithTimeout(ctx, inst.StopTimeout)
 	defer cancel()
 	if err := s.inst.Stop(stopCtx); err != nil {
@@ -288,10 +292,26 @@ func (s *Server) SubscribeEvents(ctx context.Context, req *connect.Request[lavra
 	}
 	ch, cancel := s.inst.Subscribe()
 	defer cancel()
+	healthCh, healthCancel := s.subscribeHealth()
+	defer healthCancel()
 	for {
 		select {
 		case <-ctx.Done():
 			return nil // клиент ушёл — тихое завершение стрима
+		case <-healthCh:
+			// Итог проверки связи изменился: свежий статус (health_error) и,
+			// если трафик не идёт, предупреждение с машинным кодом.
+			if err := stream.Send(&lavrayv1.CoreEvent{
+				TsMs: nowMs(),
+				Kind: &lavrayv1.CoreEvent_StateChanged{StateChanged: s.coreStatus()},
+			}); err != nil {
+				return err
+			}
+			if warn := s.healthWarningEvent(); warn != nil {
+				if err := stream.Send(warn); err != nil {
+					return err
+				}
+			}
 		case ev, ok := <-ch:
 			if !ok {
 				// Shutdown — сообщаем о скором завершении ядра
@@ -363,6 +383,7 @@ func (s *Server) GetRuntimeConfig(ctx context.Context, req *connect.Request[lavr
 // процесса — вызывающая сторона (OnShutdown; headless W8).
 func (s *Server) Shutdown(ctx context.Context, req *connect.Request[lavrayv1.ShutdownRequest]) (*connect.Response[lavrayv1.Empty], error) {
 	s.logs.Logf(logs.LevelInfo, logs.SourceCore, "Shutdown: graceful-остановка (reason=%d)", int(req.Msg.GetReason()))
+	s.resetHealth()
 	stopCtx, cancel := context.WithTimeout(ctx, inst.StopTimeout)
 	defer cancel()
 	if err := s.inst.Shutdown(stopCtx); err != nil {

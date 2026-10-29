@@ -2651,8 +2651,13 @@ type CoreStatus struct {
 	Inbound         *InboundInfo `protobuf:"bytes,9,opt,name=inbound,proto3" json:"inbound,omitempty"`
 	RoutingPresetId *string      `protobuf:"bytes,10,opt,name=routing_preset_id,json=routingPresetId,proto3,oneof" json:"routing_preset_id,omitempty"`
 	Tun             *TunInfo     `protobuf:"bytes,11,opt,name=tun,proto3" json:"tun,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Проверка связи после подключения (0.2.1): инстанс запущен, но запрос test.url
+	// через исходящее не прошёл. Краткая причина; пусто — проверка прошла, не
+	// выполнялась или выключена (connect.health_check). Сбрасывается при
+	// отключении и новом запуске.
+	HealthError   *string `protobuf:"bytes,12,opt,name=health_error,json=healthError,proto3,oneof" json:"health_error,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CoreStatus) Reset() {
@@ -2760,6 +2765,13 @@ func (x *CoreStatus) GetTun() *TunInfo {
 		return x.Tun
 	}
 	return nil
+}
+
+func (x *CoreStatus) GetHealthError() string {
+	if x != nil && x.HealthError != nil {
+		return *x.HealthError
+	}
+	return ""
 }
 
 type InboundInfo struct {
@@ -13666,7 +13678,7 @@ const file_lavray_proto_rawDesc = "" +
 	"\x12REASON_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vREASON_EXIT\x10\x01\x12\x11\n" +
 	"\rREASON_UPDATE\x10\x02\x12\x10\n" +
-	"\fREASON_FATAL\x10\x03\"\xe9\x04\n" +
+	"\fREASON_FATAL\x10\x03\"\xa2\x05\n" +
 	"\n" +
 	"CoreStatus\x12*\n" +
 	"\x05state\x18\x01 \x01(\x0e2\x14.lavray.v1.CoreStateR\x05state\x12/\n" +
@@ -13681,13 +13693,15 @@ const file_lavray_proto_rawDesc = "" +
 	"\ainbound\x18\t \x01(\v2\x16.lavray.v1.InboundInfoR\ainbound\x12/\n" +
 	"\x11routing_preset_id\x18\n" +
 	" \x01(\tH\x05R\x0froutingPresetId\x88\x01\x01\x12$\n" +
-	"\x03tun\x18\v \x01(\v2\x12.lavray.v1.TunInfoR\x03tunB\x14\n" +
+	"\x03tun\x18\v \x01(\v2\x12.lavray.v1.TunInfoR\x03tun\x12&\n" +
+	"\fhealth_error\x18\f \x01(\tH\x06R\vhealthError\x88\x01\x01B\x14\n" +
 	"\x12_active_profile_idB\x12\n" +
 	"\x10_active_group_idB\x16\n" +
 	"\x14_active_profile_nameB\x10\n" +
 	"\x0e_started_at_msB\r\n" +
 	"\v_last_errorB\x14\n" +
-	"\x12_routing_preset_id\"\\\n" +
+	"\x12_routing_preset_idB\x0f\n" +
+	"\r_health_error\"\\\n" +
 	"\vInboundInfo\x12\x16\n" +
 	"\x06listen\x18\x01 \x01(\tR\x06listen\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12!\n" +

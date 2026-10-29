@@ -5,6 +5,7 @@ package inst
 import (
 	"context"
 	"errors"
+	"net"
 	"sync"
 	"time"
 )
@@ -27,6 +28,10 @@ type FakeRunner struct {
 	StartDelay   time.Duration
 	StopDelay    time.Duration
 	FailStartCtx bool
+	// ProxyDial — подставная реализация ProxyDialer: соединение «через исходящее
+	// профиля» (проверка связи после подключения). nil — раннер не умеет
+	// (DialProxy возвращает ErrDialUnsupported).
+	ProxyDial func(ctx context.Context, network, address string) (net.Conn, error)
 	// StartedCounter/StopCalls — для assertions.
 	StartedCounter int
 	StopCalls      int
@@ -98,3 +103,16 @@ func (f *FakeRunner) LastConfig() []byte {
 	defer f.mu.Unlock()
 	return append([]byte(nil), f.lastConfig...)
 }
+
+// DialProxy — подставное соединение через исходящее профиля (ProxyDial).
+func (f *FakeRunner) DialProxy(ctx context.Context, network, address string) (net.Conn, error) {
+	f.mu.Lock()
+	dial := f.ProxyDial
+	f.mu.Unlock()
+	if dial == nil {
+		return nil, ErrDialUnsupported
+	}
+	return dial(ctx, network, address)
+}
+
+var _ ProxyDialer = (*FakeRunner)(nil)

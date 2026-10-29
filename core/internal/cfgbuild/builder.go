@@ -217,12 +217,10 @@ func neutralPreset() *presets.Preset {
 // buildSingBoxConfig — каркас + outbounds (W4) + inbounds/DNS/route/
 // experimental (W5, порт BuildConfigSingBox ConfigBuilder.cpp:389–771).
 func buildSingBoxConfig(req BuildRequest, st *BuildSettings, res *BuildResult) (map[string]any, error) {
-	// Частичные настройки (W6 может передать подмножество полей): пустой
-	// уровень лога — как дефолт "info" (SettingDescriptors log.level).
-	logLevel := st.LogLevel
-	if logLevel == "" {
-		logLevel = "info"
-	}
+	// Частичные настройки (W6 может передать подмножество полей): пустой или
+	// неизвестный уровень лога — как дефолт "info" (SettingDescriptors
+	// log.level; T-49: normalizeLogLevel).
+	logLevel := normalizeLogLevel(st.LogLevel)
 	cfg := map[string]any{
 		"log": map[string]any{"level": logLevel},
 	}

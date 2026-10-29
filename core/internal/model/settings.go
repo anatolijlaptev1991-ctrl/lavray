@@ -105,6 +105,9 @@ func SettingDescriptors() []SettingDescriptor {
 		{Key: "core.clash_api.enabled", Type: SettingBool, GroupID: "core", DeprecatedBy: "core_box_clash_api"},
 		{Key: "core.clash_api.secret", Type: SettingString, GroupID: "core", DeprecatedBy: "core_box_clash_api_secret"},
 		{Key: "core.underlying_dns", Type: SettingString, GroupID: "core", DefaultValue: `"local"`, DeprecatedBy: "core_box_underlying_dns"},
+		// T-49: уровень лога sing-box (trace|debug|info|warn|error|fatal|panic);
+		// неизвестное значение cfgbuild заменяет на "info".
+		{Key: "log.level", Type: SettingString, GroupID: "core", DefaultValue: `"info"`, RequiresProfileRestart: true, DeprecatedBy: "log_level"},
 
 		// ---- Безопасность ----
 		{Key: "security.allow_insecure_default", Type: SettingBool, GroupID: "security", DeprecatedBy: "skip_cert"},

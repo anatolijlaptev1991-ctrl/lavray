@@ -261,6 +261,7 @@ func (s *Server) buildSettings(tunMode bool) *cfgbuild.BuildSettings {
 		DefaultOn:   s.settingBool("mux.default_on"),
 	}
 	st.AllowInsecureDefault = s.settingBool("security.allow_insecure_default")
+	st.LogLevel = s.settingStr("log.level") // T-49: пусто/неизвестно → "info" в cfgbuild
 	if v := s.settingStr("core.underlying_dns"); v != "" {
 		st.UnderlyingDNS = v
 	}

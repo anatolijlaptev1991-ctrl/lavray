@@ -9,6 +9,7 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use lavray_shell::autostart::{self, AutostartState};
 use lavray_shell::coreproc::driver::generate_auth_token;
 use lavray_shell::coreproc::runner::{spawn_supervisor, Failure, SupervisorHandle};
 use lavray_shell::coreproc::{CoreSpawnConfig, CoreState};
@@ -90,6 +91,27 @@ async fn relaunch_elevated(app: tauri::AppHandle) -> Result<RelaunchOutcome, Str
         begin_quit(&app);
     }
     Ok(outcome)
+}
+
+/// autostart_state — автозапуск с системой, как его видит ОС (T-82): задача
+/// планировщика или значение `Run`. Читается при каждом показе строки
+/// настроек (FR-UI-013); `supported: false` — строку нужно скрыть.
+#[tauri::command]
+async fn autostart_state() -> Result<AutostartState, String> {
+    tauri::async_runtime::spawn_blocking(autostart::current_state)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// set_autostart — включить/выключить автозапуск (T-82). С правами
+/// администратора — задача планировщика, без прав — `Run` в реестре; ответ —
+/// состояние, заново прочитанное из ОС. Вызовы `reg.exe`/`schtasks.exe`
+/// идут в фоновом потоке: окно не замирает.
+#[tauri::command]
+async fn set_autostart(enabled: bool) -> Result<AutostartState, String> {
+    tauri::async_runtime::spawn_blocking(move || autostart::change(enabled))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Адрес ConnectRPC-ядра для UI (вызывается фронтендом при старте).
@@ -484,7 +506,9 @@ fn main() {
             window_hide,
             window_start_drag,
             set_system_proxy,
-            relaunch_elevated
+            relaunch_elevated,
+            autostart_state,
+            set_autostart
         ])
         .build(tauri::generate_context!())
         .expect("LAVRay shell: failed to build tauri application")

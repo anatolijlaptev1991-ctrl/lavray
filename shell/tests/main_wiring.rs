@@ -138,3 +138,24 @@ fn relaunch_is_wired_and_waits_for_the_old_instance_before_plugins() {
         .expect("плагин single-instance");
     assert!(wait < plugin, "ждать нужно до плагина single-instance");
 }
+
+/// T-82/Э-2: команды автозапуска зарегистрированы и не блокируют главный поток
+/// (`reg.exe`/`schtasks.exe` — отдельные процессы).
+#[test]
+fn autostart_commands_are_registered_and_run_off_the_main_thread() {
+    let main_rs = source("main.rs");
+    for needed in ["            autostart_state,", "            set_autostart"] {
+        assert!(
+            main_rs.contains(needed),
+            "нет в generate_handler!: {needed}"
+        );
+    }
+    for name in ["async fn autostart_state", "async fn set_autostart"] {
+        let body = main_rs
+            .split(name)
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap_or_else(|| panic!("нет {name}"));
+        assert!(body.contains("spawn_blocking"), "{name}: {body}");
+    }
+}

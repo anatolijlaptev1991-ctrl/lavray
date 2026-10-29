@@ -288,7 +288,9 @@ func tunStackOf(impl int) string {
 
 // validateInboundLAN — FR-UI-279/LNB-33: inbound-адрес не loopback при пустой
 // авторизации → INVALID_ARGUMENT («пароль обязателен при доступе из LAN»).
-// В TUN-режиме mixed-слушателя нет — проверка не нужна.
+// В TUN-режиме mixed-слушатель остаётся (cfgbuild/inbounds.go), но не-loopback
+// адрес без авторизации там отвергает уже сборка конфига — повторная проверка
+// не нужна (T-55: прежний текст «в TUN mixed нет» был неверен).
 func (s *Server) validateInboundLAN(inbound cfgbuild.InboundSettings) error {
 	addr := strings.TrimSpace(inbound.Address)
 	if addr == "" || addr == "localhost" {

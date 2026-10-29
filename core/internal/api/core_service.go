@@ -52,11 +52,9 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 
 	st := s.buildSettings(mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN)
 	var warnings []string
-	if mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN {
-		// FR-UI-279: в TUN слушателей на loopback нет вообще — mixed
-		// отключает конфигбилдер; предупреждение для пользователя.
-		warnings = append(warnings, "tun_mixed_disabled: в режиме TUN mixed-слушатель отключён (слушателей на loopback нет)")
-	} else {
+	if mode != lavrayv1.ConnectMode_CONNECT_MODE_TUN {
+		// T-55: в TUN mixed-слушатель остаётся (cfgbuild/inbounds.go), и
+		// не-loopback адрес без авторизации отвергает уже сборка конфига.
 		if err := s.validateInboundLAN(st.Inbound); err != nil {
 			return nil, nil, err
 		}
@@ -85,6 +83,7 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 	if err != nil {
 		return nil, nil, err
 	}
+	warnings = append(warnings, tunMixedWarning(result.Config, mode)...) // T-55: по факту конфига
 	configJSON, err := cfgbuild.MarshalIndent(result.Config)
 	if err != nil {
 		return nil, nil, err
@@ -104,6 +103,11 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 		ConfigJSON:  configJSON,
 	})
 	if err != nil {
+		// T-55: занятый порт входа — понятное сообщение вместо сырого bind-текста.
+		if friendly := explainStartError(err, st.Inbound.Port); friendly != nil {
+			s.logs.Logf(logs.LevelError, logs.SourceCore, "старт инстанса: %v", err)
+			return nil, nil, friendly
+		}
 		return nil, nil, err
 	}
 	// Секреты конфига никогда не логируются (LNB-01/28): журнал получает
@@ -152,13 +156,12 @@ func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.Conn
 
 	if in.GetValidateOnly() {
 		// dry-run: собрать и провалидировать, не стартуя (редактор/диагностика)
-		if _, err := s.dryRunBuild(profile, in.GetMode()); err != nil {
+		built, err := s.dryRunBuild(profile, in.GetMode())
+		if err != nil {
 			return nil, err
 		}
 		warnings := []string{"validate_only: конфиг собран и валиден, инстанс не запущен"}
-		if in.GetMode() == lavrayv1.ConnectMode_CONNECT_MODE_TUN {
-			warnings = append(warnings, "tun_mixed_disabled: в режиме TUN mixed-слушатель отключён")
-		}
+		warnings = append(warnings, tunMixedWarning(built.Config, in.GetMode())...) // T-55: по факту конфига
 		return connect.NewResponse(&lavrayv1.ConnectResponse{
 			Status:   s.coreStatus(),
 			Warnings: warnings,

@@ -8,6 +8,9 @@ import {
   Failure,
   click,
   connectedStatus,
+  connectingStatus,
+  errorStatus,
+  flush,
   idleStatus,
   mount,
   profile,
@@ -363,5 +366,120 @@ describe('режимы на экране «Подключение» (T-27)', () 
     // T-46: выбранный TUN в оболочке спрашивает права (`is_elevated`, только чтение).
     // Команд, меняющих систему (прокси и т.п.), по-прежнему не уходит.
     expect(invokeMock.mock.calls.filter(([cmd]) => cmd !== 'is_elevated')).toEqual([]);
+  });
+});
+
+describe('баннер ошибки, состояния карточки и бейдж протокола (T-64)', () => {
+  const BIND = 'listen tcp 127.0.0.1:2080: bind: address already in use';
+  const list = profileList(profile('1', 'S1'));
+  const card = (v: { container: HTMLElement }): string | null | undefined =>
+    v.container.querySelector('#stateCard')?.getAttribute('data-conn');
+  const banner = (v: { container: HTMLElement }): HTMLElement | null =>
+    v.container.querySelector('#connBanner');
+
+  it('ядро в ошибке старта: карточка «err», баннер с текстом ядра и кнопками «Retry» и «Open diagnostics»', async () => {
+    stubCore({ 'CoreService/GetStatus': errorStatus(BIND), 'ProfileService/ListProfiles': list });
+    const view = await screen();
+
+    expect(card(view)).toBe('err');
+    expect(view.container.querySelector('#connState')?.textContent).toBe('Core error');
+    expect(banner(view)?.getAttribute('role')).toBe('alert');
+    expect(banner(view)?.querySelector('b')?.textContent).toBe('The core didn’t start');
+    expect(banner(view)?.textContent).toContain(BIND);
+    expect(Array.from(banner(view)?.querySelectorAll('button') ?? []).map((b) => b.textContent)).toEqual([
+      'Retry',
+      'Open diagnostics',
+    ]);
+  });
+
+  it('«Retry» подключает выбранный сервер ещё раз, «Open diagnostics» открывает диагностику', async () => {
+    window.localStorage.setItem('lavray.server', '1');
+    const core = stubCore({ 'CoreService/GetStatus': errorStatus(BIND), 'ProfileService/ListProfiles': list });
+    const view = await screen();
+
+    await click(view.container.querySelector('#cbRetry'));
+    expect(core.bodies('CoreService/Connect')).toEqual([
+      { profileId: '1', mode: 'CONNECT_MODE_SYSTEM_PROXY' },
+    ]);
+
+    await click(view.container.querySelector('#cbDiag'));
+    expect(window.location.hash).toBe('#screen=diag&tab=checks');
+  });
+
+  it('ядро пропало (опрос статуса перестал отвечать): баннер «Core unavailable», карточка «err»', async () => {
+    stubCore({
+      'CoreService/GetStatus': (n) => (n === 0 ? connectedStatus('1', 'S1') : new Down()),
+      'ProfileService/ListProfiles': list,
+    });
+    const view = await screen();
+    expect(banner(view)).toBeNull(); // первый опрос удался
+
+    await flush(1100); // следующий опрос — ядро молчит
+
+    expect(card(view)).toBe('err');
+    expect(banner(view)?.textContent).toContain('Core unavailable');
+    expect(banner(view)?.textContent).not.toContain('core.unavailable');
+  });
+
+  it('холодный старт: ядро ещё не ответило ни разу — ошибки нет, ждём', async () => {
+    stubCore({ 'CoreService/GetStatus': new Down(), 'ProfileService/ListProfiles': list });
+    const view = await screen();
+
+    expect(card(view)).toBe('off');
+    expect(banner(view)).toBeNull();
+  });
+
+  it('Connect отклонён ядром: причина в том же баннере; ошибка быстрого действия — под карточкой, не в баннере', async () => {
+    stubCore({
+      'CoreService/GetStatus': idleStatus(),
+      'ProfileService/ListProfiles': list,
+      'CoreService/Connect': new Failure('failed_precondition', 'tun requires administrator rights'),
+    });
+    const view = await screen();
+
+    await click(view.container.querySelector('#cxMain .btn-lg'));
+
+    expect(banner(view)?.textContent).toContain('tun requires administrator rights');
+    expect(view.container.querySelector('#stateCard > .banner-err')).toBeNull();
+  });
+
+  it('идёт подключение: карточка «mid», кнопка заблокирована, баннера нет', async () => {
+    stubCore({ 'CoreService/GetStatus': connectingStatus('1', 'S1'), 'ProfileService/ListProfiles': list });
+    const view = await screen();
+
+    expect(card(view)).toBe('mid');
+    expect(view.container.querySelector<HTMLButtonElement>('#cxMain .btn-lg')?.disabled).toBe(true);
+    expect(banner(view)).toBeNull();
+  });
+
+  it('исправное ядро: карточка «off»/«on» и баннера нет', async () => {
+    const idle = stubCore({ 'CoreService/GetStatus': idleStatus(), 'ProfileService/ListProfiles': list });
+    const off = await screen();
+    expect([card(off), banner(off)]).toEqual(['off', null]);
+    off.unmount();
+
+    idle.routes['CoreService/GetStatus'] = connectedStatus('1', 'S1');
+    const on = await screen();
+    expect([card(on), banner(on)]).toEqual(['on', null]);
+  });
+
+  it('бейдж типа — название протокола, а не число enum', async () => {
+    const cases: [string | number, string][] = [
+      ['PROFILE_TYPE_VLESS', 'VLESS'],
+      ['PROFILE_TYPE_HYSTERIA2', 'Hysteria2'],
+      ['PROFILE_TYPE_SHADOWSOCKS', 'Shadowsocks'],
+      ['PROFILE_TYPE_TUIC', 'TUIC'],
+      ['PROFILE_TYPE_CHAIN', 'Chain'],
+      [99, '—'], // тип из ядра новее интерфейса: экран не должен падать
+    ];
+    for (const [type, label] of cases) {
+      stubCore({
+        'CoreService/GetStatus': idleStatus(),
+        'ProfileService/ListProfiles': profileList(profile('1', 'S1', { type })),
+      });
+      const view = await screen();
+      expect(view.container.querySelector('.srv-top .badge')?.textContent, String(type)).toBe(label);
+      view.unmount();
+    }
   });
 });

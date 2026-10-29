@@ -25,6 +25,20 @@ export const connectedStatus = (id: string, name: string, mode = 'CONNECT_MODE_S
   startedAtMs: String(Date.now() - 5000),
 });
 
+/** Старт не удался: инстанс в Crashed, текст — inst.Status.LastError. */
+export const errorStatus = (lastError: string): Json => ({
+  ...idleStatus(),
+  state: 'CORE_STATE_ERROR',
+  lastError,
+});
+
+export const connectingStatus = (id: string, name: string): Json => ({
+  ...idleStatus(),
+  state: 'CORE_STATE_CONNECTING',
+  activeProfileId: id,
+  activeProfileName: name,
+});
+
 export function profile(id: string, name: string, extra: Json = {}): Json {
   return {
     id,

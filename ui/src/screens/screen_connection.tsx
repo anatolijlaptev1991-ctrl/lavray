@@ -15,7 +15,7 @@ import {
 } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
-import { useTunBlocked } from '../hooks/useTunBlocked';
+import { useElevated } from '../hooks/useElevated';
 import { useI18n } from '../hooks/useI18n';
 import { CORE_UNAVAILABLE, showCoreError } from '../lib/core';
 import { profileTypeLabel } from '../lib/profileType';
@@ -26,12 +26,19 @@ import {
   disconnectAll,
   loadModes,
   loadSelectedProfileId,
+  markTunRelaunch,
   reconnect,
+  rememberModes,
+  restoreModes,
   saveModes,
   saveSelectedProfileId,
+  takeTunRelaunch,
 } from '../lib/connection';
+import { relaunchElevated, tunNeedsElevation } from '../lib/elevation';
+import type { RelaunchOutcome } from '../lib/elevation';
 import { ConnRight } from '../components/ConnRight';
 import { TunAdminNotice } from '../components/TunAdminNotice';
+import { TunDialog } from '../components/TunDialog';
 import { ImportDialog } from '../components/ImportDialog';
 import { ProfileMenu } from '../components/ProfileMenu';
 import type { ProfileMenuAnchor } from '../components/ProfileMenu';
@@ -86,8 +93,31 @@ export function ConnectionScreen(): JSX.Element {
   const coreError = status.lastError ?? '';
   const coreFailed =
     status.state === CoreState.ERROR || (coreError !== '' && status.coreVersion !== '');
-  // T-46: TUN выбран, а прав администратора нет — подключаться бессмысленно.
-  const tunBlocked = useTunBlocked(tunMode);
+  // T-46/T-81: бейдж «админ» на пункте TUN, пока оболочка точно сообщает, что
+  // прав нет; выбранный TUN без прав — предупреждение с кнопкой перезапуска.
+  const elevated = useElevated();
+  const tunBlocked = tunMode && elevated === false;
+  // T-81: диалог «Перезапустить от администратора» (dlgTun).
+  const [tunDialog, setTunDialog] = useState(false);
+
+  // T-81: режимы дублируются в настройке ядра `remember.modes`. Если окну
+  // (другой профиль WebView после перезапуска от администратора) выбор потерян
+  // — берём его из ядра.
+  useEffect(() => {
+    void restoreModes(core, window.localStorage).then((modes) => {
+      if (modes === null) return;
+      setSysProxy(modes.sysProxy);
+      setTunMode(modes.tunMode);
+    });
+  }, [core]);
+
+  // T-81: приложение только что перезапущено от администратора ради TUN.
+  useEffect(() => {
+    if (!takeTunRelaunch(window.localStorage)) return;
+    void tunNeedsElevation().then((stillNeeds) => {
+      if (!stillNeeds) setActionMsg(t('toast.tunReady'));
+    });
+  }, [t]);
 
   // Список подписок нужен для быстрого действия «Обновить подписки»:
   // обновление идёт по groupId, а не глобально.
@@ -242,6 +272,11 @@ export function ConnectionScreen(): JSX.Element {
         // иначе браузеры остаются на мёртвом порту.
         await disconnectAll(core);
       } else if (active !== undefined) {
+        // T-81: TUN без прав администратора не поднимется — предлагаем перезапуск.
+        if (tunMode && (await tunNeedsElevation())) {
+          setTunDialog(true);
+          return;
+        }
         await core.core.connect({
           profileId: active.id,
           mode: coreModeFor({ sysProxy, tunMode }),
@@ -252,7 +287,7 @@ export function ConnectionScreen(): JSX.Element {
         setConnError(t('cx.empty.t'));
       }
     } catch (e) {
-      setConnError(showCoreError(e, t));
+      setConnError(showCoreError(e, t, { tun: tunMode }));
     } finally {
       setBusy(false);
     }
@@ -266,6 +301,7 @@ export function ConnectionScreen(): JSX.Element {
       const prev = { sysProxy, tunMode };
       setSysProxy(next);
       saveModes(window.localStorage, { sysProxy: next, tunMode });
+      void rememberModes(core, { sysProxy: next, tunMode });
       if (!ready) return;
       setBusy(true);
       setConnError('');
@@ -275,18 +311,26 @@ export function ConnectionScreen(): JSX.Element {
       } else {
         setSysProxy(prev.sysProxy);
         saveModes(window.localStorage, prev);
+        void rememberModes(core, prev);
       }
       setBusy(false);
     },
-    [ready, sysProxy, tunMode, applySys, t],
+    [core, ready, sysProxy, tunMode, applySys, t],
   );
 
   // TUN ядро на лету не включает: перезапуск соединения с новым режимом.
   const changeTun = useCallback(
     async (next: boolean): Promise<void> => {
+      // T-81: включать TUN без прав администратора бессмысленно — диалог с
+      // перезапуском; пока не перезапустились, режим не меняется.
+      if (next && (await tunNeedsElevation())) {
+        setTunDialog(true);
+        return;
+      }
       const prev = { sysProxy, tunMode };
       setTunMode(next);
       saveModes(window.localStorage, { sysProxy, tunMode: next });
+      void rememberModes(core, { sysProxy, tunMode: next });
       const running = status.mode === ConnectMode.TUN;
       if (!ready || runningId === 0n || running === next) return;
       setBusy(true);
@@ -302,13 +346,38 @@ export function ConnectionScreen(): JSX.Element {
       } catch (e) {
         setTunMode(prev.tunMode);
         saveModes(window.localStorage, prev);
-        setConnError(showCoreError(e, t));
+        void rememberModes(core, prev);
+        setConnError(showCoreError(e, t, { tun: next }));
       } finally {
         setBusy(false);
       }
     },
     [core, ready, runningId, status.mode, sysProxy, tunMode, t],
   );
+
+  // T-81: «Перезапустить от администратора». Выбор TUN записывается заранее
+  // (localStorage и ядро), чтобы новый экземпляр открылся уже в режиме TUN; отказ
+  // в UAC или сбой возвращают прежний выбор: приложение остаётся как было.
+  const relaunchForTun = useCallback(async (): Promise<RelaunchOutcome> => {
+    const prev = { sysProxy, tunMode };
+    const next = { sysProxy, tunMode: true };
+    const revert = (): void => {
+      takeTunRelaunch(window.localStorage);
+      saveModes(window.localStorage, prev);
+      void rememberModes(core, prev);
+    };
+    saveModes(window.localStorage, next);
+    markTunRelaunch(window.localStorage);
+    await rememberModes(core, next);
+    try {
+      const outcome = await relaunchElevated();
+      if (outcome === 'cancelled') revert();
+      return outcome;
+    } catch (e) {
+      revert();
+      throw e;
+    }
+  }, [core, sysProxy, tunMode]);
 
   // Состояние карточки (прототип renderConn): ошибка важнее остальных.
   const phase = coreFailed ? 'err' : ready ? 'on' : connecting ? 'connecting' : 'off';
@@ -349,7 +418,7 @@ export function ConnectionScreen(): JSX.Element {
         // Остались на прежнем сервере (или без соединения): выбор возвращаем.
         setPickedId(runningId);
         saveSelectedProfileId(window.localStorage, runningId);
-        setConnError(showCoreError(e, t));
+        setConnError(showCoreError(e, t, { tun: modes.tunMode }));
       } finally {
         setBusy(false);
       }
@@ -487,7 +556,7 @@ export function ConnectionScreen(): JSX.Element {
             <button
               className={`btn btn-lg ${ready ? 'btn-danger-solid' : 'btn-pri'}`}
               onClick={() => void toggle()}
-              disabled={busy || connecting || status.state === CoreState.DISCONNECTING || (tunBlocked && !ready)}
+              disabled={busy || connecting || status.state === CoreState.DISCONNECTING}
             >
               <Icon name="plug" />
               {ready ? t('conn.disconnect') : t('conn.connect')}
@@ -515,7 +584,18 @@ export function ConnectionScreen(): JSX.Element {
                   />
                 </div>
                 <div className="cx-mode-row">
-                  <span className="cx-mode-l">{t('mode.tun')}</span>
+                  <span className="cx-mode-l">
+                    {t('mode.tun')}
+                    {elevated === false && (
+                      <span
+                        className="mode-admin"
+                        title={t('mode.tun.needAdmin')}
+                        style={{ marginInlineStart: 8 }}
+                      >
+                        {t('mode.admin')}
+                      </span>
+                    )}
+                  </span>
                   <button
                     className={`sw${tunMode ? ' on' : ''}`}
                     role="switch"
@@ -529,7 +609,13 @@ export function ConnectionScreen(): JSX.Element {
                 </div>
               </div>
               <p className="hint">{t('mode.both.hint')}</p>
-              {tunBlocked && <TunAdminNotice />}
+              {tunBlocked && (
+                <TunAdminNotice
+                  onRestart={() => {
+                    setTunDialog(true);
+                  }}
+                />
+              )}
             </div>
 
             <dl className="cx-meta">
@@ -612,6 +698,14 @@ export function ConnectionScreen(): JSX.Element {
             window.location.hash = 'screen=servers&tab=profiles';
           }}
           onClose={closeMenu}
+        />
+      )}
+      {tunDialog && (
+        <TunDialog
+          onClose={() => {
+            setTunDialog(false);
+          }}
+          onRelaunch={relaunchForTun}
         />
       )}
       {importOpen && (

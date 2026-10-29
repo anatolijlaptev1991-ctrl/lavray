@@ -101,3 +101,69 @@ describe('friendlyCoreError', () => {
     expect(out).toBe('<core.unavailable>');
   });
 });
+
+describe('отказ в правах при запуске TUN (T-81)', () => {
+  /** Так sing-box сообщает про адаптер TUN без администратора (Windows). */
+  const denied = (): ConnectError =>
+    new ConnectError(
+      'inst: старт инстанса: start inbound/tun[tun-in]: configure tun interface: Access is denied.',
+      Code.Unknown,
+    );
+
+  it('access_denied_error_is_localized: на каждом языке — готовая фраза, не сырой текст ОС', () => {
+    for (const lang of LANGUAGES) {
+      setLanguage(lang);
+      const text = friendlyCoreError(denied());
+      expect(text, lang).toBe(t('err.tunAccess', lang));
+      expect(text, lang).not.toContain('Access is denied');
+      expect(text, lang).not.toBe('err.tunAccess');
+    }
+    setLanguage('ru');
+    expect(friendlyCoreError(denied())).toBe(
+      'Для запуска TUN не хватает прав. Перезапустите LAVRay от имени администратора.',
+    );
+  });
+
+  it('узнаёт отказ ОС и по другим формулировкам (Linux, русская Windows)', () => {
+    setLanguage('en');
+    for (const raw of [
+      'start inbound/tun[tun-in]: configure tun interface: operation not permitted',
+      'tun: open /dev/net/tun: permission denied',
+      'tun: A required privilege is not held by the client.',
+      'tun: Отказано в доступе.',
+    ]) {
+      expect(friendlyCoreError(new ConnectError(raw, Code.Unknown)), raw).toBe(t('err.tunAccess', 'en'));
+    }
+  });
+
+  it('без контекста TUN «Access is denied» без слова tun не трогаем; с контекстом — объясняем', () => {
+    setLanguage('en');
+    const plain = new ConnectError('open C:/data/cache.db: Access is denied.', Code.Unknown);
+    expect(friendlyCoreError(plain)).toBe(plain.message);
+    expect(friendlyCoreError(plain, undefined, { tun: true })).toBe(t('err.tunAccess', 'en'));
+  });
+
+  it('FailedPrecondition от ядра сохраняет причину, даже если в ней есть «access is denied»', () => {
+    setLanguage('en');
+    const text = friendlyCoreError(
+      new ConnectError('tun requires administrator rights, access is denied', Code.FailedPrecondition),
+      undefined,
+      { tun: true },
+    );
+    expect(text).toContain('tun requires administrator rights');
+  });
+
+  it('переводчик экрана получает ключ err.tunAccess', () => {
+    const seen: string[] = [];
+    const out = showCoreError(
+      denied(),
+      (key) => {
+        seen.push(key);
+        return `<${key}>`;
+      },
+      { tun: true },
+    );
+    expect(seen).toEqual(['err.tunAccess']);
+    expect(out).toBe('<err.tunAccess>');
+  });
+});

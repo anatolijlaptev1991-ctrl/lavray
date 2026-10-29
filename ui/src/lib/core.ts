@@ -99,13 +99,29 @@ export function coreUrlFromEnv(): string {
 /** Стабильный код «ядро недоступно» (ключ словаря). Показывать пользователю его нельзя. */
 export const CORE_UNAVAILABLE = 'core.unavailable';
 
-/** Ключи словаря, которые friendlyCoreError подставляет сам (T-59). */
-export type CoreErrorKey = 'core.unavailable' | 'err.unimplemented' | 'err.precondition';
+/** Ключи словаря, которые friendlyCoreError подставляет сам (T-59, T-81). */
+export type CoreErrorKey =
+  | 'core.unavailable'
+  | 'err.unimplemented'
+  | 'err.precondition'
+  | 'err.tunAccess';
 export type CoreErrorTranslate = (key: CoreErrorKey) => string;
 
 // Сбой самого транспорта: сеть недоступна либо вместо ядра ответил чужой
 // сервер (asset-сервер оболочки отвечает HTML с кодом 404/405, прокси — 5xx).
 const TRANSPORT_DOWN = /(Failed to fetch|NetworkError|fetch failed|Load failed|^HTTP (404|405|5\d\d)\b)/i;
+
+// Отказ ОС в правах: так sing-box сообщает, что не смог создать адаптер TUN без
+// администратора (Windows — «Access is denied» / «A required privilege is not
+// held», Linux/macOS — «operation not permitted» / «permission denied»; на
+// русской Windows текст приходит по-русски).
+const ACCESS_DENIED =
+  /(access is denied|privilege is not held|permission denied|operation not permitted|отказано в доступе|не хватает прав)/i;
+
+export interface CoreErrorContext {
+  /** Запрошен режим TUN: отказ в правах объясняется как нехватка прав у TUN. */
+  readonly tun?: boolean;
+}
 
 /**
  * Текст ошибки для пользователя. Всегда возвращает готовую фразу на языке
@@ -114,10 +130,17 @@ const TRANSPORT_DOWN = /(Failed to fetch|NetworkError|fetch failed|Load failed|^
  * - ядро ответило `Unimplemented` — «Функция пока не реализована» (ядро живо,
  *   это заглушка RPC; раньше она маскировалась под «Ядро недоступно»);
  * - `FailedPrecondition` — «Сейчас это действие недоступно» плюс причина от ядра;
+ * - отказ ОС в правах при запуске TUN — «Для TUN не хватает прав, перезапустите
+ *   от администратора» (T-81): в режиме TUN (`context.tun`) узнаётся по одному
+ *   тексту отказа, без контекста — только если в тексте упомянут `tun`;
  * - прочее — сообщение как есть.
  * `tr` по умолчанию — глобальный перевод текущего языка; экраны передают свой `t`.
  */
-export function friendlyCoreError(e: unknown, tr: CoreErrorTranslate = translate): string {
+export function friendlyCoreError(
+  e: unknown,
+  tr: CoreErrorTranslate = translate,
+  context: CoreErrorContext = {},
+): string {
   const connectErr = e instanceof ConnectError ? e : null;
   const msg = e instanceof Error ? e.message : String(e);
   const raw = connectErr?.rawMessage ?? msg;
@@ -128,8 +151,12 @@ export function friendlyCoreError(e: unknown, tr: CoreErrorTranslate = translate
     const reason = raw.trim();
     return reason === '' ? head : `${head}: ${reason}`;
   }
+  if (ACCESS_DENIED.test(raw) && (context.tun === true || /\btun\b/i.test(raw))) {
+    return tr('err.tunAccess');
+  }
   return msg;
 }
 
 /** Прежнее имя для экранов, которые передают свой `t`. */
-export const showCoreError: (e: unknown, t: CoreErrorTranslate) => string = friendlyCoreError;
+export const showCoreError: (e: unknown, t: CoreErrorTranslate, context?: CoreErrorContext) => string =
+  friendlyCoreError;

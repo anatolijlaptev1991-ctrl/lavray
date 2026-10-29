@@ -4,8 +4,9 @@
 // «Подключение» и меню титлбара. Режимы независимы (NekoBox-паритет):
 // TUN — туннель, системный прокси — дополнительный канал для приложений,
 // оба могут быть включены одновременно.
+import { create } from '@bufbuild/protobuf';
 import type { CoreClients } from './core';
-import { ConnectMode } from '../gen/lavray_pb';
+import { ConnectMode, SettingValueSchema } from '../gen/lavray_pb';
 import { tunNeedsElevation } from './elevation';
 import type { Profile } from '../gen/lavray_pb';
 
@@ -37,6 +38,86 @@ export function saveModes(storage: Storage, modes: ModePreferences): void {
     storage.setItem(KEY, JSON.stringify(modes));
   } catch {
     /* приватный режим браузера — настройки не сохраняются */
+  }
+}
+
+/** Настройка ядра с запомненными режимами (формат NekoBox: список `tun`, `system_proxy`). */
+const REMEMBER_MODES_KEY = 'remember.modes';
+/** Метка «приложение перезапускается от администратора ради TUN» (T-81). */
+const TUN_RELAUNCH_KEY = 'lavray.tunRelaunch';
+
+/** Режимы в виде списка настройки `remember.modes`. */
+export function rememberedModes(modes: ModePreferences): string[] {
+  return [...(modes.tunMode ? ['tun'] : []), ...(modes.sysProxy ? ['system_proxy'] : [])];
+}
+
+/** Обратное преобразование; пустой или непонятный список — «ничего не запомнено» (`null`). */
+export function modesFromRemembered(items: readonly string[]): ModePreferences | null {
+  const names = new Set(items.map((item) => item.trim()));
+  const tunMode = names.has('tun') || names.has('vpn');
+  const sysProxy = names.has('system_proxy') || names.has('proxy');
+  return tunMode || sysProxy ? { sysProxy, tunMode } : null;
+}
+
+/**
+ * Записать выбранные режимы в настройку ядра. localStorage окна живёт только в
+ * профиле WebView; перезапуск от администратора (T-81) должен вернуть тот же
+ * выбор, поэтому режимы дублируются в ядре. Ядро недоступно — выбор остаётся в
+ * localStorage, ошибка не показывается.
+ */
+export async function rememberModes(core: CoreClients, modes: ModePreferences): Promise<void> {
+  try {
+    await core.settings.setSettings({
+      values: {
+        [REMEMBER_MODES_KEY]: create(SettingValueSchema, {
+          value: { case: 'stringListValue', value: { items: rememberedModes(modes) } },
+        }),
+      },
+    });
+  } catch {
+    /* ядро недоступно — режимы остались в localStorage */
+  }
+}
+
+/**
+ * Режимы из ядра, если в localStorage их ещё нет (другой профиль WebView после
+ * перезапуска от администратора, очищенные данные). Найденное записывается в
+ * localStorage. `null` — восстанавливать нечего или есть собственный выбор окна.
+ */
+export async function restoreModes(
+  core: CoreClients,
+  storage: Storage,
+): Promise<ModePreferences | null> {
+  try {
+    if (storage.getItem(KEY) !== null) return null;
+    const res = await core.settings.getSettings({ keys: [REMEMBER_MODES_KEY] });
+    const value = res.values[REMEMBER_MODES_KEY]?.value;
+    if (value?.case !== 'stringListValue') return null;
+    const modes = modesFromRemembered(value.value.items);
+    if (modes !== null) saveModes(storage, modes);
+    return modes;
+  } catch {
+    return null;
+  }
+}
+
+/** Отметить, что приложение перезапускается от администратора ради TUN. */
+export function markTunRelaunch(storage: Storage): void {
+  try {
+    storage.setItem(TUN_RELAUNCH_KEY, '1');
+  } catch {
+    /* приватный режим браузера — подсказка после перезапуска не покажется */
+  }
+}
+
+/** Снять отметку; `true`, если она была (подсказку показывают один раз). */
+export function takeTunRelaunch(storage: Storage): boolean {
+  try {
+    const marked = storage.getItem(TUN_RELAUNCH_KEY) !== null;
+    storage.removeItem(TUN_RELAUNCH_KEY);
+    return marked;
+  } catch {
+    return false;
   }
 }
 

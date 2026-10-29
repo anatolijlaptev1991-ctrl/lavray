@@ -324,7 +324,10 @@ describe('режимы на экране «Подключение» (T-27)', () 
     ]);
     expect(sw(view)[1]?.getAttribute('aria-checked')).toBe('false');
     expect(stored()).toEqual({ sysProxy: true, tunMode: false });
-    expect(view.container.querySelector('.banner-err')?.textContent).toContain('access is denied');
+    // T-81: отказ ОС в правах при старте TUN — понятный текст вместо сырого «access is denied»
+    const banner = view.container.querySelector('.banner-err')?.textContent ?? '';
+    expect(banner).toContain('Not enough rights to start TUN. Restart LAVRay as administrator.');
+    expect(banner).not.toContain('access is denied');
   });
 
   it('системный прокси при активном соединении применяется сразу, без перезапуска ядра', async () => {

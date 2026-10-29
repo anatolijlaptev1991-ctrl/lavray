@@ -447,6 +447,7 @@ mod wininet {
 mod imp {
     use super::wininet::{self, parse_dword, parse_query, RegValue, Registry, NAMES};
     use super::ProxySnapshot;
+    use crate::oemtext::decode_console_output;
     use std::collections::BTreeMap;
     use std::os::windows::process::CommandExt;
     use std::path::PathBuf;
@@ -465,6 +466,10 @@ mod imp {
         PathBuf::from(root).join("System32").join("reg.exe")
     }
 
+    /// Запустить `reg.exe`. Аргументы уходят в `CreateProcessW` (UTF-16), так
+    /// что не-ASCII значения при записи доходят без потерь; а вывод `reg.exe`
+    /// пишет в OEM-кодовой странице (CP866 на русской Windows), поэтому читается
+    /// через [`decode_console_output`], а не как UTF-8 (S-02).
     fn run(args: &[&str]) -> Result<String, String> {
         let out = std::process::Command::new(reg_exe())
             .args(args)
@@ -475,10 +480,10 @@ mod imp {
             return Err(format!(
                 "reg {}: {}",
                 args.first().unwrap_or(&""),
-                String::from_utf8_lossy(&out.stderr).trim()
+                decode_console_output(&out.stderr).trim()
             ));
         }
-        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+        Ok(decode_console_output(&out.stdout))
     }
 
     struct RegExe;
@@ -914,6 +919,44 @@ mod tests {
         assert_eq!(found["Empty"].data, "");
         assert_eq!(found["Path"].kind, "REG_EXPAND_SZ");
         assert_eq!(found.len(), 5, "заголовки ключей не значения");
+    }
+
+    /// S-02: `reg query` на русской Windows пишет в CP866. `*.рф` - байты
+    /// `2A 2E E0 E4`; прочитанные как UTF-8 они давали `*.??` (реестр не нужен).
+    #[cfg(windows)]
+    #[test]
+    fn reg_query_output_in_cp866_keeps_cyrillic_exceptions() {
+        let mut raw = Vec::new();
+        raw.extend_from_slice(
+            b"\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\r\n\
+              \x20   ProxyOverride    REG_SZ    *.corp.local; ",
+        );
+        raw.extend_from_slice(&[0x2A, 0x2E, 0xE0, 0xE4]);
+        raw.extend_from_slice(b";<local>\r\n    ProxyEnable    REG_DWORD    0x1\r\n");
+        let found = parse_query(&crate::oemtext::decode_output(&raw, 866));
+        assert_eq!(
+            found["ProxyOverride"],
+            RegValue::sz("*.corp.local; *.рф;<local>")
+        );
+        assert_eq!(found["ProxyEnable"], RegValue::dword(1));
+        // Как было: UTF-8 с заменой портит те же байты.
+        let broken = parse_query(&String::from_utf8_lossy(&raw));
+        assert_ne!(broken["ProxyOverride"], found["ProxyOverride"]);
+    }
+
+    /// Снимок на диске и откат не портят не-ASCII значения.
+    #[test]
+    fn cyrillic_bypass_list_survives_enable_then_disable() {
+        let mem = MemRegistry::with(&[
+            ("ProxyEnable", "REG_DWORD", "0x1"),
+            ("ProxyServer", "REG_SZ", "corp.proxy:8080"),
+            ("ProxyOverride", "REG_SZ", "*.рф;*.москва; 10.*;<local>"),
+        ]);
+        let before = mem.dump();
+        let sp = proxy("cyrillic", &mem);
+        sp.enable("127.0.0.1", 2080).unwrap();
+        sp.disable().unwrap();
+        assert_eq!(mem.dump(), before);
     }
 
     #[cfg(windows)]

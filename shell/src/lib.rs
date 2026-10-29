@@ -13,6 +13,8 @@
 //!   к циклу надзора `coreproc::runner` (T-56): публикует адрес, шлёт событие
 //!   и снимает системный прокси при смерти ядра (T-03);
 //! - [`integrity`] — сверка SHA-256 ядра с вшитым при сборке (T-44);
+//! - `oemtext` (только Windows) — вывод консольных программ (`reg.exe`) из OEM-
+//!   кодовой страницы в строку (S-02);
 //! - [`tray`] — конфигурация меню трея (§9), проверяемая без GUI;
 //! - [`elevation`] — запущено ли приложение с повышенными правами (T-46);
 //! - [`uiprotocol`] — протокол UI ↔ shell (команды/события, serde, версия
@@ -28,6 +30,8 @@ pub mod coreproc;
 pub mod elevation;
 pub mod endpoint;
 pub mod integrity;
+#[cfg(windows)]
+mod oemtext;
 pub mod sysproxy;
 pub mod tray;
 pub mod uiprotocol;

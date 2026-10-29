@@ -83,3 +83,27 @@ fn system_proxy_command_validates_the_port_it_is_given() {
     assert!(command.contains("validate_port(port)?"));
     assert!(!command.contains("port: u16"));
 }
+
+/// S-02: вывод `reg.exe` читается в OEM-кодовой странице, а не как UTF-8
+/// (запуск `reg.exe` в тестах не нужен - проверяется проводка Windows-бэкенда;
+/// macOS/Linux читают UTF-8 законно).
+#[test]
+fn reg_output_is_decoded_with_the_oem_codepage() {
+    let sysproxy_rs = source("sysproxy.rs");
+    let windows_backend = sysproxy_rs
+        .split("use super::wininet::{self")
+        .nth(1)
+        .and_then(|rest| rest.split("// macOS: networksetup").next())
+        .expect("Windows-бэкенд sysproxy");
+    assert!(windows_backend.contains("decode_console_output(&out.stdout)"));
+    assert!(windows_backend.contains("decode_console_output(&out.stderr)"));
+    for banned in [
+        "from_utf8_lossy(&out.stdout)",
+        "from_utf8_lossy(&out.stderr)",
+    ] {
+        assert!(
+            !windows_backend.contains(banned),
+            "вывод reg.exe читается как UTF-8: {banned}"
+        );
+    }
+}

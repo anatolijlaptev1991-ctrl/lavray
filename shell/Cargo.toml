@@ -41,6 +41,9 @@ windows-sys = { version = "0.61", features = [
   "Win32_System_Threading",
   # F5: WinINET-уведомление об изменении прокси (InternetSetOption)
   "Win32_Networking_WinInet",
+  # S-02: OEM-кодовая страница (GetOEMCP) и перекодировка вывода reg.exe
+  # (MultiByteToWideChar)
+  "Win32_Globalization",
 ] }
 
 [build-dependencies]

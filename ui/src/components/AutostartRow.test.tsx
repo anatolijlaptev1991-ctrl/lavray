@@ -245,6 +245,94 @@ describe('строка «Автозапуск» (T-82)', () => {
     expect(row(view)).not.toBeNull(); // переключатель остался рядом с сообщением
   });
 
+  describe('кнопка «Перезапустить от администратора»', () => {
+    const relaunchButton = (): HTMLButtonElement | null =>
+      document.querySelector<HTMLButtonElement>('#autostartRelaunch');
+    const dialogText = (): string => document.querySelector('.dlg')?.textContent ?? '';
+
+    it('показана, когда выключить задачу или перейти на неё можно только с правами', async () => {
+      // задача создана с правами, процесс обычный: отключить её без прав нельзя
+      invokeMock.mockResolvedValue(os({ enabled: true, method: 'task' }));
+      const viaTask = await mountBare(createElement(AutostartRow));
+      expect(relaunchButton()?.textContent).toBe('Restart as administrator');
+      viaTask.unmount();
+
+      // автозапуск выключен, копия установлена: с правами включится задача
+      invokeMock.mockResolvedValue(os());
+      const off = await mountBare(createElement(AutostartRow));
+      expect(relaunchButton()).not.toBeNull();
+      off.unmount();
+
+      // выключить не вышло — нужны права
+      invokeMock.mockImplementation((cmd: string) =>
+        Promise.resolve(
+          cmd === 'set_autostart'
+            ? os({ enabled: true, method: 'registry', notice: 'task_needs_admin' })
+            : os({ enabled: true, method: 'registry' }),
+        ),
+      );
+      const failed = await mountBare(createElement(AutostartRow));
+      expect(relaunchButton()).toBeNull(); // обычный автозапуск менять можно и так
+      await click(sw(failed));
+      expect(relaunchButton()).not.toBeNull();
+    });
+
+    it('скрыта, когда права уже есть или повышение ничего не даст', async () => {
+      invokeMock.mockResolvedValue(os({ enabled: true, method: 'task', elevated: true }));
+      const admin = await mountBare(createElement(AutostartRow));
+      expect(relaunchButton()).toBeNull();
+      admin.unmount();
+
+      // не установленная копия: задача невозможна и с правами
+      invokeMock.mockResolvedValue(os({ installed: false }));
+      const portable = await mountBare(createElement(AutostartRow));
+      expect(relaunchButton()).toBeNull();
+      portable.unmount();
+
+      // обычный автозапуск включён: менять нечего
+      invokeMock.mockResolvedValue(os({ enabled: true, method: 'registry' }));
+      const plain = await mountBare(createElement(AutostartRow));
+      expect(relaunchButton()).toBeNull();
+      plain.unmount();
+    });
+
+    it('открывает диалог с текстами автозапуска; «Перезапустить» вызывает relaunch_elevated', async () => {
+      invokeMock.mockImplementation((cmd: string) =>
+        Promise.resolve(cmd === 'relaunch_elevated' ? 'started' : os({ enabled: true, method: 'task' })),
+      );
+      const view = await mountBare(createElement(AutostartRow));
+
+      await click(relaunchButton());
+      expect(dialogText()).toContain('Autostart with administrator rights can be turned on or off only');
+      expect(dialogText()).not.toContain('TUN');
+
+      await click(document.querySelector('#tunRelaunch'));
+      expect(invokeMock).toHaveBeenCalledWith('relaunch_elevated');
+      // режимы и настройки TUN не трогаются: это не просьба про TUN
+      expect(invokeMock.mock.calls.filter(([cmd]) => cmd === 'set_system_proxy')).toEqual([]);
+      view.unmount();
+    });
+
+    it('отказ в UAC и обычная учётная запись объясняются словами автозапуска', async () => {
+      let answer: Promise<unknown> = Promise.resolve('cancelled');
+      invokeMock.mockImplementation((cmd: string) =>
+        cmd === 'relaunch_elevated' ? answer : Promise.resolve(os({ enabled: true, method: 'task' })),
+      );
+      await mountBare(createElement(AutostartRow));
+      await click(relaunchButton());
+
+      await click(document.querySelector('#tunRelaunch'));
+      expect(dialogText()).toContain('autostart is unchanged');
+
+      answer = Promise.reject(new Error('admin_account_required'));
+      await click(document.querySelector('#tunRelaunch'));
+      expect(document.querySelector('.dlg .banner-err')?.textContent).toContain(
+        'Autostart with administrator rights needs an administrator account',
+      );
+      expect(dialogText()).not.toContain('TUN needs');
+    });
+  });
+
   it('вне Windows (supported=false), без оболочки и при сбое чтения строки нет', async () => {
     invokeMock.mockResolvedValue(os({ supported: false }));
     const unsupported = await mountBare(createElement(AutostartRow));

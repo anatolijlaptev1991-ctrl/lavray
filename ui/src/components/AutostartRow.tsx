@@ -7,9 +7,11 @@ import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { useI18n } from '../hooks/useI18n';
 import { readAutostart, writeAutostart } from '../lib/autostart';
+import { relaunchElevated } from '../lib/elevation';
 import type { AutostartInfo } from '../lib/autostart';
 import type { MessageKey } from '../lib/i18n';
 import { Icon } from './Icon';
+import { TunDialog } from './TunDialog';
 
 /** Что пошло не так: текст собирается при показе, чтобы смена языка его перевела. */
 type Problem =
@@ -42,6 +44,7 @@ export function AutostartRow(): JSX.Element | null {
   const [info, setInfo] = useState<AutostartInfo | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<Problem | null>(null);
+  const [relaunchOpen, setRelaunchOpen] = useState(false);
 
   // Неудачное повторное чтение не стирает уже показанное состояние.
   const refresh = useCallback(async (): Promise<void> => {
@@ -83,6 +86,13 @@ export function AutostartRow(): JSX.Element | null {
     [refresh],
   );
 
+  // Выключить автозапуск задачей или перейти на неё можно только с правами
+  // администратора: предлагаем перезапуск (тот же relaunch_elevated, что и у TUN).
+  const needsAdmin =
+    info !== null &&
+    !info.elevated &&
+    (info.method === 'task' || problem?.kind === 'needAdmin' || (!info.enabled && info.installed));
+
   // Сообщение об ошибке показывается и когда состояние ОС прочитать не удалось.
   if (info === null && problem === null) return null;
   return (
@@ -95,6 +105,17 @@ export function AutostartRow(): JSX.Element | null {
             <div className="set-d" role="status">
               {t(detailKey(info))}
             </div>
+            {needsAdmin && (
+              <button
+                className="btn btn-sec btn-sm"
+                id="autostartRelaunch"
+                onClick={() => {
+                  setRelaunchOpen(true);
+                }}
+              >
+                {t('tun.dlg.ok')}
+              </button>
+            )}
           </div>
           <div className="set-ctl">
             <button
@@ -117,6 +138,15 @@ export function AutostartRow(): JSX.Element | null {
           </span>
           <div className="bn-t">{problemText(problem, t)}</div>
         </div>
+      )}
+      {relaunchOpen && (
+        <TunDialog
+          purpose="autostart"
+          onClose={() => {
+            setRelaunchOpen(false);
+          }}
+          onRelaunch={relaunchElevated}
+        />
       )}
     </>
   );

@@ -894,4 +894,8 @@ export const deDict: Record<string, string> = {
   "set.autostart.installedOnly": "Der Autostart mit Administratorrechten gibt es nur für die installierte Version (in Program Files). Diese Kopie bekommt den normalen Autostart.",
   "set.autostart.unknown": "Es ließ sich nicht feststellen, ob der Autostart über die Aufgabenplanung aktiv ist. Versuche es später erneut oder starte LAVRay als Administrator.",
   "tun.dlg.needAdminAccount": "TUN braucht ein Administratorkonto: Dieses Konto ist ein Standardkonto und kann ohne Administratorkennwort keine erhöhten Rechte bekommen. Melde dich als Administrator an.",
+  "set.autostart.relaunch.t": "Als Administrator neu starten",
+  "set.autostart.relaunch.d": "Der Autostart mit Administratorrechten lässt sich nur in LAVRay als Administrator ein- oder ausschalten. Die App schließt sich und öffnet sich neu, das System fragt nach Bestätigung.",
+  "set.autostart.relaunch.cancelled": "Systemabfrage abgelehnt: LAVRay bleibt ohne Administratorrechte, der Autostart bleibt unverändert.",
+  "set.autostart.relaunch.needAdminAccount": "Der Autostart mit Administratorrechten braucht ein Administratorkonto: Dieses Konto ist ein Standardkonto und kann ohne Administratorkennwort keine erhöhten Rechte bekommen.",
 }

@@ -894,4 +894,8 @@ export const enDict: Record<string, string> = {
   "set.autostart.installedOnly": "Autostart with administrator rights is available only for the installed version (in Program Files). This copy gets the regular autostart.",
   "set.autostart.unknown": "Could not tell whether autostart through the scheduler is on. Try again later or start LAVRay as administrator.",
   "tun.dlg.needAdminAccount": "TUN needs an administrator account: this account is a standard one and cannot get elevated rights without an administrator password. Sign in as an administrator.",
+  "set.autostart.relaunch.t": "Restart as administrator",
+  "set.autostart.relaunch.d": "Autostart with administrator rights can be turned on or off only from LAVRay running as administrator. The app closes and opens again, and your system will ask for confirmation.",
+  "set.autostart.relaunch.cancelled": "System prompt declined: LAVRay stays without administrator rights, autostart is unchanged.",
+  "set.autostart.relaunch.needAdminAccount": "Autostart with administrator rights needs an administrator account: this account is a standard one and cannot get elevated rights without an administrator password.",
 }

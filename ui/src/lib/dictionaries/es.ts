@@ -894,4 +894,8 @@ export const esDict: Record<string, string> = {
   "set.autostart.installedOnly": "El arranque automático con permisos de administrador solo está disponible en la versión instalada (en Program Files). Esta copia usa el arranque normal.",
   "set.autostart.unknown": "No se pudo determinar si el arranque automático mediante el programador está activado. Inténtalo más tarde o inicia LAVRay como administrador.",
   "tun.dlg.needAdminAccount": "TUN necesita una cuenta de administrador: esta cuenta es estándar y no puede elevar permisos sin la contraseña de un administrador. Inicia sesión como administrador.",
+  "set.autostart.relaunch.t": "Reiniciar como administrador",
+  "set.autostart.relaunch.d": "El arranque automático con permisos de administrador solo se activa o desactiva desde LAVRay ejecutado como administrador. La aplicación se cierra y se abre de nuevo, y el sistema pedirá confirmación.",
+  "set.autostart.relaunch.cancelled": "Petición del sistema rechazada: LAVRay sigue sin permisos de administrador y el arranque automático no cambia.",
+  "set.autostart.relaunch.needAdminAccount": "El arranque automático con permisos de administrador necesita una cuenta de administrador: esta cuenta es estándar y no puede elevar permisos sin la contraseña de un administrador.",
 }

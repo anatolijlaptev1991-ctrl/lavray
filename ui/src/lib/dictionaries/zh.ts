@@ -887,4 +887,8 @@ export const zhDict: Record<string, string> = {
   "set.autostart.installedOnly": "仅已安装的版本（位于 Program Files）可使用管理员权限自启。此副本使用普通自启。",
   "set.autostart.unknown": "无法确定是否已通过计划任务启用自启。请稍后重试，或以管理员身份启动 LAVRay。",
   "tun.dlg.needAdminAccount": "TUN 需要管理员账户：当前账户是标准账户，没有管理员密码无法提升权限。请使用管理员账户登录。",
+  "set.autostart.relaunch.t": "以管理员身份重新启动",
+  "set.autostart.relaunch.d": "带管理员权限的自启只能在以管理员身份运行的 LAVRay 中开启或关闭。应用会关闭并重新打开，系统会请求确认。",
+  "set.autostart.relaunch.cancelled": "已拒绝系统提示：LAVRay 仍无管理员权限，自启设置未更改。",
+  "set.autostart.relaunch.needAdminAccount": "带管理员权限的自启需要管理员账户：当前账户是标准账户，没有管理员密码无法提升权限。",
 }

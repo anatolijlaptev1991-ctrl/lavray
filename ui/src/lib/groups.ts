@@ -41,6 +41,26 @@ export function newServerGroupId(
 }
 
 /**
+ * Группа для импорта (диалог «Импорт»). undefined — группу не передаём, ядро
+ * кладёт серверы в «Default» (T-07).
+ * - «Добавлены вручную» — как у редактора: первая НЕ подписочная группа,
+ *   иначе импорт при этом фильтре попадал бы в подписку из начала списка;
+ * - вкладка или фильтр с конкретной группой — эта группа, иначе targetGroup;
+ * - «0» и пустая строка — группы нет.
+ */
+export function importGroupId(
+  filter: string,
+  targetGroup: string,
+  groups: readonly GroupRef[],
+): bigint | undefined {
+  if (filter === MANUAL_FILTER) {
+    return newServerGroupId(filter, targetGroup, groups) ?? undefined;
+  }
+  const raw = numericGroupId(filter) !== null ? filter : targetGroup;
+  return raw === '' || raw === '0' ? undefined : BigInt(raw);
+}
+
+/**
  * Имя группы для показа. Встроенная «Default» (DEFAULT_GROUP_ID) показывается
  * переводом grp.default, пока пользователь не переименовал её; любое другое
  * имя показывается как есть. Ядро не меняется: имя в нём остаётся «Default».

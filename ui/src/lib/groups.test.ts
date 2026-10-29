@@ -3,7 +3,13 @@
 // строка означают «группы нет» (ядро на group_id=0 отвечает invalid_argument).
 import { describe, expect, it } from 'vitest';
 import { Group_Kind } from '../gen/lavray_pb';
-import { DEFAULT_GROUP_ID, MANUAL_FILTER, groupDisplayName, newServerGroupId } from './groups';
+import {
+  DEFAULT_GROUP_ID,
+  MANUAL_FILTER,
+  groupDisplayName,
+  importGroupId,
+  newServerGroupId,
+} from './groups';
 import type { GroupRef } from './groups';
 import { t } from './i18n';
 import type { Language, MessageKey } from './i18n';
@@ -38,6 +44,26 @@ describe('U-01: группа для нового сервера', () => {
   it('вкладка с конкретной группой отдаёт её id; фильтр «0» — группы нет', () => {
     expect(newServerGroupId(String(WORK_ID), '', SUB_FIRST)).toBe(WORK_ID);
     expect(newServerGroupId('0', String(WORK_ID), SUB_FIRST)).toBeNull();
+  });
+});
+
+describe('U-01: группа для импорта', () => {
+  it('«Добавлены вручную» импортирует в первую не подписочную группу, а не в подписку из начала списка', () => {
+    expect(importGroupId(MANUAL_FILTER, String(SUB_ID), SUB_FIRST)).toBe(DEFAULT_GROUP_ID);
+  });
+
+  it('«Добавлены вручную» без не подписочной группы — группу не передаём, ядро выберет «Default»', () => {
+    expect(importGroupId(MANUAL_FILTER, '', [])).toBeUndefined();
+    expect(
+      importGroupId(MANUAL_FILTER, String(SUB_ID), [{ id: SUB_ID, kind: Group_Kind.SUBSCRIPTION }]),
+    ).toBeUndefined();
+  });
+
+  it('вкладка с группой — она; «Все» — текущая группа; «0» и пустая строка — группы нет', () => {
+    expect(importGroupId(String(WORK_ID), '', SUB_FIRST)).toBe(WORK_ID);
+    expect(importGroupId('all', String(WORK_ID), SUB_FIRST)).toBe(WORK_ID);
+    expect(importGroupId('all', '', SUB_FIRST)).toBeUndefined();
+    expect(importGroupId('0', String(WORK_ID), SUB_FIRST)).toBeUndefined();
   });
 });
 

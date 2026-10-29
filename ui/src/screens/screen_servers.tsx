@@ -11,7 +11,7 @@ import { useI18n } from '../hooks/useI18n';
 import { useKbdLabel } from '../hooks/useKbdLabel';
 import { showCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
-import { MANUAL_FILTER, groupDisplayName, newServerGroupId, numericGroupId } from '../lib/groups';
+import { MANUAL_FILTER, groupDisplayName, importGroupId, newServerGroupId } from '../lib/groups';
 import { formatMs, type MessageKey } from '../lib/i18n';
 import { isTestDown, isTestNotApplicable } from '../lib/testResult';
 import { ProfileEditor } from '../components/ProfileEditor';
@@ -186,13 +186,9 @@ export function ServersScreen(): JSX.Element {
   const activeId = live ? (status.activeProfileId ?? 0n) : 0n;
   const activeDot = status.state === CoreState.CONNECTED ? 'ok' : 'warn';
 
-  // Группа для импорта: вкладка/фильтр, иначе первая группа списка. «0» (пункт
-  // «Добавлены вручную») и ещё не загруженный список групп — это «группы нет»:
-  // ничего не передаём, ядро кладёт профили в «Default» (T-07).
-  const importGroupId = ((): bigint | undefined => {
-    const raw = numericGroupId(groupFilter) !== null ? groupFilter : targetGroup;
-    return raw === '' || raw === '0' ? undefined : BigInt(raw);
-  })();
+  // Группа для импорта (см. lib/groups.ts): undefined — ядро кладёт серверы
+  // в «Default» (T-07); при «Добавлены вручную» — не подписочная группа.
+  const importTarget = importGroupId(groupFilter, targetGroup, groups);
 
   const toggleSelect = useCallback((id: bigint, on: boolean): void => {
     setSelected((prev) => {
@@ -745,7 +741,7 @@ export function ServersScreen(): JSX.Element {
 
       {importOpen && (
         <ImportDialog
-          groupId={importGroupId}
+          groupId={importTarget}
           onClose={() => {
             setImportOpen(false);
           }}

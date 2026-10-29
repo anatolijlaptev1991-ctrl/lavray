@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -134,9 +135,13 @@ type Manager struct {
 	// результата, а не зовут runner.Stop повторно.
 	stop *stopOp
 
-	subMu  sync.Mutex
-	subs   map[chan Event]struct{}
-	closed bool // Shutdown отработал
+	subMu sync.Mutex
+	subs  map[chan Event]struct{}
+	// closed — Shutdown отработал. Читают Start (под mu) и Subscribe/
+	// notifySnapshot/Shutdown (под subMu), пишет только Shutdown; общего
+	// мьютекса у этих путей нет, поэтому флаг атомарный (D-03). Запись всё
+	// равно идёт под subMu, чтобы «closed + обмен subs» оставались атомарными.
+	closed atomic.Bool
 }
 
 // Event — уведомление об изменении состояния (полный снимок — headless-режим
@@ -183,7 +188,7 @@ func (m *Manager) Start(ctx context.Context, info RunInfo) error {
 	if info.StartedAtMs == 0 {
 		info.StartedAtMs = time.Now().UnixMilli()
 	}
-	if m.closed {
+	if m.closed.Load() {
 		m.mu.Unlock()
 		return ErrNotRunning // L14: после Shutdown инстанс не поднимается
 	}
@@ -358,7 +363,7 @@ func (m *Manager) Status() Status {
 func (m *Manager) Subscribe() (<-chan Event, func()) {
 	ch := make(chan Event, 8)
 	m.subMu.Lock()
-	if m.closed {
+	if m.closed.Load() {
 		m.subMu.Unlock()
 		close(ch)
 		return ch, func() {}
@@ -377,7 +382,7 @@ func (m *Manager) notifySnapshot() {
 	st := m.Status()
 	m.subMu.Lock()
 	defer m.subMu.Unlock()
-	if m.closed {
+	if m.closed.Load() {
 		return
 	}
 	for ch := range m.subs {
@@ -393,11 +398,11 @@ func (m *Manager) notifySnapshot() {
 // закрытие подписок. Повторный вызов — no-op.
 func (m *Manager) Shutdown(ctx context.Context) error {
 	m.subMu.Lock()
-	if m.closed {
+	if m.closed.Load() {
 		m.subMu.Unlock()
 		return nil
 	}
-	m.closed = true
+	m.closed.Store(true)
 	subs := m.subs
 	m.subs = map[chan Event]struct{}{}
 	m.subMu.Unlock()

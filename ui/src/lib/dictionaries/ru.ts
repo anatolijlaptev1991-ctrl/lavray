@@ -532,6 +532,7 @@ export const ruDict = {
   "rt.presets": "Пресеты маршрутов",
   "rt.rename": "Переименовать",
   "rt.ro": "Встроенный пресет нельзя изменить",
+  "rt.ruleExists": "Такая запись уже есть в списке",
   "rt.rules": "Правила",
   "rt.ruleOne": "правило",
   "rt.ruleMany": "правил",

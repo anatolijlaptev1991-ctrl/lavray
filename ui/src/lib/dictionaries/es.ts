@@ -518,6 +518,7 @@ export const esDict: Record<string, string> = {
   "rt.presets": "Presets de rutas",
   "rt.rename": "Renombrar",
   "rt.ro": "Un preset integrado no se puede modificar",
+  "rt.ruleExists": "Esta entrada ya está en la lista",
   "rt.rules": "Reglas",
   "rt.ruleOne": "regla",
   "rt.ruleMany": "reglas",

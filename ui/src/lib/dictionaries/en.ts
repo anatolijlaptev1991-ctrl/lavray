@@ -518,6 +518,7 @@ export const enDict: Record<string, string> = {
   "rt.presets": "Route presets",
   "rt.rename": "Rename",
   "rt.ro": "A built-in preset can’t be changed",
+  "rt.ruleExists": "This entry is already in the list",
   "rt.rules": "Rules",
   "rt.ruleOne": "rule",
   "rt.ruleMany": "rules",

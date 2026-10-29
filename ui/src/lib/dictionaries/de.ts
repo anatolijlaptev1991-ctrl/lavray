@@ -518,6 +518,7 @@ export const deDict: Record<string, string> = {
   "rt.presets": "Routing-Presets",
   "rt.rename": "Umbenennen",
   "rt.ro": "Ein integriertes Preset lässt sich nicht ändern",
+  "rt.ruleExists": "Dieser Eintrag steht schon in der Liste",
   "rt.rules": "Regeln",
   "rt.ruleOne": "Regel",
   "rt.ruleMany": "Regeln",

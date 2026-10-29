@@ -511,6 +511,7 @@ export const zhDict: Record<string, string> = {
   "rt.presets": "路由预设",
   "rt.rename": "重命名",
   "rt.ro": "内置预设无法修改",
+  "rt.ruleExists": "列表中已有此条目",
   "rt.rules": "规则",
   "rt.ruleOne": "条规则",
   "rt.ruleMany": "条规则",

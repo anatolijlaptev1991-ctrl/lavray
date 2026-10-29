@@ -157,15 +157,12 @@ export function RulesScreen(): JSX.Element {
     [core, query, t],
   );
 
-  const toggleRule = useCallback(
-    async (def: ListDef, entry: string): Promise<void> => {
+  /** Сохранить новый список записей одного вида (UpdatePreset с проверкой ревизии). */
+  const saveList = useCallback(
+    async (def: ListDef, next: string[]): Promise<void> => {
       if (active === undefined || active.builtin) return;
       setErr('');
       try {
-        const current = ((active[def.kind] as string[] | undefined) ?? []);
-        const next = current.includes(entry)
-          ? current.filter((x) => x !== entry)
-          : [...current, entry];
         const res = await core.routing.updatePreset({
           preset: { ...active, [def.kind]: next },
           expectedRevision: active.revision,
@@ -180,12 +177,29 @@ export function RulesScreen(): JSX.Element {
     [core, active, t],
   );
 
-  const addRule = useCallback(
+  /** Убрать запись из списка (✕ на чипе). */
+  const removeRule = useCallback(
     async (def: ListDef, entry: string): Promise<void> => {
-      if (active === undefined || active.builtin || entry.trim() === '') return;
-      await toggleRule(def, entry.trim());
+      if (active === undefined) return;
+      await saveList(def, active[def.kind].filter((x) => x !== entry));
     },
-    [active, toggleRule],
+    [active, saveList],
+  );
+
+  /** Добавить запись. Повторный ввод уже существующей (без учёта регистра) ничего не меняет. */
+  const addRule = useCallback(
+    async (def: ListDef, raw: string): Promise<void> => {
+      const entry = raw.trim();
+      if (active === undefined || active.builtin || entry === '') return;
+      const current = active[def.kind];
+      if (current.some((x) => x.toLowerCase() === entry.toLowerCase())) {
+        setErr('');
+        setOk(t('rt.ruleExists'));
+        return;
+      }
+      await saveList(def, [...current, entry]);
+    },
+    [active, saveList, t],
   );
 
   const setDefaultOutbound = useCallback(
@@ -390,6 +404,14 @@ export function RulesScreen(): JSX.Element {
           </div>
         )}
 
+        {/* Пустое состояние (прототип #ruleList): в наборе нет ни одного правила. */}
+        {active !== undefined && LISTS.every((def) => active[def.kind].length === 0) && (
+          <div className="empty" style={{ padding: '24px 12px' }}>
+            <Icon name="route" />
+            <div className="empty-t">{t('rt.rulesEmpty')}</div>
+          </div>
+        )}
+
         {LISTS.map((def) => {
           const items = (active?.[def.kind] ?? []);
           if (items.length === 0 && active?.builtin === true) return null;
@@ -407,7 +429,7 @@ export function RulesScreen(): JSX.Element {
                       <button
                         className="rule-chip-x"
                         aria-label={`${t('common.delete')} ${entry}`}
-                        onClick={() => void toggleRule(def, entry)}
+                        onClick={() => void removeRule(def, entry)}
                       >
                         <Icon name="x" />
                       </button>

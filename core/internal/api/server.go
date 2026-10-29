@@ -65,6 +65,7 @@ type Server struct {
 	subsMu      sync.Mutex
 	subsRunning map[int64]bool           // бегущие UpdateSubscription → ALREADY_EXISTS
 	subsSnap    map[int64]*subs.Snapshot // последний успешный снапшот (Rollback)
+	hwidMu      sync.Mutex               // создание постоянного HWID установки (D-02)
 
 	// ---- SettingsService: поток изменений ----
 	setMu   sync.Mutex

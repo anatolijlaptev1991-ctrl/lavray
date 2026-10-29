@@ -39,11 +39,17 @@ func (s *Server) subscriberWith(r subRequest) *subs.Subscriber {
 		MaxBodyBytes:    64 << 20,
 		AllowPrivateURL: s.settingBool("sub.allow_private_urls"),
 		InsecureTLS:     s.settingBool("sub.insecure"),
-		HWIDEnabled:     s.settingBool("sub.hwid_enabled"),
 		ClearBefore:     s.settingBool("sub.clear"), // FR-UI-124; запрос может перекрыть
 		Log: func(format string, args ...any) {
 			s.logs.Logf("warn", "subs", format, args...)
 		},
+	}
+	// D-02: HWID только при явном opt-in, и всегда один и тот же (sub.hwid_id).
+	if s.settingBool("sub.hwid_enabled") {
+		if h, ok := s.deviceHWID(); ok {
+			opts.HWIDEnabled = true
+			opts.HWID = h
+		}
 	}
 	if r.allowPrivate != nil {
 		opts.AllowPrivateURL = *r.allowPrivate

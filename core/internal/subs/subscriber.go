@@ -47,7 +47,9 @@ const (
 )
 
 // HWID — значения заголовков x-hwid/… (FR-UI-265, opt-in). ID — случайный
-// на установку (CSPRNG); os-поля заполняет вызывающая сторона или дефолты.
+// на установку (CSPRNG) и ПОСТОЯННЫЙ: его создаёт NewHWID один раз, а хранит
+// вызывающая сторона (api — настройка sub.hwid_id, D-02); os-поля заполняет
+// вызывающая сторона или дефолты.
 type HWID struct {
 	ID          string
 	DeviceOS    string
@@ -56,14 +58,21 @@ type HWID struct {
 }
 
 // NewHWID генерирует набор HWID со случайным идентификатором установки.
+// Вызывать нужно один раз и сохранить ID: новый ID на каждое обновление
+// подписки провайдер считает новым устройством (D-02).
 func NewHWID() HWID {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		// деградация качества недопустима для идентификатора — паники нет,
 		// fallback на временный уникальный
-		return HWID{ID: fmt.Sprintf("tmp-%d", time.Now().UnixNano()), DeviceOS: runtime.GOOS}
+		return HWIDWithID(fmt.Sprintf("tmp-%d", time.Now().UnixNano()))
 	}
-	return HWID{ID: hex.EncodeToString(b), DeviceOS: runtime.GOOS}
+	return HWIDWithID(hex.EncodeToString(b))
+}
+
+// HWIDWithID — набор HWID для уже сохранённого идентификатора установки.
+func HWIDWithID(id string) HWID {
+	return HWID{ID: id, DeviceOS: runtime.GOOS}
 }
 
 // Options — параметры подписчика (нулевые значения заменяются дефолтами).
@@ -107,6 +116,9 @@ func (o Options) withDefaults() Options {
 	if o.MaxBodyBytes <= 0 {
 		o.MaxBodyBytes = DefaultMaxBodyBytes
 	}
+	// Запасной путь для прямых пользователей пакета: ID живёт столько же, сколько
+	// этот Subscriber. Приложение сюда не попадает — api всегда передаёт
+	// сохранённый sub.hwid_id.
 	if o.HWIDEnabled && o.HWID.ID == "" {
 		o.HWID = NewHWID()
 	}

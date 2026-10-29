@@ -256,6 +256,9 @@ func settingTypeToProto(t model.SettingType) lavrayv1.SettingType {
 func (s *Server) DescribeSettings(ctx context.Context, req *connect.Request[lavrayv1.DescribeSettingsRequest]) (*connect.Response[lavrayv1.DescribeSettingsResponse], error) {
 	out := &lavrayv1.DescribeSettingsResponse{}
 	for _, d := range model.SettingDescriptors() {
+		if d.Internal {
+			continue // служебный ключ ядра (sub.hwid_id) UI не показываем
+		}
 		sd := &lavrayv1.SettingDescriptor{
 			Key:                    d.Key,
 			Type:                   settingTypeToProto(d.Type),
@@ -293,6 +296,9 @@ func (s *Server) GetSettings(ctx context.Context, req *connect.Request[lavrayv1.
 		if len(want) > 0 && !want[k] {
 			continue
 		}
+		if d, known := descriptorMap[k]; known && d.Internal {
+			continue // служебный ключ ядра не отдаётся UI даже по явному запросу
+		}
 		// A4 (аудит №4): тип значения — из дескриптора. Сырой JSON в
 		// stringValue приводил к тому, что клиент видел "\"192.168.1.5\""
 		// и молча сбрасывал int/bool в дефолты.
@@ -316,6 +322,9 @@ func (s *Server) SetSettings(ctx context.Context, req *connect.Request[lavrayv1.
 	for _, k := range keys {
 		v := req.Msg.Values[k]
 		d, known := descriptorMap[k]
+		if known && d.Internal {
+			continue // служебный ключ ядра UI менять не может (как неизвестный: не в accepted)
+		}
 		if !known && !strings.HasPrefix(k, "dns.") {
 			continue // неизвестный ключ не применяется и не попадает в accepted (LNB-30-класс: не молча — список accepted честный)
 		}

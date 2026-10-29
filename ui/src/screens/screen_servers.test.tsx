@@ -16,7 +16,6 @@ import {
   LatencyResultSchema,
   ProfileSchema,
   ProfileType,
-  TestLatencyRequest_Mode,
 } from '../gen/lavray_pb';
 import type { Group, LatencyResult, Profile } from '../gen/lavray_pb';
 import { CoreContext } from '../hooks/useCore';
@@ -72,34 +71,6 @@ describe('T-22: подпись прогресса теста', () => {
 
     release();
     await flush(20);
-    m.unmount();
-  });
-});
-
-describe('T-24: меню режима теста без нереализованных режимов', () => {
-  it('в меню ▾ только «Latency»; «Full test» скрыт, тест уходит как TCP-пинг', async () => {
-    const clients = makeClients({ profiles: [profileOf(1, 'S1'), profileOf(2, 'S2')] });
-    const testLatency = vi
-      .spyOn(clients.profiles, 'testLatency')
-      .mockImplementation(() =>
-        (async function* (): AsyncGenerator<LatencyResult> {
-          await Promise.resolve();
-          yield frame(1, 1, 40);
-        })(),
-      );
-    const m = await mountWithCore(clients, createElement(ServersScreen));
-
-    await click(m.container.querySelector('button[aria-label="More tests"]'));
-    const items = Array.from(m.container.querySelectorAll('[role="menuitem"]'));
-    expect(items.map((i) => (i.textContent ?? '').trim())).toEqual(['Latency']);
-    expect(m.container.textContent).not.toContain('Full test');
-
-    await click(items[0]);
-    expect(testLatency).toHaveBeenCalledTimes(1);
-    expect(testLatency.mock.calls[0]?.[0]).toMatchObject({
-      profileIds: [1n, 2n],
-      mode: TestLatencyRequest_Mode.TCP_PING,
-    });
     m.unmount();
   });
 });

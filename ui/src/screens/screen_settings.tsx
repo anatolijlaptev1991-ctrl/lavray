@@ -200,7 +200,7 @@ export function SettingsScreen(): JSX.Element {
           return;
         }
         accepted.current = { ...accepted.current, [key]: raw };
-        setOk(t('common.save'));
+        setOk(t('toast.saved'));
         window.setTimeout(() => {
           setOk('');
         }, 1500);
@@ -351,7 +351,7 @@ export function SettingsScreen(): JSX.Element {
           <div className="bn-t">{err}</div>
         </div>
       )}
-      {ok !== '' && <div className="toast-ok">{ok}</div>}
+      {ok !== '' && <div className="toast-ok" role="status">{ok}</div>}
 
       <div className="searchwrap set-search">
         <span className="ic">
@@ -758,7 +758,7 @@ export function SettingsScreen(): JSX.Element {
                               payload[k] = toSettingValue(d.type, v);
                             }
                             await core.settings.setSettings({ values: payload });
-                            setOk(t('bk.restore'));
+                            setOk(t('bk.restored'));
                           } catch (e2) {
                             setErr(showCoreError(e2, t));
                           }

@@ -812,4 +812,14 @@ export const esDict: Record<string, string> = {
   "onb.src.v2ray.d": "Enlaces de v2rayN, base64 o archivo de exportación",
   "mode.both.hint": "Ambos pueden estar activos: los navegadores usan el proxy del sistema y los juegos van por TUN.",
   "mode.sys.nativeOnly": "El proxy del sistema solo se configura en la aplicación de escritorio",
+  // T-59: сообщения об ошибках и успехе
+  "err.unimplemented": "Esta función aún no está disponible",
+  "err.precondition": "Esta acción no está disponible ahora",
+  "toast.saved": "Guardado",
+  "toast.presetActivated": "Preset aplicado",
+  "toast.presetCopied": "Copia del preset creada",
+  "toast.subAdded": "Suscripción «{name}» añadida",
+  "dns.jsonOk": "JSON válido",
+  "bk.restored": "Ajustes restaurados desde el archivo",
+  "sub.dropConfirm": "La actualización eliminará {removed}. Quedarán {kept} en la suscripción. ¿Continuar?",
 }

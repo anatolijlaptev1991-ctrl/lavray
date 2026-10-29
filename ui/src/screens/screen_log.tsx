@@ -101,7 +101,7 @@ export function LogScreen(): JSX.Element {
         .map((l) => `${new Date(Number(l.tsMs)).toISOString()} ${LEVEL_LABEL[l.level] ?? 'INFO'} ${l.source}: ${l.message}`)
         .join('\n');
       await navigator.clipboard.writeText(text);
-      setOk(t('log.exportBtn'));
+      setOk(t('toast.logCopied'));
     } catch (e) {
       setErr(showCoreError(e, t));
     }
@@ -129,7 +129,7 @@ export function LogScreen(): JSX.Element {
           <div className="bn-t">{err}</div>
         </div>
       )}
-      {ok !== '' && <div className="toast-ok">{ok}</div>}
+      {ok !== '' && <div className="toast-ok" role="status">{ok}</div>}
 
       <div className="log-toolbar">
         <div className="searchwrap">

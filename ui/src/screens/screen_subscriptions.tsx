@@ -118,7 +118,9 @@ export function SubscriptionsScreen(): JSX.Element {
         name: name.trim() === '' ? autoName : name.trim(),
         url: clean,
       });
-      setOk(tf('toast.subUpdated', { name: g.name }));
+      // CreateSubscription создаёт только пустую группу, серверы не загружает:
+      // «обновлена» было бы неправдой (B1-25).
+      setOk(tf('toast.subAdded', { name: g.name }));
       setUrl('');
       setName('');
       setAdding(false);
@@ -152,7 +154,7 @@ export function SubscriptionsScreen(): JSX.Element {
             if (ev.phase === SubscriptionProgress_Phase.CONFIRM_REQUIRED) {
               wouldRemove = ev.wouldRemoveCount ?? 0;
             } else if (ev.phase === SubscriptionProgress_Phase.FAILED) {
-              setErrors((m) => ({ ...m, [String(id)]: ev.detail ?? 'error' }));
+              setErrors((m) => ({ ...m, [String(id)]: ev.detail ?? t('sub.err.badge') }));
             } else if (ev.phase === SubscriptionProgress_Phase.DONE) {
               done = true;
             } else {
@@ -255,8 +257,8 @@ export function SubscriptionsScreen(): JSX.Element {
           <div className="bn-t">{err}</div>
         </div>
       )}
-      {ok !== '' && <div className="toast-ok">{ok}</div>}
-      {progress !== '' && <div className="toast-ok">{progress}</div>}
+      {ok !== '' && <div className="toast-ok" role="status">{ok}</div>}
+      {progress !== '' && <div className="toast-ok" role="status">{progress}</div>}
 
       <div className="sub-grid">
         {subs.map((g) => {

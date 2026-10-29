@@ -812,4 +812,14 @@ export const deDict: Record<string, string> = {
   "onb.src.v2ray.d": "v2rayN-Links, Base64 oder Exportdatei",
   "mode.both.hint": "Beides kann gleichzeitig aktiv sein: Browser nutzen den Systemproxy, Spiele laufen über TUN.",
   "mode.sys.nativeOnly": "Der Systemproxy lässt sich nur in der Desktop-App setzen",
+  // T-59: сообщения об ошибках и успехе
+  "err.unimplemented": "Diese Funktion ist noch nicht verfügbar",
+  "err.precondition": "Diese Aktion ist derzeit nicht verfügbar",
+  "toast.saved": "Gespeichert",
+  "toast.presetActivated": "Preset angewendet",
+  "toast.presetCopied": "Preset-Kopie erstellt",
+  "toast.subAdded": "Abo „{name}“ hinzugefügt",
+  "dns.jsonOk": "JSON ist gültig",
+  "bk.restored": "Einstellungen aus Datei wiederhergestellt",
+  "sub.dropConfirm": "Das Update entfernt {removed}. Danach verbleiben {kept} im Abo. Fortfahren?",
 }

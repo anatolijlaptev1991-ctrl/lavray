@@ -826,4 +826,14 @@ export const ruDict: Record<string, string> = {
   "onb.src.v2ray.d": "Ссылки v2rayN, base64 или файл экспорта",
   "mode.both.hint": "Оба режима можно включить одновременно: браузеры пойдут через системный прокси, игры и консоль — через TUN.",
   "mode.sys.nativeOnly": "Системный прокси ставится только в настольном приложении",
+  // T-59: сообщения об ошибках и успехе
+  "err.unimplemented": "Функция пока не реализована",
+  "err.precondition": "Сейчас это действие недоступно",
+  "toast.saved": "Сохранено",
+  "toast.presetActivated": "Пресет применён",
+  "toast.presetCopied": "Копия пресета создана",
+  "toast.subAdded": "Подписка «{name}» добавлена",
+  "dns.jsonOk": "JSON корректен",
+  "bk.restored": "Настройки восстановлены из файла",
+  "sub.dropConfirm": "Обновление удалит {removed}. После него в подписке останется {kept}. Продолжить?",
 }

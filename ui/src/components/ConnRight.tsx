@@ -9,6 +9,7 @@ import { TrafficGraph } from './TrafficGraph';
 import type { LeakReport } from '../gen/lavray_pb';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { showCoreError } from '../lib/core';
 import { formatSince } from '../lib/i18n';
 import { leakRows } from '../lib/leaks';
 
@@ -43,11 +44,11 @@ export function ConnRight({
       setReport(await core.diagnostics.checkLeaks({}));
       setCheckedAt(Date.now());
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      setErr(showCoreError(e, t));
     } finally {
       setBusy(false);
     }
-  }, [core]);
+  }, [core, t]);
 
   // При подключении проверка запускается сама — как в прототипе.
   useEffect(() => {
@@ -101,7 +102,7 @@ export function ConnRight({
             {t('leak.off')}
           </p>
         )}
-        {err !== '' && <p className="toast-err">{err}</p>}
+        {err !== '' && <p className="toast-err" role="alert">{err}</p>}
         <div className="leak-foot">
           <span className="cap">
             {checkedAt !== null ? tf('leak.last', { when: relTime(checkedAt) }) : ''}

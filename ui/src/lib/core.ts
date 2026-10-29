@@ -3,7 +3,7 @@
 // режиме адрес даёт оболочка (Tauri IPC: localhost-порт named-pipe-моста);
 // в веб-режиме — location.origin (панель за той же auth-cookie).
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { createClient, type Interceptor } from '@connectrpc/connect';
+import { Code, ConnectError, createClient, type Interceptor } from '@connectrpc/connect';
 import {
   CoreService,
   ProfileService,
@@ -17,7 +17,7 @@ import {
   DiagnosticsService,
   UpdateService,
 } from '../gen/lavray_pb';
-
+import { t as translate } from './i18n';
 
 export interface CoreAuth {
   token?: string; // Bearer (натив: сгенерирован оболочкой; веб: cookie-сессия)
@@ -94,35 +94,40 @@ export function coreUrlFromEnv(): string {
   return 'http://127.0.0.1:0';
 }
 
-/**
- * Человекочитаемая причина недоступности ядра. Возвращает СТАБИЛЬНЫЙ КОД
- * (`core.unavailable`), который UI переводит через t(); раньше здесь была
- * захардкоженная русская строка, и в en/zh/es/de показывался русский текст.
- */
+/** Стабильный код «ядро недоступно» (ключ словаря). Показывать пользователю его нельзя. */
 export const CORE_UNAVAILABLE = 'core.unavailable';
 
-export function friendlyCoreError(e: unknown): string {
+/** Ключи словаря, которые friendlyCoreError подставляет сам (T-59). */
+export type CoreErrorKey = 'core.unavailable' | 'err.unimplemented' | 'err.precondition';
+export type CoreErrorTranslate = (key: CoreErrorKey) => string;
+
+// Сбой самого транспорта: сеть недоступна либо вместо ядра ответил чужой
+// сервер (asset-сервер оболочки отвечает HTML с кодом 404/405, прокси — 5xx).
+const TRANSPORT_DOWN = /(Failed to fetch|NetworkError|fetch failed|Load failed|^HTTP (404|405|5\d\d)\b)/i;
+
+/**
+ * Текст ошибки для пользователя. Всегда возвращает готовую фразу на языке
+ * интерфейса, а не ключ словаря:
+ * - сеть недоступна или ответил не тот сервер — «Ядро недоступно»;
+ * - ядро ответило `Unimplemented` — «Функция пока не реализована» (ядро живо,
+ *   это заглушка RPC; раньше она маскировалась под «Ядро недоступно»);
+ * - `FailedPrecondition` — «Сейчас это действие недоступно» плюс причина от ядра;
+ * - прочее — сообщение как есть.
+ * `tr` по умолчанию — глобальный перевод текущего языка; экраны передают свой `t`.
+ */
+export function friendlyCoreError(e: unknown, tr: CoreErrorTranslate = translate): string {
+  const connectErr = e instanceof ConnectError ? e : null;
   const msg = e instanceof Error ? e.message : String(e);
-  if (
-    msg.includes('Failed to fetch') ||
-    msg.includes('NetworkError') ||
-    msg.includes('fetch failed')
-  ) {
-    return CORE_UNAVAILABLE;
-  }
-  // Сырые служебные ответы транспорта (404/унimplemented от asset-сервера)
-  // не должны уходить пользователю как есть — это не его ошибка.
-  if (/(unimplemented|HTTP 404|HTTP 405|HTTP 5..)/i.test(msg)) {
-    return CORE_UNAVAILABLE;
+  const raw = connectErr?.rawMessage ?? msg;
+  if (TRANSPORT_DOWN.test(raw)) return tr('core.unavailable');
+  if (connectErr?.code === Code.Unimplemented) return tr('err.unimplemented');
+  if (connectErr?.code === Code.FailedPrecondition) {
+    const head = tr('err.precondition');
+    const reason = raw.trim();
+    return reason === '' ? head : `${head}: ${reason}`;
   }
   return msg;
 }
 
-/** Перевести результат friendlyCoreError для показа. */
-export function showCoreError(
-  e: unknown,
-  t: (key: 'core.unavailable') => string,
-): string {
-  const v = friendlyCoreError(e);
-  return v === CORE_UNAVAILABLE ? t(CORE_UNAVAILABLE) : v;
-}
+/** Прежнее имя для экранов, которые передают свой `t`. */
+export const showCoreError: (e: unknown, t: CoreErrorTranslate) => string = friendlyCoreError;

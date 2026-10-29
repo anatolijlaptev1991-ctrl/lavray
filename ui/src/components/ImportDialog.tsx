@@ -97,7 +97,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
         ...(groupId === undefined ? {} : { targetGroupId: groupId }),
         allowCustomFields: warnings.length > 0,
       });
-      setOk(tf('toast.subUpdated', { name: String(res.addedProfileIds.length) }));
+      setOk(tf('toast.imported', { n: res.addedProfileIds.length }));
       onImported();
       onClose();
     } catch (e) {
@@ -169,7 +169,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
               <div className="bn-t">{err}</div>
             </div>
           )}
-          {ok !== '' && <div className="toast-ok">{ok}</div>}
+          {ok !== '' && <div className="toast-ok" role="status">{ok}</div>}
 
           <div
             className="tabs"

@@ -96,7 +96,7 @@ export function RulesScreen(): JSX.Element {
       try {
         const res = await core.routing.activatePreset({ id });
         setActiveId(id);
-        setOk(res.needsProfileRestart ? t('dns.restart') : t('common.save'));
+        setOk(res.needsProfileRestart ? t('dns.restart') : t('toast.presetActivated'));
         await reload();
       } catch (e) {
         setErr(showCoreError(e, t));
@@ -116,7 +116,7 @@ export function RulesScreen(): JSX.Element {
         });
         await reload();
         setActiveId(res.id);
-        setOk(t('rt.customizeCopy'));
+        setOk(t('toast.presetCopied'));
       } catch (e) {
         setErr(showCoreError(e, t));
       }
@@ -171,7 +171,7 @@ export function RulesScreen(): JSX.Element {
         });
         const updated = res.preset ?? active;
         setPresets((prev) => prev.map((p) => (p.id === active.id ? updated : p)));
-        setOk(t('common.save'));
+        setOk(t('toast.presetSaved'));
       } catch (e) {
         setErr(showCoreError(e, t));
       }
@@ -213,7 +213,7 @@ export function RulesScreen(): JSX.Element {
           <div className="bn-t">{err}</div>
         </div>
       )}
-      {ok !== '' && <div className="toast-ok">{ok}</div>}
+      {ok !== '' && <div className="toast-ok" role="status">{ok}</div>}
 
       {/* ---- Тестер маршрута ---- */}
       <div className="card">

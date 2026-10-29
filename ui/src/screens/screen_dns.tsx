@@ -64,7 +64,7 @@ export function DnsScreen(): JSX.Element {
         const res = await core.dns.setDns({ dns: next });
         if (res.applied !== undefined) setDns(res.applied);
         setNeedsRestart(res.needsProfileRestart);
-        setOk(t('common.save'));
+        setOk(t('toast.saved'));
       } catch (e) {
         setErr(showCoreError(e, t));
       } finally {
@@ -109,7 +109,7 @@ export function DnsScreen(): JSX.Element {
         return;
       }
       if (res.formatted !== undefined) setJson(res.formatted);
-      setOk(t('dns.validated'));
+      setOk(t('dns.jsonOk'));
     } catch (e) {
       setErr(showCoreError(e, t));
     }
@@ -130,7 +130,7 @@ export function DnsScreen(): JSX.Element {
           <div className="bn-t">{err}</div>
         </div>
       )}
-      {ok !== '' && <div className="toast-ok">{ok}</div>}
+      {ok !== '' && <div className="toast-ok" role="status">{ok}</div>}
 
       <div className="card">
         <div className="card-h">

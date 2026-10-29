@@ -805,4 +805,14 @@ export const zhDict: Record<string, string> = {
   "onb.src.v2ray.d": "v2rayN 链接、base64 或导出文件",
   "mode.both.hint": "两种模式可同时开启：浏览器走系统代理，游戏与控制台走 TUN。",
   "mode.sys.nativeOnly": "系统代理只能在桌面应用中设置",
+  // T-59: сообщения об ошибках и успехе
+  "err.unimplemented": "此功能尚未实现",
+  "err.precondition": "当前无法执行此操作",
+  "toast.saved": "已保存",
+  "toast.presetActivated": "预设已应用",
+  "toast.presetCopied": "已创建预设副本",
+  "toast.subAdded": "已添加订阅“{name}”",
+  "dns.jsonOk": "JSON 有效",
+  "bk.restored": "已从文件恢复设置",
+  "sub.dropConfirm": "此次更新将移除 {removed}，更新后订阅中将剩余 {kept}。是否继续？",
 }

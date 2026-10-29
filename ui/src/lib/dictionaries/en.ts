@@ -812,4 +812,14 @@ export const enDict: Record<string, string> = {
   "onb.src.v2ray.d": "v2rayN links, base64 or export file",
   "mode.both.hint": "Both can be on at once: browsers use the system proxy, games and consoles go through TUN.",
   "mode.sys.nativeOnly": "The system proxy can be set only in the desktop app",
+  // T-59: сообщения об ошибках и успехе
+  "err.unimplemented": "This feature is not available yet",
+  "err.precondition": "This action is not available right now",
+  "toast.saved": "Saved",
+  "toast.presetActivated": "Preset applied",
+  "toast.presetCopied": "Preset copy created",
+  "toast.subAdded": "Subscription “{name}” added",
+  "dns.jsonOk": "JSON is valid",
+  "bk.restored": "Settings restored from file",
+  "sub.dropConfirm": "The update will remove {removed}. {kept} will remain in the subscription. Continue?",
 }

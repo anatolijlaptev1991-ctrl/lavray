@@ -580,7 +580,7 @@ export function ServersScreen(): JSX.Element {
         )}
       </div>
 
-      {msg !== '' && <div className="toast-ok">{msg}</div>}
+      {msg !== '' && <div className="toast-ok" role="status">{msg}</div>}
       {err !== '' && (
         <div className="banner banner-err" role="alert">
           <span className="ic">

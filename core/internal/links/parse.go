@@ -47,7 +47,7 @@ func ParseLink(raw string) (*model.Profile, error) {
 	case "nekoray":
 		return parseNekoLink(s)
 	case "happ":
-		return nil, errors.New("happ-ссылки пока не поддерживаются (подписки/happ — этап W3)")
+		return nil, errors.New("зашифрованная ссылка — это подписка: добавьте её в «Подписки»")
 	default:
 		return nil, fmt.Errorf("неподдерживаемая схема %q (поддерживаются: ss, vmess, vless, trojan, hy2/hysteria2, tuic, socks, http/https, nekoray)", scheme)
 	}

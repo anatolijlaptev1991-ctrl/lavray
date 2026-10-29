@@ -284,7 +284,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
                     className="input input-mono"
                     id="impLink"
                     ref={firstFieldRef}
-                    placeholder="https://… / ss://… / vless://… / happ://…"
+                    placeholder="https://… / ss://… / vless://…"
                     autoComplete="off"
                     value={link}
                     onChange={(e) => {

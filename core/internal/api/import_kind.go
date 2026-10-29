@@ -93,11 +93,11 @@ func resolveSubscriptionURL(raw string) (string, error) {
 	}
 	plain, err := happDecryptInProcess(v)
 	if err != nil {
-		return "", invalidArg("не удалось расшифровать Happ-ссылку: %v", err)
+		return "", invalidArg("не удалось расшифровать ссылку: %v", err)
 	}
 	plain = strings.TrimSpace(plain)
 	if _, ok := parseHTTPURL(plain); !ok {
-		return "", invalidArg("Happ-ссылка не содержит ссылки на подписку")
+		return "", invalidArg("расшифрованная ссылка не содержит ссылки на подписку")
 	}
 	return plain, nil
 }

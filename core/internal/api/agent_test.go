@@ -627,3 +627,28 @@ func TestConnectTunPrivilegeCheck(t *testing.T) {
 type errString string
 
 func (e errString) Error() string { return string(e) }
+
+// Заголовок подтверждения деструктивного обновления подписки агент подставить не
+// может: перехватчик убирает его до хендлера. Обычному клиенту он остаётся.
+func TestAgentCannotSendTheConfirmHeader(t *testing.T) {
+	i := newInterceptor(nil, func() string { return AgentModeControl })
+	proc := lavrayv1connect.SubscriptionServiceUpdateSubscriptionProcedure
+
+	agent := http.Header{}
+	agent.Set(agentConfirmHeader, "1")
+	if err := i.agentBefore(WithAgent(context.Background()), proc, agent); err != nil {
+		t.Fatal(err)
+	}
+	if got := agent.Get(agentConfirmHeader); got != "" {
+		t.Errorf("заголовок подтверждения дошёл бы до хендлера: %q", got)
+	}
+
+	own := http.Header{}
+	own.Set(agentConfirmHeader, "1")
+	if err := i.agentBefore(context.Background(), proc, own); err != nil {
+		t.Fatal(err)
+	}
+	if own.Get(agentConfirmHeader) != "1" {
+		t.Error("у основного клиента заголовок убран")
+	}
+}

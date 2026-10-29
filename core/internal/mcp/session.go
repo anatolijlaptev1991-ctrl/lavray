@@ -94,13 +94,16 @@ func baseURL(raw string) (string, error) {
 
 // Session — клиенты ядра для одного вызова инструмента.
 type Session struct {
-	Mode    string
-	Core    lavrayv1connect.CoreServiceClient
-	Profile lavrayv1connect.ProfileServiceClient
-	Subs    lavrayv1connect.SubscriptionServiceClient
-	Stats   lavrayv1connect.StatsServiceClient
-	Logs    lavrayv1connect.LogServiceClient
-	Diag    lavrayv1connect.DiagnosticsServiceClient
+	Mode string
+	// transport держит соединения с ядром; общий для вызовов с тем же адресом
+	// и токеном, чтобы каждый вызов не открывал новое.
+	transport *http.Transport
+	Core      lavrayv1connect.CoreServiceClient
+	Profile   lavrayv1connect.ProfileServiceClient
+	Subs      lavrayv1connect.SubscriptionServiceClient
+	Stats     lavrayv1connect.StatsServiceClient
+	Logs      lavrayv1connect.LogServiceClient
+	Diag      lavrayv1connect.DiagnosticsServiceClient
 	// Dir — каталог файла с адресом (рядом лежит ui-state.json).
 	Dir string
 }
@@ -123,25 +126,24 @@ func newSession(ep Endpoint, dir string) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
-	hc := &http.Client{Transport: bearerTransport{
-		token: ep.Token,
-		// Proxy не задан: запросы к ядру идут напрямую, а не в системный прокси.
-		base: &http.Transport{
-			Proxy:               nil,
-			DialContext:         (&net.Dialer{Timeout: 3 * time.Second}).DialContext,
-			MaxIdleConnsPerHost: 4,
-			IdleConnTimeout:     30 * time.Second,
-		},
-	}}
+	// Proxy не задан: запросы к ядру идут напрямую, а не в системный прокси.
+	transport := &http.Transport{
+		Proxy:               nil,
+		DialContext:         (&net.Dialer{Timeout: 3 * time.Second}).DialContext,
+		MaxIdleConnsPerHost: 4,
+		IdleConnTimeout:     30 * time.Second,
+	}
+	hc := &http.Client{Transport: bearerTransport{token: ep.Token, base: transport}}
 	return &Session{
-		Mode:    ep.Mode,
-		Dir:     dir,
-		Core:    lavrayv1connect.NewCoreServiceClient(hc, base),
-		Profile: lavrayv1connect.NewProfileServiceClient(hc, base),
-		Subs:    lavrayv1connect.NewSubscriptionServiceClient(hc, base),
-		Stats:   lavrayv1connect.NewStatsServiceClient(hc, base),
-		Logs:    lavrayv1connect.NewLogServiceClient(hc, base),
-		Diag:    lavrayv1connect.NewDiagnosticsServiceClient(hc, base),
+		Mode:      ep.Mode,
+		transport: transport,
+		Dir:       dir,
+		Core:      lavrayv1connect.NewCoreServiceClient(hc, base),
+		Profile:   lavrayv1connect.NewProfileServiceClient(hc, base),
+		Subs:      lavrayv1connect.NewSubscriptionServiceClient(hc, base),
+		Stats:     lavrayv1connect.NewStatsServiceClient(hc, base),
+		Logs:      lavrayv1connect.NewLogServiceClient(hc, base),
+		Diag:      lavrayv1connect.NewDiagnosticsServiceClient(hc, base),
 	}, nil
 }
 

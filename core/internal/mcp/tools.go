@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sync"
 	"time"
 )
 
@@ -38,6 +39,10 @@ type Tools struct {
 	endpointPath string
 	all          []tool
 	byName       map[string]tool
+
+	mu      sync.Mutex
+	cached  *Session // клиенты для адреса и токена cachedKey
+	cachedK string
 }
 
 // NewTools создаёт набор; endpointPath — путь к agent-endpoint.json.
@@ -77,6 +82,28 @@ func (t *Tools) Specs() []ToolSpec {
 // Fingerprint — режим доступа: он определяет список инструментов.
 func (t *Tools) Fingerprint() string { return "mode=" + t.mode() }
 
+// session — клиенты ядра для адреса и токена из файла. Пока они не менялись,
+// соединения переиспользуются; после перезапуска ядра (другой порт, другой
+// токен) старые закрываются. Режим берётся из файла при каждом вызове.
+func (t *Tools) session(ep Endpoint) (*Session, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	key := ep.URL + "\n" + ep.Token
+	if t.cached == nil || t.cachedK != key {
+		fresh, err := newSession(ep, filepath.Dir(t.endpointPath))
+		if err != nil {
+			return nil, err
+		}
+		if t.cached != nil {
+			t.cached.transport.CloseIdleConnections()
+		}
+		t.cached, t.cachedK = fresh, key
+	}
+	sess := *t.cached
+	sess.Mode = ep.Mode
+	return &sess, nil
+}
+
 // Call выполняет инструмент.
 func (t *Tools) Call(ctx context.Context, name string, args json.RawMessage) (ToolResult, error) {
 	tl, ok := t.byName[name]
@@ -90,7 +117,7 @@ func (t *Tools) Call(ctx context.Context, name string, args json.RawMessage) (To
 	if tl.spec.Control && ep.Mode != ModeControl {
 		return ToolResult{}, fmt.Errorf("инструмент %s доступен в режиме «чтение и управление»: включите его в LAVRay → Настройки → Агенты (MCP)", name)
 	}
-	sess, err := newSession(ep, filepath.Dir(t.endpointPath))
+	sess, err := t.session(ep)
 	if err != nil {
 		return ToolResult{}, err
 	}

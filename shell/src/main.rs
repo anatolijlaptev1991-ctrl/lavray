@@ -15,7 +15,7 @@ use lavray_shell::endpoint::{
     EndpointEvent, EndpointHub, HostObserver, SupervisorHost, CORE_ENDPOINT_EVENT, ENDPOINT_WAIT,
 };
 use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
-use lavray_shell::sysproxy::SysProxy;
+use lavray_shell::sysproxy::{validate_port, SysProxy};
 use lavray_shell::tray::TrayUpdate;
 use lavray_shell::uiprotocol::IPC_PROTOCOL_VERSION;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -97,12 +97,18 @@ fn restart_core(supervisor: tauri::State<'_, Arc<SupervisorHandle>>) {
 /// set_system_proxy — включить/выключить системный прокси (F5, FR-UI-221/222).
 /// Включение сохраняет снимок прежних настроек; выключение — восстанавливает.
 /// Прокси указывает на mixed-инбаунд ядра (127.0.0.1:<port>).
+///
+/// Порт приходит от окна и проверяется в оболочке (A2-18): 1..=65535, ядро
+/// должно быть живо. Хост не параметр — всегда loopback. При выключении порт
+/// не нужен и не проверяется: неверное значение не должно оставить прокси
+/// включённым.
 #[tauri::command]
 fn set_system_proxy(
     shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>,
     enabled: bool,
-    port: u16,
+    port: i64,
 ) -> Result<String, String> {
+    let port = if enabled { validate_port(port)? } else { 0 };
     let data = {
         let s = shared.lock().map_err(|_| "state poisoned".to_string())?;
         if s.core_url.is_empty() || (enabled && !s.core_alive) {
@@ -112,9 +118,6 @@ fn set_system_proxy(
     };
     let sp = SysProxy::new(&data);
     if enabled {
-        if port == 0 {
-            return Err("порт mixed-инбаунда не задан".to_string());
-        }
         let applied = sp.enable("127.0.0.1", port)?;
         Ok(format!("{}:{}", applied.host, applied.port))
     } else {

@@ -68,3 +68,18 @@ fn main_uses_the_library_supervisor_and_exposes_diagnostics() {
         );
     }
 }
+
+/// A2-18: порт `set_system_proxy` проверяет оболочка, а не только UI; тип
+/// порта шире `u16`, иначе 0 проходил бы, а >65535 давал сырую ошибку serde.
+#[test]
+fn system_proxy_command_validates_the_port_it_is_given() {
+    let main_rs = source("main.rs");
+    let command = main_rs
+        .split("fn set_system_proxy")
+        .nth(1)
+        .and_then(|rest| rest.split("fn request_quit").next())
+        .expect("команда set_system_proxy");
+    assert!(command.contains("port: i64"), "порт принимается шире u16");
+    assert!(command.contains("validate_port(port)?"));
+    assert!(!command.contains("port: u16"));
+}

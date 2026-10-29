@@ -17,6 +17,7 @@
 //! macOS: `networksetup -setwebproxy/-setsecurewebproxy`.
 
 use serde_json::Value;
+use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard};
 
@@ -47,6 +48,31 @@ pub struct Applied {
     /// Точка выхода прокси, которую увидит система.
     pub host: String,
     pub port: u16,
+}
+
+/// Порт mixed-инбаунда из команды UI -> порт в 1..=65535 (A2-18).
+///
+/// Принимает широкий тип: `u16` на входе команды отвергал бы >65535 сырой
+/// ошибкой десериализации и пропускал 0 ("порт не задан").
+pub fn validate_port(raw: i64) -> Result<u16, String> {
+    u16::try_from(raw)
+        .ok()
+        .filter(|port| *port != 0)
+        .ok_or_else(|| format!("порт системного прокси вне 1..=65535: {raw}"))
+}
+
+/// Хост системного прокси: только loopback (127.0.0.0/8) в записи IPv4 (A2-18).
+///
+/// Прокси ОС принимает весь трафик пользователя; указать на чужой адрес
+/// нельзя. Разбор через `Ipv4Addr` заодно не пропускает пробелы, `;`, `=` и
+/// `:`, которыми в значении `ProxyServer` задаются отдельные схемы и порт.
+pub fn validate_host(host: &str) -> Result<(), String> {
+    match host.parse::<Ipv4Addr>() {
+        Ok(ip) if ip.is_loopback() => Ok(()),
+        _ => Err(format!(
+            "системный прокси можно направить только на loopback (127.x.x.x): {host:?}"
+        )),
+    }
 }
 
 /// Операции над настройками прокси ОС: в приложении — [`System`], в тестах —
@@ -165,7 +191,12 @@ impl<B: Backend> SysProxy<B> {
     }
 
     /// Включить системный прокси `host:port`, сохранив предыдущее состояние.
+    ///
+    /// Адрес проверяется раньше всего прочего (A2-18): отказ не трогает ни
+    /// реестр, ни снимок, ни уже идущую сессию.
     pub fn enable(&self, host: &str, port: u16) -> Result<Applied, String> {
+        validate_host(host)?;
+        validate_port(i64::from(port))?;
         let _guard = exclusive();
         // Повторное включение при живом снимке: сначала откатываем прошлое.
         // Не вышло — выходим, не трогая файл: в нём настоящие настройки
@@ -1015,5 +1046,81 @@ mod tests {
             RegValue::sz("http://pac.corp/wpad.dat")
         );
         assert!(!after.contains_key("ProxyServer"));
+    }
+
+    /// A2-18: порт - только 1..=65535; 0 и всё за пределами отвергаются.
+    #[test]
+    fn port_must_be_within_1_to_65535() {
+        for ok in [1, 2080, 65535] {
+            assert_eq!(validate_port(ok), Ok(ok as u16), "{ok}");
+        }
+        for bad in [
+            0,
+            -1,
+            65536,
+            70_000,
+            i64::from(u32::MAX),
+            i64::MAX,
+            i64::MIN,
+        ] {
+            assert!(validate_port(bad).is_err(), "{bad} принят");
+        }
+    }
+
+    /// A2-18: системный прокси может смотреть только на loopback.
+    #[test]
+    fn host_must_be_an_ipv4_loopback_address() {
+        for ok in ["127.0.0.1", "127.0.0.2", "127.255.255.254"] {
+            assert!(validate_host(ok).is_ok(), "{ok} отвергнут");
+        }
+        for bad in [
+            "",
+            "0.0.0.0",
+            "8.8.8.8",
+            "192.168.1.10",
+            "10.0.0.1",
+            "localhost",
+            "evil.example",
+            "::1",
+            "[::1]",
+            "127.0.0.1:80",
+            " 127.0.0.1",
+            "127.0.0.1 ",
+            "127.0.0.1;https=8.8.8.8:80",
+            "127.0.0.1
+",
+            "'127.0.0.1'",
+        ] {
+            assert!(validate_host(bad).is_err(), "{bad:?} принят");
+        }
+    }
+
+    /// Неверный адрес отвергается до любых действий: реестр цел, снимка нет.
+    #[test]
+    fn enable_rejects_a_bad_endpoint_before_touching_anything() {
+        let mem = initial_corp();
+        let before = mem.dump();
+        let sp = proxy("bad-endpoint", &mem);
+        assert!(sp.enable("127.0.0.1", 0).is_err());
+        assert!(sp.enable("8.8.8.8", 2080).is_err());
+        assert!(sp.enable("127.0.0.1;http=8.8.8.8:80", 2080).is_err());
+        assert_eq!(mem.dump(), before);
+        assert!(sp.pending_snapshot().is_none());
+    }
+
+    /// Отказ из-за адреса не откатывает уже включённый нами прокси:
+    /// проверка идёт раньше отката прошлого снимка.
+    #[test]
+    fn rejected_enable_leaves_a_running_session_alone() {
+        let mem = initial_corp();
+        let before = mem.dump();
+        let sp = proxy("bad-while-on", &mem);
+        sp.enable("127.0.0.1", 2080).unwrap();
+        let during = mem.dump();
+        assert!(sp.enable("127.0.0.1", 0).is_err());
+        assert_eq!(mem.dump(), during);
+        assert!(sp.pending_snapshot().is_some());
+        sp.disable().unwrap();
+        assert_eq!(mem.dump(), before);
     }
 }

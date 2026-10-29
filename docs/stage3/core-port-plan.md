@@ -33,7 +33,7 @@
 (на десктопе — rollback-помощник оболочки; в ядре — только ресурсы).
 
 **Берётся как есть**: форк sing-box `628a9ed` (neko-слой по реестру
-`lavray/core/NEKO_PATCHES.md`), happ-декриптор (+фикс LNB-13), форк x/net.
+`lavray/core/NEKO_PATCHES.md`), декриптор защищённых ссылок (+фикс LNB-13), форк x/net.
 **Плюс новый патч форка** (LNB-25): hardening `downloadZIP` — запрет `..`,
 абсолютных путей и симлинков + лимит размера (вносится в NEKO_PATCHES.md).
 
@@ -58,7 +58,7 @@ env/argv (LNB-28). Изменение THREAT-MODEL при включении —
 ```
 core/
   go.mod                      # go 1.25; replace: sing-box, libneko, x/net — пины libs/*.sh
-  cmd/lavray-core/main.go     # serve | run -c <config.json> | happ-decrypt <link> | version
+  cmd/lavray-core/main.go     # serve | run -c <config.json> | <команда-расшифровки> <link> | version
   internal/
     config/                   # [W4–W5] ConfigBuilder
       builder.go  merge.go    # MergeJson "+key"/"key+" С ALLOWLIST (§3.1.1)
@@ -73,7 +73,7 @@ core/
       store.go migrate.go import_nekobox_test.go
     subs/                     # [W3] подписки: fetch/parse/diff/apply/headers
       fetch.go parse.go clash.go singboxjson.go diff.go snapshot.go
-      happ/                   # порт go/cmd/nekobox_core/happ (как есть + LNB-13)
+      <пакет расшифровки>/    # порт go/cmd/nekobox_core/<пакет расшифровки> (как есть + LNB-13)
     presets/                  # [W3] формат LAVRay + конвертер NekoRay 4.x
     inst/                     # [W6] менеджер инстанса sing-box (мьютекс, FSM FR-UI-261)
     api/                      # [W6] ConnectRPC-реализации lavray.v1
@@ -256,7 +256,7 @@ chain×routing×dns×tun); осознанные отклонения от C++-or
 | Clash/Clash.Meta YAML | YAML-парсинг → ключ `proxies` верхнего уровня (НЕ подстрока — LNB-16) | все типы §GroupUpdater.cpp:215–463 + unknown→skip |
 | **sing-box JSON подписка** (FR-UI-264, SHOULD) | автопроба: JSON-массив outbounds | W3; UA согласования `LAVRay/<v>` |
 | Многострочник | >1 строки после детекций → построчная рекурсия | mixed |
-| happ:// | префикс → внутренний вызов `happdecrypt.Decrypt` (не подпроцесс, UX-15) | 38 векторов + LNB-13 |
+| защищённая ссылка | префикс схемы → внутренний вызов декриптора (не подпроцесс, UX-15) | 38 векторов + LNB-13 |
 | Share-ссылки | все схемы FR-UI-120 | roundtrip §4.3 |
 | Заголовки ответа (FR-UI-262, MUST) | `subscription-userinfo`, `profile-update-interval`, `profile-title` (base64:), `content-disposition`, `profile-web-page-url`, `support-url`, `announce`, `routing`; строки `#key: value` в теле | → SubscriptionInfo; «Без лимита»/«Бессрочно» выводит UI |
 | Нормализация | security none/0/false→""; 1/true→tls; SNI из host при IP; порт>0; SS-метод по списку | LNB-15/17 |
@@ -550,7 +550,7 @@ SQLite-схема + **права 0700/0600**; импортёр NekoBox (routes_b
 **Готово**: roundtrip-матрица; `FuzzParseLink` 60 с чисто; FR-UI-190/191/164.
 
 ### W3 — Подписки-парсер + пресеты + импорт-харденинг
-Base64/Clash/**sing-box JSON**/happ; валидатор URL; лимит размера;
+Base64/Clash/**sing-box JSON**/защищённые ссылки; валидатор URL; лимит размера;
 дифф-флоу **в промежуточной копии** + снапшот/rollback + confirm_destructive
 (FR-UI-258); **заголовки FR-UI-262 + per-sub FR-UI-263 + HWID opt-in**;
 **LNB-25: отбрасывание c_cfg/c_out/core/cmd + preview**; конвертер
@@ -616,7 +616,7 @@ headless под procd/systemd переживает SIGTERM без зависши
 4. **Внешние ядра — решение владельца** (оспорено ревью): v1 = naive +
    custom-external за флагом off-by-default; hy2/tuic внутренние. При
    сохранении полного отказа — удалить extcore и флаг (упрощение).
-5. happ-ключи: правовой статус LNB-24 — до релиза (не до портирования).
+5. ключи расшифровки: правовой статус LNB-24 — до релиза (не до портирования).
 6. **Kill switch (FR-UI-275, SHOULD)**: реализуется в W5 (флаг
    tun.kill_switch, off по умолчанию); полная блокировка при падении
    туннеля требует координации с помощником/фаерволом — эскиз в

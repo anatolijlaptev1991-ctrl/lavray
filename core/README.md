@@ -18,7 +18,7 @@ ConfigBuilder (оригинал — `db/ConfigBuilder.cpp` в nekoray, порт 
 - `cmd/lavray-core/` — точка входа (бинарь ядра, слушает ConnectRPC).
 - `internal/config/` — ConfigBuilder: профили → конфиг sing-box (golden-тесты).
 - `internal/store/` — хранилище профилей/групп/настроек (порт модели DataStore nekoray).
-- `internal/subs/` — подписки, импорт/экспорт, happ-декриптор.
+- `internal/subs/` — подписки, импорт/экспорт, декриптор ссылок других клиентов.
 - `internal/presets/` — формат пресетов LAVRay и конвертер из NekoRay 4.x (см. `../presets/README.md`).
 - `internal/api/` — реализация сервисов из `../proto/`.
 

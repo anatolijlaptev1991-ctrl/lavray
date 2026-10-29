@@ -23,7 +23,7 @@
 | `DiagnosticsService` | проверки маршрута/утечек, публичный IP, самопроверки |
 | `GatewayService` | шлюз OpenWrt: TProxy/TUN, device-policy, watchdog |
 | `WebAdminService` | веб-панель: сессии, привязка к LAN |
-| `ProfileService` | CRUD профилей, группы, импорт (vmess/vless/ss/trojan/hysteria2/tuic/happ), экспорт, QR |
+| `ProfileService` | CRUD профилей, группы, импорт (vmess/vless/ss/trojan/hysteria2/tuic), экспорт, QR |
 | `RoutingService` | пресеты маршрутизации, активный пресет, счётчик правил |
 | `DnsService` | конфигурация и статус DNS |
 | `SubscriptionService` | подписки: обновление, diff, откат |

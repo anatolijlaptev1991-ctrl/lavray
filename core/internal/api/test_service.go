@@ -141,7 +141,13 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			res := s.tcpPing(runCtx, p, timeout)
+			res, aborted := s.tcpPing(runCtx, p, timeout)
+			if aborted {
+				// D-05: StopTests/обрыв стрима прервали измерение. Это не
+				// «сервер недоступен»: прошлый результат профиля не трогаем и
+				// кадр не шлём.
+				return
+			}
 			// T-22: пишем ТОЛЬКО результат (TestedAt/Latency/LastError) отдельным
 			// UPDATE. Раньше сюда шла копия профиля, прочитанная при старте
 			// батча, целиком через UpdateProfile: она затирала правки
@@ -180,38 +186,49 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 }
 
 // tcpPing измеряет время установки TCP-соединения с сервером профиля.
-func (s *Server) tcpPing(ctx context.Context, p *model.Profile, timeout time.Duration) model.TestResult {
+// aborted=true — измерение прервано отменой ctx (StopTests, закрытие стрима),
+// а не ответом сервера: результат тогда сохранять и показывать нельзя (D-05).
+// Собственный таймаут измерения отменой не считается — это честное
+// «таймаут N мс».
+func (s *Server) tcpPing(ctx context.Context, p *model.Profile, timeout time.Duration) (res model.TestResult, aborted bool) {
 	now := time.Now().UnixMilli()
 	if why := tcpPingNotApplicable(p); why != "" {
-		return model.TestResult{TestedAtMs: &now, LastError: testNAPrefix + why}
+		return model.TestResult{TestedAtMs: &now, LastError: testNAPrefix + why}, false
 	}
 	if p == nil || p.Address == "" || p.Port <= 0 {
-		return model.TestResult{TestedAtMs: &now, LastError: "нет адреса/порта"}
+		return model.TestResult{TestedAtMs: &now, LastError: "нет адреса/порта"}, false
 	}
 	host := p.Address
 	if ip := net.ParseIP(host); ip == nil && host == "" {
-		return model.TestResult{TestedAtMs: &now, LastError: "пустой адрес"}
+		return model.TestResult{TestedAtMs: &now, LastError: "пустой адрес"}, false
 	}
 	addr := net.JoinHostPort(host, strconv.Itoa(p.Port))
 	dialCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	dial := s.dial
+	if dial == nil {
+		dial = (&net.Dialer{}).DialContext
+	}
 	start := time.Now()
-	var d net.Dialer
-	conn, err := d.DialContext(dialCtx, "tcp", addr)
+	conn, err := dial(dialCtx, "tcp", addr)
 	elapsed := time.Since(start)
 	if err != nil {
+		if ctx.Err() != nil {
+			// Причина — для вызывающих, которым результат всё же нужен (selfcheck).
+			return model.TestResult{LastError: ctx.Err().Error()}, true
+		}
 		msg := err.Error()
 		if errors.Is(err, context.DeadlineExceeded) {
 			msg = "таймаут " + strconv.Itoa(int(timeout/time.Millisecond)) + " мс"
 		}
-		return model.TestResult{TestedAtMs: &now, LastError: msg}
+		return model.TestResult{TestedAtMs: &now, LastError: msg}, false
 	}
 	_ = conn.Close()
 	ms := int32(elapsed / time.Millisecond)
 	if ms <= 0 {
 		ms = 1
 	}
-	return model.TestResult{LatencyMs: &ms, TestedAtMs: &now}
+	return model.TestResult{LatencyMs: &ms, TestedAtMs: &now}, false
 }
 
 // StopTests — прерывает текущий батч (FR-UI-203).

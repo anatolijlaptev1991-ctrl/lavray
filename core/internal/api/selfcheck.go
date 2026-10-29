@@ -152,7 +152,7 @@ func (s *Server) checkServer(ctx context.Context) *checkResult {
 	if p.Type == model.TypeHysteria2 || p.Type == model.TypeTUIC {
 		return notChecked("not_applicable") // UDP-протокол: TCP-проверка неприменима
 	}
-	r := s.tcpPing(ctx, p, 3*time.Second)
+	r, _ := s.tcpPing(ctx, p, 3*time.Second)
 	if r.LatencyMs == nil {
 		return verdict(ckFail, r.LastError, "")
 	}

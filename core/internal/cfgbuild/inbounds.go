@@ -2,8 +2,8 @@
 
 // inbounds.go — генерация inbounds (порт BuildConfigSingBox,
 // ConfigBuilder.cpp:393–450): mixed-слушатель по настройкам inbound.*
-// (auth опционален; FR-UI-279: не-loopback адрес требует пары user/pass,
-// в режиме TUN слушателей на loopback нет вовсе), TUN-инбаунд по tun.*
+// (auth опционален; FR-UI-279: не-loopback адрес требует пары user/pass;
+// в режиме TUN loopback-слушатель остаётся, как в NekoBox), TUN-инбаунд по tun.*
 // (FR-UI-184: interface_name/address/mtu/stack/strict_route/auto_route;
 // kill-switch FR-UI-275 форсирует strict_route), custom_inbound-добавка.
 //

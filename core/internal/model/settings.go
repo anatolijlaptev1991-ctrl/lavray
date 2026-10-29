@@ -55,11 +55,17 @@ func SettingDescriptors() []SettingDescriptor {
 		{Key: "inbound.auth.pass", Type: SettingString, GroupID: "inbound", RequiresProfileRestart: true, DeprecatedBy: "inbound_auth.pass"},
 		{Key: "inbound.custom_inbound", Type: SettingString, GroupID: "inbound", RequiresProfileRestart: true, DeprecatedBy: "custom_inbound"},
 
-		// ---- Тесты ----
+		// ---- Тесты (URL- и полный тест, T-84) ----
+		// Весь тестовый трафик идёт через исходящее проверяемого профиля. Адреса
+		// по умолчанию — решение владельца 2026-10-29; URL — http/https с
+		// хостом, test.udp_target — host:port.
 		{Key: "test.url", Type: SettingString, GroupID: "test", DefaultValue: `"https://www.gstatic.com/generate_204"`, DeprecatedBy: "test_url"},
-		{Key: "test.url_dl", Type: SettingString, GroupID: "test", DefaultValue: `"https://speed.cloudflare.com/__down?bytes=100000000"`, DeprecatedBy: "test_url_dl"},
+		{Key: "test.url_dl", Type: SettingString, GroupID: "test", DefaultValue: `"http://cachefly.cachefly.net/10mb.test"`, DeprecatedBy: "test_url_dl"},
 		{Key: "test.dl_timeout", Type: SettingInt, GroupID: "test", DefaultValue: `10`, DeprecatedBy: "test_dl_timeout"},
-		{Key: "test.concurrent", Type: SettingInt, GroupID: "test", DefaultValue: `10`, DeprecatedBy: "test_concurrent"},
+		// Параллельные тестовые инстансы (каждый — отдельный box.Box), 1…16.
+		{Key: "test.concurrent", Type: SettingInt, GroupID: "test", DefaultValue: `5`, DeprecatedBy: "test_concurrent"},
+		{Key: "test.url_ip", Type: SettingString, GroupID: "test", DefaultValue: `"https://cloudflare.com/cdn-cgi/trace"`},
+		{Key: "test.udp_target", Type: SettingString, GroupID: "test", DefaultValue: `"1.1.1.1:53"`},
 
 		// ---- Маршрутизация ----
 		{Key: "routing.active_preset", Type: SettingString, GroupID: "routing", DefaultValue: `"global"`, RequiresProfileRestart: true, DeprecatedBy: "active_routing"},

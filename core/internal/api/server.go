@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -77,6 +78,11 @@ type Server struct {
 	// ---- тесты задержки: один батч на процесс (StopTests) ----
 	testsMu      sync.Mutex
 	testsRunning *testRun
+	// newTestInst — фабрика временных инстансов URL- и полного теста (T-84);
+	// nil → inst.NewTestInstance. lookupIP — разбор имени сервера для «входного
+	// IP»; nil → системный резолвер. Тесты подменяют оба.
+	newTestInst inst.TestInstanceFactory
+	lookupIP    func(ctx context.Context, host string) (netip.Addr, error)
 
 	// ---- обновления: доступ к общему клиенту сериализуется ----
 	updMu sync.Mutex

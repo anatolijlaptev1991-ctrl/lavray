@@ -8,6 +8,8 @@ import App from './App';
 import { detectOS, osAttribute } from './platform/adapter';
 import { FIRST_ENDPOINT_WAIT_MS, followShellEndpoint } from './lib/coreEndpoint';
 import { installDropGuard } from './lib/external';
+import { loadLaunchInfo } from './lib/launch';
+import { hydrateUiState, installUiStateSync } from './lib/uiState';
 
 // Нативный режим (Tauri): оболочка сообщает адрес и токен ядра командой
 // core_endpoint (она дожидается готовности ядра) и событием core-endpoint при
@@ -18,6 +20,13 @@ import { installDropGuard } from './lib/external';
 async function bootstrap(): Promise<void> {
   const tauri = (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   if (tauri !== undefined) {
+    // T-81: у повышенного экземпляра свой профиль WebView, а язык, тема, режимы,
+    // выбор сервера и признак онбординга общие: источник истины — файл оболочки,
+    // localStorage — кэш. Значения применяются до первого рендера, а каждое
+    // изменение отслеживаемых ключей дальше уходит в файл.
+    await hydrateUiState(window.localStorage);
+    installUiStateSync(window.localStorage);
+    await loadLaunchInfo();
     await Promise.race([
       followShellEndpoint(),
       new Promise<void>((resolve) => {

@@ -6,7 +6,7 @@
 // выделение, тест задержки с прогрессом, гео-группировка.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
-import { CoreState, Group_Kind, ProfileType, TestLatencyRequest_Mode } from '../gen/lavray_pb';
+import { CoreState, Group_Kind, ProfileType } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
@@ -15,9 +15,12 @@ import { showCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
 import { MANUAL_FILTER, groupDisplayName, importGroupId, newServerGroupId } from '../lib/groups';
 import { formatMs, type MessageKey } from '../lib/i18n';
-import { isTestDown, isTestNotApplicable } from '../lib/testResult';
+import { testRequest } from '../lib/testRequest';
+import type { TestRun } from '../lib/testRequest';
+import { formatFullReport, isTestDown, isTestNotApplicable, resultLabel } from '../lib/testResult';
 import { ProfileEditor } from '../components/ProfileEditor';
 import { ImportDialog } from '../components/ImportDialog';
+import { FullTestDialog } from '../components/FullTestDialog';
 import { ContextMenu } from '../components/ContextMenu';
 import type { MenuAnchor } from '../components/ContextMenu';
 import { ConfirmDialog, GroupsDialog } from '../components/dialogs';
@@ -98,6 +101,12 @@ export function ServersScreen(): JSX.Element {
   const [groupBySub, setGroupBySub] = useState(true);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [latency, setLatency] = useState<Record<string, string>>({});
+  // Строки отчёта полного теста по кадрам стрима (пустая строка — отчёта нет и
+  // сохранённый в профиле показывать не надо); до конца прогона список профилей
+  // не обновляется.
+  const [reports, setReports] = useState<Record<string, string>>({});
+  // Диалог опций полного теста.
+  const [fullOpen, setFullOpen] = useState(false);
   const [testing, setTesting] = useState(false);
   const [progress, setProgress] = useState('');
   const [msg, setMsg] = useState('');
@@ -203,35 +212,25 @@ export function ServersScreen(): JSX.Element {
   }, []);
 
   const testLatency = useCallback(
-    async (ids: bigint[]): Promise<void> => {
+    async (ids: bigint[], run: TestRun = { kind: 'tcp' }): Promise<void> => {
       setErr('');
       setMsg('');
       if (ids.length === 0) return;
       setTesting(true);
       setLatency({});
+      setReports({});
       // SS-03: стрим отменяем при уходе с экрана/остановке, иначе setState
       // после unmount и параллельные прогоны.
       testAbort.current?.abort();
       const ac = new AbortController();
       testAbort.current = ac;
       try {
-        const stream = core.profiles.testLatency(
-          {
-            profileIds: ids,
-            // URL- и Full-тест ядро пока не умеет (T-84): только TCP-пинг.
-            mode: TestLatencyRequest_Mode.TCP_PING,
-          },
-          { signal: ac.signal },
-        );
+        const stream = core.profiles.testLatency(testRequest(ids, run), { signal: ac.signal });
         for await (const res of stream) {
           const r = res.result;
           const key = String(res.profileId);
-          const na = isTestNotApplicable(r);
-          const down = isTestDown(r);
-          setLatency((m) => ({
-            ...m,
-            [key]: na ? t('test.na') : down ? '✕' : formatMs(r?.latencyMs ?? 0, lang),
-          }));
+          setLatency((m) => ({ ...m, [key]: resultLabel(r, t, lang) }));
+          setReports((m) => ({ ...m, [key]: formatFullReport(r?.fullReport, t, lang) }));
           setProgress(tf('test.progress', { done: res.index, total: res.total }));
         }
         refresh();
@@ -358,6 +357,7 @@ export function ServersScreen(): JSX.Element {
       compact,
       checked: selected.has(String(p.id)),
       latencyLabel: latency[String(p.id)],
+      reportLabel: reports[String(p.id)],
       onCheck: (on: boolean): void => {
         toggleSelect(p.id, on);
       },
@@ -380,7 +380,7 @@ export function ServersScreen(): JSX.Element {
       active: activeId !== 0n && p.id === activeId,
       activeDot,
     }),
-    [compact, selected, latency, rowMenu, toggleSelect, toggleFav, t, activeId, activeDot],
+    [compact, selected, latency, reports, rowMenu, toggleSelect, toggleFav, t, activeId, activeDot],
   );
 
   return (
@@ -761,8 +761,8 @@ export function ServersScreen(): JSX.Element {
           onSaved={refresh}
         />
       )}
-      {/* Меню режима теста (прототип #testMore). Пункт «Полный тест: UDP и
-          скорость» скрыт до T-84 — ядро отвечает на него ошибкой. */}
+      {/* Меню режима теста (прототип #testMore): задержка (TCP), URL-тест и
+          полный тест — последний сначала спрашивает, что проверять. */}
       {testMenu !== null && (
         <ContextMenu
           anchor={testMenu}
@@ -781,7 +781,48 @@ export function ServersScreen(): JSX.Element {
             <Icon name="gauge" size={16} />
             <span>{t('test.latency')}</span>
           </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setTestMenu(null);
+              void testLatency(
+                profiles.map((p) => p.id),
+                { kind: 'url' },
+              );
+            }}
+          >
+            <Icon name="globe" size={16} />
+            <span>{t('test.url')}</span>
+          </button>
+          <button
+            className="menu-item"
+            role="menuitem"
+            onClick={() => {
+              setTestMenu(null);
+              setFullOpen(true);
+            }}
+          >
+            <Icon name="activity" size={16} />
+            <span>{t('test.full')}</span>
+          </button>
         </ContextMenu>
+      )}
+
+      {/* Опции полного теста; запуск — по всем видимым серверам, как «Проверить все». */}
+      {fullOpen && (
+        <FullTestDialog
+          onClose={() => {
+            setFullOpen(false);
+          }}
+          onStart={(options) => {
+            setFullOpen(false);
+            void testLatency(
+              profiles.map((p) => p.id),
+              { kind: 'full', options },
+            );
+          }}
+        />
       )}
 
       {/* Меню «Переместить в группу…» (прототип #selMove). Подписочные группы
@@ -885,6 +926,8 @@ interface RowProps {
   readonly compact: boolean;
   readonly checked: boolean;
   readonly latencyLabel: string | undefined;
+  /** Строка отчёта полного теста из текущего прогона; undefined — брать из профиля. */
+  readonly reportLabel: string | undefined;
   readonly onCheck: (on: boolean) => void;
   readonly onEdit: () => void;
   readonly onFav: () => void;
@@ -905,6 +948,7 @@ function ProfileRow({
   compact,
   checked,
   latencyLabel,
+  reportLabel,
   onCheck,
   onEdit,
   onFav,
@@ -929,6 +973,7 @@ function ProfileRow({
   const delay =
     latencyLabel ?? (na ? t('test.na') : ms !== undefined && ms > 0 ? formatMs(ms, lang) : '—');
   const down = isTestDown(p.testResult);
+  const report = reportLabel ?? formatFullReport(p.testResult?.fullReport, t, lang);
   return (
     <li
       className={`prow${checked ? ' sel' : ''}${active ? ' active' : ''}`}
@@ -984,7 +1029,14 @@ function ProfileRow({
           </span>
         )}
       </button>
-      <span className={`prow-lat mono${down ? ' err' : delay === '—' ? ' na' : ''}`}>{delay}</span>
+      <span className="prow-res">
+        <span className={`prow-lat mono${down ? ' err' : delay === '—' ? ' na' : ''}`}>{delay}</span>
+        {report !== '' && (
+          <span className="prow-rep mono" title={report}>
+            {report}
+          </span>
+        )}
+      </span>
       <button
         className="prow-more btn btn-ic btn-sm"
         aria-label={t('aria.menu')}

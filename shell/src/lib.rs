@@ -18,7 +18,19 @@
 //! - `oemtext` (только Windows) — вывод консольных программ (`reg.exe`) из OEM-
 //!   кодовой страницы в строку (S-02);
 //! - [`tray`] — конфигурация меню трея (§9), проверяемая без GUI;
-//! - [`elevation`] — запущено ли приложение с повышенными правами (T-46);
+//! - [`elevation`] — запущено ли приложение с повышенными правами (T-46) и
+//!   перезапуск от администратора (T-81);
+//! - [`launch`] — аргументы запуска `--tray`, `--elevated-relaunch`,
+//!   `--wait-pid` и ожидание выхода прежнего экземпляра (T-81, T-82);
+//! - [`token`] — SID пользователя и тип повышения токена процесса (T-81, T-82);
+//! - [`single_instance`] — проверка мьютекса single-instance между разными
+//!   уровнями прав (T-81);
+//! - [`profile`] — отдельный каталог данных WebView повышенного экземпляра (T-81);
+//! - [`ui_state`] — общий файл настроек UI `ui-state.json` для обоих профилей
+//!   WebView (T-81);
+//! - [`msgbox`] — сообщения до появления окна (T-81);
+//! - [`autostart`] — автозапуск с системой: задача планировщика или `Run`
+//!   в реестре, команды — через внедряемый исполнитель (T-82);
 //! - [`uiprotocol`] — протокол UI ↔ shell (команды/события, serde, версия
 //!   протокола);
 //! - [`updater`] — автомат состояний автообновления TUF-lite (§8.3), без сети.
@@ -28,13 +40,20 @@
 //! §3.2; CoreService.Disconnect/Shutdown для лестницы §5) — будущий
 //! `src/ipc.rs` по дереву §10, реализация при врезке реального ядра.
 
+pub mod autostart;
 pub mod coreproc;
 pub mod elevation;
 pub mod endpoint;
 pub mod integrity;
+pub mod launch;
+pub mod msgbox;
 #[cfg(windows)]
 mod oemtext;
+pub mod profile;
+pub mod single_instance;
 pub mod sysproxy;
+pub mod token;
 pub mod tray;
+pub mod ui_state;
 pub mod uiprotocol;
 pub mod updater;

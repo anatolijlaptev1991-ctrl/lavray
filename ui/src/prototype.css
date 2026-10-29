@@ -1238,6 +1238,15 @@ html[data-shell="native"][data-os="mac"] #app { height: 100vh; }
 .prow-title .prow-name{flex:0 1 auto;min-width:0}
 .prow-title .badge,.prow-title .p-tag{flex:none}
 .prow-lat.na{color:var(--t3)}
+/* T-84: колонка результата — задержка и под ней строка отчёта полного теста. */
+.prow-res{flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:2px;max-width:min(22rem,45%)}
+.prow-rep{font-size:.6875rem;color:var(--t2);text-align:end;overflow-wrap:anywhere}
+.test-opts{display:flex;flex-direction:column;gap:2px}
+.test-opt{display:flex;align-items:flex-start;gap:10px;min-height:32px;padding:6px 4px;font-size:.8125rem;cursor:pointer}
+.test-opt input{flex:none;width:24px;height:24px;margin:0;accent-color:var(--accent);cursor:pointer}
+.test-opt-t{display:flex;flex-direction:column;gap:2px;padding-top:3px}
+.test-opt-t small{font-size:.6875rem;color:var(--t3)}
+.test-opt-none{margin:8px 4px 0;font-size:.75rem;color:var(--err-text)}
 .prow-fav.on{color:var(--warn);background:transparent}
 .prow-fav.on .ic{fill:currentColor}
 .prow-fav:hover{color:var(--warn)}

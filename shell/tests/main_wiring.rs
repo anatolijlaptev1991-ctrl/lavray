@@ -109,3 +109,148 @@ fn reg_output_is_decoded_with_the_oem_codepage() {
         );
     }
 }
+
+/// T-81/Э-2: «Перезапустить от администратора» зарегистрирована для UI, текущий
+/// экземпляр выходит обычным путём (`begin_quit`) только после успешного
+/// запуска второго, а второй ждёт старого до инициализации single-instance.
+#[test]
+fn relaunch_is_wired_and_waits_for_the_old_instance_before_plugins() {
+    let main_rs = source("main.rs");
+    assert!(
+        main_rs.contains("            relaunch_elevated,"),
+        "нет в generate_handler!"
+    );
+    let command = main_rs
+        .split("async fn relaunch_elevated")
+        .nth(1)
+        .and_then(|rest| rest.split("async fn autostart_state").next())
+        .expect("команда relaunch_elevated");
+    assert!(command.contains("if outcome == RelaunchOutcome::Started"));
+    assert!(command.contains("begin_quit(&app)"));
+    assert!(
+        command.contains("spawn_blocking"),
+        "UAC ждёт ответа не в потоке команд"
+    );
+
+    let wait = main_rs.find("wait_for_exit(pid)").expect("ожидание pid");
+    let plugin = main_rs
+        .find("tauri_plugin_single_instance::init")
+        .expect("плагин single-instance");
+    assert!(wait < plugin, "ждать нужно до плагина single-instance");
+}
+
+/// T-82/Э-2: команды автозапуска зарегистрированы и не блокируют главный поток
+/// (`reg.exe`/`schtasks.exe` — отдельные процессы).
+#[test]
+fn autostart_commands_are_registered_and_run_off_the_main_thread() {
+    let main_rs = source("main.rs");
+    for needed in ["            autostart_state,", "            set_autostart"] {
+        assert!(
+            main_rs.contains(needed),
+            "нет в generate_handler!: {needed}"
+        );
+    }
+    for name in ["async fn autostart_state", "async fn set_autostart"] {
+        let body = main_rs
+            .split(name)
+            .nth(1)
+            .and_then(|rest| rest.split("\n}\n").next())
+            .unwrap_or_else(|| panic!("нет {name}"));
+        assert!(body.contains("spawn_blocking"), "{name}: {body}");
+    }
+}
+
+/// T-81 (ревью): мьютекс single-instance проверяется ДО плагина (повышенный
+/// экземпляр прячет свой мьютекс от обычного, и плагин принял бы себя за
+/// первый); не вышедший за срок прежний экземпляр — сообщение и выход, а не
+/// передача аргументов старому окну.
+#[test]
+fn single_instance_is_checked_before_the_plugin_and_a_stuck_parent_stops_the_start() {
+    let main_rs = source("main.rs");
+    let check = main_rs
+        .find("single_instance::check(")
+        .expect("проверка мьютекса");
+    let plugin = main_rs
+        .find("tauri_plugin_single_instance::init")
+        .expect("плагин single-instance");
+    assert!(check < plugin, "проверка мьютекса должна идти до плагина");
+    assert!(main_rs.contains("Verdict::ElevatedInstanceRunning"));
+    assert!(main_rs.contains("msgbox::ALREADY_RUNNING_ELEVATED"));
+
+    let wait = main_rs
+        .find("if !wait_for_exit(pid)")
+        .expect("ожидание pid");
+    let tail = &main_rs[wait..check];
+    assert!(tail.contains("msgbox::previous_instance_alive("));
+    assert!(tail.contains("std::process::exit(1)"));
+}
+
+/// T-81 (ревью): сбой создания окна — сообщение с причиной, не паника; общие
+/// настройки UI читаются и пишутся командами оболочки (файл `ui-state.json`),
+/// а признак перезапуска — из флага `--elevated-relaunch`.
+#[test]
+fn window_failure_is_reported_and_the_ui_state_commands_are_registered() {
+    let main_rs = source("main.rs");
+    assert!(main_rs.contains("msgbox::window_failed(&reason)"));
+    assert!(
+        !main_rs.contains(".expect(\"LAVRay shell: failed to build tauri application\")"),
+        "сбой сборки приложения не должен быть тихой паникой"
+    );
+    for needed in [
+        "            launch_info,",
+        "            ui_state_load,",
+        "            ui_state_set,",
+        "            window_show,",
+    ] {
+        assert!(
+            main_rs.contains(needed),
+            "нет в generate_handler!: {needed}"
+        );
+    }
+    // обычному пользователю UAC потребовал бы пароль чужой учётной записи
+    assert!(main_rs.contains("can_elevate: token::can_self_elevate("));
+}
+
+/// T-81 (ревью): повышенный процесс создаёт общий файл настроек с явным доступом
+/// для текущего пользователя (SID из токена), а признак перезапуска не читается
+/// из файлов.
+#[test]
+fn ui_state_file_is_opened_to_the_user_when_an_elevated_process_writes_it() {
+    let main_rs = source("main.rs");
+    let command = main_rs
+        .split("async fn ui_state_set")
+        .nth(1)
+        .and_then(|rest| {
+            rest.split(
+                "
+}
+",
+            )
+            .next()
+        })
+        .expect("команда ui_state_set");
+    assert!(command.contains("process_is_elevated()"));
+    assert!(command.contains("token::user_sid()"));
+    assert!(command.contains("ui_state::set(&data_dir(), &key, value, owner.as_deref())"));
+    assert!(
+        command.contains("spawn_blocking"),
+        "запись с fsync — не в потоке команд"
+    );
+
+    let launch = main_rs
+        .split("fn launch_info")
+        .nth(1)
+        .and_then(|rest| {
+            rest.split(
+                "
+}
+",
+            )
+            .next()
+        })
+        .expect("команда launch_info");
+    assert!(
+        !launch.contains("data_dir"),
+        "признак берётся из флага, не из файла"
+    );
+}

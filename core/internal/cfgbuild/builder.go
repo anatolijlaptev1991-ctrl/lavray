@@ -227,9 +227,9 @@ func buildSingBoxConfig(req BuildRequest, st *BuildSettings, res *BuildResult) (
 		"log": map[string]any{"level": logLevel},
 	}
 
-	// Inbounds: mixed (+custom) и TUN (FR-UI-279: в режиме TUN mixed-слушатель
-	// не эмитится вовсе; forTest — без inbounds, но секция присутствует —
-	// пустой массив, как в оракуле).
+	// Inbounds: mixed (+custom) и TUN (FR-UI-279: в режиме TUN loopback-слушатель
+	// mixed остаётся, как в NekoBox; forTest — без inbounds, но секция
+	// присутствует — пустой массив, как в оракуле).
 	inbounds, err := buildInbounds(st, req.ForTest)
 	if err != nil {
 		return nil, err

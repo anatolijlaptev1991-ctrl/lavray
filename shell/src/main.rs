@@ -9,16 +9,26 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use lavray_shell::autostart::{self, AutostartState};
 use lavray_shell::coreproc::driver::generate_auth_token;
 use lavray_shell::coreproc::runner::{spawn_supervisor, Failure, SupervisorHandle};
 use lavray_shell::coreproc::{CoreSpawnConfig, CoreState};
-use lavray_shell::elevation::is_elevated as process_is_elevated;
+use lavray_shell::elevation::{
+    is_elevated as process_is_elevated, relaunch_elevated as relaunch, RelaunchOutcome,
+    RelaunchRequest, Runas,
+};
 use lavray_shell::endpoint::{
     EndpointEvent, EndpointHub, HostObserver, SupervisorHost, CORE_ENDPOINT_EVENT, ENDPOINT_WAIT,
 };
 use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
+use lavray_shell::launch::{wait_for_exit, LaunchArgs, WAIT_PID_TIMEOUT};
+use lavray_shell::msgbox;
+use lavray_shell::profile;
+use lavray_shell::single_instance::{self, Verdict};
 use lavray_shell::sysproxy::{validate_port, SysProxy};
+use lavray_shell::token;
 use lavray_shell::tray::TrayUpdate;
+use lavray_shell::ui_state;
 use lavray_shell::uiprotocol::IPC_PROTOCOL_VERSION;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -53,6 +63,120 @@ struct RuntimeState {
 #[tauri::command]
 fn is_elevated() -> bool {
     process_is_elevated()
+}
+
+/// relaunch_elevated — «Перезапустить от администратора» из диалога TUN
+/// (T-81): запускает второй экземпляр через UAC и, если запуск состоялся,
+/// завершает этот обычным путём выхода (останов ядра, возврат системного
+/// прокси — как `begin_quit`). Отказ в UAC — не ошибка: ответ `cancelled`, и
+/// приложение остаётся как было. Новый экземпляр дожидается выхода этого
+/// процесса (`--wait-pid`), прежде чем занять single-instance.
+#[tauri::command]
+async fn relaunch_elevated(app: tauri::AppHandle) -> Result<RelaunchOutcome, String> {
+    let exe = std::env::current_exe().map_err(|e| format!("путь к LAVRay.exe: {e}"))?;
+    let window_hidden = app
+        .get_webview_window("main")
+        .and_then(|window| window.is_visible().ok())
+        .is_some_and(|visible| !visible);
+    // `ShellExecuteExW` ждёт ответа на запрос UAC: в фоновом потоке.
+    let outcome = tauri::async_runtime::spawn_blocking(move || {
+        let elevated = process_is_elevated();
+        relaunch(
+            &Runas,
+            &RelaunchRequest {
+                exe: &exe,
+                parent_pid: std::process::id(),
+                window_hidden,
+                elevated,
+                // обычному пользователю UAC потребовал бы пароль чужой учётной записи
+                can_elevate: token::can_self_elevate(token::elevation_kind(), elevated),
+            },
+        )
+    })
+    .await
+    .map_err(|e| e.to_string())??;
+    if outcome == RelaunchOutcome::Started {
+        begin_quit(&app);
+    }
+    Ok(outcome)
+}
+
+/// Что UI узнаёт о запуске: перезапущен ли экземпляр от администратора.
+#[derive(serde::Serialize)]
+struct LaunchInfo {
+    elevated_relaunch: bool,
+}
+
+/// Состояние запуска: запущен ли экземпляр с `--elevated-relaunch`; ответ
+/// `launch_info` с признаком выдаётся один раз (перезагрузка страницы не
+/// повторяет подсказку «TUN включён»).
+struct LaunchState {
+    elevated_relaunch: bool,
+    answered: AtomicBool,
+}
+
+/// launch_info — признак «приложение только что перезапущено от администратора»
+/// (по флагу `--elevated-relaunch`, а не по файлам и `localStorage`).
+#[tauri::command]
+fn launch_info(state: tauri::State<'_, LaunchState>) -> LaunchInfo {
+    let first = !state.answered.swap(true, Ordering::SeqCst);
+    LaunchInfo {
+        elevated_relaunch: state.elevated_relaunch && first,
+    }
+}
+
+/// ui_state_load — общие настройки UI из `ui-state.json` в каталоге данных
+/// (источник истины для обоих профилей WebView; `localStorage` — кэш).
+#[tauri::command]
+async fn ui_state_load() -> Result<ui_state::Loaded, String> {
+    tauri::async_runtime::spawn_blocking(|| ui_state::load(&data_dir()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// ui_state_set — записать (`value`) или удалить (`null`) одну настройку из
+/// явного списка ключей. Повышенный процесс создаёт файл с явным доступом для
+/// текущего пользователя, чтобы обычный экземпляр мог его перезаписать.
+#[tauri::command]
+async fn ui_state_set(key: String, value: Option<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let owner = if process_is_elevated() {
+            token::user_sid()
+        } else {
+            None
+        };
+        ui_state::set(&data_dir(), &key, value, owner.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// window_show — показать и развернуть главное окно (трей и Ctrl+D просят
+/// диалог TUN, пока окно скрыто).
+#[tauri::command]
+fn window_show(app: tauri::AppHandle) {
+    tray_ui::show_main_window(&app);
+}
+
+/// autostart_state — автозапуск с системой, как его видит ОС (T-82): задача
+/// планировщика или значение `Run`. Читается при каждом показе строки
+/// настроек (FR-UI-013); `supported: false` — строку нужно скрыть.
+#[tauri::command]
+async fn autostart_state() -> Result<AutostartState, String> {
+    tauri::async_runtime::spawn_blocking(autostart::current_state)
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+/// set_autostart — включить/выключить автозапуск (T-82). С правами
+/// администратора — задача планировщика, без прав — `Run` в реестре; ответ —
+/// состояние, заново прочитанное из ОС. Вызовы `reg.exe`/`schtasks.exe`
+/// идут в фоновом потоке: окно не замирает.
+#[tauri::command]
+async fn set_autostart(enabled: bool) -> Result<AutostartState, String> {
+    tauri::async_runtime::spawn_blocking(move || autostart::change(enabled))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Адрес ConnectRPC-ядра для UI (вызывается фронтендом при старте).
@@ -359,7 +483,57 @@ impl SupervisorHost for ShellHost {
     }
 }
 
+/// Главное окно создаётся здесь, а не из `tauri.conf.json` (там `create: false`):
+/// повышенному экземпляру нужен собственный каталог данных WebView, иначе общий
+/// профиль с процессами другой целостности может не открыться.
+fn create_main_window(app: &tauri::App, elevated: bool) -> Result<(), String> {
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|window| window.label == "main")
+        .ok_or("в tauri.conf.json нет окна main")?;
+    let mut builder = tauri::WebviewWindowBuilder::from_config(app.handle(), config)
+        .map_err(|e| e.to_string())?;
+    if cfg!(windows) {
+        let local = app.path().local_data_dir().map_err(|e| e.to_string())?;
+        if let Some(dir) = profile::webview_data_dir(&local, &app.config().identifier, elevated) {
+            builder = builder.data_directory(dir);
+        }
+    }
+    builder.build().map(|_| ()).map_err(|e| e.to_string())
+}
+
 fn main() {
+    let launch = LaunchArgs::from_env();
+    // T-81: перезапуск от администратора запускает этот экземпляр, пока прежний
+    // ещё выходит. Ждём его до плагинов: single-instance иначе отдал бы
+    // аргументы старому окну и закрыл новый экземпляр.
+    // Не вышел за срок — не запускаемся: single-instance отдал бы аргументы
+    // старому экземпляру, а два экземпляра на одних данных вредны.
+    if let Some(pid) = launch.wait_pid {
+        if !wait_for_exit(pid) {
+            msgbox::show(&msgbox::previous_instance_alive(
+                pid,
+                WAIT_PID_TIMEOUT.as_secs(),
+            ));
+            std::process::exit(1);
+        }
+    }
+    let context = tauri::generate_context!();
+    // Мьютекс single-instance, созданный повышенным экземпляром, обычному не
+    // открыть: плагин принял бы себя за первый (второе ядро, второй трей, откат
+    // прокси первого). Проверяем до плагина.
+    if single_instance::check(&single_instance::System, &context.config().identifier)
+        == Verdict::ElevatedInstanceRunning
+    {
+        msgbox::show(msgbox::ALREADY_RUNNING_ELEVATED);
+        std::process::exit(0);
+    }
+    // T-82: `--tray` (автозапуск) — окно остаётся скрытым, только значок.
+    let start_hidden = launch.tray;
+    let elevated = process_is_elevated();
     let runtime = Arc::new(Mutex::new(RuntimeState::default()));
     let rt_for_setup = Arc::clone(&runtime);
     let hub = Arc::new(EndpointHub::default());
@@ -374,7 +548,17 @@ fn main() {
         .plugin(tauri_plugin_opener::init())
         .manage(Arc::clone(&runtime))
         .manage(hub)
+        .manage(LaunchState {
+            elevated_relaunch: launch.elevated_relaunch,
+            answered: AtomicBool::new(false),
+        })
         .setup(move |app| {
+            // Окно первым: события ядра адресуются окну `main`. Не создалось —
+            // сообщение с причиной вместо тихой паники.
+            if let Err(reason) = create_main_window(app, elevated) {
+                msgbox::show(&msgbox::window_failed(&reason));
+                std::process::exit(1);
+            }
             // F5/FR-UI-259: если прошлая сессия упала с включённым прокси,
             // возвращаем системные настройки ДО запуска нового ядра.
             match SysProxy::new(&data_dir()).recover_if_needed() {
@@ -397,6 +581,11 @@ fn main() {
             // Трей (DS §9, §10): меню по TrayMenuSpec, состояние и тексты
             // присылает UI (`tray_update`); закрытие окна — в трей.
             tray_ui::install(app)?;
+            // Окно в tauri.conf.json создаётся скрытым (`visible: false`): так
+            // `--tray` не мигает окном на старте.
+            if !start_hidden {
+                tray_ui::show_main_window(app.handle());
+            }
             Ok(())
         })
         .on_window_event(|window, event| match event {
@@ -427,10 +616,20 @@ fn main() {
             window_is_maximized,
             window_hide,
             window_start_drag,
-            set_system_proxy
+            set_system_proxy,
+            relaunch_elevated,
+            launch_info,
+            ui_state_load,
+            ui_state_set,
+            window_show,
+            autostart_state,
+            set_autostart
         ])
-        .build(tauri::generate_context!())
-        .expect("LAVRay shell: failed to build tauri application")
+        .build(context)
+        .unwrap_or_else(|e| {
+            msgbox::show(&msgbox::window_failed(&e.to_string()));
+            std::process::exit(1);
+        })
         .run(|_app, event| {
             on_run_event(&event, || {
                 let _ = SysProxy::new(&data_dir()).release_on_quit();

@@ -44,6 +44,17 @@ windows-sys = { version = "0.61", features = [
   # S-02: OEM-кодовая страница (GetOEMCP) и перекодировка вывода reg.exe
   # (MultiByteToWideChar)
   "Win32_Globalization",
+  # T-81: перезапуск от администратора — ShellExecuteExW (глагол runas;
+  # структуре SHELLEXECUTEINFOW нужен HKEY из Win32_System_Registry),
+  # CoInitializeEx для вызова вне потока окна, SW_SHOWNORMAL
+  "Win32_System_Com",
+  "Win32_System_Registry",
+  # T-82 (ревью): SID пользователя из токена (ConvertSidToStringSidW)
+  "Win32_Security_Authorization",
+  # общий файл настроек UI: CreateFileW с явным дескриптором безопасности
+  "Win32_Storage_FileSystem",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
 ] }
 
 [build-dependencies]

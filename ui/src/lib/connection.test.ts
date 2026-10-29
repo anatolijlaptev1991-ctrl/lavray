@@ -14,10 +14,16 @@ import {
   stubCore,
 } from '../test-utils/coreStub';
 import { createCoreClients } from './core';
+import { onTunDialogRequest, requestTunDialog, takeTunDialogRequest } from './tunRequest';
 import {
   chooseProfile,
+  loadModes,
   loadSelectedProfileId,
+  modesFromRemembered,
   reconnect,
+  rememberModes,
+  rememberedModes,
+  restoreModes,
   saveModes,
   saveSelectedProfileId,
   sortByLatency,
@@ -112,6 +118,68 @@ describe('toggleConnection (Ctrl+D и меню титлбара)', () => {
   });
 });
 
+describe('toggleConnection: TUN без прав администратора (T-81, ревью)', () => {
+  const routes = {
+    'CoreService/GetStatus': idleStatus(),
+    'ProfileService/ListProfiles': profileList(profile('1', 'S1')),
+  };
+
+  beforeEach(() => {
+    (window as TauriWindow).__TAURI_INTERNALS__ = {};
+    invokeMock.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === 'is_elevated' ? false : undefined),
+    );
+  });
+
+  it('трей и Ctrl+D: показывают окно и просят диалог TUN, а не подключаются', async () => {
+    saveModes(window.localStorage, { sysProxy: false, tunMode: true });
+    const core = stubCore(routes);
+    takeTunDialogRequest(); // сбросить следы других тестов
+
+    expect(await toggleConnection({ core: clients(), connected: false, port: 2080 })).toBe(false);
+
+    expect(core.bodies('CoreService/Connect')).toEqual([]);
+    // окно могло быть скрыто в трей: его нужно показать (вызов уходит асинхронно)
+    await vi.waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith('window_show');
+    });
+    expect(takeTunDialogRequest()).toBe(true);
+    expect(takeTunDialogRequest()).toBe(false); // просьба выдаётся один раз
+  });
+
+  it('без выбранного TUN, а также при правах просьбы нет', async () => {
+    saveModes(window.localStorage, { sysProxy: false, tunMode: false });
+    stubCore(routes);
+    takeTunDialogRequest();
+    expect(await toggleConnection({ core: clients(), connected: false, port: 2080 })).toBe(true);
+    expect(takeTunDialogRequest()).toBe(false);
+
+    saveModes(window.localStorage, { sysProxy: false, tunMode: true });
+    invokeMock.mockImplementation((cmd: string) =>
+      Promise.resolve(cmd === 'is_elevated' ? true : undefined),
+    );
+    stubCore(routes);
+    expect(await toggleConnection({ core: clients(), connected: false, port: 2080 })).toBe(true);
+    expect(takeTunDialogRequest()).toBe(false);
+  });
+
+  it('просьба, пришедшая до открытия экрана, ждёт его; подписчик получает новую сразу', () => {
+    takeTunDialogRequest();
+    requestTunDialog();
+    const seen: boolean[] = [];
+    const stop = onTunDialogRequest(() => {
+      seen.push(takeTunDialogRequest());
+    });
+    expect(takeTunDialogRequest()).toBe(true); // экран монтируется и забирает просьбу
+    requestTunDialog();
+    expect(seen).toEqual([true]);
+    stop();
+    requestTunDialog();
+    expect(seen).toEqual([true]);
+    takeTunDialogRequest();
+  });
+});
+
 describe('reconnect', () => {
   const sys = { sysProxy: true, tunMode: false };
   const tun = { sysProxy: true, tunMode: true };
@@ -158,5 +226,62 @@ describe('reconnect', () => {
     await expect(reconnect({ core: clients(), next, prev })).rejects.toThrow('Failed to fetch');
     expect(dead.bodies('CoreService/Connect')).toEqual([]);
     expect(invokeMock).toHaveBeenCalledWith('set_system_proxy', expect.objectContaining({ enabled: false }));
+  });
+});
+
+describe('режимы в настройке ядра remember.modes (T-81)', () => {
+  it('rememberedModes и modesFromRemembered — взаимно обратные', () => {
+    expect(rememberedModes({ sysProxy: true, tunMode: true })).toEqual(['tun', 'system_proxy']);
+    expect(rememberedModes({ sysProxy: false, tunMode: true })).toEqual(['tun']);
+    expect(rememberedModes({ sysProxy: false, tunMode: false })).toEqual([]);
+    for (const modes of [
+      { sysProxy: true, tunMode: true },
+      { sysProxy: false, tunMode: true },
+      { sysProxy: true, tunMode: false },
+    ]) {
+      expect(modesFromRemembered(rememberedModes(modes))).toEqual(modes);
+    }
+    // имена NekoBox и мусор
+    expect(modesFromRemembered(['vpn', ' proxy '])).toEqual({ sysProxy: true, tunMode: true });
+    expect(modesFromRemembered([])).toBeNull();
+    expect(modesFromRemembered(['что-то'])).toBeNull();
+  });
+
+  it('rememberModes пишет список в SetSettings; ядро недоступно — без ошибки', async () => {
+    const core = stubCore({ 'SettingsService/SetSettings': { acceptedKeys: ['remember.modes'] } });
+    await rememberModes(clients(), { sysProxy: false, tunMode: true });
+    expect(core.bodies('SettingsService/SetSettings')).toEqual([
+      { values: { 'remember.modes': { stringListValue: { items: ['tun'] } } } },
+    ]);
+
+    stubCore({ 'SettingsService/SetSettings': new Down() });
+    await expect(rememberModes(clients(), { sysProxy: true, tunMode: false })).resolves.toBeUndefined();
+  });
+
+  it('restoreModes берёт режимы из ядра, только если в окне выбора нет', async () => {
+    const reply = {
+      'SettingsService/GetSettings': {
+        values: { 'remember.modes': { stringListValue: { items: ['tun'] } } },
+      },
+    };
+    const core = stubCore(reply);
+    expect(await restoreModes(clients(), window.localStorage)).toEqual({ sysProxy: false, tunMode: true });
+    expect(loadModes(window.localStorage)).toEqual({ sysProxy: false, tunMode: true });
+    expect(core.bodies('SettingsService/GetSettings')).toEqual([{ keys: ['remember.modes'] }]);
+
+    // собственный выбор окна не затирается, ядро даже не спрашивается
+    saveModes(window.localStorage, { sysProxy: true, tunMode: false });
+    const second = stubCore(reply);
+    expect(await restoreModes(clients(), window.localStorage)).toBeNull();
+    expect(second.calls).toEqual([]);
+    expect(loadModes(window.localStorage)).toEqual({ sysProxy: true, tunMode: false });
+  });
+
+  it('restoreModes: ядро ничего не помнит или недоступно — null, localStorage пуст', async () => {
+    stubCore({ 'SettingsService/GetSettings': { values: {} } });
+    expect(await restoreModes(clients(), window.localStorage)).toBeNull();
+    stubCore({ 'SettingsService/GetSettings': new Down() });
+    expect(await restoreModes(clients(), window.localStorage)).toBeNull();
+    expect(window.localStorage.getItem('lavray.modes')).toBeNull();
   });
 });

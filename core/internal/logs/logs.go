@@ -12,6 +12,8 @@
 //     скрывается (в любом контексте, не только валидный JSON);
 //   - содержимое share/happ-ссылок (база после «vmess://» и др.) — [REDACTED];
 //   - пары KEY=… секретных имён (env-паттерн, LNB-28) — [REDACTED].
+//   - MAC-адреса (шлюз, устройства сети; строки sing-box после T-33) —
+//     остаются первые два байта: 50:88:**:**:**:** (D-07, MaskMACs).
 //
 // env/argv внешних ядер и core_config в лог не пишутся ВООБЩЕ — это политика
 // вызывающего кода (extcore W6+/W8); Redact — эшелонированная защита от
@@ -92,7 +94,9 @@ func (m *Mux) Logf(level, source, format string, args ...any) {
 	// а после StripANSI получается открытый «PASSWORD=x» в журнале и
 	// подписчиках (LNB-01). Повторная редакция страхует случаи, когда сама
 	// escape-последовательность склеивала части секрета.
-	msg := Redact(StripANSI(fmt.Sprintf(format, args...)))
+	// D-07: MAC-адреса (шлюз, устройства сети) в журнале маскируются так же,
+	// как секреты, — до буфера, подписчиков и экспорта журнала из UI.
+	msg := MaskMACs(Redact(StripANSI(fmt.Sprintf(format, args...))))
 	m.publish(Line{TsMs: time.Now().UnixMilli(), Level: level, Source: source, Message: msg})
 }
 

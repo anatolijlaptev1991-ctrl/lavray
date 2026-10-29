@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package store
 
 import (
@@ -128,6 +130,11 @@ func migrate(db *sql.DB) error {
 	current, err := schemaVersion(ctx, db)
 	if err != nil {
 		return err
+	}
+	// T-50: БД «из будущего» не принимается — старая сборка не должна
+	// молча писать в схему новой (миграции m.version <= current пропускались).
+	if latest := migrations[len(migrations)-1].version; current > latest {
+		return &SchemaTooNewError{Found: current, Supported: latest}
 	}
 	for _, m := range migrations {
 		if m.version <= current {

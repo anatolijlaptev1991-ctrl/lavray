@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // geo.go — определение страны сервера для группировки в UI (FR-UI-008/009):
 // «несколько ключей по странам» — обычный случай подписки, поэтому каждый
 // профиль получает ISO-код (ru/jp/nl/…) из имени (эмодзи-флаг, код страны,
@@ -42,7 +44,7 @@ var geoAliases = map[string]string{
 	"украина": "ua", "ukraine": "ua", "kyiv": "ua", "киев": "ua",
 	"латвия": "lv", "latvia": "lv", "riga": "lv", "рига": "lv",
 	"литва": "lt", "lithuania": "lt", "vilnius": "lt", "вильнюс": "lt",
-	"эстония": "ee", "estonia": "ee", "tallinn": "ee", "таллин": "et",
+	"эстония": "ee", "estonia": "ee", "tallinn": "ee", "таллин": "ee",
 	"молдова": "md", "moldova": "md",
 	"сербия": "rs", "serbia": "rs", "belgrade": "rs",
 	"румыния": "ro", "romania": "ro", "bucharest": "ro",
@@ -115,7 +117,7 @@ func DetectGeo(name, address string) string {
 	best := ""
 	bestLen := 0
 	for alias, code := range geoAliases {
-		if len(alias) > bestLen && strings.Contains(lower, alias) {
+		if len(alias) > bestLen && containsAlias(lower, alias) {
 			best, bestLen = code, len(alias)
 		}
 	}
@@ -137,7 +139,8 @@ func codeBetween(s, left, right string) string {
 	for i := 0; i+4 <= len(s); i++ {
 		if string(s[i]) == left && string(s[i+3]) == right {
 			code := strings.ToLower(s[i+1 : i+3])
-			if isAlpha2(code) {
+			// T-54: только настоящий код страны и не тег протокола (ws, ss, cf…).
+			if isAlpha2(code) && isoCountryCodes[code] && !notCountryTags[code] {
 				return code
 			}
 		}

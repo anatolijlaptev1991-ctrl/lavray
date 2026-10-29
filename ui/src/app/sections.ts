@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * Application structure: 5 sections with their tabs (prototype `GROUPS`,
  * DS §7). The scaffold renders one stub screen per tab.

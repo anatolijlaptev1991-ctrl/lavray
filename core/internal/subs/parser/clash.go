@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package parser
 
 // clash.go — Clash / Clash.Meta YAML-подписка (FR-UI-119/121, MUST).

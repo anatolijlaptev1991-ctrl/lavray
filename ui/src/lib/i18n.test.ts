@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   DICTIONARIES,
@@ -15,6 +17,7 @@ import {
   setLanguage,
   t,
   tf,
+  type Language,
 } from './i18n';
 
 describe('i18n dictionaries', () => {
@@ -27,8 +30,8 @@ describe('i18n dictionaries', () => {
     // Полные словари из прототипа: non-plural ключи идентичны; plural-формы
     // различны по языку (ru one/few/many, en/es/de one/other, zh other) —
     // как в design/tools/i18n_check.py и docs/fix-plan/03-i18n.md (F2).
-    const nonPlural = (lang: string): string[] =>
-      Object.keys(DICTIONARIES[lang as never])
+    const nonPlural = (lang: Language): string[] =>
+      Object.keys(DICTIONARIES[lang])
         .filter((k) => !k.startsWith('pl.'))
         .sort();
     const reference = nonPlural('en');
@@ -38,15 +41,15 @@ describe('i18n dictionaries', () => {
   });
 
   it('has complete plural forms per language', () => {
-    const expectForms = (lang: string, forms: readonly string[]): void => {
-      const pluralKeys = Object.keys(DICTIONARIES[lang as never]).filter((k) =>
+    const expectForms = (lang: Language, forms: readonly string[]): void => {
+      const pluralKeys = Object.keys(DICTIONARIES[lang]).filter((k) =>
         k.startsWith('pl.'),
       );
       const bases = new Set(pluralKeys.map((k) => k.slice(0, k.lastIndexOf('.'))));
       for (const base of bases) {
         for (const form of forms) {
           expect(
-            DICTIONARIES[lang as never][`${base}.${form}`],
+            DICTIONARIES[lang][`${base}.${form}`],
             `${lang}: ${base}.${form}`,
           ).toBeTruthy();
         }

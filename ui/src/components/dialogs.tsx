@@ -1,17 +1,24 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // dialogs.tsx — остальные диалоги прототипа v1.2 одним модулем:
-// группы серверов, подтверждение, горячие клавиши, лицензии, резервная
-// копия, сохранение пресета, онбординг, экспорт журнала, переход на бета.
+// группы серверов, подтверждение, горячие клавиши, лицензии, онбординг.
 // Общая оболочка Dialog повторяет .dlg-back/.dlg/.dlg-h/.dlg-b/.dlg-f из DS.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { JSX } from 'react';
+import { createPortal } from 'react-dom';
 import { Group_Kind } from '../gen/lavray_pb';
 import type { Group } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { useKbdLabel } from '../hooks/useKbdLabel';
+import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
-import { LANGUAGES, LANG_NATIVE } from '../lib/i18n';
+import { loadModes, saveModes } from '../lib/connection';
+import { groupDisplayName } from '../lib/groups';
+import { LANGUAGES, LANG_NATIVE, type MessageKey } from '../lib/i18n';
+import { presetTitle } from '../lib/presets';
 
 interface ShellProps {
   readonly titleId: string;
@@ -21,6 +28,8 @@ interface ShellProps {
   readonly footer?: ReactNode;
   readonly onClose: () => void;
   readonly autofocusRef?: React.RefObject<HTMLElement | null>;
+  /** false — клик по затемнению не закрывает диалог (формы и мастер: не терять ввод). */
+  readonly dismissOnBackdrop?: boolean;
 }
 
 /** Оболочка диалога: focus-trap, Esc, клик по фону. */
@@ -32,47 +41,25 @@ export function DialogShell({
   footer,
   onClose,
   autofocusRef,
+  dismissOnBackdrop = true,
 }: ShellProps): JSX.Element {
   const { t } = useI18n();
   const rootRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    (autofocusRef?.current ?? rootRef.current)?.focus();
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-        return;
-      }
-      if (e.key !== 'Tab') return;
-      const root = rootRef.current;
-      if (root === null) return;
-      const nodes = root.querySelectorAll<HTMLElement>(
-        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      const first = nodes[0];
-      const last = nodes[nodes.length - 1];
-      if (first === undefined || last === undefined) return;
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener('keydown', onKey);
-    return (): void => {
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [onClose, autofocusRef, t]);
+  // T-05: фокус ставится один раз при открытии (useModal читает onClose через
+  // latest-ref), а не при каждом ререндере родителя.
+  useModal(rootRef, { onClose, autofocusRef });
 
-  return (
+  // T-06: диалог рендерится в портале на <body>, а не внутри экрана. После
+  // анимации .screen.active>* на предке остаётся transform, а он делает предка
+  // containing block для position:fixed — диалог центрировался по высоте
+  // списка серверов и уезжал за окно.
+  return createPortal(
     <div
       className="dlg-back open"
       role="presentation"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (dismissOnBackdrop && e.target === e.currentTarget) onClose();
       }}
     >
       <div
@@ -92,7 +79,8 @@ export function DialogShell({
         <div className="dlg-b">{children}</div>
         {footer !== undefined && <div className="dlg-f">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -148,12 +136,14 @@ interface GroupsDialogProps {
 }
 
 export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Element {
-  const { t, plural } = useI18n();
+  const { t, tf, plural } = useI18n();
   const core = useCore();
   const [groups, setGroups] = useState<Group[]>([]);
   const [name, setName] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  // T-12: группа, ожидающая подтверждения удаления (RPC — только после «Удалить»).
+  const [pendingDelete, setPendingDelete] = useState<Group | null>(null);
   const createRef = useRef<HTMLInputElement | null>(null);
 
   const reload = useCallback(async (): Promise<void> => {
@@ -243,7 +233,7 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
         {groups.map((g) => (
           <div className="grp-dlg-row" key={String(g.id)}>
             <span className="n">
-              {g.name}
+              {groupDisplayName(g, t)}
               <small>
                 {plural('pl.p', g.profileOrder.length)}
                 {g.kind === Group_Kind.SUBSCRIPTION ? ` · ${t('nav.subscriptions')}` : ''}
@@ -251,8 +241,10 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
             </span>
             <button
               className="btn btn-ic btn-sm"
-              aria-label={`${t('common.edit')} ${g.name}`}
+              aria-label={`${t('common.edit')} ${groupDisplayName(g, t)}`}
               onClick={() => {
+                // В поле — настоящее имя из ядра: перевод туда не подставляем, иначе
+                // «ОК» без правок переименовал бы встроенную группу.
                 const next = window.prompt(t('common.edit'), g.name);
                 if (next !== null) void rename(g, next);
               }}
@@ -261,9 +253,9 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
             </button>
             <button
               className="btn btn-ic btn-sm"
-              aria-label={`${t('common.delete')} ${g.name}`}
+              aria-label={`${t('common.delete')} ${groupDisplayName(g, t)}`}
               disabled={groups.length <= 1}
-              onClick={() => { void remove(g.id); }}
+              onClick={() => { setPendingDelete(g); }}
             >
               <Icon name="trash" />
             </button>
@@ -286,6 +278,21 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
           {t('grp.create')}
         </button>
       </div>
+      {/* T-12: подтверждение поверх диалога «Группы» (портал на <body>). */}
+      {pendingDelete !== null && (
+        <ConfirmDialog
+          title={t('grp.delete')}
+          text={tf('grp.delConfirm', { name: groupDisplayName(pendingDelete, t), n: pendingDelete.profileOrder.length })}
+          confirmLabel={t('grp.delete')}
+          danger
+          onConfirm={() => {
+            const id = pendingDelete.id;
+            setPendingDelete(null);
+            void remove(id);
+          }}
+          onClose={() => { setPendingDelete(null); }}
+        />
+      )}
     </DialogShell>
   );
 }
@@ -296,7 +303,8 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
 
 export function HotkeysDialog({ onClose }: { readonly onClose: () => void }): JSX.Element {
   const { t } = useI18n();
-  const rows: readonly (readonly [string, string])[] = [
+  const kbd = useKbdLabel();
+  const rows: readonly (readonly [MessageKey, string])[] = [
     ['hk.search', 'K'],
     ['hk.toggle', 'D'],
     ['hk.close', 'Esc'],
@@ -311,10 +319,10 @@ export function HotkeysDialog({ onClose }: { readonly onClose: () => void }): JS
         </>
       }
     >
-      {rows.map(([key, kbd]) => (
+      {rows.map(([key, keycap]) => (
         <div className="hk-row" key={key}>
-          <div className="set-txt"><div className="set-l">{t(key as never)}</div></div>
-          <kbd className="kbd">{kbd}</kbd>
+          <div className="set-txt"><div className="set-l">{t(key)}</div></div>
+          <kbd className="kbd">{kbd(keycap)}</kbd>
         </div>
       ))}
     </DialogShell>
@@ -350,97 +358,6 @@ export function LicensesDialog({ onClose }: { readonly onClose: () => void }): J
 }
 
 // ============================================================================
-// Экспорт журнала (dlgLogExport)
-// ============================================================================
-
-export function LogExportDialog({
-  sampleBefore,
-  sampleAfter,
-  onExport,
-  onClose,
-}: {
-  readonly sampleBefore: string;
-  readonly sampleAfter: string;
-  readonly onExport: () => void;
-  readonly onClose: () => void;
-}): JSX.Element {
-  const { t } = useI18n();
-  return (
-    <DialogShell titleId="leTitle" title={t('log.exportT')} size="md" onClose={onClose}
-      footer={
-        <>
-          <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
-          <span className="flex1" />
-          <button className="btn btn-pri" onClick={onExport}>
-            <Icon name="copy" />
-            <span>{t('log.exportBtn')}</span>
-          </button>
-        </>
-      }
-    >
-      <p style={{ fontSize: '.8125rem' }}>{t('log.exportD')}</p>
-      <div className="le-samples">
-        <div>
-          <span className="cap">{t('log.before')}</span>
-          <div className="le-sample mono">{sampleBefore}</div>
-        </div>
-        <div>
-          <span className="cap">{t('log.after')}</span>
-          <div className="le-sample mono">{sampleAfter}</div>
-        </div>
-      </div>
-    </DialogShell>
-  );
-}
-
-// ============================================================================
-// Сохранение пресета (dlgPresetSave)
-// ============================================================================
-
-export function PresetSaveDialog({
-  onSave,
-  onClose,
-}: {
-  readonly onSave: (name: string) => void;
-  readonly onClose: () => void;
-}): JSX.Element {
-  const { t } = useI18n();
-  const [name, setName] = useState('');
-  const ref = useRef<HTMLInputElement | null>(null);
-  return (
-    <DialogShell
-      titleId="psTitle"
-      title={t('rt.saveAs')}
-      size="sm"
-      onClose={onClose}
-      autofocusRef={ref}
-      footer={
-        <>
-          <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
-          <span className="flex1" />
-          <button className="btn btn-pri" disabled={name.trim() === ''} onClick={() => { onSave(name.trim()); }}>
-            {t('common.save')}
-          </button>
-        </>
-      }
-    >
-      <div className="field">
-        <label className="req" htmlFor="psName">{t('rt.presetName')}</label>
-        <input
-          className="input"
-          id="psName"
-          ref={ref}
-          autoComplete="off"
-          value={name}
-          onChange={(e) => { setName(e.target.value); }}
-        />
-      </div>
-    </DialogShell>
-  );
-}
-
-
-// ============================================================================
 // Онбординг (dlgOnb) — 4 шага: язык → серверы → маршруты/режим → готово
 // ============================================================================
 
@@ -456,8 +373,12 @@ export function OnboardingDialog({
   const [step, setStep] = useState(1);
   const [presets, setPresets] = useState<{ id: string; displayName: string }[]>([]);
   const [presetId, setPresetId] = useState('');
-  const [sysProxy, setSysProxy] = useState(true);
-  const [tunMode, setTunMode] = useState(false);
+  // T-73: переключатели стартуют с сохранённых режимов (при повторном
+  // открытии мастера из меню), а не с зашитых значений.
+  const [sysProxy, setSysProxy] = useState(() => loadModes(window.localStorage).sysProxy);
+  const [tunMode, setTunMode] = useState(() => loadModes(window.localStorage).tunMode);
+  // T-73: нажали «Перенести из NekoBox» — показываем, что функции пока нет.
+  const [nekoSoon, setNekoSoon] = useState(false);
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -483,17 +404,46 @@ export function OnboardingDialog({
     },
     [core, t],
   );
+  const chosenPreset = presets.find((p) => p.id === presetId);
 
+  // T-73: «Готово» сохраняет выбранные режимы (раньше выбор терялся: в
+  // lavray.modes ничего не попадало) и закрывает мастер. «Пропустить» и Esc
+  // режимы не трогают.
+  const finish = (): void => {
+    saveModes(window.localStorage, { sysProxy, tunMode });
+    onClose();
+  };
+
+  // T-40: мастер на общей оболочке DialogShell (портал на <body>, фокус при
+  // открытии, ловушка Tab, Esc = «Пропустить», возврат фокуса). Клик по
+  // затемнению мастер не закрывает, как и раньше. Отступы тела не менялись,
+  // чтобы diff остался читаемым.
   return (
-    <div className="dlg-back open" role="presentation">
-      <div className="dlg dlg-md" role="dialog" aria-modal="true" aria-labelledby="onbTitle">
-        <div className="dlg-h">
-          <h2 id="onbTitle">{t('onb.title')}</h2>
-          <button className="btn btn-ic btn-sm" aria-label={t('onb.skip')} title={t('onb.skip')} onClick={onClose}>
-            <Icon name="x" />
-          </button>
-        </div>
-        <div className="dlg-b">
+    <DialogShell
+      titleId="onbTitle"
+      title={t('onb.title')}
+      size="md"
+      onClose={onClose}
+      dismissOnBackdrop={false}
+      footer={
+        <>
+          <button className="btn btn-ghost" onClick={onClose}>{t('onb.skip')}</button>
+          <span className="flex1" />
+          {step > 1 && (
+            <button className="btn btn-sec" onClick={() => { setStep((v) => v - 1); }}>
+              {t('common.back')}
+            </button>
+          )}
+          {step < 4 ? (
+            <button className="btn btn-pri" onClick={() => { setStep((v) => v + 1); }}>
+              {t('common.next')}
+            </button>
+          ) : (
+            <button className="btn btn-pri" onClick={finish}>{t('onb.finish')}</button>
+          )}
+        </>
+      }
+    >
           <p className="t2">{t('onb.sub')}</p>
           <p className="cap" style={{ marginTop: 4 }}>
             {tf('onb.stepOf', { n: step, total: 4 })}
@@ -591,11 +541,22 @@ export function OnboardingDialog({
                   <Icon name="download" />
                   <span>{t('onb.src.v2ray')}</span>
                 </button>
-                <span className="onb-src muted" title={t('onb.neko.found')}>
+                {/* Перенос из NekoBox пока не подключён к ядру (эпик T-78): честная
+                    кнопка «Скоро». Раньше здесь был span с подсказкой-шаблоном
+                    «Найдено: {servers}, {subs}», которую никто не раскрывал. */}
+                <button
+                  type="button"
+                  className="onb-src onb-src-btn"
+                  aria-disabled="true"
+                  title={t('onb.neko.soonHint')}
+                  onClick={() => { setNekoSoon(true); }}
+                >
                   <Icon name="layers" />
                   <span>{t('onb.src.neko')}</span>
-                </span>
+                  <span className="badge badge-soft">{t('onb.neko.soon')}</span>
+                </button>
               </div>
+              {nekoSoon && <p className="cap" role="status" style={{ marginTop: 8 }}>{t('onb.neko.soonHint')}</p>}
               <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={() => { setStep(3); }}>
                 {t('onb.later')}
               </button>
@@ -615,7 +576,7 @@ export function OnboardingDialog({
                     aria-checked={presetId === p.id}
                     onClick={() => { void applyPreset(p.id); }}
                   >
-                    {p.displayName}
+                    {presetTitle(p.id, p.displayName, t)}
                   </button>
                 ))}
               </div>
@@ -669,7 +630,11 @@ export function OnboardingDialog({
                 </div>
                 <div>
                   <dt>{t('nav.routing')}</dt>
-                  <dd>{presets.find((p) => p.id === presetId)?.displayName ?? '—'}</dd>
+                  <dd>
+                    {chosenPreset === undefined
+                      ? '—'
+                      : presetTitle(chosenPreset.id, chosenPreset.displayName, t)}
+                  </dd>
                 </div>
                 <div>
                   <dt>{t('onb.modeTitle')}</dt>
@@ -682,24 +647,6 @@ export function OnboardingDialog({
               </dl>
             </div>
           )}
-        </div>
-        <div className="dlg-f">
-          <button className="btn btn-ghost" onClick={onClose}>{t('onb.skip')}</button>
-          <span className="flex1" />
-          {step > 1 && (
-            <button className="btn btn-sec" onClick={() => { setStep((v) => v - 1); }}>
-              {t('common.back')}
-            </button>
-          )}
-          {step < 4 ? (
-            <button className="btn btn-pri" onClick={() => { setStep((v) => v + 1); }}>
-              {t('common.next')}
-            </button>
-          ) : (
-            <button className="btn btn-pri" onClick={onClose}>{t('common.next')}</button>
-          )}
-        </div>
-      </div>
-    </div>
+    </DialogShell>
   );
 }

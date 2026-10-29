@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package api
 
 // convert.go — конвертация контрактов lavray.v1 (internal/gen/lavrayv1) ↔
@@ -818,7 +820,7 @@ func outboundToProto(s string) lavrayv1.Outbound {
 	switch s {
 	case "proxy":
 		return lavrayv1.Outbound_OUTBOUND_PROXY
-	case "direct":
+	case "direct", "bypass": // тег bypass = DIRECT (контракт, enum Outbound)
 		return lavrayv1.Outbound_OUTBOUND_DIRECT
 	case "block":
 		return lavrayv1.Outbound_OUTBOUND_BLOCK

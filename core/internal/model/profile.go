@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package model — каноническая модель данных LAVRay: bean-иерархия профилей
 // (порт fmt/*Bean.hpp из nekoray, см. docs/stage3/core-port-plan.md §5),
 // группы и скелет карты настроек.
@@ -62,6 +64,13 @@ type Profile struct {
 	Favorite bool     `json:"favorite,omitempty"` // метаданные LAVRay (REQUIREMENTS §20.18)
 	Tags     []string `json:"tags,omitempty"`
 	Notes    string   `json:"notes,omitempty"`
+
+	// Manual — профиль добавлен пользователем вручную в группу-подписку
+	// (T-51, B1-35): обновление подписки его не сопоставляет, не удаляет и не
+	// учитывает в пороге «удаление > 50 %». В proto не отдаётся: флаг ставит
+	// ядро (CreateProfile / ImportContent / MoveProfiles в группу-подписку),
+	// UpdateProfile его сохраняет.
+	Manual bool `json:"manual,omitempty"`
 
 	// Geo — страна/регион сервера: ISO 3166-1 alpha-2 (нижний регистр, "jp",
 	// "nl", …) либо "" если неизвестна. Заполняется импортёром/подпиской из

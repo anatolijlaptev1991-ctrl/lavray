@@ -3,6 +3,7 @@ name = "lavray-shell"
 version = "0.1.0"
 description = "LAVRay desktop shell (Tauri 2)"
 edition = "2021"
+license = "GPL-3.0-only"
 publish = false
 
 [lib]
@@ -12,12 +13,17 @@ name = "lavray_shell"
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-single-instance = "2"
+# Внешние ссылки (target=_blank) в системный браузер; схемы — в capabilities (T-58).
+tauri-plugin-opener = "2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 thiserror = "2.0"
 # CSPRNG для auth-токена §3.2 (32 байта). getrandom 0.3.4 УЖЕ в дереве
 # (транзитивно через tauri) — прямая зависимость не добавляет пакетов в lock.
 getrandom = "0.3"
+# SHA-256 ядра (T-44). sha2 0.10.9 уже в дереве (через tauri): Cargo.lock
+# получает только ссылку из lavray-shell, новых пакетов нет.
+sha2 = "0.10"
 
 [target.'cfg(unix)'.dependencies]
 # PDEATHSIG SIGKILL и kill(2) по pgid (§3.3, LNB-09); process-группа — std
@@ -35,7 +41,11 @@ windows-sys = { version = "0.61", features = [
   "Win32_System_Threading",
   # F5: WinINET-уведомление об изменении прокси (InternetSetOption)
   "Win32_Networking_WinInet",
+  # S-02: OEM-кодовая страница (GetOEMCP) и перекодировка вывода reg.exe
+  # (MultiByteToWideChar)
+  "Win32_Globalization",
 ] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+sha2 = "0.10"

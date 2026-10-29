@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * Inline SVG icons — Lucide style: 24 grid, stroke 1.75, currentColor
  * (paths copied from design/prototype.html `IC` map; DS §5).
@@ -45,7 +47,13 @@ export type IconName =
   | 'minimize'
   | 'maximize'
   | 'restore'
-  | 'power';
+  | 'power'
+  | 'star'
+  | 'dots'
+  | 'arrup'
+  | 'arrdown'
+  | 'pause'
+  | 'play';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
@@ -280,6 +288,33 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
       <path d="M18.4 6.6a9 9 0 1 1-12.8 0" />
     </>
   ),
+  star: <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />,
+  dots: (
+    <>
+      <circle cx="12" cy="12" r="1" />
+      <circle cx="19" cy="12" r="1" />
+      <circle cx="5" cy="12" r="1" />
+    </>
+  ),
+  arrup: (
+    <>
+      <path d="M12 19V5" />
+      <path d="m5 12 7-7 7 7" />
+    </>
+  ),
+  arrdown: (
+    <>
+      <path d="M12 5v14" />
+      <path d="m19 12-7 7-7-7" />
+    </>
+  ),
+  pause: (
+    <>
+      <rect x="14" y="4" width="4" height="16" rx="1" />
+      <rect x="6" y="4" width="4" height="16" rx="1" />
+    </>
+  ),
+  play: <polygon points="6 3 20 12 6 21 6 3" />,
 };
 
 export interface IconProps {

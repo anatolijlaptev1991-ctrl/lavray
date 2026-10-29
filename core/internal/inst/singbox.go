@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //go:build singbox_run
 
 // singbox.go — реальный раннер sing-box (форк 628a9ed, см. NEKO_PATCHES.md).
@@ -28,16 +30,45 @@ import (
 type SingBoxRunner struct {
 	mu       sync.Mutex
 	instance *box.Box
-	// shutdownCh — канал graceful-лестницы: Close может занять время
-	// (TUN/маршруты/QUIC-соединения); ждём его здесь же в Stop.
-	shutdownCh chan struct{}
-	// closing — Close уже идёт (I3): новый Start запрещён, пока инстанс не
-	// освободит ресурсы.
-	closing bool
+	// closing — идущее закрытие instance (I3, T-14): Close может занять время
+	// (TUN/маршруты/QUIC-соединения). Повторные и параллельные Stop ждут ЭТОГО
+	// закрытия, а не зовут Close ещё раз; новый Start запрещён, пока instance
+	// не освободит ресурсы.
+	closing *closeOp
+	// logSink — приёмник журнала sing-box (SetLogSink, T-33); nil — журнал
+	// остаётся в stderr процесса, где его никто не читает.
+	logSink LogSink
+}
+
+// closeOp — одно закрытие инстанса. err читать только после <-done.
+type closeOp struct {
+	done chan struct{}
+	err  error
 }
 
 // NewSingBoxRunner создаёт раннер (инстанс создаётся в Start).
 func NewSingBoxRunner() *SingBoxRunner { return &SingBoxRunner{} }
+
+// SetLogSink подключает приёмник журнала sing-box: следующие Start
+// перенаправляют вывод инстанса в sink (T-33). Вызывать до Start.
+func (r *SingBoxRunner) SetLogSink(sink LogSink) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.logSink = sink
+}
+
+// attachLogSink заменяет писатель журнала инстанса (neko-патч SetLogWritter
+// форка подменяет приватное поле фабрики через reflect/unsafe). Если пин форка
+// изменил устройство фабрики, это паника: гасим её и сообщаем через sink —
+// запуск не должен зависеть от журнала.
+func attachLogSink(instance *box.Box, sink LogSink) {
+	defer func() {
+		if r := recover(); r != nil {
+			sink("warn", fmt.Sprintf("журнал sing-box не перенаправлен: %v", r))
+		}
+	}()
+	instance.SetLogWritter(newLogWriter(sink))
+}
 
 // Start поднимает box.Box из конфига и ждёт готовности (box.Box.Start
 // возвращает после открытия inbounds/outbound'ов).
@@ -52,7 +83,12 @@ func (r *SingBoxRunner) Start(ctx context.Context, configJSON []byte) error {
 	// encoding/json «успешно» декодировал, но оставлял поля пустыми —
 	// box.New затем падал «parse rule[0]: missing conditions» на ЛЮБОМ
 	// конфиге. Это ловилось только реальным прогоном sing-box.
-	baseCtx := include.Context(ctx)
+	// T-01: инстанс живёт до Stop, а не до конца RPC Connect. Manager.Start
+	// отменяет ctx сразу после успешного старта (inst.go: cancel()), и
+	// раньше это обрывало каждое исходящее соединение
+	// («operation was canceled»). WithoutCancel сохраняет значения
+	// контекста, но не наследует отмену.
+	baseCtx := include.Context(context.WithoutCancel(ctx))
 	var options option.Options
 	if err := sbjson.UnmarshalContext(baseCtx, configJSON, &options); err != nil {
 		return fmt.Errorf("singbox: некорректный конфиг: %w", err)
@@ -67,62 +103,77 @@ func (r *SingBoxRunner) Start(ctx context.Context, configJSON []byte) error {
 	if err != nil {
 		return fmt.Errorf("singbox: box.New: %w", err)
 	}
+	// T-33: вывод sing-box — в журнал ядра. Раньше он шёл в stderr процесса,
+	// который никто не читает. До Start: записи, накопленные при box.New,
+	// выдаются фабрикой уже в новый писатель.
+	if r.logSink != nil {
+		attachLogSink(instance, r.logSink)
+	}
+	// T-14: ctx ограничивает время СТАРТА и отменяется Stop-ом (Disconnect во
+	// время подключения) — но не доходит до инстанса (WithoutCancel выше), так
+	// что проверяем его сами: до открытия портов и после старта.
+	if err := ctx.Err(); err != nil {
+		_ = instance.Close()
+		return fmt.Errorf("singbox: старт отменён: %w", err)
+	}
 	if err := instance.Start(); err != nil {
 		// старт не удался — ресурсы инстанса закрываем сразу (TUN мог
 		// подняться частично; AUDIT §7.1.2)
 		_ = instance.Close()
 		return fmt.Errorf("singbox: старт: %w", err)
 	}
+	if err := ctx.Err(); err != nil {
+		_ = instance.Close()
+		return fmt.Errorf("singbox: старт отменён: %w", err)
+	}
 	r.instance = instance
-	r.shutdownCh = make(chan struct{})
 	return nil
 }
 
 // Stop — graceful-остановка: box.Close() (TUN/маршруты/инбаунды) с ожиданием
 // в горутине; ctx дан менеджером (≤ StopTimeout). Дождаться Close ВАЖНО:
 // выход из процесса до завершения Close оставляет висящий TUN (AUDIT §7.1.2).
+//
+// T-14 (A1-05): безопасен при повторных и параллельных вызовах — Close
+// выполняется один раз, все вызывающие ждут его результата. Раньше второй Stop
+// звал Close ещё раз (ошибка «file already closed») и закрывал уже закрытый
+// канал (panic).
 func (r *SingBoxRunner) Stop(ctx context.Context) error {
 	r.mu.Lock()
 	instance := r.instance
-	ch := r.shutdownCh
 	if instance == nil {
 		r.mu.Unlock()
-		return nil // Stop после неудачного Start — no-op
+		return nil // Stop после неудачного Start или повторный Stop — no-op
 	}
-	// I3 (аудит round 2): instance НЕ обнуляется до успешного Close. Раньше
+	// I3 (аудит round 2): instance НЕ обнуляется до окончания Close. Раньше
 	// при таймауте дескриптор терялся навсегда (утечка TUN), а следующий
 	// Start поднимал второй инстанс поверх неубитого.
-	r.closing = true
+	op := r.closing
+	if op == nil {
+		op = &closeOp{done: make(chan struct{})}
+		r.closing = op
+		go func() {
+			op.err = instance.Close()
+			r.mu.Lock()
+			r.instance = nil
+			r.closing = nil
+			r.mu.Unlock()
+			close(op.done)
+		}()
+	}
 	r.mu.Unlock()
 
-	done := make(chan error, 1)
-	go func() {
-		done <- instance.Close()
-	}()
-	var err error
 	select {
-	case err = <-done:
+	case <-op.done:
+		if op.err != nil {
+			return fmt.Errorf("singbox: закрытие: %w", op.err)
+		}
+		return nil
 	case <-ctx.Done():
-		// Close продолжает дорывать ресурсы в фоне; instance остаётся в
-		// r.instance, чтобы повторный Stop мог дождаться его завершения.
-		r.mu.Lock()
-		r.closing = false
-		r.mu.Unlock()
+		// Close продолжает дорывать ресурсы в фоне; повторный Stop дождётся
+		// его же, а не запустит второй Close.
 		return fmt.Errorf("singbox: закрытие не уложилось в таймаут (%w); инстанс считается упавшим", ctx.Err())
 	}
-
-	r.mu.Lock()
-	r.instance = nil
-	r.shutdownCh = nil
-	r.closing = false
-	r.mu.Unlock()
-	if ch != nil {
-		close(ch)
-	}
-	if err != nil {
-		return fmt.Errorf("singbox: закрытие: %w", err)
-	}
-	return nil
 }
 
 var _ Runner = (*SingBoxRunner)(nil)

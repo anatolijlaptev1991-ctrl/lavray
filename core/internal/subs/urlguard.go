@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package subs
 
 // Валидатор URL подписок (LNB-05; SSRF-минимум для подписок — LNB-29/W3):

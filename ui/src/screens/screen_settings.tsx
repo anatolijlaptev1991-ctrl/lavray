@@ -1,8 +1,10 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_settings.tsx — «Настройки» по прототипу v1.2 (DS §8): 10 секций с
 // оглавлением, поиском по настройкам и скролл-наблюдением. Все контролы
 // связаны с реальным API ядра (SettingsService), а тема/акцент/язык — с
 // локальными предпочтениями (как в прототипе).
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { create } from '@bufbuild/protobuf';
 import { SettingType, SettingValueSchema } from '../gen/lavray_pb';
@@ -10,27 +12,31 @@ import type { SettingDescriptor, SettingValue } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { useKbdLabel } from '../hooks/useKbdLabel';
+import { ConfirmDialog } from '../components/dialogs';
 import { Icon, type IconName } from '../components/Icon';
+import { withoutSecrets } from '../lib/backup';
 import {
+  ACCENTS,
+  THEMES,
   applyTheme,
   loadPreferences,
   type AccentPreference,
   type ThemePreference,
 } from '../lib/theme';
-import { LANGUAGES, LANG_NATIVE, type Language } from '../lib/i18n';
+import { LANGUAGES, LANG_NATIVE, type Language, type MessageKey } from '../lib/i18n';
+import { APP_VERSION } from '../lib/version';
 
 interface Section {
   readonly id: string;
   readonly icon: IconName;
-  readonly titleKey: string;
+  readonly titleKey: MessageKey;
 }
 
 const SECTIONS: readonly Section[] = [
   { id: 'general', icon: 'settings', titleKey: 'sec.general' },
-  { id: 'behavior', icon: 'sliders', titleKey: 'sec.behavior' },
   { id: 'network', icon: 'globe', titleKey: 'sec.network' },
   { id: 'tun', icon: 'route', titleKey: 'sec.tun' },
-  { id: 'integration', icon: 'monitor', titleKey: 'sec.integration' },
   { id: 'hotkeys', icon: 'keyboard', titleKey: 'sec.hotkeys' },
   { id: 'appearance', icon: 'sun', titleKey: 'sec.appearance' },
   { id: 'backup', icon: 'save', titleKey: 'sec.backup' },
@@ -41,8 +47,8 @@ const SECTIONS: readonly Section[] = [
 interface Row {
   readonly key: string;
   readonly type: SettingType;
-  readonly labelKey: string;
-  readonly descKey?: string;
+  readonly labelKey: MessageKey;
+  readonly descKey?: MessageKey;
 }
 
 const NETWORK_ROWS: readonly Row[] = [
@@ -56,22 +62,75 @@ const TUN_ROWS: readonly Row[] = [
   { key: 'tun.impl', type: SettingType.INT, labelKey: 'tun.stack', descKey: 'tun.stack.d' },
   { key: 'tun.mtu', type: SettingType.INT, labelKey: 'tun.mtu' },
   { key: 'tun.strict_route', type: SettingType.BOOL, labelKey: 'tun.strict' },
+  // T-35: tun.kill_switch (FR-UI-275) сейчас лишь принудительно включает
+  // strict_route (cfgbuild/inbounds.go); раньше он был подписан «Строгий
+  // маршрут», как и tun.strict_route, и лежал в «Системной интеграции».
+  { key: 'tun.kill_switch', type: SettingType.BOOL, labelKey: 'tun.kill', descKey: 'tun.kill.d' },
   { key: 'tun.ipv6', type: SettingType.BOOL, labelKey: 'tun.ipv6' },
   { key: 'tun.fake_dns', type: SettingType.BOOL, labelKey: 'dns.fakeip', descKey: 'dns.fakeip.d' },
   { key: 'tun.bypass_process', type: SettingType.STRING, labelKey: 'tun.exclApps', descKey: 'tun.exclHint' },
   { key: 'tun.bypass_cidr', type: SettingType.STRING, labelKey: 'tun.exclAddr', descKey: 'tun.exclHint' },
 ];
 
+/** Ключ «не проверять TLS-сертификаты по умолчанию» (FR-UI-177, skip_cert в NekoBox). */
+const INSECURE_TLS_KEY = 'security.allow_insecure_default';
+
 const CORE_ROWS: readonly Row[] = [
   { key: 'core.underlying_dns', type: SettingType.STRING, labelKey: 'dns.local', descKey: 'dns.local.d' },
   { key: 'mux.protocol', type: SettingType.STRING, labelKey: 'mux.protocol' },
   { key: 'mux.concurrency', type: SettingType.INT, labelKey: 'mux.concurrency' },
   { key: 'mux.default_on', type: SettingType.BOOL, labelKey: 'mux.default_on' },
-  // ST-01 (аудит round 3): подписи строго соответствуют смыслу ключа —
-  // раньше allow_insecure был подписан «Подтверждать выход».
-  { key: 'security.allow_insecure_default', type: SettingType.BOOL, labelKey: 'dns.warn.t' },
+  // T-11: ключ отключает проверку TLS-сертификатов у ВСЕХ серверов
+  // (cfgbuild/outbounds.go: `s.AllowInsecure || st.AllowInsecureDefault`).
+  // Раньше он носил чужую подпись «Совместимость» (dns.warn.t) без описания.
+  // Подпись называет действие прямо; включение идёт через подтверждение.
+  { key: INSECURE_TLS_KEY, type: SettingType.BOOL, labelKey: 'set.insecure', descKey: 'set.insecure.d' },
   { key: 'enable_external_cores', type: SettingType.BOOL, labelKey: 'core.external' },
 ];
+
+/** Список горячих клавиш раздела: [ключ подписи, клавиша]. */
+const HOTKEYS = [
+  ['hk.search', 'K'],
+  ['hk.toggle', 'D'],
+  ['hk.close', 'Esc'],
+  ['hk.settings', ','],
+] as const;
+
+interface SearchRow {
+  readonly labelKey: MessageKey;
+  readonly descKey?: MessageKey;
+}
+
+/**
+ * T-71: подписи ВСЕХ строк каждого раздела — по ним ищет «Поиск по
+ * настройкам». Раньше искало только по сетевым, TUN- и «ядерным» строкам,
+ * поэтому «язык», «тема», «резервная копия» не находились. Новая строка в
+ * разделе должна попасть и сюда.
+ */
+const SECTION_SEARCH: Readonly<Record<string, readonly SearchRow[]>> = {
+  general: [{ labelKey: 'set.lang', descKey: 'set.langD' }],
+  network: [{ labelKey: 'set.local' }, ...NETWORK_ROWS],
+  tun: TUN_ROWS,
+  hotkeys: [{ labelKey: 'set.hotkeysD' }, ...HOTKEYS.map(([labelKey]) => ({ labelKey }))],
+  appearance: [
+    { labelKey: 'set.theme' },
+    ...THEMES.map((th) => ({ labelKey: `theme.${th}` as MessageKey })),
+    { labelKey: 'set.accent' },
+    ...ACCENTS.map((ac) => ({ labelKey: `accent.${ac}` as MessageKey })),
+  ],
+  backup: [
+    { labelKey: 'bk.export', descKey: 'bk.hint' },
+    { labelKey: 'bk.restore', descKey: 'bk.restoreD' },
+  ],
+  core: [{ labelKey: 'mux.title' }, { labelKey: 'set.appVersion' }, { labelKey: 'set.coreVersion' }, ...CORE_ROWS],
+  about: [
+    { labelKey: 'about.desc' },
+    { labelKey: 'about.repo' },
+    { labelKey: 'about.bug' },
+    { labelKey: 'about.license' },
+    { labelKey: 'lic.title' },
+  ],
+};
 
 function valueOf(v: SettingValue | undefined): string | boolean | number {
   const c = v?.value;
@@ -92,6 +151,20 @@ function valueOf(v: SettingValue | undefined): string | boolean | number {
     default:
       return '';
   }
+}
+
+/** Значения из GetSettings в виде, с которым работает экран. */
+function valuesOf(settings: Readonly<Record<string, SettingValue>>): Record<string, string | boolean | number> {
+  const map: Record<string, string | boolean | number> = {};
+  for (const [k, v] of Object.entries(settings)) map[k] = valueOf(v);
+  return map;
+}
+
+/** Целое число из ввода; пустое поле и нечисло → null (раньше становились 0). */
+function parseInteger(raw: string | boolean | number): number | null {
+  if (typeof raw === 'number') return Number.isInteger(raw) ? raw : null;
+  const text = String(raw).trim();
+  return /^-?\d+$/.test(text) ? Number(text) : null;
 }
 
 function toSettingValue(kind: SettingType, raw: string | boolean | number): SettingValue {
@@ -121,7 +194,8 @@ function toSettingValue(kind: SettingType, raw: string | boolean | number): Sett
 }
 
 export function SettingsScreen(): JSX.Element {
-  const { t, lang, setLanguage } = useI18n();
+  const { t, tf, lang, setLanguage } = useI18n();
+  const kbd = useKbdLabel();
   const core = useCore();
   const [theme, setTheme] = useState<ThemePreference>(() => loadPreferences(window.localStorage).theme);
   const [accent, setAccent] = useState<AccentPreference>(() => loadPreferences(window.localStorage).accent);
@@ -132,7 +206,12 @@ export function SettingsScreen(): JSX.Element {
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
   const [coreVersion, setCoreVersion] = useState('');
+  const [confirmInsecure, setConfirmInsecure] = useState(false);
+  // Восстановление из файла ждёт подтверждения: null — диалога нет (U-02).
+  const [pendingRestore, setPendingRestore] = useState<Record<string, SettingValue> | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  // Последние значения, принятые ядром: поле откатывается к ним при невалидном вводе.
+  const accepted = useRef<Record<string, string | boolean | number>>({});
 
   useEffect(() => {
     void (async (): Promise<void> => {
@@ -144,8 +223,8 @@ export function SettingsScreen(): JSX.Element {
         ]);
         setDescriptors(desc.descriptors);
         setCoreVersion(st.coreVersion);
-        const map: Record<string, string | boolean | number> = {};
-        for (const [k, v] of Object.entries(settings.values)) map[k] = valueOf(v);
+        const map = valuesOf(settings.values);
+        accepted.current = map;
         setValues(map);
       } catch (e) {
         setErr(showCoreError(e, t));
@@ -156,6 +235,19 @@ export function SettingsScreen(): JSX.Element {
   const save = useCallback(
     async (key: string, kind: SettingType, raw: string | boolean | number): Promise<void> => {
       setErr('');
+      const revert = (): void => {
+        setValues((prev) => ({ ...prev, [key]: accepted.current[key] ?? '' }));
+      };
+      if (kind === SettingType.INT) {
+        // Пустое или нечисловое поле в ядро не отправляется (раньше уходил 0).
+        const n = parseInteger(raw);
+        const isPort = key === 'inbound.port';
+        if (n === null || (isPort && (n < 1 || n > 65535))) {
+          setErr(`${key}: ${t(isPort ? 'set.portErr' : 'set.intErr')}`);
+          revert();
+          return;
+        }
+      }
       setValues((prev) => ({ ...prev, [key]: raw }));
       try {
         const res = await core.settings.setSettings({
@@ -163,18 +255,69 @@ export function SettingsScreen(): JSX.Element {
         });
         if (!res.acceptedKeys.includes(key)) {
           setErr(`${key}: ${t('set.portErr')}`);
+          revert();
           return;
         }
-        setOk(t('common.save'));
+        accepted.current = { ...accepted.current, [key]: raw };
+        setOk(t('toast.saved'));
         window.setTimeout(() => {
           setOk('');
         }, 1500);
       } catch (e) {
         setErr(showCoreError(e, t));
+        revert();
       }
     },
     [core, t],
   );
+
+  /** Перечитывает значения из ядра: поля показывают то, что реально применилось. */
+  const reloadValues = useCallback(async (): Promise<void> => {
+    const settings = await core.settings.getSettings({});
+    const map = valuesOf(settings.values);
+    accepted.current = map;
+    setValues(map);
+  }, [core]);
+
+  /** U-02: применяет подтверждённое восстановление; непринятые ядром ключи — ошибка. */
+  const applyRestore = useCallback(
+    async (payload: Record<string, SettingValue>): Promise<void> => {
+      setErr('');
+      setOk('');
+      try {
+        const res = await core.settings.setSettings({ values: payload });
+        const rejected = Object.keys(payload).filter((k) => !res.acceptedKeys.includes(k));
+        await reloadValues();
+        if (rejected.length > 0) {
+          setErr(tf('bk.restorePartial', { keys: rejected.join(', ') }));
+        } else {
+          setOk(t('bk.restored'));
+        }
+      } catch (e) {
+        setErr(showCoreError(e, t));
+      }
+    },
+    [core, reloadValues, t, tf],
+  );
+
+  // T-11: стабильные колбэки — иначе перерисовка раз в секунду (опрос
+  // статуса) заново вешала бы обработчики диалога подтверждения.
+  const closeRestore = useCallback((): void => {
+    setPendingRestore(null);
+  }, []);
+  const confirmRestore = useCallback((): void => {
+    if (pendingRestore === null) return;
+    setPendingRestore(null);
+    void applyRestore(pendingRestore);
+  }, [pendingRestore, applyRestore]);
+
+  const closeInsecureConfirm = useCallback((): void => {
+    setConfirmInsecure(false);
+  }, []);
+  const confirmInsecureOn = useCallback((): void => {
+    setConfirmInsecure(false);
+    void save(INSECURE_TLS_KEY, SettingType.BOOL, true);
+  }, [save]);
 
   const setThemePref = useCallback((next: ThemePreference): void => {
     setTheme(next);
@@ -217,7 +360,7 @@ export function SettingsScreen(): JSX.Element {
 
   const q = query.trim().toLowerCase();
   const matches = useCallback(
-    (labelKey: string, descKey?: string): boolean => {
+    (labelKey: MessageKey, descKey?: MessageKey): boolean => {
       if (q === '') return true;
       const label = t(labelKey).toLowerCase();
       if (label.includes(q)) return true;
@@ -226,12 +369,20 @@ export function SettingsScreen(): JSX.Element {
     [q, t],
   );
   const sectionVisible = useCallback(
-    (id: string, titleKey: string): boolean => {
+    (id: string, titleKey: MessageKey): boolean => {
       if (q === '') return true;
       if (t(titleKey).toLowerCase().includes(q)) return true;
-      const rows = id === 'network' ? NETWORK_ROWS : id === 'tun' ? TUN_ROWS : id === 'core' ? CORE_ROWS : [];
-      return rows.some((r) => matches(r.labelKey, r.descKey));
+      return (SECTION_SEARCH[id] ?? []).some((r) => matches(r.labelKey, r.descKey));
     },
+    [q, t, matches],
+  );
+  // Запрос совпал с названием раздела — показываем его строки целиком, иначе
+  // только подходящие (раньше раздел «Сеть и прокси» по запросу «сеть» терял все поля).
+  const filterRows = useCallback(
+    (titleKey: MessageKey, rows: readonly Row[]): readonly Row[] =>
+      q === '' || t(titleKey).toLowerCase().includes(q)
+        ? rows
+        : rows.filter((r) => matches(r.labelKey, r.descKey)),
     [q, t, matches],
   );
 
@@ -260,6 +411,41 @@ export function SettingsScreen(): JSX.Element {
     </div>
   );
 
+  // T-11: небезопасный режим TLS. Включение — только через подтверждение,
+  // выключение (безопасное направление) — сразу. Пока включено, под строкой
+  // висит предупреждение.
+  const insecureOn = values[INSECURE_TLS_KEY] === true;
+  const insecureRow = (r: Row): JSX.Element => (
+    <Fragment key={r.key}>
+      <div className="set-row">
+        <div className="set-txt">
+          <div className="set-l">{t(r.labelKey)}</div>
+          {r.descKey !== undefined && <div className="set-d">{t(r.descKey)}</div>}
+        </div>
+        <div className="set-ctl">
+          <button
+            className={`sw${insecureOn ? ' on' : ''}`}
+            role="switch"
+            aria-checked={insecureOn}
+            aria-label={t(r.labelKey)}
+            onClick={() => {
+              if (insecureOn) void save(r.key, r.type, false);
+              else setConfirmInsecure(true);
+            }}
+          />
+        </div>
+      </div>
+      {insecureOn && (
+        <div className="banner banner-warn" role="status">
+          <span className="ic">
+            <Icon name="alert" />
+          </span>
+          <div className="bn-t">{t('set.insecure.on')}</div>
+        </div>
+      )}
+    </Fragment>
+  );
+
   return (
     <div className="set">
       {err !== '' && (
@@ -270,7 +456,7 @@ export function SettingsScreen(): JSX.Element {
           <div className="bn-t">{err}</div>
         </div>
       )}
-      {ok !== '' && <div className="toast-ok">{ok}</div>}
+      {ok !== '' && <div className="toast-ok" role="status">{ok}</div>}
 
       <div className="searchwrap set-search">
         <span className="ic">
@@ -299,7 +485,7 @@ export function SettingsScreen(): JSX.Element {
                 gotoSection(s.id);
               }}
             >
-              {t(s.titleKey as never)}
+              {t(s.titleKey)}
             </button>
           ))}
         </nav>
@@ -313,7 +499,7 @@ export function SettingsScreen(): JSX.Element {
         >
           {visibleSections.map((s) => (
             <option key={s.id} value={s.id}>
-              {t(s.titleKey as never)}
+              {t(s.titleKey)}
             </option>
           ))}
         </select>
@@ -355,74 +541,6 @@ export function SettingsScreen(): JSX.Element {
                   </select>
                 </div>
               </div>
-              <div className="set-row">
-                <div className="set-txt">
-                  <div className="set-l">{t('set.startMin')}</div>
-                </div>
-                <div className="set-ctl">
-                  <button
-                    className={`sw${values['ui.start_minimal'] === true ? ' on' : ''}`}
-                    role="switch"
-                    aria-checked={values['ui.start_minimal'] === true}
-                    aria-label={t('set.startMin')}
-                    onClick={() => {
-                      void save('ui.start_minimal', SettingType.BOOL, values['ui.start_minimal'] !== true);
-                    }}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {visibleSections.some((s) => s.id === 'behavior') && (
-            <div
-              className="card set-card"
-              data-sec="behavior"
-              ref={(el) => {
-                cardRefs.current.behavior = el;
-              }}
-            >
-              <h2>
-                <span className="ic">
-                  <Icon name="sliders" />
-                </span>
-                <span>{t('sec.behavior')}</span>
-              </h2>
-              <div className="set-row">
-                <div className="set-txt">
-                  <div className="set-l">{t('conn.traffic')}</div>
-                  <div className="set-d">{t('set.rememberScreen')}</div>
-                </div>
-                <div className="set-ctl">
-                  <button
-                    className={`sw${values['ui.conn_stat'] === true ? ' on' : ''}`}
-                    role="switch"
-                    aria-checked={values['ui.conn_stat'] === true}
-                    aria-label={t('conn.traffic')}
-                    onClick={() => {
-                      void save('ui.conn_stat', SettingType.BOOL, values['ui.conn_stat'] !== true);
-                    }}
-                  />
-                </div>
-              </div>
-              <div className="set-row">
-                <div className="set-txt">
-                  <div className="set-l">{t('set.tray')}</div>
-                </div>
-                <div className="set-ctl">
-                  <button
-                    className={`sw${values['ui.start_minimal'] === true ? ' on' : ''}`}
-                    role="switch"
-                    aria-checked={values['ui.start_minimal'] === true}
-                    aria-label={t('set.tray')}
-                    onClick={() => {
-                      // D7: скрытие консоли TUN — чужой ключ; для трея
-                      // используем shell-owned ui.start_minimal.
-                      void save('ui.start_minimal', SettingType.BOOL, values['ui.start_minimal'] !== true);
-                    }}
-                  />
-                </div>
-              </div>
             </div>
           )}
 
@@ -445,11 +563,11 @@ export function SettingsScreen(): JSX.Element {
                   <div className="set-l">{t('set.local')}</div>
                 </div>
               </div>
-              {NETWORK_ROWS.filter((r) => matches(r.labelKey, r.descKey)).map((r) => (
+              {filterRows('sec.network', NETWORK_ROWS).map((r) => (
                 <div className="set-row" key={r.key}>
                   <div className="set-txt">
                     <label className="set-l" htmlFor={r.key}>
-                      {t(r.labelKey as never)}
+                      {t(r.labelKey)}
                     </label>
                   </div>
                   <div className="set-ctl">
@@ -508,16 +626,16 @@ export function SettingsScreen(): JSX.Element {
                 </span>
                 <span>{t('sec.tun')}</span>
               </h2>
-              {TUN_ROWS.filter((r) => matches(r.labelKey, r.descKey)).map((r) =>
+              {filterRows('sec.tun', TUN_ROWS).map((r) =>
                 r.type === SettingType.BOOL ? (
                   boolRow(r)
                 ) : (
                   <div className="set-row" key={r.key}>
                     <div className="set-txt">
                       <label className="set-l" htmlFor={r.key}>
-                        {t(r.labelKey as never)}
+                        {t(r.labelKey)}
                       </label>
-                      {r.descKey !== undefined && <div className="set-d">{t(r.descKey as never)}</div>}
+                      {r.descKey !== undefined && <div className="set-d">{t(r.descKey)}</div>}
                     </div>
                     <div className="set-ctl set-ctl-wide">
                       {r.key === 'tun.impl' ? (
@@ -568,35 +686,6 @@ export function SettingsScreen(): JSX.Element {
             </div>
           )}
 
-          {visibleSections.some((s) => s.id === 'integration') && (
-            <div
-              className="card set-card"
-              data-sec="integration"
-              ref={(el) => {
-                cardRefs.current.integration = el;
-              }}
-            >
-              <h2>
-                <span className="ic">
-                  <Icon name="monitor" />
-                </span>
-                <span>{t('sec.integration')}</span>
-              </h2>
-              {boolRow({
-                key: 'tun.enabled',
-                type: SettingType.BOOL,
-                labelKey: 'mode.tun',
-                descKey: 'tun.dlg.d',
-              })}
-              {boolRow({
-                key: 'tun.kill_switch',
-                type: SettingType.BOOL,
-                labelKey: 'tun.strict',
-                descKey: 'tun.strict.d',
-              })}
-            </div>
-          )}
-
           {visibleSections.some((s) => s.id === 'hotkeys') && (
             <div
               className="card set-card"
@@ -612,19 +701,12 @@ export function SettingsScreen(): JSX.Element {
                 <span>{t('sec.hotkeys')}</span>
               </h2>
               <p className="hint">{t('set.hotkeysD')}</p>
-              {(
-                [
-                  ['hk.search', 'K'],
-                  ['hk.toggle', 'D'],
-                  ['hk.close', 'Esc'],
-                  ['hk.settings', ','],
-                ] as const
-              ).map(([key, kbd]) => (
+              {HOTKEYS.map(([key, keycap]) => (
                 <div className="hk-row" key={key}>
                   <div className="set-txt">
-                    <div className="set-l">{t(key as never)}</div>
+                    <div className="set-l">{t(key)}</div>
                   </div>
-                  <kbd className="kbd">{kbd}</kbd>
+                  <kbd className="kbd">{kbd(keycap)}</kbd>
                 </div>
               ))}
             </div>
@@ -658,7 +740,7 @@ export function SettingsScreen(): JSX.Element {
                           setThemePref(th);
                         }}
                       >
-                        {t(`theme.${th}` as never)}
+                        {t(`theme.${th}`)}
                       </button>
                     ))}
                   </div>
@@ -673,8 +755,8 @@ export function SettingsScreen(): JSX.Element {
                     <button
                       key={ac}
                       className={`accdot${accent === ac ? ' on' : ''}`}
-                      title={t(`accent.${ac}` as never)}
-                      aria-label={t(`accent.${ac}` as never)}
+                      title={t(`accent.${ac}`)}
+                      aria-label={t(`accent.${ac}`)}
                       onClick={() => {
                         setAccentPref(ac);
                       }}
@@ -720,13 +802,15 @@ export function SettingsScreen(): JSX.Element {
                 <div className="set-ctl">
                   <button
                     className="btn btn-sec btn-sm"
+                    aria-label={t('bk.export')}
                     onClick={() => {
                       void (async (): Promise<void> => {
                         try {
                           const res = await core.settings.getSettings({});
-                          const dump: Record<string, unknown> = {};
-                          for (const [k, v] of Object.entries(res.values)) dump[k] = valueOf(v);
-                          const blob = new Blob([JSON.stringify(dump, null, 2)], {
+                          const all: Record<string, string | boolean | number> = {};
+                          for (const [k, v] of Object.entries(res.values)) all[k] = valueOf(v);
+                          // T-13: пароль локального прокси и другие секреты в файл не пишем.
+                          const blob = new Blob([JSON.stringify(withoutSecrets(all), null, 2)], {
                             type: 'application/json',
                           });
                           const a = document.createElement('a');
@@ -742,13 +826,14 @@ export function SettingsScreen(): JSX.Element {
                       })();
                     }}
                   >
-                    {t('bk.export')}
+                    {t('bk.exportBtn')}
                   </button>
                 </div>
               </div>
               <div className="set-row">
                 <div className="set-txt">
                   <div className="set-l">{t('bk.restore')}</div>
+                  <div className="set-d">{t('bk.restoreD')}</div>
                 </div>
                 <div className="set-ctl">
                   <label className="btn btn-ghost btn-sm set-file">
@@ -757,7 +842,10 @@ export function SettingsScreen(): JSX.Element {
                       type="file"
                       accept="application/json,.json"
                       onChange={(e) => {
-                        const f = e.target.files?.[0];
+                        const input = e.target;
+                        const f = input.files?.[0];
+                        // Сброс поля: после отмены тот же файл можно выбрать снова.
+                        input.value = '';
                         if (f === undefined) return;
                         void (async (): Promise<void> => {
                           try {
@@ -770,8 +858,13 @@ export function SettingsScreen(): JSX.Element {
                               if (d === undefined) continue;
                               payload[k] = toSettingValue(d.type, v);
                             }
-                            await core.settings.setSettings({ values: payload });
-                            setOk(t('bk.restore'));
+                            // Файл без известных настроек не открывает пустое подтверждение.
+                            if (Object.keys(payload).length === 0) {
+                              setErr(t('bk.restoreEmpty'));
+                              return;
+                            }
+                            // Применяется только после подтверждения (см. диалог внизу экрана).
+                            setPendingRestore(payload);
                           } catch (e2) {
                             setErr(showCoreError(e2, t));
                           }
@@ -806,7 +899,7 @@ export function SettingsScreen(): JSX.Element {
                   <div className="set-l">{t('set.appVersion')}</div>
                 </div>
                 <div className="set-ctl">
-                  <span className="mono">v0.1.0</span>
+                  <span className="mono">v{APP_VERSION}</span>
                 </div>
               </div>
               <div className="set-row">
@@ -817,16 +910,18 @@ export function SettingsScreen(): JSX.Element {
                   <span className="mono">{coreVersion === '' ? '—' : coreVersion}</span>
                 </div>
               </div>
-              {CORE_ROWS.filter((r) => matches(r.labelKey, r.descKey)).map((r) =>
-                r.type === SettingType.BOOL ? (
+              {filterRows('sec.core', CORE_ROWS).map((r) =>
+                r.key === INSECURE_TLS_KEY ? (
+                  insecureRow(r)
+                ) : r.type === SettingType.BOOL ? (
                   boolRow(r)
                 ) : (
                   <div className="set-row" key={r.key}>
                     <div className="set-txt">
                       <label className="set-l" htmlFor={r.key}>
-                        {t(r.labelKey as never)}
+                        {t(r.labelKey)}
                       </label>
-                      {r.descKey !== undefined && <div className="set-d">{t(r.descKey as never)}</div>}
+                      {r.descKey !== undefined && <div className="set-d">{t(r.descKey)}</div>}
                     </div>
                     <div className="set-ctl">
                       <input
@@ -864,7 +959,7 @@ export function SettingsScreen(): JSX.Element {
               <div className="set-row" style={{ borderTop: 'none' }}>
                 <div className="set-txt">
                   <div className="set-l">
-                    LAVRay <span className="mono muted">v0.1.0</span>
+                    LAVRay <span className="mono muted">v{APP_VERSION}</span>
                   </div>
                   <div className="set-d">{t('about.desc')}</div>
                 </div>
@@ -931,6 +1026,25 @@ export function SettingsScreen(): JSX.Element {
           )}
         </div>
       </div>
+      {confirmInsecure && (
+        <ConfirmDialog
+          title={t('set.insecure.confirm.t')}
+          text={t('set.insecure.confirm.d')}
+          confirmLabel={t('set.insecure.confirm.ok')}
+          danger
+          onConfirm={confirmInsecureOn}
+          onClose={closeInsecureConfirm}
+        />
+      )}
+      {pendingRestore !== null && (
+        <ConfirmDialog
+          title={t('bk.restoreTitle')}
+          text={tf('bk.restoreConfirm', { n: Object.keys(pendingRestore).length })}
+          confirmLabel={t('bk.restoreOk')}
+          onConfirm={confirmRestore}
+          onClose={closeRestore}
+        />
+      )}
     </div>
   );
 }

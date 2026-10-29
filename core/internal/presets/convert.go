@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package presets
 
 // Конвертер маршрутов NekoRay 4.x → формат LAVRay (SCHEMA §6; источник —

@@ -1,16 +1,27 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! sysproxy — системный прокси ОС (FR-UI-221/222/259).
 //!
 //! Принцип: перед изменением — снимок текущих настроек в файл рядом с
-//! данными; при отключении/падении — восстановление снимка (не «выключить
-//! прокси», а «вернуть как было»). Если приложение упало, следующий старт
-//! находит незакрытый снимок и восстанавливает настройки (teardown-verify).
+//! данными; при отключении/падении — откат (не «выключить прокси», а «вернуть
+//! как было»). Если приложение упало, следующий старт находит незакрытый снимок
+//! и возвращает настройки (teardown-verify).
+//!
+//! Откат трёхсторонний (T-42): рядом с исходными настройками в снимок
+//! записывается то, что стояло сразу после нашего включения. Значение
+//! возвращается к исходному, только если сейчас оно такое, какое поставили мы;
+//! если за время сессии его изменили пользователь или другая программа, оно
+//! остаётся как есть.
 //!
 //! Windows: WinINET через реестр (Internet Settings) + InternetSetOption
 //! (WM_SETTINGCHANGE) — то, что видят Chrome/Edge/системные приложения.
 //! Linux: gsettings (GNOME); KDE — kioslaverc (через `kwriteconfig5/6`).
 //! macOS: `networksetup -setwebproxy/-setsecurewebproxy`.
 
+use serde_json::Value;
+use std::net::Ipv4Addr;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, MutexGuard};
 
 /// Снимок предыдущих настроек прокси.
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
@@ -23,6 +34,16 @@ pub struct ProxySnapshot {
     pub data: serde_json::Value,
 }
 
+/// Содержимое файла снимка: настройки «до нас» и «после нас».
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct StoredSnapshot {
+    original: ProxySnapshot,
+    /// Что стояло сразу после включения. `None` — файл прошлой версии или
+    /// включение не дошло до конца: откат безусловный.
+    #[serde(default)]
+    applied: Option<ProxySnapshot>,
+}
+
 /// Итог применения.
 #[derive(Debug, Clone)]
 pub struct Applied {
@@ -31,49 +52,175 @@ pub struct Applied {
     pub port: u16,
 }
 
-/// Менеджер системного прокси: снимок + применение + восстановление.
-pub struct SysProxy {
+/// Порт mixed-инбаунда из команды UI -> порт в 1..=65535 (A2-18).
+///
+/// Принимает широкий тип: `u16` на входе команды отвергал бы >65535 сырой
+/// ошибкой десериализации и пропускал 0 ("порт не задан").
+pub fn validate_port(raw: i64) -> Result<u16, String> {
+    u16::try_from(raw)
+        .ok()
+        .filter(|port| *port != 0)
+        .ok_or_else(|| format!("порт системного прокси вне 1..=65535: {raw}"))
+}
+
+/// Хост системного прокси: только loopback (127.0.0.0/8) в записи IPv4 (A2-18).
+///
+/// Прокси ОС принимает весь трафик пользователя; указать на чужой адрес
+/// нельзя. Разбор через `Ipv4Addr` заодно не пропускает пробелы, `;`, `=` и
+/// `:`, которыми в значении `ProxyServer` задаются отдельные схемы и порт.
+pub fn validate_host(host: &str) -> Result<(), String> {
+    match host.parse::<Ipv4Addr>() {
+        Ok(ip) if ip.is_loopback() => Ok(()),
+        _ => Err(format!(
+            "системный прокси можно направить только на loopback (127.x.x.x): {host:?}"
+        )),
+    }
+}
+
+/// Операции над настройками прокси ОС: в приложении — [`System`], в тестах —
+/// подставной реестр.
+pub trait Backend {
+    /// Прочитать текущие настройки.
+    fn capture(&self) -> Result<ProxySnapshot, String>;
+    /// Включить прокси `host:port`.
+    fn apply(&self, host: &str, port: u16) -> Result<(), String>;
+    /// Записать настройки из снимка.
+    fn restore(&self, snap: &ProxySnapshot) -> Result<(), String>;
+}
+
+/// Настоящая ОС.
+pub struct System;
+
+impl Backend for System {
+    fn capture(&self) -> Result<ProxySnapshot, String> {
+        imp::capture()
+    }
+
+    fn apply(&self, host: &str, port: u16) -> Result<(), String> {
+        imp::apply(host, port)
+    }
+
+    fn restore(&self, snap: &ProxySnapshot) -> Result<(), String> {
+        imp::restore(snap)
+    }
+}
+
+/// Операции с прокси идут по одной: ими пользуются и команды UI, и поток
+/// надзирателя (снятие прокси при смерти ядра, T-03).
+static OPERATIONS: Mutex<()> = Mutex::new(());
+
+fn exclusive() -> MutexGuard<'static, ()> {
+    OPERATIONS.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Менеджер системного прокси: снимок + применение + откат.
+pub struct SysProxy<B: Backend = System> {
     snapshot_path: PathBuf,
+    backend: B,
 }
 
 impl SysProxy {
     /// Менеджер с файлом снимка в каталоге данных.
     pub fn new(data_dir: &Path) -> Self {
+        Self::with_backend(data_dir, System)
+    }
+}
+
+impl<B: Backend> SysProxy<B> {
+    /// Менеджер с подставным бэкендом (тесты).
+    pub fn with_backend(data_dir: &Path, backend: B) -> Self {
         Self {
             snapshot_path: data_dir.join("sysproxy.snapshot.json"),
+            backend,
         }
     }
 
-    /// Незакрытый снимок от прошлого запуска (приложение упало, не успев
-    /// восстановить настройки) — надо откатить ДО нового применения.
+    /// Исходные настройки из незакрытого снимка (приложение упало, не успев
+    /// их вернуть) — надо откатить ДО нового применения.
     pub fn pending_snapshot(&self) -> Option<ProxySnapshot> {
-        let raw = std::fs::read_to_string(&self.snapshot_path).ok()?;
-        serde_json::from_str(&raw).ok()
+        self.pending().map(|stored| stored.original)
     }
 
-    /// Восстановить настройки из незакрытого снимка (idempotent).
-    pub fn recover_if_needed(&self) -> Result<bool, String> {
-        let Some(snap) = self.pending_snapshot() else {
+    fn pending(&self) -> Option<StoredSnapshot> {
+        let raw = std::fs::read_to_string(&self.snapshot_path).ok()?;
+        serde_json::from_str::<StoredSnapshot>(&raw)
+            .ok()
+            .or_else(|| {
+                // Файл прошлой версии: голый ProxySnapshot без `applied`.
+                let original = serde_json::from_str::<ProxySnapshot>(&raw).ok()?;
+                Some(StoredSnapshot {
+                    original,
+                    applied: None,
+                })
+            })
+    }
+
+    fn store(&self, stored: &StoredSnapshot) -> Result<(), String> {
+        let raw = serde_json::to_string_pretty(stored).map_err(|e| e.to_string())?;
+        // Через временный файл: оборванная запись не оставит полуснимок.
+        let tmp = self.snapshot_path.with_extension("json.tmp");
+        std::fs::write(&tmp, raw)
+            .and_then(|()| std::fs::rename(&tmp, &self.snapshot_path))
+            .map_err(|e| format!("snapshot: {e}"))
+    }
+
+    /// Вернуть настройки из снимка и удалить его. `Ok(false)` — снимка нет.
+    /// При ошибке снимок остаётся: следующая попытка доделает откат.
+    fn rollback(&self) -> Result<bool, String> {
+        let Some(stored) = self.pending() else {
             return Ok(false);
         };
-        restore(&snap)?;
+        let target = match &stored.applied {
+            Some(applied) => ProxySnapshot {
+                data: three_way(
+                    &stored.original.data,
+                    &applied.data,
+                    &self.backend.capture()?.data,
+                ),
+                ..stored.original.clone()
+            },
+            None => stored.original.clone(),
+        };
+        self.backend.restore(&target)?;
         let _ = std::fs::remove_file(&self.snapshot_path);
         Ok(true)
     }
 
+    /// Восстановить настройки из незакрытого снимка (idempotent).
+    pub fn recover_if_needed(&self) -> Result<bool, String> {
+        let _guard = exclusive();
+        self.rollback()
+    }
+
     /// Включить системный прокси `host:port`, сохранив предыдущее состояние.
+    ///
+    /// Адрес проверяется раньше всего прочего (A2-18): отказ не трогает ни
+    /// реестр, ни снимок, ни уже идущую сессию.
     pub fn enable(&self, host: &str, port: u16) -> Result<Applied, String> {
-        // Повторное включение при живом снимке: сначала откатываем прошлое,
-        // чтобы не затереть «настоящие» настройки пользователя нашими.
-        let _ = self.recover_if_needed();
-        let snap = capture()?;
-        let raw = serde_json::to_string_pretty(&snap).map_err(|e| e.to_string())?;
-        std::fs::write(&self.snapshot_path, raw).map_err(|e| format!("snapshot: {e}"))?;
-        if let Err(e) = apply(host, port) {
-            let _ = restore(&snap);
-            let _ = std::fs::remove_file(&self.snapshot_path);
-            return Err(e);
+        validate_host(host)?;
+        validate_port(i64::from(port))?;
+        let _guard = exclusive();
+        // Повторное включение при живом снимке: сначала откатываем прошлое.
+        // Не вышло — выходим, не трогая файл: в нём настоящие настройки
+        // пользователя, а снять новый снимок значило бы стереть их нашими.
+        self.rollback()
+            .map_err(|e| format!("не удалось вернуть прежние настройки прокси: {e}"))?;
+        let original = self.backend.capture()?;
+        self.store(&StoredSnapshot {
+            original: original.clone(),
+            applied: None,
+        })?;
+        if let Err(e) = self.backend.apply(host, port) {
+            return Err(match self.rollback() {
+                Ok(_) => e,
+                Err(rollback_error) => format!("{e}; откат не удался: {rollback_error}"),
+            });
         }
+        // То, что стоит сейчас, поставили мы: по этому откат отличит свои
+        // значения от чужих. Не записалось — снимок остаётся без `applied`,
+        // откат будет безусловным.
+        let applied = self.backend.capture().ok();
+        let _ = self.store(&StoredSnapshot { original, applied });
         Ok(Applied {
             host: host.to_string(),
             port,
@@ -87,14 +234,8 @@ impl SysProxy {
     /// стоял `clear()`, из-за чего «Отключить» в приложении выключал
     /// собственный прокси пользователя, выставленный вручную.
     pub fn disable(&self) -> Result<(), String> {
-        match self.pending_snapshot() {
-            Some(snap) => {
-                restore(&snap)?;
-                let _ = std::fs::remove_file(&self.snapshot_path);
-                Ok(())
-            }
-            None => Ok(()),
-        }
+        let _guard = exclusive();
+        self.rollback().map(|_| ())
     }
 
     /// Снять прокси при выходе приложения: восстановить снимок, если он есть.
@@ -104,20 +245,235 @@ impl SysProxy {
     }
 }
 
+/// Трёхсторонний откат: запись возвращается к исходной, только если сейчас
+/// она такая, какую поставили мы. Иначе её изменил пользователь или другая
+/// программа, и она остаётся как есть (A2-05).
+fn three_way(original: &Value, applied: &Value, current: &Value) -> Value {
+    let (Some(original), Some(applied), Some(current)) = (
+        original.as_object(),
+        applied.as_object(),
+        current.as_object(),
+    ) else {
+        return original.clone();
+    };
+    let merged = original
+        .iter()
+        .map(|(key, old)| {
+            let ours = applied.get(key) == current.get(key);
+            let value = if ours {
+                old.clone()
+            } else {
+                current.get(key).cloned().unwrap_or(Value::Null)
+            };
+            (key.clone(), value)
+        })
+        .collect();
+    Value::Object(merged)
+}
+
 // ============================================================================
-// Windows: WinINET через реестр
+// Windows: значения WinINET (логика без обращения к ОС — проверяется на любой
+// платформе)
 // ============================================================================
+
+#[cfg(any(windows, test))]
+mod wininet {
+    use super::ProxySnapshot;
+    use serde_json::{json, Value};
+    use std::collections::BTreeMap;
+
+    /// Значения Internet Settings, которыми управляет прокси.
+    pub(super) const NAMES: [&str; 4] = [
+        "ProxyEnable",
+        "ProxyServer",
+        "ProxyOverride",
+        "AutoConfigURL",
+    ];
+    /// Локальные адреса и типичные внутренние сети — мимо прокси.
+    pub(super) const BYPASS: &str =
+        "localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;\
+        172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;\
+        172.28.*;172.29.*;172.30.*;172.31.*;192.168.*;<local>";
+
+    /// Значение реестра: тип и текст так, как их печатает `reg query`.
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub(super) struct RegValue {
+        pub kind: String,
+        pub data: String,
+    }
+
+    impl RegValue {
+        pub fn sz(data: impl Into<String>) -> Self {
+            Self {
+                kind: "REG_SZ".into(),
+                data: data.into(),
+            }
+        }
+
+        pub fn dword(n: u32) -> Self {
+            Self {
+                kind: "REG_DWORD".into(),
+                data: format!("0x{n:x}"),
+            }
+        }
+
+        fn to_json(&self) -> Value {
+            json!({ "type": self.kind, "data": self.data })
+        }
+
+        /// Из снимка: `null` (значения нет), объект `{type, data}` или строка
+        /// старого формата (число для ProxyEnable, иначе REG_SZ).
+        fn from_json(name: &str, value: &Value) -> Result<Option<Self>, String> {
+            match value {
+                Value::Null => Ok(None),
+                Value::String(s) if name == "ProxyEnable" => parse_dword(s)
+                    .map(|n| Some(Self::dword(n)))
+                    .ok_or_else(|| format!("снимок: {name}: не число: {s}")),
+                Value::String(s) => Ok(Some(Self::sz(s.clone()))),
+                Value::Object(map) => match (map.get("type"), map.get("data")) {
+                    (Some(Value::String(kind)), Some(Value::String(data))) => Ok(Some(Self {
+                        kind: kind.clone(),
+                        data: data.clone(),
+                    })),
+                    _ => Err(format!("снимок: {name}: нет type/data")),
+                },
+                _ => Err(format!("снимок: {name}: неожиданное значение")),
+            }
+        }
+    }
+
+    /// `0x1` (так печатает `reg query`) или `1` → число.
+    pub(super) fn parse_dword(text: &str) -> Option<u32> {
+        let text = text.trim();
+        match text.strip_prefix("0x") {
+            Some(hex) => u32::from_str_radix(hex, 16).ok(),
+            None => text.parse().ok(),
+        }
+    }
+
+    /// Значения из вывода `reg query <ключ>`: строки `    Имя    ТИП    данные`.
+    /// Данные берутся целиком, с любыми пробелами (раньше значение обрезалось
+    /// по первому пробелу, A2-04). Заголовок ключа, имена подразделов и пустые
+    /// строки пропускаются.
+    pub(super) fn parse_query(output: &str) -> BTreeMap<String, RegValue> {
+        let mut found = BTreeMap::new();
+        for line in output.lines() {
+            let Some(rest) = line.strip_prefix("    ") else {
+                continue;
+            };
+            let mut parts = rest.splitn(3, "    ");
+            let (Some(name), Some(kind)) = (parts.next(), parts.next()) else {
+                continue;
+            };
+            if kind.starts_with("REG_") {
+                let data = parts.next().unwrap_or("").to_string();
+                found.insert(
+                    name.to_string(),
+                    RegValue {
+                        kind: kind.to_string(),
+                        data,
+                    },
+                );
+            }
+        }
+        found
+    }
+
+    /// Чтение и запись значений Internet Settings: `reg.exe` или подставной.
+    pub(super) trait Registry {
+        /// Текущие значения; отсутствующих в карте нет.
+        fn read(&self) -> Result<BTreeMap<String, RegValue>, String>;
+        fn write(&self, name: &str, value: &RegValue) -> Result<(), String>;
+        /// Удаление отсутствующего значения — не ошибка.
+        fn remove(&self, name: &str) -> Result<(), String>;
+    }
+
+    /// Снимок текущих настроек. ProxyEnable и ProxyServer лежат в одной записи
+    /// `proxy`: если ProxyServer сменила другая программа, её ProxyEnable мы
+    /// тоже не трогаем.
+    pub(super) fn capture_with(reg: &impl Registry) -> Result<ProxySnapshot, String> {
+        let found = reg.read()?;
+        let get = |name: &str| -> Result<Value, String> {
+            match found.get(name) {
+                None => Ok(Value::Null),
+                Some(v) if matches!(v.kind.as_str(), "REG_SZ" | "REG_EXPAND_SZ" | "REG_DWORD") => {
+                    Ok(v.to_json())
+                }
+                Some(v) => Err(format!(
+                    "{name}: тип {} не поддерживается, системный прокси не изменён",
+                    v.kind
+                )),
+            }
+        };
+        Ok(ProxySnapshot {
+            version: 2,
+            os: "windows".into(),
+            data: json!({
+                "proxy": { "ProxyEnable": get("ProxyEnable")?, "ProxyServer": get("ProxyServer")? },
+                "ProxyOverride": get("ProxyOverride")?,
+                "AutoConfigURL": get("AutoConfigURL")?,
+            }),
+        })
+    }
+
+    pub(super) fn apply_with(reg: &impl Registry, host: &str, port: u16) -> Result<(), String> {
+        reg.write("ProxyServer", &RegValue::sz(format!("{host}:{port}")))?;
+        reg.write("ProxyOverride", &RegValue::sz(BYPASS))?;
+        // PAC-скрипт несовместим с ручным прокси — убираем на время сессии
+        // (значение сохранено в снимке и вернётся при выключении).
+        reg.remove("AutoConfigURL")?;
+        reg.write("ProxyEnable", &RegValue::dword(1))
+    }
+
+    /// Записать настройки из снимка (новый формат или плоский старый).
+    /// ProxyEnable идёт первым: если запись оборвётся посередине, прокси
+    /// останется выключенным, а не включённым с чужим адресом.
+    pub(super) fn restore_with(reg: &impl Registry, snap: &ProxySnapshot) -> Result<(), String> {
+        for name in NAMES {
+            let value = snap
+                .data
+                .get("proxy")
+                .and_then(|group| group.get(name))
+                .or_else(|| snap.data.get(name))
+                .unwrap_or(&Value::Null);
+            match RegValue::from_json(name, value)? {
+                Some(v) => reg.write(name, &v)?,
+                None => reg.remove(name)?,
+            }
+        }
+        Ok(())
+    }
+}
 
 #[cfg(windows)]
 mod imp {
+    use super::wininet::{self, parse_dword, parse_query, RegValue, Registry, NAMES};
     use super::ProxySnapshot;
+    use crate::oemtext::decode_console_output;
+    use std::collections::BTreeMap;
     use std::os::windows::process::CommandExt;
+    use std::path::PathBuf;
 
     const REG_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings";
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
-    fn reg(args: &[&str]) -> Result<String, String> {
-        let out = std::process::Command::new("reg")
+    /// `%SystemRoot%\System32\reg.exe`. Запуск по имени (`Command::new("reg")`)
+    /// ищет программу сначала в каталоге приложения: подложенный рядом с
+    /// LAVRay.exe `reg.exe` выполнялся бы при каждом включении прокси, а при
+    /// запуске от администратора — с повышенными правами (A2-07).
+    pub(super) fn reg_exe() -> PathBuf {
+        let root = std::env::var_os("SystemRoot")
+            .or_else(|| std::env::var_os("windir"))
+            .unwrap_or_else(|| r"C:\Windows".into());
+        PathBuf::from(root).join("System32").join("reg.exe")
+    }
+
+    /// Запустить `reg.exe`. Аргументы уходят в `CreateProcessW` (UTF-16), так
+    /// что не-ASCII значения при записи доходят без потерь; а вывод `reg.exe`
+    /// пишет в OEM-кодовой странице (CP866 на русской Windows), поэтому читается
+    /// через [`decode_console_output`], а не как UTF-8 (S-02).
+    fn run(args: &[&str]) -> Result<String, String> {
+        let out = std::process::Command::new(reg_exe())
             .args(args)
             .creation_flags(CREATE_NO_WINDOW)
             .output()
@@ -126,61 +482,54 @@ mod imp {
             return Err(format!(
                 "reg {}: {}",
                 args.first().unwrap_or(&""),
-                String::from_utf8_lossy(&out.stderr).trim()
+                decode_console_output(&out.stderr).trim()
             ));
         }
-        Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+        Ok(decode_console_output(&out.stdout))
     }
 
-    fn query(name: &str) -> Option<String> {
-        let out = reg(&["query", REG_KEY, "/v", name]).ok()?;
-        // Формат: "    ProxyEnable    REG_DWORD    0x1"
-        let line = out.lines().find(|l| l.contains(name))?;
-        let mut parts = line.split_whitespace();
-        let _ = parts.next()?; // имя
-        let _ = parts.next()?; // тип
-        parts.next().map(str::to_string)
-    }
+    struct RegExe;
 
-    pub fn capture() -> Result<ProxySnapshot, String> {
-        Ok(ProxySnapshot {
-            version: 1,
-            os: "windows".into(),
-            data: serde_json::json!({
-                "ProxyEnable": query("ProxyEnable"),
-                "ProxyServer": query("ProxyServer"),
-                "ProxyOverride": query("ProxyOverride"),
-                "AutoConfigURL": query("AutoConfigURL"),
-            }),
-        })
-    }
+    impl Registry for RegExe {
+        /// Один `reg query` по ключу вместо четырёх: пока он успешен,
+        /// отсутствие имени в выводе значит «значения нет».
+        fn read(&self) -> Result<BTreeMap<String, RegValue>, String> {
+            let mut all = parse_query(&run(&["query", REG_KEY])?);
+            all.retain(|name, _| NAMES.contains(&name.as_str()));
+            Ok(all)
+        }
 
-    fn set_dword(name: &str, value: u32) -> Result<(), String> {
-        reg(&[
-            "add",
-            REG_KEY,
-            "/v",
-            name,
-            "/t",
-            "REG_DWORD",
-            "/d",
-            &format!("{value}"),
-            "/f",
-        ])
-        .map(|_| ())
-    }
+        fn write(&self, name: &str, value: &RegValue) -> Result<(), String> {
+            let data = if value.kind == "REG_DWORD" {
+                parse_dword(&value.data)
+                    .ok_or_else(|| format!("{name}: не число: {}", value.data))?
+                    .to_string()
+            } else {
+                value.data.clone()
+            };
+            run(&[
+                "add",
+                REG_KEY,
+                "/v",
+                name,
+                "/t",
+                &value.kind,
+                "/d",
+                &data,
+                "/f",
+            ])
+            .map(|_| ())
+        }
 
-    fn set_sz(name: &str, value: &str) -> Result<(), String> {
-        reg(&[
-            "add", REG_KEY, "/v", name, "/t", "REG_SZ", "/d", value, "/f",
-        ])
-        .map(|_| ())
-    }
-
-    fn delete(name: &str) -> Result<(), String> {
-        // Удаление отсутствующего значения — не ошибка для нас.
-        let _ = reg(&["delete", REG_KEY, "/v", name, "/f"]);
-        Ok(())
+        fn remove(&self, name: &str) -> Result<(), String> {
+            match run(&["delete", REG_KEY, "/v", name, "/f"]) {
+                Ok(_) => Ok(()),
+                // `reg delete` одинаково падает на «нет значения» и «нет доступа»
+                // (текст ошибки зависит от языка ОС): различаем повторным чтением.
+                Err(e) if self.read()?.contains_key(name) => Err(e),
+                Err(_) => Ok(()),
+            }
+        }
     }
 
     /// Уведомить WinINET об изменении (без этого Chrome видит старый прокси).
@@ -206,51 +555,24 @@ mod imp {
         }
     }
 
+    pub fn capture() -> Result<ProxySnapshot, String> {
+        wininet::capture_with(&RegExe)
+    }
+
     pub fn apply(host: &str, port: u16) -> Result<(), String> {
-        set_sz("ProxyServer", &format!("{host}:{port}"))?;
-        // Локальные адреса и типичные внутренние сети — мимо прокси.
-        set_sz(
-            "ProxyOverride",
-            "localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;\
-             172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;\
-             172.28.*;172.29.*;172.30.*;172.31.*;192.168.*;<local>",
-        )?;
-        // PAC-скрипт несовместим с ручным прокси — убираем на время сессии
-        // (значение сохранено в снимке и вернётся при выключении).
-        delete("AutoConfigURL")?;
-        set_dword("ProxyEnable", 1)?;
+        wininet::apply_with(&RegExe, host, port)?;
         notify();
         Ok(())
     }
 
     pub fn restore(snap: &ProxySnapshot) -> Result<(), String> {
-        let d = &snap.data;
-        let str_of = |k: &str| d.get(k).and_then(|v| v.as_str()).map(str::to_string);
-        let dword_of = |k: &str| {
-            d.get(k)
-                .and_then(|v| v.as_str())
-                .and_then(|s| s.trim_start_matches("0x").parse::<u32>().ok())
-                .or_else(|| d.get(k).and_then(|v| v.as_u64()).map(|n| n as u32))
-        };
-        match str_of("ProxyServer") {
-            Some(v) if !v.is_empty() => set_sz("ProxyServer", &v)?,
-            _ => delete("ProxyServer")?,
-        }
-        match str_of("ProxyOverride") {
-            Some(v) if !v.is_empty() => set_sz("ProxyOverride", &v)?,
-            _ => delete("ProxyOverride")?,
-        }
-        match str_of("AutoConfigURL") {
-            Some(v) if !v.is_empty() => set_sz("AutoConfigURL", &v)?,
-            _ => delete("AutoConfigURL")?,
-        }
-        set_dword("ProxyEnable", dword_of("ProxyEnable").unwrap_or(0))?;
+        wininet::restore_with(&RegExe, snap)?;
         notify();
         Ok(())
     }
 
     pub fn clear() -> Result<(), String> {
-        set_dword("ProxyEnable", 0)?;
+        RegExe.write("ProxyEnable", &RegValue::dword(0))?;
         notify();
         Ok(())
     }
@@ -469,7 +791,95 @@ pub use imp::{apply, capture, clear, restore};
 
 #[cfg(test)]
 mod tests {
+    use super::wininet::{
+        apply_with, capture_with, parse_query, restore_with, RegValue, Registry, BYPASS,
+    };
     use super::*;
+    use std::cell::{Cell, RefCell};
+    use std::collections::BTreeMap;
+
+    /// Реестр в памяти: настоящий реестр и `reg.exe` тесты не трогают.
+    #[derive(Default)]
+    struct MemRegistry {
+        values: RefCell<BTreeMap<String, RegValue>>,
+        /// Сколько ближайших записей завершатся ошибкой «Access is denied».
+        fail_writes: Cell<u32>,
+    }
+
+    impl MemRegistry {
+        fn with(rows: &[(&str, &str, &str)]) -> Self {
+            let mem = Self::default();
+            for (name, kind, data) in rows {
+                let value = RegValue {
+                    kind: (*kind).into(),
+                    data: (*data).into(),
+                };
+                mem.values.borrow_mut().insert((*name).into(), value);
+            }
+            mem
+        }
+
+        fn dump(&self) -> BTreeMap<String, RegValue> {
+            self.values.borrow().clone()
+        }
+
+        fn set(&self, name: &str, kind: &str, data: &str) {
+            let value = RegValue {
+                kind: kind.into(),
+                data: data.into(),
+            };
+            self.values.borrow_mut().insert(name.into(), value);
+        }
+    }
+
+    impl Registry for MemRegistry {
+        fn read(&self) -> Result<BTreeMap<String, RegValue>, String> {
+            Ok(self.dump())
+        }
+
+        fn write(&self, name: &str, value: &RegValue) -> Result<(), String> {
+            if self.fail_writes.get() > 0 {
+                self.fail_writes.set(self.fail_writes.get() - 1);
+                return Err("reg add: Access is denied".into());
+            }
+            self.values.borrow_mut().insert(name.into(), value.clone());
+            Ok(())
+        }
+
+        fn remove(&self, name: &str) -> Result<(), String> {
+            self.values.borrow_mut().remove(name);
+            Ok(())
+        }
+    }
+
+    /// Бэкенд поверх реестра в памяти: та же логика, что у настоящего.
+    struct Mem<'a>(&'a MemRegistry);
+
+    impl Backend for Mem<'_> {
+        fn capture(&self) -> Result<ProxySnapshot, String> {
+            capture_with(self.0)
+        }
+
+        fn apply(&self, host: &str, port: u16) -> Result<(), String> {
+            apply_with(self.0, host, port)
+        }
+
+        fn restore(&self, snap: &ProxySnapshot) -> Result<(), String> {
+            restore_with(self.0, snap)
+        }
+    }
+
+    fn fresh_dir(tag: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("lavray-sysproxy-{tag}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn proxy<'a>(tag: &str, mem: &'a MemRegistry) -> SysProxy<Mem<'a>> {
+        SysProxy::with_backend(&fresh_dir(tag), Mem(mem))
+    }
 
     #[test]
     fn snapshot_roundtrip() {
@@ -490,5 +900,272 @@ mod tests {
         let sp = SysProxy::new(&dir);
         assert!(sp.pending_snapshot().is_none());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn parse_query_keeps_values_with_spaces() {
+        let output = "\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\r\n\
+            \x20   ProxyEnable    REG_DWORD    0x1\r\n\
+            \x20   ProxyOverride    REG_SZ    *.corp.local; 10.*;<local>\r\n\
+            \x20   Wide    REG_SZ    a    b\r\n\
+            \x20   Empty    REG_SZ    \r\n\
+            \x20   Path    REG_EXPAND_SZ    %SystemRoot%\\x\r\n\
+            \r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\Connections\r\n";
+        let found = parse_query(output);
+        assert_eq!(
+            found["ProxyOverride"],
+            RegValue::sz("*.corp.local; 10.*;<local>")
+        );
+        assert_eq!(found["ProxyEnable"], RegValue::dword(1));
+        assert_eq!(found["Wide"].data, "a    b");
+        assert_eq!(found["Empty"].data, "");
+        assert_eq!(found["Path"].kind, "REG_EXPAND_SZ");
+        assert_eq!(found.len(), 5, "заголовки ключей не значения");
+    }
+
+    /// S-02: `reg query` на русской Windows пишет в CP866. `*.рф` - байты
+    /// `2A 2E E0 E4`; прочитанные как UTF-8 они давали `*.??` (реестр не нужен).
+    #[cfg(windows)]
+    #[test]
+    fn reg_query_output_in_cp866_keeps_cyrillic_exceptions() {
+        let mut raw = Vec::new();
+        raw.extend_from_slice(
+            b"\r\nHKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\r\n\
+              \x20   ProxyOverride    REG_SZ    *.corp.local; ",
+        );
+        raw.extend_from_slice(&[0x2A, 0x2E, 0xE0, 0xE4]);
+        raw.extend_from_slice(b";<local>\r\n    ProxyEnable    REG_DWORD    0x1\r\n");
+        let found = parse_query(&crate::oemtext::decode_output(&raw, 866));
+        assert_eq!(
+            found["ProxyOverride"],
+            RegValue::sz("*.corp.local; *.рф;<local>")
+        );
+        assert_eq!(found["ProxyEnable"], RegValue::dword(1));
+        // Как было: UTF-8 с заменой портит те же байты.
+        let broken = parse_query(&String::from_utf8_lossy(&raw));
+        assert_ne!(broken["ProxyOverride"], found["ProxyOverride"]);
+    }
+
+    /// Снимок на диске и откат не портят не-ASCII значения.
+    #[test]
+    fn cyrillic_bypass_list_survives_enable_then_disable() {
+        let mem = MemRegistry::with(&[
+            ("ProxyEnable", "REG_DWORD", "0x1"),
+            ("ProxyServer", "REG_SZ", "corp.proxy:8080"),
+            ("ProxyOverride", "REG_SZ", "*.рф;*.москва; 10.*;<local>"),
+        ]);
+        let before = mem.dump();
+        let sp = proxy("cyrillic", &mem);
+        sp.enable("127.0.0.1", 2080).unwrap();
+        sp.disable().unwrap();
+        assert_eq!(mem.dump(), before);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn reg_program_is_the_absolute_system_reg_exe() {
+        let program = imp::reg_exe();
+        assert!(program.is_absolute(), "{program:?}");
+        assert!(program.ends_with(r"System32\reg.exe"), "{program:?}");
+        assert!(program.is_file(), "{program:?}");
+    }
+
+    fn initial_corp() -> MemRegistry {
+        MemRegistry::with(&[
+            ("ProxyEnable", "REG_DWORD", "0x1"),
+            ("ProxyServer", "REG_SZ", "corp.proxy:8080"),
+            ("ProxyOverride", "REG_SZ", "*.corp.local; 10.*;<local>"),
+        ])
+    }
+
+    /// A2-04: включить и выключить = ровно прежние настройки, включая пробелы.
+    #[test]
+    fn enable_then_disable_gives_back_exact_settings() {
+        let mem = initial_corp();
+        let before = mem.dump();
+        let sp = proxy("roundtrip", &mem);
+        sp.enable("127.0.0.1", 2080).unwrap();
+        assert_eq!(mem.dump()["ProxyServer"], RegValue::sz("127.0.0.1:2080"));
+        assert_eq!(mem.dump()["ProxyOverride"], RegValue::sz(BYPASS));
+        sp.disable().unwrap();
+        assert_eq!(mem.dump(), before);
+        assert!(sp.pending_snapshot().is_none());
+    }
+
+    /// A2-05: другая программа заняла системный прокси — наш откат её не стирает.
+    #[test]
+    fn foreign_proxy_set_during_session_is_not_rolled_back() {
+        let mem = MemRegistry::with(&[("ProxyEnable", "REG_DWORD", "0x0")]);
+        let sp = proxy("foreign", &mem);
+        sp.enable("127.0.0.1", 2080).unwrap();
+        mem.set("ProxyServer", "REG_SZ", "10.9.9.9:3128");
+        sp.disable().unwrap();
+        let after = mem.dump();
+        assert_eq!(after["ProxyServer"], RegValue::sz("10.9.9.9:3128"));
+        assert_eq!(
+            after["ProxyEnable"],
+            RegValue::dword(1),
+            "чужой прокси остался включённым"
+        );
+    }
+
+    /// Пользователь поправил только список исключений: свой адрес снимаем,
+    /// его список оставляем.
+    #[test]
+    fn user_edit_of_bypass_list_survives_while_our_proxy_is_removed() {
+        let mem = MemRegistry::with(&[("ProxyEnable", "REG_DWORD", "0x0")]);
+        let sp = proxy("bypass", &mem);
+        sp.enable("127.0.0.1", 2080).unwrap();
+        mem.set("ProxyOverride", "REG_SZ", "mine.local");
+        sp.disable().unwrap();
+        let after = mem.dump();
+        assert_eq!(after["ProxyOverride"], RegValue::sz("mine.local"));
+        assert_eq!(after["ProxyEnable"], RegValue::dword(0));
+        assert!(!after.contains_key("ProxyServer"));
+    }
+
+    /// Падение приложения с включённым прокси: следующий запуск возвращает
+    /// и PAC, и ручной прокси.
+    #[test]
+    fn crash_then_recover_restores_pac_and_manual_proxy() {
+        let mem = MemRegistry::with(&[
+            ("ProxyEnable", "REG_DWORD", "0x0"),
+            ("AutoConfigURL", "REG_SZ", "http://pac.corp/wpad.dat"),
+        ]);
+        let before = mem.dump();
+        let dir = fresh_dir("crash");
+        let first_run = SysProxy::with_backend(&dir, Mem(&mem));
+        first_run.enable("127.0.0.1", 2080).unwrap();
+        assert!(!mem.dump().contains_key("AutoConfigURL"));
+        // «Процесс упал»: disable() не вызывался, новый менеджер видит снимок.
+        let second_run = SysProxy::with_backend(&dir, Mem(&mem));
+        assert!(second_run.recover_if_needed().unwrap());
+        assert_eq!(mem.dump(), before);
+    }
+
+    #[test]
+    fn double_enable_keeps_the_original_settings() {
+        let mem = initial_corp();
+        let before = mem.dump();
+        let sp = proxy("double", &mem);
+        sp.enable("127.0.0.1", 2080).unwrap();
+        sp.enable("127.0.0.1", 2081).unwrap();
+        sp.disable().unwrap();
+        assert_eq!(mem.dump(), before);
+    }
+
+    /// A2-15: сбой отката внутри `enable()` не должен ни затирать исходный
+    /// снимок, ни продолжать включение.
+    #[test]
+    fn failed_recovery_inside_enable_keeps_the_original_snapshot() {
+        let mem = initial_corp();
+        let before = mem.dump();
+        let sp = proxy("failed-recovery", &mem);
+        sp.enable("127.0.0.1", 2080).unwrap();
+        mem.fail_writes.set(1); // первая же запись отката упадёт
+        assert!(sp.enable("127.0.0.1", 2080).is_err());
+        let kept = sp.pending_snapshot().expect("снимок цел");
+        assert_eq!(kept.data["proxy"]["ProxyServer"]["data"], "corp.proxy:8080");
+        sp.disable().unwrap();
+        assert_eq!(mem.dump(), before);
+    }
+
+    /// Снимок прошлой версии (плоский, без `applied`) откатывается безусловно.
+    #[test]
+    fn snapshot_file_of_the_previous_version_is_restored() {
+        let mem = MemRegistry::with(&[
+            ("ProxyEnable", "REG_DWORD", "0x1"),
+            ("ProxyServer", "REG_SZ", "127.0.0.1:2080"),
+        ]);
+        let sp = proxy("legacy", &mem);
+        let legacy = serde_json::json!({
+            "version": 1, "os": "windows",
+            "data": {"ProxyEnable": "0x0", "ProxyServer": null, "ProxyOverride": null, "AutoConfigURL": "http://pac.corp/wpad.dat"}
+        });
+        std::fs::write(&sp.snapshot_path, legacy.to_string()).unwrap();
+        assert!(sp.recover_if_needed().unwrap());
+        let after = mem.dump();
+        assert_eq!(after["ProxyEnable"], RegValue::dword(0));
+        assert_eq!(
+            after["AutoConfigURL"],
+            RegValue::sz("http://pac.corp/wpad.dat")
+        );
+        assert!(!after.contains_key("ProxyServer"));
+    }
+
+    /// A2-18: порт - только 1..=65535; 0 и всё за пределами отвергаются.
+    #[test]
+    fn port_must_be_within_1_to_65535() {
+        for ok in [1, 2080, 65535] {
+            assert_eq!(validate_port(ok), Ok(ok as u16), "{ok}");
+        }
+        for bad in [
+            0,
+            -1,
+            65536,
+            70_000,
+            i64::from(u32::MAX),
+            i64::MAX,
+            i64::MIN,
+        ] {
+            assert!(validate_port(bad).is_err(), "{bad} принят");
+        }
+    }
+
+    /// A2-18: системный прокси может смотреть только на loopback.
+    #[test]
+    fn host_must_be_an_ipv4_loopback_address() {
+        for ok in ["127.0.0.1", "127.0.0.2", "127.255.255.254"] {
+            assert!(validate_host(ok).is_ok(), "{ok} отвергнут");
+        }
+        for bad in [
+            "",
+            "0.0.0.0",
+            "8.8.8.8",
+            "192.168.1.10",
+            "10.0.0.1",
+            "localhost",
+            "evil.example",
+            "::1",
+            "[::1]",
+            "127.0.0.1:80",
+            " 127.0.0.1",
+            "127.0.0.1 ",
+            "127.0.0.1;https=8.8.8.8:80",
+            "127.0.0.1
+",
+            "'127.0.0.1'",
+        ] {
+            assert!(validate_host(bad).is_err(), "{bad:?} принят");
+        }
+    }
+
+    /// Неверный адрес отвергается до любых действий: реестр цел, снимка нет.
+    #[test]
+    fn enable_rejects_a_bad_endpoint_before_touching_anything() {
+        let mem = initial_corp();
+        let before = mem.dump();
+        let sp = proxy("bad-endpoint", &mem);
+        assert!(sp.enable("127.0.0.1", 0).is_err());
+        assert!(sp.enable("8.8.8.8", 2080).is_err());
+        assert!(sp.enable("127.0.0.1;http=8.8.8.8:80", 2080).is_err());
+        assert_eq!(mem.dump(), before);
+        assert!(sp.pending_snapshot().is_none());
+    }
+
+    /// Отказ из-за адреса не откатывает уже включённый нами прокси:
+    /// проверка идёт раньше отката прошлого снимка.
+    #[test]
+    fn rejected_enable_leaves_a_running_session_alone() {
+        let mem = initial_corp();
+        let before = mem.dump();
+        let sp = proxy("bad-while-on", &mem);
+        sp.enable("127.0.0.1", 2080).unwrap();
+        let during = mem.dump();
+        assert!(sp.enable("127.0.0.1", 0).is_err());
+        assert_eq!(mem.dump(), during);
+        assert!(sp.pending_snapshot().is_some());
+        sp.disable().unwrap();
+        assert_eq!(mem.dump(), before);
     }
 }

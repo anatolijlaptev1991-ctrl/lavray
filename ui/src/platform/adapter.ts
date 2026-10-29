@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 /**
  * LAVRay platform adapter (stage-3 scaffold).
  *
@@ -87,13 +89,26 @@ function canceled(): OpenFileResult {
   return { path: null, canceled: true };
 }
 
-/** Best-effort UA detection for the web stub; the Tauri adapter overrides. */
+/**
+ * Единственное место, где ОС определяется по User-Agent. Ей пользуются и
+ * адаптер (React-хром, ⌘/Ctrl), и main.tsx (`html[data-os]` для CSS) — раньше
+ * там были две разные копии с разными запасными значениями.
+ */
 export function detectOS(win: Window): HostOS {
   const ua = win.navigator.userAgent;
   if (ua.includes('Mac')) return 'macos';
   if (ua.includes('Windows')) return 'windows';
   if (ua.includes('Linux') || ua.includes('X11')) return 'linux';
   return 'web';
+}
+
+/** Значение `html[data-os]` словаря прототипа: win | mac | linux. Неизвестная ОС → linux. */
+export type OsAttribute = 'win' | 'mac' | 'linux';
+
+export function osAttribute(os: HostOS): OsAttribute {
+  if (os === 'windows') return 'win';
+  if (os === 'macos') return 'mac';
+  return 'linux';
 }
 
 /** Default implementation: browser/web panel — everything is a stub. */

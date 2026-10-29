@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // outbounds.go — профиль модели → sing-box outbound JSON (порт
 // fmt/Bean2CoreObj_box.cpp: SocksHttpBean/ShadowSocksBean/VMessBean/
 // TrojanVLESSBean/QUICBean/CustomBean + V2rayStreamSettings).
@@ -215,10 +217,14 @@ func buildHysteria2(p *model.Profile) (map[string]any, error) {
 	if d.DownloadMbps > 0 {
 		out["down_mbps"] = d.DownloadMbps
 	}
-	// LNB-35/FR-UI-268: имена полей sing-box 1.14 — server_ports (строка
-	// «a:b» / «a:b,c:d») + hop_interval (Duration-строка); оракул эмитил
+	// LNB-35/FR-UI-268: имена полей sing-box 1.14 — server_ports (список
+	// диапазонов «a:b», D-01) + hop_interval (Duration-строка); оракул эмитил
 	// hop_ports + int — баг, не переносим (deviations.yaml, вектор G14).
-	if ports := strings.TrimSpace(d.ServerPorts); ports != "" {
+	ports, err := hysteria2ServerPorts(d.ServerPorts)
+	if err != nil {
+		return nil, err
+	}
+	if len(ports) > 0 {
 		out["server_ports"] = ports
 		if hi := strings.TrimSpace(d.HopInterval); hi != "" {
 			out["hop_interval"] = hi
@@ -278,6 +284,11 @@ func buildCustomInternal(p *model.Profile) (map[string]any, error) {
 	var out map[string]any
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
 		return nil, invalidArgument("custom", "custom internal profile: outbound JSON: %v", err)
+	}
+	// T-08: outbound tor запускает executable_path, ssh читает
+	// private_key_path, tls — certificate_path: пути из чужого JSON не нужны.
+	if err := rejectFileKeys("custom", out); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // errors.go — ошибки конфигбилдера. Коды соответствуют ConnectRPC/контракту
 // lavray.v1 (запрещённый ключ custom_config → INVALID_ARGUMENT, §3.1.1).
 package cfgbuild

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package api
 
 import (
@@ -23,6 +25,7 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/version"
 )
 
 // Deps — зависимости сервера (все внедряются: cmd/lavray-core в W8, тесты —
@@ -42,6 +45,12 @@ type Server struct {
 	inst *inst.Manager
 	http *http.Client
 
+	// ipURL — сервис публичного IP (GetPublicIp/CheckLeaks); dial — набор
+	// номера для зондов (IPv6, порт); тесты подменяют оба.
+	ipURL      string
+	ipProbeURL string // адрес-литерал для проверки «трафик идёт через туннель» (без DNS)
+	dial       func(ctx context.Context, network, addr string) (net.Conn, error)
+
 	// OnShutdown вызывается после остановки инстанса при CoreService.Shutdown
 	// (W8 headless подставит выход из процесса; здесь — только остановка).
 	OnShutdown func(ctx context.Context)
@@ -59,6 +68,7 @@ type Server struct {
 	subsMu      sync.Mutex
 	subsRunning map[int64]bool           // бегущие UpdateSubscription → ALREADY_EXISTS
 	subsSnap    map[int64]*subs.Snapshot // последний успешный снапшот (Rollback)
+	hwidMu      sync.Mutex               // создание постоянного HWID установки (D-02)
 
 	// ---- SettingsService: поток изменений ----
 	setMu   sync.Mutex
@@ -85,11 +95,22 @@ func NewServer(d Deps) *Server {
 	if httpc == nil {
 		httpc = &http.Client{Timeout: subs.DefaultOverallTimeout}
 	}
+	// T-33: журнал sing-box попадает в журнал ядра (GetTail/Subscribe);
+	// секреты вычищает Mux.Logf (Redact) до буфера.
+	if ls, ok := d.Runner.(inst.LogSinker); ok {
+		ls.SetLogSink(func(level, message string) {
+			lg.Logf(level, logs.SourceSingBox, "%s", message)
+		})
+	}
 	return &Server{
 		st:          d.Store,
 		logs:        lg,
 		inst:        inst.NewManager(d.Runner),
 		http:        httpc,
+		ipURL:       publicIPURL,
+		ipProbeURL:  "https://1.1.1.1/",
+		dial:        (&net.Dialer{}).DialContext,
+		appVersion:  version.Version,
 		subsRunning: map[int64]bool{},
 		subsSnap:    map[int64]*subs.Snapshot{},
 		setSubs:     map[chan *lavrayv1.SettingsChanged]struct{}{},
@@ -100,6 +121,7 @@ func NewServer(d Deps) *Server {
 func (s *Server) HandlerOptions() []connect.HandlerOption {
 	return []connect.HandlerOption{
 		connect.WithInterceptors(newInterceptor(s.logs)),
+		connect.WithReadMaxBytes(MaxRequestBytes), // T-50: лимит тела запроса
 	}
 }
 
@@ -245,12 +267,16 @@ func (s *Server) buildSettings(tunMode bool) *cfgbuild.BuildSettings {
 		DefaultOn:   s.settingBool("mux.default_on"),
 	}
 	st.AllowInsecureDefault = s.settingBool("security.allow_insecure_default")
+	st.LogLevel = s.settingStr("log.level") // T-49: пусто/неизвестно → "info" в cfgbuild
 	if v := s.settingStr("core.underlying_dns"); v != "" {
 		st.UnderlyingDNS = v
 	}
 	st.CustomRouteGlobalJSON = s.settingStr("routing.custom_global")
 	st.GeoDir = filepath.ToSlash(filepath.Join(s.st.Dir(), "geo"))
 	st.CacheFilePath = filepath.ToSlash(filepath.Join(s.st.Dir(), "cache.db"))
+	if ov, ok := s.activeDNSChoice(); ok {
+		st.DNSRemoteDirect = ov.RemoteDirect
+	}
 	return st
 }
 
@@ -267,7 +293,9 @@ func tunStackOf(impl int) string {
 
 // validateInboundLAN — FR-UI-279/LNB-33: inbound-адрес не loopback при пустой
 // авторизации → INVALID_ARGUMENT («пароль обязателен при доступе из LAN»).
-// В TUN-режиме mixed-слушателя нет — проверка не нужна.
+// В TUN-режиме mixed-слушатель остаётся (cfgbuild/inbounds.go), но не-loopback
+// адрес без авторизации там отвергает уже сборка конфига — повторная проверка
+// не нужна (T-55: прежний текст «в TUN mixed нет» был неверен).
 func (s *Server) validateInboundLAN(inbound cfgbuild.InboundSettings) error {
 	addr := strings.TrimSpace(inbound.Address)
 	if addr == "" || addr == "localhost" {
@@ -288,7 +316,7 @@ func (s *Server) validateInboundLAN(inbound cfgbuild.InboundSettings) error {
 
 const (
 	metaCustomPresets   = "routing.custom_presets" // JSON []presets.Preset
-	metaDNSOverride     = "routing.dns_override"   // JSON presets.DNSBlock (для builtin-активного)
+	metaDNSOverride     = "routing.dns_override"   // JSON map[id пресета]dnsChoice (dns_choice.go)
 	settingActivePreset = "routing.active_preset"
 )
 
@@ -365,96 +393,6 @@ func (s *Server) activePreset() (*presets.Preset, error) {
 	return s.applyDNSOverride(p), nil
 }
 
-// dnsOverride — DNS-переопределение для builtin-активного пресета
-// (DnsService.SetDns; пользовательские пресеты хранят DNS в себе).
-func (s *Server) dnsOverride() (*presets.DNSBlock, error) {
-	raw, ok, err := s.st.GetMeta(metaDNSOverride)
-	if err != nil || !ok || strings.TrimSpace(raw) == "" {
-		return nil, err
-	}
-	var d presets.DNSBlock
-	if err := json.Unmarshal([]byte(raw), &d); err != nil {
-		return nil, fmt.Errorf("api: чтение DNS-переопределения: %w", err)
-	}
-	return &d, nil
-}
-
-// dnsSettingStr — строковое значение dns.* (JSON-строка; совместимость с
-// ранними сборками, писавшими сырой текст).
-func (s *Server) dnsSettingStr(key string) string {
-	raw, ok, err := s.st.GetSetting(key)
-	if err != nil || !ok {
-		return ""
-	}
-	var v string
-	if json.Unmarshal([]byte(raw), &v) == nil {
-		return v
-	}
-	return raw
-}
-
-func (s *Server) dnsSettingBool(key string) bool {
-	raw, ok, err := s.st.GetSetting(key)
-	if err != nil || !ok {
-		return false
-	}
-	switch raw {
-	case "1", "true":
-		return true
-	}
-	var b bool
-	if json.Unmarshal([]byte(raw), &b) == nil {
-		return b
-	}
-	return false
-}
-
-// dnsSettingsPresent — задан ли пользовательский DNS хоть одним ключом.
-func (s *Server) dnsSettingsPresent() bool {
-	for _, k := range []string{setDNSMode, setDNSRemote, setDNSDirect, setDNSAdvJSON, setDNSRouting} {
-		if _, ok, err := s.st.GetSetting(k); err == nil && ok {
-			return true
-		}
-	}
-	return false
-}
-
-// applyDNSOverride — копия пресета с DNS из настроек (A5/A6/A7 аудита:
-// SetDns писал dns.* в settings, а конфигбилдер читал только пресет —
-// настройки DNS молча не применялись). p == nil (пресет не найден) —
-// берём нейтральный, чтобы пользовательский DNS всё равно доехал до конфига.
-func (s *Server) applyDNSOverride(p *presets.Preset) *presets.Preset {
-	if !s.dnsSettingsPresent() {
-		return p
-	}
-	if p == nil {
-		p = cfgbuild.NeutralPreset()
-	}
-	cp := *p
-	dns := p.DNS
-	switch s.dnsSettingStr(setDNSMode) {
-	case "advanced":
-		dns.Mode = "advanced"
-	case "simple":
-		dns.Mode = "simple"
-	}
-	if v := s.dnsSettingStr(setDNSRemote); v != "" {
-		dns.RemoteDNS = v
-	}
-	if v := s.dnsSettingStr(setDNSDirect); v != "" {
-		dns.DirectDNS = v
-	}
-	if v := s.dnsSettingStr(setDNSAdvJSON); v != "" {
-		dns.AdvancedJSON = v
-	}
-	if v := s.dnsSettingStr(setDNSStrategy); v != "" {
-		dns.RemoteQueryStrategy = v
-	}
-	dns.RoutingEnabled = s.dnsSettingBool(setDNSRouting)
-	cp.DNS = dns
-	return &cp
-}
-
 // ============================================================================
 // CoreStatus
 // ============================================================================
@@ -490,7 +428,7 @@ func (s *Server) coreStatus() *lavrayv1.CoreStatus {
 	st := s.inst.Status()
 	cs := &lavrayv1.CoreStatus{
 		State:           coreStateOf(st.State),
-		CoreVersion:     inst.CoreVersion,
+		CoreVersion:     version.Version,
 		Mode:            connectModeOf(""),
 		RoutingPresetId: strpIf(s.activePresetID()),
 	}

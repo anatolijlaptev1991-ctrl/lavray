@@ -1216,6 +1216,13 @@ message DnsSettings {
   optional string underlying_dns = 9;
   // FakeDNS (FR-UI-151): включается в TUN-настройках, здесь read-only.
   optional bool fake_dns_enabled = 10;
+
+  // Карточка экрана DNS (FR-UI-148): "auto" — DNS пресета без переопределения,
+  // "tunnel" — DoH внутри туннеля, "doh" — DoH напрямую, "dot" и "local" — по
+  // своему адресу, "custom" — remote_dns пользователя. Выбор хранится для
+  // активного пресета и на другие не действует. В SetDns пусто: remote_dns
+  // пуст — "auto", иначе "custom"; в GetDns — выбранная карточка.
+  optional string choice = 11;
 }
 
 message GetDnsRequest {}
@@ -1629,6 +1636,9 @@ message LeakReport {
   optional string dns_egress = 3; // резолвер, видимый тест-домену
   bool ipv6_direct_available = 4; // true при активном туннеле = риск утечки v6
   bool tunnel_active = 5;
+  // Замеры, которые НЕ выполнены: "direct_ip", "tunnel_ip", "dns", "ipv6".
+  // Пустое значение поля без замера нельзя читать как «в порядке».
+  repeated string unchecked = 6;
 }
 
 // ============================================================================

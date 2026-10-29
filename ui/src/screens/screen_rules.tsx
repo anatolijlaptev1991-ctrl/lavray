@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_rules.tsx — «Маршрутизация» по прототипу v1.2 (DS §8):
 // тестер маршрута (CheckRoute), сетка пресетов с активацией, редактор
 // списков правил (proxy/direct/block: домены и IP) и default outbound.
@@ -10,6 +12,8 @@ import type { RoutingPreset } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { presetDescription, presetRuleCount, presetTitle } from '../lib/presets';
+import type { MessageKey } from '../lib/i18n';
 import { Icon } from '../components/Icon';
 import { DialogShell } from '../components/dialogs';
 
@@ -23,7 +27,7 @@ type ListKind =
 
 interface ListDef {
   readonly kind: ListKind;
-  readonly labelKey: string;
+  readonly labelKey: MessageKey;
   readonly ip: boolean;
 }
 
@@ -36,7 +40,7 @@ const LISTS: readonly ListDef[] = [
   { kind: 'directIp', labelKey: 'out.direct', ip: true },
 ];
 
-const OUTBOUND_OPTIONS: readonly { value: OutboundEnum; labelKey: string }[] = [
+const OUTBOUND_OPTIONS: readonly { value: OutboundEnum; labelKey: MessageKey }[] = [
   { value: OutboundEnum.PROXY, labelKey: 'out.proxy' },
   { value: OutboundEnum.DIRECT, labelKey: 'out.direct' },
   { value: OutboundEnum.BLOCK, labelKey: 'out.block' },
@@ -53,7 +57,7 @@ const ROUTE_SUGGESTIONS = [
 ] as const;
 
 export function RulesScreen(): JSX.Element {
-  const { t } = useI18n();
+  const { t, tf, plural } = useI18n();
   const core = useCore();
   const [presets, setPresets] = useState<RoutingPreset[]>([]);
   const [activeId, setActiveId] = useState('');
@@ -95,7 +99,7 @@ export function RulesScreen(): JSX.Element {
       try {
         const res = await core.routing.activatePreset({ id });
         setActiveId(id);
-        setOk(res.needsProfileRestart ? t('dns.restart') : t('common.save'));
+        setOk(res.needsProfileRestart ? t('dns.restart') : t('toast.presetActivated'));
         await reload();
       } catch (e) {
         setErr(showCoreError(e, t));
@@ -115,7 +119,7 @@ export function RulesScreen(): JSX.Element {
         });
         await reload();
         setActiveId(res.id);
-        setOk(t('rt.customizeCopy'));
+        setOk(t('toast.presetCopied'));
       } catch (e) {
         setErr(showCoreError(e, t));
       }
@@ -155,22 +159,19 @@ export function RulesScreen(): JSX.Element {
     [core, query, t],
   );
 
-  const toggleRule = useCallback(
-    async (def: ListDef, entry: string): Promise<void> => {
+  /** Сохранить новый список записей одного вида (UpdatePreset с проверкой ревизии). */
+  const saveList = useCallback(
+    async (def: ListDef, next: string[]): Promise<void> => {
       if (active === undefined || active.builtin) return;
       setErr('');
       try {
-        const current = ((active[def.kind] as string[] | undefined) ?? []);
-        const next = current.includes(entry)
-          ? current.filter((x) => x !== entry)
-          : [...current, entry];
         const res = await core.routing.updatePreset({
           preset: { ...active, [def.kind]: next },
           expectedRevision: active.revision,
         });
         const updated = res.preset ?? active;
         setPresets((prev) => prev.map((p) => (p.id === active.id ? updated : p)));
-        setOk(t('common.save'));
+        setOk(t('toast.presetSaved'));
       } catch (e) {
         setErr(showCoreError(e, t));
       }
@@ -178,12 +179,29 @@ export function RulesScreen(): JSX.Element {
     [core, active, t],
   );
 
-  const addRule = useCallback(
+  /** Убрать запись из списка (✕ на чипе). */
+  const removeRule = useCallback(
     async (def: ListDef, entry: string): Promise<void> => {
-      if (active === undefined || active.builtin || entry.trim() === '') return;
-      await toggleRule(def, entry.trim());
+      if (active === undefined) return;
+      await saveList(def, active[def.kind].filter((x) => x !== entry));
     },
-    [active, toggleRule],
+    [active, saveList],
+  );
+
+  /** Добавить запись. Повторный ввод уже существующей (без учёта регистра) ничего не меняет. */
+  const addRule = useCallback(
+    async (def: ListDef, raw: string): Promise<void> => {
+      const entry = raw.trim();
+      if (active === undefined || active.builtin || entry === '') return;
+      const current = active[def.kind];
+      if (current.some((x) => x.toLowerCase() === entry.toLowerCase())) {
+        setErr('');
+        setOk(t('rt.ruleExists'));
+        return;
+      }
+      await saveList(def, [...current, entry]);
+    },
+    [active, saveList, t],
   );
 
   const setDefaultOutbound = useCallback(
@@ -212,7 +230,7 @@ export function RulesScreen(): JSX.Element {
           <div className="bn-t">{err}</div>
         </div>
       )}
-      {ok !== '' && <div className="toast-ok">{ok}</div>}
+      {ok !== '' && <div className="toast-ok" role="status">{ok}</div>}
 
       {/* ---- Тестер маршрута ---- */}
       <div className="card">
@@ -302,7 +320,10 @@ export function RulesScreen(): JSX.Element {
               onClick={() => {
                 setNewPresetAt(null);
                 if (active !== undefined) {
-                  void copyPreset(active.id, `${active.displayName} (${t('rt.copyName')})`);
+                  void copyPreset(
+                    active.id,
+                    tf('rt.copyName', { name: presetTitle(active.id, active.displayName, t) }),
+                  );
                 }
               }}
             >
@@ -338,13 +359,22 @@ export function RulesScreen(): JSX.Element {
               aria-pressed={p.id === activeId}
             >
               <span className="preset-top">
-                <h3>{p.displayName}</h3>
                 {p.id === activeId && (
                   <span className="preset-check"><Icon name="check" /></span>
                 )}
+                <h3>{presetTitle(p.id, p.displayName, t)}</h3>
+                <span className={`badge ${p.builtin ? 'badge-soft' : 'badge-grad'}`}>
+                  {t(p.builtin ? 'rt.builtin' : 'rt.mine')}
+                </span>
               </span>
-              <span className="muted mono">
-                rev {String(p.revision)}{p.builtin ? ' · builtin' : ''}
+              {presetDescription(p.id, t) !== null && (
+                <span className="desc">{presetDescription(p.id, t)}</span>
+              )}
+              <span className="meta">
+                <span className="badge badge-info">{plural('pl.r', presetRuleCount(p))}</span>
+                <span className="badge">
+                  {t('preset.rev')} {p.revision}
+                </span>
               </span>
             </button>
           ))}
@@ -376,6 +406,14 @@ export function RulesScreen(): JSX.Element {
           </div>
         )}
 
+        {/* Пустое состояние (прототип #ruleList): в наборе нет ни одного правила. */}
+        {active !== undefined && LISTS.every((def) => active[def.kind].length === 0) && (
+          <div className="empty" style={{ padding: '24px 12px' }}>
+            <Icon name="route" />
+            <div className="empty-t">{t('rt.rulesEmpty')}</div>
+          </div>
+        )}
+
         {LISTS.map((def) => {
           const items = (active?.[def.kind] ?? []);
           if (items.length === 0 && active?.builtin === true) return null;
@@ -393,7 +431,7 @@ export function RulesScreen(): JSX.Element {
                       <button
                         className="rule-chip-x"
                         aria-label={`${t('common.delete')} ${entry}`}
-                        onClick={() => void toggleRule(def, entry)}
+                        onClick={() => void removeRule(def, entry)}
                       >
                         <Icon name="x" />
                       </button>
@@ -445,7 +483,7 @@ export function RulesScreen(): JSX.Element {
             }}
           >
             {OUTBOUND_OPTIONS.map((o) => (
-              <option key={o.labelKey} value={String(o.value)}>{t(o.labelKey as never)}</option>
+              <option key={o.labelKey} value={String(o.value)}>{t(o.labelKey)}</option>
             ))}
           </select>
         </div>

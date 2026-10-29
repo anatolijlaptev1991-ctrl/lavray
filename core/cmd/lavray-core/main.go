@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // lavray-core — процесс Go-ядра LAVRay (оболочка Tauri спавнит его с
 // `serve --listen-socket <path>`; спека — docs/stage3/shell-lifecycle §3):
 //
@@ -86,7 +88,11 @@ func main() {
 
 	st, err := store.Open(*dataDir)
 	if err != nil {
-		mux.Logf(logs.LevelError, "core", "store: %v", err)
+		// T-50: причина и инструкция — в stderr (оболочка/пользователь) и в
+		// журнал; раньше выход с кодом 1 был молчаливым.
+		msg := describeStoreError(*dataDir, err)
+		mux.Logf(logs.LevelError, "core", "store: %s", oneLine(msg))
+		fmt.Fprintln(os.Stderr, msg)
 		os.Exit(1)
 	}
 	defer st.Close()
@@ -111,10 +117,18 @@ func main() {
 	// тегом singbox_run; раньше хардкод NopRunner означал, что туннель не
 	// запускался НИ В ОДНОЙ сборке.
 	server := api.NewServer(api.Deps{Store: st, Logs: mux, Runner: pickRunner()})
+	// Автообновление подписок (FR-UI-126, T-20): таймер обновляет группы, у
+	// которых прошёл интервал; skip_auto_update и архив пропускаются.
+	stopAutoUpdate := server.StartSubscriptionScheduler(context.Background())
+	defer stopAutoUpdate()
 	// appVersion — билд-флаг платформенных репо.
 	root := http.NewServeMux()
 	server.Register(root)
-	httpSrv := &http.Server{Handler: authMiddleware(root, authToken, mux)}
+	// RPC CoreService.Shutdown: инстанс он останавливает сам, а выход из
+	// процесса — здесь (T-52: раньше OnShutdown не назначался).
+	exitReq := newExitRequest()
+	server.OnShutdown = exitReq.trigger
+	httpSrv := newHTTPServer(authMiddleware(root, authToken, mux)) // T-50: таймауты и лимит заголовков
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- httpSrv.Serve(ln) }()
@@ -135,14 +149,16 @@ func main() {
 		mux.Logf(logs.LevelInfo, "core", "сигнал завершения")
 	case <-parentDead:
 		mux.Logf(logs.LevelInfo, "core", "оболочка умерла (stdin EOF) — graceful выход")
+	case <-exitReq.done():
+		mux.Logf(logs.LevelInfo, "core", "RPC Shutdown — выход")
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			mux.Logf(logs.LevelError, "core", "serve: %v", err)
 		}
 	}
-	shCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_ = httpSrv.Shutdown(shCtx)
+	// T-52: сначала sing-box (TUN снимается), затем HTTP; раньше при EOF и
+	// сигнале закрывался только HTTP-сервер, и ждал он до 10 с.
+	gracefulExit(server, httpSrv, mux, os.Stderr, 2*time.Second)
 }
 
 // listenSocket — UDS (unix:///…|/…), named pipe (\\.\pipe\…), TCP (host:port).
@@ -184,8 +200,9 @@ func authMiddleware(next http.Handler, token string, mux *logs.Mux) http.Handler
 			return
 		}
 		// Fail-closed: пустой токен = отказ всем (оболочка не передала секрет).
-		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if token == "" || got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+		// T-53: схема «Bearer» обязательна; голый токен в заголовке не принимается.
+		got, hasScheme := bearerToken(r.Header.Get("Authorization"))
+		if token == "" || !hasScheme || got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
 			http.Error(w, `{"code":"unauthenticated"}`, http.StatusUnauthorized)
 			return
 		}

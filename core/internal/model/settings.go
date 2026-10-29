@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package model
 
 // SettingType — тип значения настройки (proto SettingType).
@@ -25,7 +27,13 @@ type SettingDescriptor struct {
 	ShellOwned             bool        `json:"shell_owned,omitempty"` // читает оболочка, ядро хранит
 	// DeprecatedBy — прежнее имя ключа DataStore NekoBox (для миграции §5.4).
 	DeprecatedBy string `json:"deprecated_by,omitempty"`
+	// Internal — служебный ключ ядра: хранится в таблице settings, но не
+	// отдаётся UI (DescribeSettings/GetSettings) и не принимается SetSettings.
+	Internal bool `json:"internal,omitempty"`
 }
+
+// SettingHWIDID — служебный ключ с постоянным HWID установки (D-02).
+const SettingHWIDID = "sub.hwid_id"
 
 // SettingGroups — секции UI настроек (stable-ключи).
 var SettingGroups = []string{
@@ -64,6 +72,10 @@ func SettingDescriptors() []SettingDescriptor {
 		{Key: "sub.insecure", Type: SettingBool, GroupID: "sub", DeprecatedBy: "sub_insecure"},
 		{Key: "sub.auto_update", Type: SettingInt, GroupID: "sub", DefaultValue: `0`, DeprecatedBy: "sub_auto_update"},
 		{Key: "sub.hwid_enabled", Type: SettingBool, GroupID: "sub", DefaultValue: `false`},
+		// D-02: постоянный идентификатор установки для x-hwid. Создаётся ядром
+		// один раз при первом обновлении подписки с включённым sub.hwid_enabled
+		// и не меняется; при выключенном HWID не создаётся вовсе.
+		{Key: SettingHWIDID, Type: SettingString, GroupID: "sub", Internal: true},
 
 		// ---- Запоминание ----
 		{Key: "remember.id", Type: SettingInt, GroupID: "remember", DefaultValue: `-1`, DeprecatedBy: "remember_id"},
@@ -105,6 +117,9 @@ func SettingDescriptors() []SettingDescriptor {
 		{Key: "core.clash_api.enabled", Type: SettingBool, GroupID: "core", DeprecatedBy: "core_box_clash_api"},
 		{Key: "core.clash_api.secret", Type: SettingString, GroupID: "core", DeprecatedBy: "core_box_clash_api_secret"},
 		{Key: "core.underlying_dns", Type: SettingString, GroupID: "core", DefaultValue: `"local"`, DeprecatedBy: "core_box_underlying_dns"},
+		// T-49: уровень лога sing-box (trace|debug|info|warn|error|fatal|panic);
+		// неизвестное значение cfgbuild заменяет на "info".
+		{Key: "log.level", Type: SettingString, GroupID: "core", DefaultValue: `"info"`, RequiresProfileRestart: true, DeprecatedBy: "log_level"},
 
 		// ---- Безопасность ----
 		{Key: "security.allow_insecure_default", Type: SettingBool, GroupID: "security", DeprecatedBy: "skip_cert"},

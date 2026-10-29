@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // routing_settings_service.go — RoutingService (builtin-пресеты + активный),
 // DnsService и SettingsService (W6). Пользовательские пресеты,
 // подписочные стримы и SubscribeSettings — W7 (unimplemented.go).
@@ -94,15 +96,6 @@ func (s *Server) GetActivePreset(ctx context.Context, req *connect.Request[lavra
 // DNS-настройки живут в settings-хранилище с ключами dns.* (модель W1);
 // SetDns применяет «живые» поля без перезапуска (FR-UI-148).
 
-const (
-	setDNSMode     = "dns.mode"
-	setDNSRemote   = "dns.remote"
-	setDNSDirect   = "dns.direct"
-	setDNSRouting  = "dns.routing_enabled"
-	setDNSAdvJSON  = "dns.advanced_json"
-	setDNSStrategy = "dns.remote_query_strategy"
-)
-
 // domainStrategyStr/Of — мост между proto-энумом и строками sing-box.
 func domainStrategyStr(s lavrayv1.DomainStrategy) string {
 	switch s {
@@ -137,17 +130,19 @@ func (s *Server) GetDns(ctx context.Context, req *connect.Request[lavrayv1.GetDn
 	return connect.NewResponse(out), nil
 }
 
-// currentDNS — снимок действующего DNS: настройки пользователя поверх
-// активного пресета (A7 аудита: UI показывал пустые поля, потому что
-// GetDns читал только dns.*-ключи, которые никто не заполнял).
+// currentDNS — снимок действующего DNS: переопределение активного пресета
+// поверх DNS самого пресета; choice — выбранная карточка ("auto" без выбора).
 func (s *Server) currentDNS() *lavrayv1.DnsSettings {
-	out := &lavrayv1.DnsSettings{Mode: lavrayv1.DnsSettings_MODE_SIMPLE}
+	out := &lavrayv1.DnsSettings{Mode: lavrayv1.DnsSettings_MODE_SIMPLE, Choice: strp("auto")}
 	dns := presets.DNSBlock{Mode: "simple", RemoteDNS: "https://dns.google/dns-query", DirectDNS: "local"}
 	if p, err := s.activePreset(); err == nil && p != nil {
 		dns = p.DNS
 	}
-	if s.dnsSettingStr(setDNSMode) == "advanced" {
+	if dns.Mode == "advanced" {
 		out.Mode = lavrayv1.DnsSettings_MODE_ADVANCED
+	}
+	if ov, ok := s.activeDNSChoice(); ok {
+		out.Choice = strp(ov.Choice)
 	}
 	out.RemoteDns = strp(dns.RemoteDNS)
 	out.DirectDns = strp(dns.DirectDNS)
@@ -158,11 +153,6 @@ func (s *Server) currentDNS() *lavrayv1.DnsSettings {
 	if st, ok := domainStrategyOf(dns.RemoteQueryStrategy); ok {
 		out.RemoteQueryStrategy = &st
 	}
-	if v := s.dnsSettingStr(setDNSStrategy); v != "" {
-		if st, ok := domainStrategyOf(v); ok {
-			out.RemoteQueryStrategy = &st
-		}
-	}
 	if v := s.settingStr("core.underlying_dns"); v != "" {
 		out.UnderlyingDns = strp(v)
 	}
@@ -170,6 +160,9 @@ func (s *Server) currentDNS() *lavrayv1.DnsSettings {
 	return out
 }
 
+// SetDns записывает выбор карточки для АКТИВНОГО пресета (T-31): «Авто»
+// сбрасывает переопределение, остальные карточки задают серверы и маршрут
+// запросов (туннель / напрямую); свой адрес проверяется.
 func (s *Server) SetDns(ctx context.Context, req *connect.Request[lavrayv1.SetDnsRequest]) (*connect.Response[lavrayv1.SetDnsResponse], error) {
 	m := req.Msg.Dns
 	if m == nil {
@@ -185,50 +178,12 @@ func (s *Server) SetDns(ctx context.Context, req *connect.Request[lavrayv1.SetDn
 				"(на него ссылается route.default_domain_resolver, LNB-08)")
 		}
 	}
-	set := func(k, v string) error { return mapErr(s.st.SetSetting(k, v)) }
-	setJSONStr := func(k, v string) error {
-		b, err := json.Marshal(v)
-		if err != nil {
-			return mapErr(err)
-		}
-		return mapErr(s.st.SetSetting(k, string(b)))
-	}
-	switch m.Mode {
-	case lavrayv1.DnsSettings_MODE_ADVANCED:
-		if err := setJSONStr(setDNSMode, "advanced"); err != nil {
-			return nil, err
-		}
-	default:
-		if err := setJSONStr(setDNSMode, "simple"); err != nil {
-			return nil, err
-		}
-	}
-	if m.RemoteDns != nil {
-		if err := setJSONStr(setDNSRemote, *m.RemoteDns); err != nil {
-			return nil, err
-		}
-	}
-	if m.DirectDns != nil {
-		if err := setJSONStr(setDNSDirect, *m.DirectDns); err != nil {
-			return nil, err
-		}
-	}
-	if m.RemoteQueryStrategy != nil {
-		if err := setJSONStr(setDNSStrategy, domainStrategyStr(*m.RemoteQueryStrategy)); err != nil {
-			return nil, err
-		}
-	}
-	v := "0"
-	if m.RoutingEnabled {
-		v = "1"
-	}
-	if err := set(setDNSRouting, v); err != nil {
+	ov, err := choiceFromRequest(m)
+	if err != nil {
 		return nil, err
 	}
-	if m.AdvancedJson != nil {
-		if err := setJSONStr(setDNSAdvJSON, *m.AdvancedJson); err != nil {
-			return nil, err
-		}
+	if err := s.saveDNSChoice(ov); err != nil {
+		return nil, mapErr(err)
 	}
 	needsRestart := s.inst.Status().State != instStateIdle
 	return connect.NewResponse(&lavrayv1.SetDnsResponse{
@@ -303,56 +258,82 @@ func settingTypeToProto(t model.SettingType) lavrayv1.SettingType {
 func (s *Server) DescribeSettings(ctx context.Context, req *connect.Request[lavrayv1.DescribeSettingsRequest]) (*connect.Response[lavrayv1.DescribeSettingsResponse], error) {
 	out := &lavrayv1.DescribeSettingsResponse{}
 	for _, d := range model.SettingDescriptors() {
-		out.Descriptors = append(out.Descriptors, &lavrayv1.SettingDescriptor{
-			Key:  d.Key,
-			Type: settingTypeToProto(d.Type),
-		})
+		if d.Internal {
+			continue // служебный ключ ядра (sub.hwid_id) UI не показываем
+		}
+		sd := &lavrayv1.SettingDescriptor{
+			Key:                    d.Key,
+			Type:                   settingTypeToProto(d.Type),
+			GroupId:                d.GroupID,
+			RequiresProfileRestart: d.RequiresProfileRestart,
+			RequiresAppRestart:     d.RequiresAppRestart,
+			ShellOwned:             d.ShellOwned,
+			DefaultValueJson:       strpIf(d.DefaultValue),
+			DeprecatedBy:           strpIf(d.DeprecatedBy),
+		}
+		out.Descriptors = append(out.Descriptors, sd)
 	}
 	return connect.NewResponse(out), nil
 }
 
+// GetSettings отдаёт сохранённые значения, а для ключей без записи — значение
+// по умолчанию из дескриптора (T-34): свежая установка показывает порт 2080, а
+// не пустое поле, которое раньше превращалось в 0.
 func (s *Server) GetSettings(ctx context.Context, req *connect.Request[lavrayv1.GetSettingsRequest]) (*connect.Response[lavrayv1.GetSettingsResponse], error) {
 	all, err := s.st.Settings()
 	if err != nil {
 		return nil, mapErr(err)
+	}
+	for _, d := range model.SettingDescriptors() {
+		if _, stored := all[d.Key]; !stored && d.DefaultValue != "" {
+			all[d.Key] = d.DefaultValue
+		}
 	}
 	want := map[string]bool{}
 	for _, k := range req.Msg.Keys {
 		want[k] = true
 	}
 	out := &lavrayv1.GetSettingsResponse{Values: map[string]*lavrayv1.SettingValue{}}
-	keys := make([]string, 0, len(all))
-	for k := range all {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
+	for k, raw := range all {
 		if len(want) > 0 && !want[k] {
 			continue
+		}
+		if d, known := descriptorMap[k]; known && d.Internal {
+			continue // служебный ключ ядра не отдаётся UI даже по явному запросу
 		}
 		// A4 (аудит №4): тип значения — из дескриптора. Сырой JSON в
 		// stringValue приводил к тому, что клиент видел "\"192.168.1.5\""
 		// и молча сбрасывал int/bool в дефолты.
-		out.Values[k] = typedSettingValue(k, all[k])
+		out.Values[k] = typedSettingValue(k, raw)
 	}
 	return connect.NewResponse(out), nil
 }
 
+// SetSettings сначала проверяет ВСЕ значения (тип, диапазон, адрес — см.
+// settings_validate.go) и только потом пишет: невалидный запрос не меняет ничего.
+// Ответ сообщает, нужен ли перезапуск профиля или приложения.
 func (s *Server) SetSettings(ctx context.Context, req *connect.Request[lavrayv1.SetSettingsRequest]) (*connect.Response[lavrayv1.SetSettingsResponse], error) {
-	known := map[string]bool{}
-	for _, d := range model.SettingDescriptors() {
-		known[d.Key] = true
-	}
-	resp := &lavrayv1.SetSettingsResponse{}
 	keys := make([]string, 0, len(req.Msg.Values))
 	for k := range req.Msg.Values {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
+	type pending struct{ key, raw string }
+	var writes []pending
+	resp := &lavrayv1.SetSettingsResponse{}
 	for _, k := range keys {
 		v := req.Msg.Values[k]
-		if !known[k] && !strings.HasPrefix(k, "dns.") {
+		d, known := descriptorMap[k]
+		if known && d.Internal {
+			continue // служебный ключ ядра UI менять не может (как неизвестный: не в accepted)
+		}
+		if !known && !strings.HasPrefix(k, "dns.") {
 			continue // неизвестный ключ не применяется и не попадает в accepted (LNB-30-класс: не молча — список accepted честный)
+		}
+		if known {
+			if err := validateSetting(k, d, v); err != nil {
+				return nil, err
+			}
 		}
 		// F6 (аудит №7): значения хранятся СТРОГО как JSON — геттеры
 		// (settingStr/Bool/Int) делают json.Unmarshal, поэтому "1"/"0" и
@@ -374,7 +355,7 @@ func (s *Server) SetSettings(ctx context.Context, req *connect.Request[lavrayv1.
 		case *lavrayv1.SettingValue_JsonValue:
 			raw = kind.JsonValue
 		case *lavrayv1.SettingValue_StringListValue:
-			b, err := json.Marshal(kind.StringListValue)
+			b, err := json.Marshal(kind.StringListValue.GetItems())
 			if err != nil {
 				return nil, mapErr(err)
 			}
@@ -382,10 +363,19 @@ func (s *Server) SetSettings(ctx context.Context, req *connect.Request[lavrayv1.
 		default:
 			continue
 		}
-		if err := s.st.SetSetting(k, raw); err != nil {
+		writes = append(writes, pending{k, raw})
+		resp.AcceptedKeys = append(resp.AcceptedKeys, k)
+		if d.RequiresProfileRestart && s.inst.Status().State != instStateIdle {
+			resp.NeedsProfileRestart = true
+		}
+		if d.RequiresAppRestart {
+			resp.NeedsAppRestart = true
+		}
+	}
+	for _, w := range writes {
+		if err := s.st.SetSetting(w.key, w.raw); err != nil {
 			return nil, mapErr(err)
 		}
-		resp.AcceptedKeys = append(resp.AcceptedKeys, k)
 	}
 	return connect.NewResponse(resp), nil
 }
@@ -411,13 +401,22 @@ func (s *Server) CreateSubscription(ctx context.Context, req *connect.Request[la
 	if strings.TrimSpace(msg.Url) == "" {
 		return nil, invalidArg("url обязателен")
 	}
+	subURL, err := resolveSubscriptionURL(msg.Url) // T-19: happ://crypt… → ссылка подписки
+	if err != nil {
+		return nil, err
+	}
+	// T-51: локальный/приватный адрес — только с явным разрешением (LNB-05). Проверяем
+	// ссылку, которую группа сохранит (после разбора happ://), а не сырой ввод.
+	if err := validateNewSubscriptionURL(subURL); err != nil {
+		return nil, invalidArg("%v", err)
+	}
 	g := &model.Group{
 		Name:            msg.Name,
 		Kind:            model.GroupSubscription,
-		SubscriptionURL: msg.Url,
+		SubscriptionURL: subURL,
 	}
 	if g.Name == "" {
-		g.Name = hostOf(msg.Url)
+		g.Name = hostOf(subURL)
 	}
 	if err := s.st.CreateGroup(g); err != nil {
 		return nil, mapErr(err)

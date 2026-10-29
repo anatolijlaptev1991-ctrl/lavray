@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package links — Link2Bean/Bean2Link: разбор и генерация share-ссылок
 // профилей (порт fmt/Link2Bean.cpp + fmt/Bean2Link.cpp из nekoray; W2,
 // core-port-plan §4.1, §9-W2; FR-UI-190/191/164).

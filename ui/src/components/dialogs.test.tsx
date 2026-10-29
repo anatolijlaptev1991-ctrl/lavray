@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // dialogs.test.tsx — проверка переноса из Happ/v2rayN и независимых режимов
 // в онбординге (DOM-проверка вместо визуальной: шаги мастера интерактивны).
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -8,6 +10,7 @@ import { createElement } from 'react';
 import { CoreContext } from '../hooks/useCore';
 import { createCoreClients } from '../lib/core';
 import { OnboardingDialog } from './dialogs';
+import { t } from '../lib/i18n';
 
 describe('OnboardingDialog', () => {
   let root: Root | undefined;
@@ -42,7 +45,7 @@ describe('OnboardingDialog', () => {
     });
   }
 
-  it('предлагает перенос из Happ и v2rayN на шаге «Сервер»', () => {
+  it('предлагает зашифрованную ссылку и перенос из v2rayN на шаге «Сервер»', () => {
     render();
     // шаг 1 → шаг 2
     const next = Array.from(document.querySelectorAll('button')).find(
@@ -52,7 +55,9 @@ describe('OnboardingDialog', () => {
       next?.click();
     });
     const labels = Array.from(document.querySelectorAll('.onb-src')).map((e) => e.textContent ?? '');
-    expect(labels.some((l) => l.includes('Happ'))).toBe(true);
+    expect(labels.some((l) => l.includes(t('onb.src.happ')))).toBe(true);
+    // Название стороннего клиента в интерфейсе не показываем (требование 14).
+    expect(labels.some((l) => l.includes('Happ'))).toBe(false);
     expect(labels.some((l) => l.includes('v2rayN'))).toBe(true);
   });
 

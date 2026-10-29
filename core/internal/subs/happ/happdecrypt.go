@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package happ расшифровывает зашифрованные Happ-ссылки подписок
 // (happ://crypt .. happ://crypt5) — порт go/cmd/nekobox_core/happ форка
 // nekoray (W3, core-port-plan §4.1; вызов внутри процесса, без подпроцесса —

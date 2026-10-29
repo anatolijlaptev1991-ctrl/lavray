@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package nekoimport — импортёр каталога профилей NekoBox/NekoRay
 // (core-port-plan §5.3, FR-UI-277).
 //

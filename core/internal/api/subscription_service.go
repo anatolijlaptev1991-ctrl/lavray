@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // subscription_service.go — SubscriptionService (W6+, аудит №7 F1): реальное
 // обновление подписки через subs.Subscriber — fetch → parse → diff →
 // подтверждение при деструктивном изменении → apply с автооткатом. Стрим
@@ -25,8 +27,10 @@ func (s *Server) subscriberFor() *subs.Subscriber {
 // allow_private_urls/таймауты раньше игнорировались).
 type subRequest struct {
 	userAgent          string
+	useProxy           *bool
 	insecureTLS        *bool
 	allowPrivate       *bool
+	clearBefore        *bool
 	connectTimeout     time.Duration
 	overallTimeout     time.Duration
 	confirmDestructive bool
@@ -37,16 +41,26 @@ func (s *Server) subscriberWith(r subRequest) *subs.Subscriber {
 		MaxBodyBytes:    64 << 20,
 		AllowPrivateURL: s.settingBool("sub.allow_private_urls"),
 		InsecureTLS:     s.settingBool("sub.insecure"),
-		HWIDEnabled:     s.settingBool("sub.hwid_enabled"),
+		ClearBefore:     s.settingBool("sub.clear"), // FR-UI-124; запрос может перекрыть
 		Log: func(format string, args ...any) {
 			s.logs.Logf("warn", "subs", format, args...)
 		},
+	}
+	// D-02: HWID только при явном opt-in, и всегда один и тот же (sub.hwid_id).
+	if s.settingBool("sub.hwid_enabled") {
+		if h, ok := s.deviceHWID(); ok {
+			opts.HWIDEnabled = true
+			opts.HWID = h
+		}
 	}
 	if r.allowPrivate != nil {
 		opts.AllowPrivateURL = *r.allowPrivate
 	}
 	if r.insecureTLS != nil {
 		opts.InsecureTLS = *r.insecureTLS
+	}
+	if r.clearBefore != nil {
+		opts.ClearBefore = *r.clearBefore
 	}
 	if r.connectTimeout > 0 {
 		opts.ConnectTimeout = r.connectTimeout
@@ -59,7 +73,8 @@ func (s *Server) subscriberWith(r subRequest) *subs.Subscriber {
 	} else if ua := s.settingStr("sub.user_agent"); ua != "" {
 		opts.UserAgent = ua
 	}
-	return subs.NewSubscriber(s.http, opts)
+	// T-16: через туннель, когда он поднят и use_proxy включён (LNB-33).
+	return subs.NewSubscriber(s.httpForSubscriptions(r.useProxy), opts)
 }
 
 func (s *Server) UpdateSubscriptionSettings(ctx context.Context, req *connect.Request[lavrayv1.UpdateSubscriptionSettingsRequest]) (*connect.Response[lavrayv1.Group], error) {
@@ -78,6 +93,10 @@ func (s *Server) UpdateSubscriptionSettings(ctx context.Context, req *connect.Re
 }
 
 func (s *Server) DeleteSubscription(ctx context.Context, req *connect.Request[lavrayv1.DeleteSubscriptionRequest]) (*connect.Response[lavrayv1.Empty], error) {
+	// T-12: подписка — это группа; активный профиль удалять нельзя.
+	if err := s.guardActiveGroup(req.Msg.GroupId); err != nil {
+		return nil, err
+	}
 	if err := s.st.DeleteGroup(req.Msg.GroupId); err != nil {
 		return nil, mapErr(err)
 	}
@@ -90,8 +109,10 @@ func (s *Server) UpdateSubscription(ctx context.Context, req *connect.Request[la
 	m := req.Msg
 	r := subRequest{
 		userAgent:          m.GetUserAgent(),
+		useProxy:           m.UseProxy,
 		insecureTLS:        m.InsecureTls,
 		allowPrivate:       m.AllowPrivateUrls,
+		clearBefore:        m.ClearBefore,
 		confirmDestructive: m.GetConfirmDestructive(),
 	}
 	if m.ConnectTimeoutMs != nil && m.GetConnectTimeoutMs() > 0 {
@@ -218,7 +239,12 @@ func (s *Server) updateOne(ctx context.Context, groupID int64, stream *connect.S
 			}
 			send(resp)
 			if !(r.confirmDestructive || subscriptionConfirmed(ctx)) {
-				return connect.NewError(connect.CodeFailedPrecondition, err)
+				// T-18: кадр CONFIRM_REQUIRED — штатный ответ «нужно решение
+				// пользователя», а не сбой. Поток закрывается без ошибки:
+				// клиент читает кадры циклом, и ошибка в конце потока делала
+				// ветку подтверждения недостижимой. Группа не менялась;
+				// продолжить можно повторным вызовом с confirm_destructive=true.
+				return nil
 			}
 			continue
 		}

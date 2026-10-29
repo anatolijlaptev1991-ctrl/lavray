@@ -65,7 +65,9 @@
       "password": "hy2-pass",
       "server": "hy2b.example.org",
       "server_port": 8443,
-      "server_ports": "1000:2000",
+      "server_ports": [
+        "1000:2000"
+      ],
       "tag": "proxy",
       "tls": {
         "alpn": "h3",

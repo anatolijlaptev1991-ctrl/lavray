@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // TitlebarMenu.tsx — меню титлбара (прототип `tbMenuItems()`).
 // Состав: импорт подписки, подключить/отключить, разделитель, первый запуск,
 // горячие клавиши, о программе, разделитель, выход.
@@ -5,6 +7,7 @@ import { useEffect, useRef } from 'react';
 import type { JSX } from 'react';
 import { Icon, type IconName } from './Icon';
 import { useI18n } from '../hooks/useI18n';
+import { kbdLabel } from '../lib/hotkeys';
 
 export interface TitlebarMenuProps {
   /** Точка привязки (левый нижний угол кнопки). */
@@ -50,10 +53,8 @@ export function TitlebarMenu({
   onQuit,
   onClose,
 }: TitlebarMenuProps): JSX.Element {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const ref = useRef<HTMLDivElement | null>(null);
-  // Модификатор по конвенции ОС (прототип: kbdLabel('D')).
-  const mod = os === 'macos' ? '⌘' : 'Ctrl';
 
   useEffect(() => {
     const root = ref.current;
@@ -111,7 +112,7 @@ export function TitlebarMenu({
       // Прототип использует `power` при активном соединении.
       ic: connected ? 'power' : 'zap',
       label: t(connected ? 'conn.disconnect' : 'conn.connect'),
-      kbd: `${mod} D`,
+      kbd: kbdLabel('D', os, lang), // «Ctrl+D» / «⌘D» / «Strg+D» (прототип: kbdLabel('D'))
       fn: onToggleConnect,
     },
     { kind: 'sep', id: 's1' },

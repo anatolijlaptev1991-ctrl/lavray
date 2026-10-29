@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package links
 
 import (
@@ -402,7 +404,7 @@ func TestParseLinkMiscErrors(t *testing.T) {
 		{"пробелы", "   ", "пуста"},
 		{"нет схемы", "just-a-host:443", "схема"},
 		{"unsupported", "wireguard://key@h.io:443", "неподдерживаемая схема"},
-		{"happ — W3", "happ://xxx", "W3"},
+		{"зашифрованная ссылка — в подписки", "happ://xxx", "«Подписки»"},
 		{"naive+https", "naive+https://u:p@h.io:443", "неподдерживаемая схема"},
 	}
 	for _, b := range bad {

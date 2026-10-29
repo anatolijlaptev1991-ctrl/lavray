@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // headless_glue.go — обвязка headless-режима (F19): CoreAPI для
 // internal/headless поверх api.Server. Автозапуск запомненного профиля и
 // авторестарт после падения — для lavrayd на OpenWrt и службы Windows.

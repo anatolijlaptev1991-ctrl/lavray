@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package cfgbuild
 
 // route_test.go — юниты route-слоя (W5): makeMatchRule (префиксы FR-UI-135,

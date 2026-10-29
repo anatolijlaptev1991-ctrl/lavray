@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //go:build singbox_check
 
 package cfgbuild
@@ -7,10 +9,15 @@ package cfgbuild
 // (эквивалент cmd/sing-box check + libbox.CheckConfig), без запуска
 // инстанса: box.New сразу закрывается.
 //
-// Без тега with_quic (дефолтный go test) протоколы на QUIC (hysteria2/tuic)
-// не скомпилированы в реестр — box.New возвращает «... is not included in
-// this build»; такие конфиги считаются валидными на уровне парсера
-// (ErrFeatureTagMissing), полная проверка — `go test -tags with_quic`.
+// Без тега with_quic (например, голый `go test -tags singbox_check`) протоколы
+// на QUIC (hysteria2/tuic) не скомпилированы в реестр — box.New возвращает
+// «... is not included in this build»; такие конфиги считаются валидными на
+// уровне парсера (ErrFeatureTagMissing), полная проверка — с тегами ядра.
+//
+// D-01: когда тест запущен со ВСЕМИ with_*-тегами из core/BUILD_TAGS,
+// «is not included in this build» — провал, а не успех: иначе проверка молча
+// урезалась бы (так G35a/G35c с неверным server_ports прошли бы незамеченными).
+// Команда: go test -tags "singbox_check,$(tr -d '[:space:]' < BUILD_TAGS)" ...
 
 import (
 	"context"
@@ -19,6 +26,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"testing"
 
@@ -141,10 +149,80 @@ func singBoxCheck(configJSON string) error {
 	return err
 }
 
+// buildTagsPath — единый список тегов ядра (cwd теста — каталог пакета).
+const buildTagsPath = "../../BUILD_TAGS"
+
+// featureTags — теги из BUILD_TAGS, подключающие протоколы/возможности
+// sing-box (with_*); singbox_run влияет на раннер, не на реестры проверки.
+func featureTags(buildTags string) []string {
+	var out []string
+	for _, tag := range strings.Split(strings.TrimSpace(buildTags), ",") {
+		if tag = strings.TrimSpace(tag); strings.HasPrefix(tag, "with_") {
+			out = append(out, tag)
+		}
+	}
+	return out
+}
+
+// activeTags — теги, с которыми собран этот тестовый бинарь (go test -tags).
+func activeTags() map[string]bool {
+	active := map[string]bool{}
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return active
+	}
+	for _, setting := range info.Settings {
+		if setting.Key != "-tags" {
+			continue
+		}
+		for _, tag := range strings.FieldsFunc(setting.Value, func(r rune) bool { return r == ',' || r == ' ' }) {
+			active[tag] = true
+		}
+	}
+	return active
+}
+
+// strictFeatureTags — тест запущен со всеми with_*-тегами из BUILD_TAGS
+// (а список непустой): отсутствие тега в реестре тогда — реальный дефект.
+func strictFeatureTags(required []string, active map[string]bool) bool {
+	if len(required) == 0 {
+		return false
+	}
+	for _, tag := range required {
+		if !active[tag] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestStrictFeatureTags(t *testing.T) {
+	req := featureTags("singbox_run,with_quic,with_gvisor,with_utls\n")
+	if want := []string{"with_quic", "with_gvisor", "with_utls"}; strings.Join(req, ",") != strings.Join(want, ",") {
+		t.Fatalf("featureTags = %v, ждали %v", req, want)
+	}
+	all := map[string]bool{"singbox_check": true, "with_quic": true, "with_gvisor": true, "with_utls": true}
+	if !strictFeatureTags(req, all) {
+		t.Error("со всеми тегами BUILD_TAGS проверка обязана быть строгой")
+	}
+	if strictFeatureTags(req, map[string]bool{"singbox_check": true, "with_quic": true}) {
+		t.Error("без with_gvisor/with_utls проверка не может быть строгой")
+	}
+	if strictFeatureTags(nil, all) {
+		t.Error("пустой список тегов не включает строгий режим")
+	}
+}
+
 // TestGoldenSingBoxCheck — каждый golden-эталон валиден для sing-box 1.14
-// (парсинг опций форка + box.New). QUIC-протоколы без тега with_quic →
-// ErrFeatureTagMissing (полная проверка: go test -tags with_quic).
+// (парсинг опций форка + box.New). Без with_*-тегов из BUILD_TAGS QUIC-
+// протоколы → ErrFeatureTagMissing (частичная проверка); со всеми — провал.
 func TestGoldenSingBoxCheck(t *testing.T) {
+	rawTags, err := os.ReadFile(buildTagsPath)
+	if err != nil {
+		t.Fatalf("core/BUILD_TAGS: %v", err)
+	}
+	required := featureTags(string(rawTags))
+	strict := strictFeatureTags(required, activeTags())
 	for _, inPath := range loadGolden(t) {
 		name := filepath.Base(inPath)
 		t.Run(name, func(t *testing.T) {
@@ -155,7 +233,10 @@ func TestGoldenSingBoxCheck(t *testing.T) {
 			}
 			if err := singBoxCheck(string(raw)); err != nil {
 				if errors.Is(err, ErrFeatureTagMissing) {
-					t.Logf("%s: ok (parse; полная проверка — -tags with_quic)", name)
+					if strict {
+						t.Fatalf("%s: в сборке нет протокола при полном наборе тегов %v: %v", name, required, err)
+					}
+					t.Logf("%s: ok (parse; полная проверка — теги из core/BUILD_TAGS)", name)
 					return
 				}
 				t.Fatalf("sing-box check: %v", err)

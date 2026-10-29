@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // observability_service.go — LogService + StatsService + DiagnosticsService
 // (W7). ConnectionService — connection_service.go. Тонкие обёртки над
 // logs.Mux / inst-событиями / cfgbuild dry-run; источники статистики и
@@ -7,16 +9,14 @@ package api
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/cfgbuild"
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
-	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 )
 
 // ---- LogService -----------------------------------------------------------------
@@ -83,7 +83,7 @@ func (s *Server) Subscribe(ctx context.Context, req *connect.Request[lavrayv1.Su
 		}
 		return false
 	}
-	ch, cancel, tail := s.logs.Subscribe(256, tailN, func(l logs.Line) bool {
+	keep := func(l logs.Line) bool {
 		if logLevelToProto(l.Level) < minLevel {
 			return false
 		}
@@ -97,9 +97,13 @@ func (s *Server) Subscribe(ctx context.Context, req *connect.Request[lavrayv1.Su
 			return false
 		}
 		return true
-	})
+	}
+	// T-70: tail_lines — «сколько истории отдать сразу (0 = нет)». Mux.Subscribe
+	// при tail <= 0 возвращает ВЕСЬ буфер, поэтому историю берём из него сами:
+	// те же фильтры, что у живого потока, последние tailN подходящих строк.
+	ch, cancel, ring := s.logs.Subscribe(256, 0, keep)
 	defer cancel()
-	for _, l := range tail {
+	for _, l := range lastMatching(ring, min(tailN, 2000), keep) {
 		if err := stream.Send(logLineToProto(l)); err != nil {
 			return err
 		}
@@ -117,6 +121,24 @@ func (s *Server) Subscribe(ctx context.Context, req *connect.Request[lavrayv1.Su
 			}
 		}
 	}
+}
+
+// lastMatching — последние n строк из lines (от старых к новым), прошедших keep;
+// n <= 0 — пусто.
+func lastMatching(lines []logs.Line, n int, keep func(logs.Line) bool) []logs.Line {
+	if n <= 0 {
+		return nil
+	}
+	var out []logs.Line
+	for i := len(lines) - 1; i >= 0 && len(out) < n; i-- {
+		if keep(lines[i]) {
+			out = append(out, lines[i])
+		}
+	}
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out
 }
 
 // ---- StatsService -----------------------------------------------------------------
@@ -185,193 +207,80 @@ func (s *Server) GetTrafficSummary(ctx context.Context, req *connect.Request[lav
 func (s *Server) CheckRoute(ctx context.Context, req *connect.Request[lavrayv1.CheckRouteRequest]) (*connect.Response[lavrayv1.CheckRouteResponse], error) {
 	msg := req.Msg
 	addr := strings.TrimSpace(msg.Address)
-	if addr == "" {
-		return nil, invalidArg("address обязателен")
+	// T-29: достаточно адреса ИЛИ имени процесса (приложение без адреса).
+	proc := strings.TrimSpace(msg.GetProcessName())
+	if addr == "" && proc == "" {
+		return nil, invalidArg("нужен address или process_name")
 	}
-	// Активный профиль/пресет: dry-run сборки + какой outbound выбрал бы
-	// сгенерированный route (проверка по правилам конфигбилдера).
-	profileID := int64(0)
-	if st := s.inst.Status(); st.Run != nil {
-		profileID = st.Run.ProfileID
-	}
-	var profile *model.Profile
-	if profileID != 0 {
-		p, err := s.st.GetProfile(profileID)
-		if err != nil {
-			return nil, mapErr(err)
-		}
-		profile = p
-	}
-	outbound := "direct" // без запущенного профиля весь трафик — напрямую
-	if profile != nil {
-		res, err := s.dryRunBuild(profile, lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY)
-		if err == nil && res.Config != nil {
-			if o := matchRouteOutbound(res.Config, addr, msg.ProcessName); o != "" {
-				outbound = o
-			}
-		}
-	}
-	return connect.NewResponse(&lavrayv1.CheckRouteResponse{Outbound: outboundToProto(outbound)}), nil
-}
-
-// matchRouteOutbound — наивная оценка route.rules: точное domain-суффиксное
-// совпадение + process_name; полная семантика — sing-box rule-set в рантайме.
-func matchRouteOutbound(config map[string]any, addr string, process *string) string {
-	host := addr
-	if i := strings.Index(host, "://"); i >= 0 {
-		host = host[i+3:]
-	}
-	if i := strings.IndexAny(host, "/:"); i >= 0 {
-		host = host[:i]
-	}
-	host = strings.ToLower(strings.TrimSuffix(host, "."))
-	route, _ := config["route"].(map[string]any)
-	rules, _ := route["rules"].([]any)
-	matchDomain := func(pat any) bool {
-		p, ok := pat.(string)
-		if !ok {
-			return false
-		}
-		if strings.HasPrefix(p, ".") {
-			return strings.HasSuffix(host, p) || host == p[1:]
-		}
-		return host == p || strings.HasSuffix(host, "."+p)
-	}
-	for _, r := range rules {
-		rule, ok := r.(map[string]any)
-		if !ok {
-			continue
-		}
-		matched := false
-		if doms, ok := rule["domain"].([]any); ok {
-			for _, d := range doms {
-				if matchDomain(d) {
-					matched = true
-					break
-				}
-			}
-		}
-		if !matched {
-			if sufs, ok := rule["domain_suffix"].([]any); ok {
-				for _, d := range sufs {
-					if matchDomain(d) {
-						matched = true
-						break
-					}
-				}
-			}
-		}
-		if !matched && process != nil && *process != "" {
-			if procs, ok := rule["process_name"].([]any); ok {
-				for _, pn := range procs {
-					if p, ok := pn.(string); ok && strings.EqualFold(p, *process) {
-						matched = true
-						break
-					}
-				}
-			}
-		}
-		if matched {
-			if o, ok := rule["outbound"].(string); ok {
-				return o
-			}
-		}
-	}
-	if f, ok := route["final"].(string); ok && f != "" {
-		return f
-	}
-	return "proxy"
-}
-
-// RunSelfCheck — набор проверок по контракту; сетевые — через инъектированный
-// http.Client с коротким таймаутом, результат — redacted деталь.
-func (s *Server) RunSelfCheck(ctx context.Context, req *connect.Request[lavrayv1.RunSelfCheckRequest]) (*connect.Response[lavrayv1.RunSelfCheckResponse], error) {
-	out := &lavrayv1.RunSelfCheckResponse{}
-
-	// 1) Конфигурация запущенного профиля валидна (dry-run сборки).
-	if st := s.inst.Status(); st.Run != nil && st.Run.ProfileID != 0 {
-		if p, err := s.st.GetProfile(st.Run.ProfileID); err == nil {
-			_, errBuild := s.dryRunBuild(p, lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY)
-			status := lavrayv1.SelfCheckResult_STATUS_OK
-			detail := ""
-			if errBuild != nil {
-				status = lavrayv1.SelfCheckResult_STATUS_FAIL
-				detail = errBuild.Error()
-			}
-			out.Results = append(out.Results, &lavrayv1.SelfCheckResult{
-				Kind:   lavrayv1.RunSelfCheckRequest_CHECK_KIND_CORE_ALIVE,
-				Status: status,
-				Detail: strpIf(detail),
-			})
-		}
-	}
-
-	// 2) Время системы не сбито (истёкшие подписи обновлений отвергались бы).
-	_, offset := time.Now().Zone()
-	_ = offset
-
-	// 3) Сеть напрямую доступна (без туннеля) — HEAD на источник метаданных.
-	if s.http != nil {
-		cctx, cancel := context.WithTimeout(ctx, 4*time.Second)
-		r, _ := http.NewRequestWithContext(cctx, http.MethodHead, "https://github.com/", nil)
-		resp, err := s.http.Do(r)
-		cancel()
-		sc := lavrayv1.SelfCheckResult_STATUS_OK
-		d := ""
-		if err != nil {
-			sc = lavrayv1.SelfCheckResult_STATUS_FAIL
-			d = err.Error()
-		} else {
-			resp.Body.Close()
-		}
-		out.Results = append(out.Results, &lavrayv1.SelfCheckResult{
-			Kind: lavrayv1.RunSelfCheckRequest_CHECK_KIND_CLOCK_SKEW, Status: sc, Detail: strpIf(d),
-		})
-	}
-	return connect.NewResponse(out), nil
-}
-
-// GetPublicIp — «каков мой адрес наружу» (сравнение прямого и через туннель =
-// проверка утечек; здесь — только прямой запрос, туннельный — W8-стенд).
-func (s *Server) GetPublicIp(ctx context.Context, req *connect.Request[lavrayv1.GetPublicIpRequest]) (*connect.Response[lavrayv1.GetPublicIpResponse], error) {
-	if s.http == nil {
-		return nil, failedPrecondition("http-клиент не сконфигурирован")
-	}
-	cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	r, _ := http.NewRequestWithContext(cctx, http.MethodGet, "https://api.ipify.org/", nil)
-	resp, err := s.http.Do(r)
+	// T-30: правила берутся из того же routeRules, что строит конфиг
+	// (rule_set, ip_*, тег bypass); запущенный профиль не нужен. В режиме TUN
+	// учитываются TUN-списки исключений.
+	preset, err := s.activePreset()
 	if err != nil {
-		return nil, mapErr(fmt.Errorf("публичный IP: %w", err))
+		return nil, mapErr(err)
 	}
-	defer resp.Body.Close()
-	buf := make([]byte, 64)
-	n, _ := resp.Body.Read(buf)
-	ip := strings.TrimSpace(string(buf[:n]))
-	isV6 := strings.Contains(ip, ":")
-	return connect.NewResponse(&lavrayv1.GetPublicIpResponse{Ip: strpIf(ip), IsIpv6: isV6}), nil
+	table, err := cfgbuild.BuildRouteTable(preset, s.buildSettings(s.tunnelIsTUN()))
+	if err != nil {
+		return nil, mapErr(err)
+	}
+	v := table.Evaluate(cfgbuild.ParseRouteQuery(addr, proc), s.ruleSetLookup(table))
+	if len(v.Unresolved) > 0 {
+		s.logs.Logf(logs.LevelWarn, logs.SourceCore, "тестер маршрута: не вычислено %v", v.Unresolved)
+	}
+	resp := &lavrayv1.CheckRouteResponse{Outbound: outboundToProto(v.Outbound), MatchedList: strp(v.List)}
+	if v.Index >= 0 {
+		resp.MatchedRule = strp(v.Rule + " → " + v.Outbound)
+	}
+	return connect.NewResponse(resp), nil
 }
 
-// CheckLeaks — сравнение IP напрямую и через туннель + DNS-egress
-// (FR-UI-273). Туннельный замер требует поднятого прокси-транспорта —
-// W8-стенд; каркас с прямым IP и TunnelActive из статуса инстанса.
-func (s *Server) CheckLeaks(ctx context.Context, req *connect.Request[lavrayv1.Empty]) (*connect.Response[lavrayv1.LeakReport], error) {
-	direct := ""
-	if s.http != nil {
-		cctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		r, _ := http.NewRequestWithContext(cctx, http.MethodGet, "https://api.ipify.org/", nil)
-		if resp, err := s.http.Do(r); err == nil {
-			buf := make([]byte, 64)
-			n, _ := resp.Body.Read(buf)
-			resp.Body.Close()
-			direct = strings.TrimSpace(string(buf[:n]))
-		}
-		cancel()
+// GetPublicIp — «каков мой адрес наружу». Поле via выбирает путь запроса
+// (T-16): THROUGH_TUNNEL — через mixed-in работающего инстанса (туннель не
+// поднят → FAILED_PRECONDITION), DIRECT — напрямую, UNSPECIFIED — через
+// туннель, если соединение активно, иначе напрямую.
+func (s *Server) GetPublicIp(ctx context.Context, req *connect.Request[lavrayv1.GetPublicIpRequest]) (*connect.Response[lavrayv1.GetPublicIpResponse], error) {
+	client, err := s.httpVia(req.Msg.Via)
+	if err != nil {
+		return nil, err
 	}
-	st := s.inst.Status()
-	out := &lavrayv1.LeakReport{TunnelActive: st.State == inst.StateReady}
-	if direct != "" {
-		out.DirectIp = strpIf(direct)
+	ip, err := s.fetchPublicIP(ctx, client)
+	if err != nil {
+		return nil, unavailable(err)
+	}
+	return connect.NewResponse(&lavrayv1.GetPublicIpResponse{Ip: strpIf(ip.String()), IsIpv6: ip.Is6()}), nil
+}
+
+// CheckLeaks — IP напрямую и через туннель, прямой IPv6 (FR-UI-273). Что не
+// измерено, перечислено в LeakReport.unchecked: пустое поле не означает
+// «в порядке». DNS-эгресс не измеряется никогда: контролируемого тест-домена,
+// который показал бы адрес резолвера, у приложения нет.
+func (s *Server) CheckLeaks(ctx context.Context, req *connect.Request[lavrayv1.Empty]) (*connect.Response[lavrayv1.LeakReport], error) {
+	out := &lavrayv1.LeakReport{
+		TunnelActive: s.inst.Status().State == inst.StateReady,
+		Unchecked:    []string{"dns"},
+	}
+	tunnel, up := s.tunnelClient()
+	if up {
+		if ip, err := s.fetchPublicIP(ctx, tunnel); err == nil {
+			out.TunnelIp = strpIf(ip.String())
+		}
+	}
+	if out.TunnelIp == nil {
+		out.Unchecked = append(out.Unchecked, "tunnel_ip")
+	}
+	if s.tunnelIsTUN() {
+		out.Unchecked = append(out.Unchecked, "direct_ip", "ipv6")
+		return connect.NewResponse(out), nil
+	}
+	if ip, err := s.fetchPublicIP(ctx, s.http); err == nil {
+		out.DirectIp = strpIf(ip.String())
+	} else {
+		out.Unchecked = append(out.Unchecked, "direct_ip")
+	}
+	if up {
+		out.Ipv6DirectAvailable = s.ipv6DirectAvailable(ctx)
+	} else {
+		out.Unchecked = append(out.Unchecked, "ipv6")
 	}
 	return connect.NewResponse(out), nil
 }

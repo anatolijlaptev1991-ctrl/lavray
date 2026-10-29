@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package web — веб-панель LAVRay (W7, FR-UI-278): вход по паролю
 // (PBKDF2-HMAC-SHA256, golang.org/x/crypto/argon2 недоступен локально —
 // Go-прокси; при доступности зависимости заменяем на argon2id без смены

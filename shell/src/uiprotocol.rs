@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Протокол UI ↔ shell: команды (UI → shell) и события (shell → UI).
 //!
 //! Это верхний канал Tauri IPC (`invoke` + события). Нижний канал

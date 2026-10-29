@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_diag.tsx — «Проверки» по прототипу v1.2 (FR-UI-271/272/273):
 // последовательный прогон самопроверок с анимацией статусов, итоговая
 // сводка с числом проблем, карточка утечек (IP/DNS) и переход к тестеру
@@ -8,9 +10,10 @@ import { GetPublicIpRequest_Via, RunSelfCheckRequest_CheckKind, SelfCheckResult_
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import type { MessageKey } from '../lib/i18n';
 import { Icon } from '../components/Icon';
 
-type RunState = 'pending' | 'run' | 'ok' | 'warn' | 'err';
+type RunState = 'pending' | 'run' | 'ok' | 'warn' | 'err' | 'skip';
 
 interface Row {
   readonly kind: number;
@@ -23,7 +26,8 @@ const STATUS_TO_RUN: Record<number, RunState> = {
   [SelfCheckResult_Status.OK]: 'ok',
   [SelfCheckResult_Status.WARN]: 'warn',
   [SelfCheckResult_Status.FAIL]: 'err',
-  [SelfCheckResult_Status.UNSPECIFIED]: 'pending',
+  // UNSPECIFIED = проверка не выполнена (T-32): показываем «не проверено», не «ок».
+  [SelfCheckResult_Status.UNSPECIFIED]: 'skip',
 };
 
 const STATE_ICON: Record<RunState, Parameters<typeof Icon>[0]['name']> = {
@@ -32,30 +36,43 @@ const STATE_ICON: Record<RunState, Parameters<typeof Icon>[0]['name']> = {
   ok: 'check',
   warn: 'alert',
   err: 'x',
+  skip: 'info',
 };
 
-const STATE_LABEL: Record<RunState, string> = {
+const STATE_LABEL: Record<RunState, MessageKey> = {
   pending: 'chk.st.pending',
   run: 'chk.st.run',
   ok: 'st.ok',
   warn: 'st.warn',
   err: 'st.fail',
+  skip: 'chk.st.skip',
 };
 
 /** Локализация названия проверки — по РЕАЛЬНОМУ enum контракта
  *  (SD-01 аудита round 3: прежняя таблица была сдвинута на единицу). */
-const KIND_LABEL: Record<number, string> = {
+const KIND_LABEL: Record<number, MessageKey> = {
   [RunSelfCheckRequest_CheckKind.CORE_ALIVE]: 'chk.core.t',
   [RunSelfCheckRequest_CheckKind.SERVER_REACHABLE]: 'chk.server.t',
   [RunSelfCheckRequest_CheckKind.DNS_RESOLVES]: 'chk.dns.t',
   [RunSelfCheckRequest_CheckKind.PROXY_ACTIVE]: 'chk.proxy.t',
-  [RunSelfCheckRequest_CheckKind.CLOCK_SKEW]: 'chk.fix.time',
-  [RunSelfCheckRequest_CheckKind.SUBSCRIPTION_OK]: 'chk.fix.sub',
+  [RunSelfCheckRequest_CheckKind.CLOCK_SKEW]: 'chk.time.t',
+  [RunSelfCheckRequest_CheckKind.SUBSCRIPTION_OK]: 'chk.sub.t',
   [RunSelfCheckRequest_CheckKind.PORT_FREE]: 'chk.port.t',
-  [RunSelfCheckRequest_CheckKind.IPV6]: 'tun.ipv6',
+  [RunSelfCheckRequest_CheckKind.IPV6]: 'chk.ipv6.t',
 };
 
-const FIX_LABEL: Record<string, string> = {
+/** Коды причин в detail (ядро: selfcheck.go) — переводятся через chk.d.<код>;
+ *  остальной detail (задержка, сдвиг часов, текст ошибки) показывается как есть. */
+const DETAIL_CODES = new Set([
+  'no_connection',
+  'blocked',
+  'not_applicable',
+  'no_subscription',
+  'time_unreachable',
+  'v6_direct',
+]);
+
+const FIX_LABEL: Record<string, MessageKey> = {
   // SD-05: коды по контракту (proto SelfCheckResult.fix_code).
   restart_profile: 'err.retry',
   open_dns: 'chk.fix.dns',
@@ -107,7 +124,7 @@ export function DiagScreen(): JSX.Element {
               ? {
                   ...x,
                   state: STATUS_TO_RUN[r.status] ?? 'pending',
-                  detail: r.detail ?? '',
+                  detail: DETAIL_CODES.has(r.detail ?? '') ? t(`chk.d.${r.detail ?? ''}` as MessageKey) : (r.detail ?? ''),
                   fixCode: r.fixCode,
                 }
               : x,
@@ -117,7 +134,15 @@ export function DiagScreen(): JSX.Element {
       const bad = results.filter(
         (r) => r.status === SelfCheckResult_Status.FAIL || r.status === SelfCheckResult_Status.WARN,
       ).length;
-      setSummary(bad === 0 ? t('chk.sum.ok') : tf('chk.sum.bad', { n: bad }));
+      const skipped = results.filter((r) => r.status === SelfCheckResult_Status.UNSPECIFIED).length;
+      // Сводка не обещает «Проблем не найдено», если часть проверок не выполнена.
+      setSummary(
+        bad > 0
+          ? tf('chk.sum.bad', { n: bad })
+          : skipped > 0
+            ? tf('chk.sum.part', { n: skipped, total: results.length })
+            : t('chk.sum.ok'),
+      );
     } catch (e) {
       setErr(showCoreError(e, t));
     } finally {
@@ -172,13 +197,13 @@ export function DiagScreen(): JSX.Element {
         )}
         <ol className="chk-list">
           {rows.map((r) => (
-            <li className={`chk-item chk-${r.state}`} key={String(r.kind)}>
-              <span className={`chk-st chk-${r.state}`}>
+            <li className={`chk-item chk-${r.state === 'skip' ? 'pending' : r.state}`} key={String(r.kind)}>
+              <span className={`chk-st chk-${r.state === 'skip' ? 'pending' : r.state}`}>
                 <Icon name={STATE_ICON[r.state]} />
-                <span className="sr-only">{t(STATE_LABEL[r.state] as never)}</span>
+                <span className="sr-only">{t(STATE_LABEL[r.state])}</span>
               </span>
               <span className="chk-body">
-                <span className="chk-t">{t((KIND_LABEL[r.kind] ?? 'chk.core.t') as never)}</span>
+                <span className="chk-t">{t(KIND_LABEL[r.kind] ?? 'chk.core.t')}</span>
                 <span className="chk-d">{r.detail}</span>
               </span>
               {r.fixCode !== '' && FIX_LABEL[r.fixCode] !== undefined && (
@@ -198,7 +223,7 @@ export function DiagScreen(): JSX.Element {
                     window.location.hash = target;
                   }}
                 >
-                  {t(FIX_LABEL[r.fixCode] as never)}
+                  {t(FIX_LABEL[r.fixCode] ?? 'err.retry')}
                 </button>
               )}
             </li>

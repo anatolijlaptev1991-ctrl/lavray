@@ -8283,8 +8283,14 @@ type DnsSettings struct {
 	UnderlyingDns *string `protobuf:"bytes,9,opt,name=underlying_dns,json=underlyingDns,proto3,oneof" json:"underlying_dns,omitempty"`
 	// FakeDNS (FR-UI-151): включается в TUN-настройках, здесь read-only.
 	FakeDnsEnabled *bool `protobuf:"varint,10,opt,name=fake_dns_enabled,json=fakeDnsEnabled,proto3,oneof" json:"fake_dns_enabled,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Карточка экрана DNS (FR-UI-148): "auto" — DNS пресета без переопределения,
+	// "tunnel" — DoH внутри туннеля, "doh" — DoH напрямую, "dot" и "local" — по
+	// своему адресу, "custom" — remote_dns пользователя. Выбор хранится для
+	// активного пресета и на другие не действует. В SetDns пусто: remote_dns
+	// пуст — "auto", иначе "custom"; в GetDns — выбранная карточка.
+	Choice        *string `protobuf:"bytes,11,opt,name=choice,proto3,oneof" json:"choice,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DnsSettings) Reset() {
@@ -8371,6 +8377,13 @@ func (x *DnsSettings) GetFakeDnsEnabled() bool {
 		return *x.FakeDnsEnabled
 	}
 	return false
+}
+
+func (x *DnsSettings) GetChoice() string {
+	if x != nil && x.Choice != nil {
+		return *x.Choice
+	}
+	return ""
 }
 
 type GetDnsRequest struct {
@@ -10923,8 +10936,11 @@ type LeakReport struct {
 	DnsEgress           *string                `protobuf:"bytes,3,opt,name=dns_egress,json=dnsEgress,proto3,oneof" json:"dns_egress,omitempty"`                            // резолвер, видимый тест-домену
 	Ipv6DirectAvailable bool                   `protobuf:"varint,4,opt,name=ipv6_direct_available,json=ipv6DirectAvailable,proto3" json:"ipv6_direct_available,omitempty"` // true при активном туннеле = риск утечки v6
 	TunnelActive        bool                   `protobuf:"varint,5,opt,name=tunnel_active,json=tunnelActive,proto3" json:"tunnel_active,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Замеры, которые НЕ выполнены: "direct_ip", "tunnel_ip", "dns", "ipv6".
+	// Пустое значение поля без замера нельзя читать как «в порядке».
+	Unchecked     []string `protobuf:"bytes,6,rep,name=unchecked,proto3" json:"unchecked,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LeakReport) Reset() {
@@ -10990,6 +11006,13 @@ func (x *LeakReport) GetTunnelActive() bool {
 		return x.TunnelActive
 	}
 	return false
+}
+
+func (x *LeakReport) GetUnchecked() []string {
+	if x != nil {
+		return x.Unchecked
+	}
+	return nil
 }
 
 type GatewayStatus struct {
@@ -14325,7 +14348,7 @@ const file_lavray_proto_rawDesc = "" +
 	"\x19ImportNekoRayRouteRequest\x12!\n" +
 	"\fnekobox_json\x18\x01 \x01(\tR\vnekoboxJson\x12\x17\n" +
 	"\x04name\x18\x02 \x01(\tH\x00R\x04name\x88\x01\x01B\a\n" +
-	"\x05_name\"\xc8\x04\n" +
+	"\x05_name\"\xf0\x04\n" +
 	"\vDnsSettings\x12/\n" +
 	"\x04mode\x18\x01 \x01(\x0e2\x1b.lavray.v1.DnsSettings.ModeR\x04mode\x12\"\n" +
 	"\n" +
@@ -14337,7 +14360,8 @@ const file_lavray_proto_rawDesc = "" +
 	"\radvanced_json\x18\b \x01(\tH\x03R\fadvancedJson\x88\x01\x01\x12*\n" +
 	"\x0eunderlying_dns\x18\t \x01(\tH\x04R\runderlyingDns\x88\x01\x01\x12-\n" +
 	"\x10fake_dns_enabled\x18\n" +
-	" \x01(\bH\x05R\x0efakeDnsEnabled\x88\x01\x01\"@\n" +
+	" \x01(\bH\x05R\x0efakeDnsEnabled\x88\x01\x01\x12\x1b\n" +
+	"\x06choice\x18\v \x01(\tH\x06R\x06choice\x88\x01\x01\"@\n" +
 	"\x04Mode\x12\x14\n" +
 	"\x10MODE_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vMODE_SIMPLE\x10\x01\x12\x11\n" +
@@ -14347,7 +14371,8 @@ const file_lavray_proto_rawDesc = "" +
 	"\v_direct_dnsB\x10\n" +
 	"\x0e_advanced_jsonB\x11\n" +
 	"\x0f_underlying_dnsB\x13\n" +
-	"\x11_fake_dns_enabledJ\x04\b\x05\x10\x06J\x04\b\a\x10\b\"\x0f\n" +
+	"\x11_fake_dns_enabledB\t\n" +
+	"\a_choiceJ\x04\b\x05\x10\x06J\x04\b\a\x10\b\"\x0f\n" +
 	"\rGetDnsRequest\"f\n" +
 	"\rSetDnsRequest\x12(\n" +
 	"\x03dns\x18\x01 \x01(\v2\x16.lavray.v1.DnsSettingsR\x03dns\x12+\n" +
@@ -14590,7 +14615,7 @@ const file_lavray_proto_rawDesc = "" +
 	"\x13GetPublicIpResponse\x12\x13\n" +
 	"\x02ip\x18\x01 \x01(\tH\x00R\x02ip\x88\x01\x01\x12\x17\n" +
 	"\ais_ipv6\x18\x02 \x01(\bR\x06isIpv6B\x05\n" +
-	"\x03_ip\"\xf8\x01\n" +
+	"\x03_ip\"\x96\x02\n" +
 	"\n" +
 	"LeakReport\x12 \n" +
 	"\ttunnel_ip\x18\x01 \x01(\tH\x00R\btunnelIp\x88\x01\x01\x12 \n" +
@@ -14598,7 +14623,8 @@ const file_lavray_proto_rawDesc = "" +
 	"\n" +
 	"dns_egress\x18\x03 \x01(\tH\x02R\tdnsEgress\x88\x01\x01\x122\n" +
 	"\x15ipv6_direct_available\x18\x04 \x01(\bR\x13ipv6DirectAvailable\x12#\n" +
-	"\rtunnel_active\x18\x05 \x01(\bR\ftunnelActiveB\f\n" +
+	"\rtunnel_active\x18\x05 \x01(\bR\ftunnelActive\x12\x1c\n" +
+	"\tunchecked\x18\x06 \x03(\tR\tuncheckedB\f\n" +
 	"\n" +
 	"_tunnel_ipB\f\n" +
 	"\n" +

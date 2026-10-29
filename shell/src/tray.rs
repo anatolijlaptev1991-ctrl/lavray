@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Меню трея (§9): конфигурация + билдер, проверяемые без запуска GUI.
 //!
 //! Рантайм-трей (tauri tray-icon API требует окна/иконок в рантайме) —
@@ -7,12 +9,23 @@
 //! поиском по серверам и «последние 5» (FR-UI-051, UX-7) требуют данных
 //! ядра — вне скаффолда.
 
+use serde::Deserialize;
+
 use crate::coreproc::CoreState;
+
+/// Идентификатор значка трея в Tauri (`TrayIconBuilder::with_id`).
+pub const TRAY_ID: &str = "main";
+/// Предел подсказки: у Windows `szTip` — 128 UTF-16-единиц с нулём.
+pub const TOOLTIP_MAX_CHARS: usize = 120;
 
 /// Статический пункт меню трея.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TrayMenuItem {
-    /// Подключить (выбор профиля — контекстное подменю, позже).
+    /// Состояние («LAVRay — Подключено»): только показывает.
+    Status,
+    /// Текущий сервер: только показывает.
+    Server,
+    /// Подключить (профиль и режимы выбирает UI — как для Ctrl+D).
     Connect,
     /// Отключить.
     Disconnect,
@@ -20,6 +33,34 @@ pub enum TrayMenuItem {
     ShowWindow,
     /// Выход (graceful §5 — единственный «жёсткий» выход).
     Exit,
+}
+
+impl TrayMenuItem {
+    /// Идентификатор пункта в Tauri-меню (приходит в `on_menu_event`).
+    pub const fn id(self) -> &'static str {
+        match self {
+            Self::Status => "status",
+            Self::Server => "server",
+            Self::Connect => "connect",
+            Self::Disconnect => "disconnect",
+            Self::ShowWindow => "show",
+            Self::Exit => "quit",
+        }
+    }
+
+    /// Обратное преобразование для `on_menu_event`.
+    pub fn from_id(id: &str) -> Option<Self> {
+        [
+            Self::Status,
+            Self::Server,
+            Self::Connect,
+            Self::Disconnect,
+            Self::ShowWindow,
+            Self::Exit,
+        ]
+        .into_iter()
+        .find(|item| item.id() == id)
+    }
 }
 
 /// Элемент спецификации меню: пункт или разделитель.
@@ -98,13 +139,17 @@ impl TrayMenuBuilder {
         self
     }
 
-    /// Собрать стандартное меню: Показать | Подключить | Отключить | Выход.
+    /// Стандартное меню: Состояние | Сервер | — | Подключить | Отключить | —
+    /// | Открыть | — | Выход.
     pub fn standard() -> TrayMenuSpec {
         let mut builder = Self::new();
-        builder.item(TrayMenuItem::ShowWindow);
+        builder.item(TrayMenuItem::Status);
+        builder.item(TrayMenuItem::Server);
         builder.separator();
         builder.item(TrayMenuItem::Connect);
         builder.item(TrayMenuItem::Disconnect);
+        builder.separator();
+        builder.item(TrayMenuItem::ShowWindow);
         builder.separator();
         builder.item(TrayMenuItem::Exit);
         builder.build().expect("standard tray menu is valid")
@@ -204,6 +249,157 @@ pub fn icon_kind_for(state: CoreState) -> TrayIconKind {
     }
 }
 
+/// Состояние соединения глазами UI (слова `PlatformAdapter.setTrayState`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TrayConn {
+    /// Не подключено.
+    #[default]
+    Off,
+    /// Подключение, отключение или переподключение.
+    Connecting,
+    /// Подключено.
+    On,
+    /// Последнее подключение не удалось.
+    Error,
+}
+
+/// Готовые строки меню на языке интерфейса: словари живут в UI.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrayLabels {
+    /// «LAVRay — Подключено» (пункт состояния и начало подсказки).
+    pub status: String,
+    /// «Сервер: Frankfurt 01».
+    pub server: String,
+    pub connect: String,
+    pub disconnect: String,
+    pub show: String,
+    pub quit: String,
+}
+
+impl Default for TrayLabels {
+    /// До первого сообщения UI: английский, а не зашитый русский.
+    fn default() -> Self {
+        let text = |s: &str| s.to_owned();
+        Self {
+            status: text("LAVRay"),
+            server: text("—"),
+            connect: text("Connect"),
+            disconnect: text("Disconnect"),
+            show: text("Open LAVRay"),
+            quit: text("Quit"),
+        }
+    }
+}
+
+/// Сообщение UI → оболочка (команда `tray_update`).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrayUpdate {
+    pub state: TrayConn,
+    pub labels: TrayLabels,
+}
+
+/// Пункт меню в готовом виде.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrayItemView {
+    pub item: TrayMenuItem,
+    pub text: String,
+    pub enabled: bool,
+}
+
+/// Готовый вид трея: пункты в порядке `TrayMenuBuilder::standard`, подсказка, значок.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TrayView {
+    pub items: Vec<TrayItemView>,
+    pub tooltip: String,
+    pub icon: TrayIconKind,
+}
+
+impl TrayView {
+    /// Пункт по идентификатору.
+    pub fn item(&self, which: TrayMenuItem) -> Option<&TrayItemView> {
+        self.items.iter().find(|v| v.item == which)
+    }
+}
+
+/// Обрезать до `max` символов с многоточием (подсказка Windows — 127 символов).
+pub fn truncate_chars(text: &str, max: usize) -> String {
+    if text.chars().count() <= max {
+        return text.to_owned();
+    }
+    let mut out: String = text.chars().take(max.saturating_sub(1)).collect();
+    out.push('…');
+    out
+}
+
+/// Вид трея по сообщению UI и живости процесса ядра. Мёртвый процесс важнее
+/// слов UI: значок «ошибка», подключать нельзя. После неудачи (`Error`)
+/// «Подключить» остаётся доступным — это повтор.
+pub fn view(update: &TrayUpdate, core_alive: bool) -> TrayView {
+    let conn = update.state;
+    let (state, avail_state) = match (core_alive, conn) {
+        (false, _) => (CoreState::Crashed, CoreState::Crashed),
+        (true, TrayConn::Off) => (CoreState::Ready, CoreState::Ready),
+        (true, TrayConn::Connecting) => (CoreState::Spawning, CoreState::Spawning),
+        (true, TrayConn::On) => (CoreState::Connected, CoreState::Connected),
+        (true, TrayConn::Error) => (CoreState::SpawnErr, CoreState::Ready),
+    };
+    let avail = availability_for(avail_state);
+    let l = &update.labels;
+    let items = TrayMenuBuilder::standard()
+        .entries()
+        .iter()
+        .filter_map(|entry| match entry {
+            TrayEntry::Item(item) => Some(*item),
+            TrayEntry::Separator => None,
+        })
+        .map(|item| {
+            let (text, enabled) = match item {
+                TrayMenuItem::Status => (&l.status, false),
+                TrayMenuItem::Server => (&l.server, false),
+                TrayMenuItem::Connect => (&l.connect, avail.connect),
+                TrayMenuItem::Disconnect => (&l.disconnect, avail.disconnect),
+                TrayMenuItem::ShowWindow => (&l.show, avail.show_window),
+                TrayMenuItem::Exit => (&l.quit, avail.exit),
+            };
+            TrayItemView {
+                item,
+                text: text.clone(),
+                enabled,
+            }
+        })
+        .collect();
+    let tooltip = if conn == TrayConn::On && core_alive {
+        format!("{}\n{}", l.status, l.server)
+    } else {
+        l.status.clone()
+    };
+    TrayView {
+        items,
+        tooltip: truncate_chars(&tooltip, TOOLTIP_MAX_CHARS),
+        icon: icon_kind_for(state),
+    }
+}
+
+/// PNG 32×32 RGBA из `design/concepts/logo/tray/*.svg`; `dark` — светлый
+/// значок для тёмной панели задач. «Ядро не работает» и «не подключено»
+/// рисуются одинаково (`off`).
+pub fn icon_png(kind: TrayIconKind, dark: bool) -> &'static [u8] {
+    use TrayIconKind::{Busy, Connected, Error, Idle, Running};
+    match (dark, kind) {
+        (true, Idle | Running) => &include_bytes!("../icons/tray/dark-off.png")[..],
+        (true, Busy) => &include_bytes!("../icons/tray/dark-wait.png")[..],
+        (true, Connected) => &include_bytes!("../icons/tray/dark-on.png")[..],
+        (true, Error) => &include_bytes!("../icons/tray/dark-err.png")[..],
+        (false, Idle | Running) => &include_bytes!("../icons/tray/light-off.png")[..],
+        (false, Busy) => &include_bytes!("../icons/tray/light-wait.png")[..],
+        (false, Connected) => &include_bytes!("../icons/tray/light-on.png")[..],
+        (false, Error) => &include_bytes!("../icons/tray/light-err.png")[..],
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -214,14 +410,19 @@ mod tests {
         assert_eq!(
             menu.entries(),
             &[
-                TrayEntry::Item(TrayMenuItem::ShowWindow),
+                TrayEntry::Item(TrayMenuItem::Status),
+                TrayEntry::Item(TrayMenuItem::Server),
                 TrayEntry::Separator,
                 TrayEntry::Item(TrayMenuItem::Connect),
                 TrayEntry::Item(TrayMenuItem::Disconnect),
                 TrayEntry::Separator,
+                TrayEntry::Item(TrayMenuItem::ShowWindow),
+                TrayEntry::Separator,
                 TrayEntry::Item(TrayMenuItem::Exit),
             ]
         );
+        assert_eq!(TrayMenuItem::from_id("quit"), Some(TrayMenuItem::Exit));
+        assert_eq!(TrayMenuItem::from_id("нет-такого"), None);
         assert!(menu.contains(TrayMenuItem::Exit));
         assert!(menu.contains(TrayMenuItem::Connect));
         assert!(menu.contains(TrayMenuItem::Disconnect));
@@ -301,6 +502,108 @@ mod tests {
         ];
         for &(state, kind) in cases {
             assert_eq!(icon_kind_for(state), kind, "{state}");
+        }
+    }
+
+    fn update(state: TrayConn) -> TrayUpdate {
+        let l = |s: &str| s.to_owned();
+        TrayUpdate {
+            state,
+            labels: TrayLabels {
+                status: l("LAVRay — Verbunden"),
+                server: l("Server: Frankfurt 01"),
+                connect: l("Verbinden"),
+                disconnect: l("Trennen"),
+                show: l("LAVRay öffnen"),
+                quit: l("Beenden"),
+            },
+        }
+    }
+
+    /// F-041: меню по спецификации, тексты — из UI (не зашиты), доступность и
+    /// значок по состоянию; мёртвый процесс ядра — «ошибка» без подключения.
+    #[test]
+    fn view_follows_the_spec_ui_labels_and_connection_state() {
+        let on = view(&update(TrayConn::On), true);
+        let texts: Vec<&str> = on.items.iter().map(|v| v.text.as_str()).collect();
+        assert_eq!(
+            texts,
+            [
+                "LAVRay — Verbunden",
+                "Server: Frankfurt 01",
+                "Verbinden",
+                "Trennen",
+                "LAVRay öffnen",
+                "Beenden"
+            ]
+        );
+        assert_eq!(on.tooltip, "LAVRay — Verbunden\nServer: Frankfurt 01");
+
+        // (состояние, ядро живо, «Подключить», «Отключить», значок)
+        let cases = [
+            (TrayConn::Off, true, true, false, TrayIconKind::Running),
+            (TrayConn::Connecting, true, false, false, TrayIconKind::Busy),
+            (TrayConn::On, true, false, true, TrayIconKind::Connected),
+            (TrayConn::Error, true, true, false, TrayIconKind::Error),
+            (TrayConn::On, false, false, false, TrayIconKind::Error),
+        ];
+        for (state, alive, connect, disconnect, icon) in cases {
+            let v = view(&update(state), alive);
+            let on = |item| v.item(item).unwrap().enabled;
+            let ctx = format!("{state:?} alive={alive}");
+            assert_eq!(on(TrayMenuItem::Connect), connect, "{ctx}");
+            assert_eq!(on(TrayMenuItem::Disconnect), disconnect, "{ctx}");
+            assert!(
+                !on(TrayMenuItem::Status) && !on(TrayMenuItem::Server),
+                "{ctx}"
+            );
+            assert!(
+                on(TrayMenuItem::ShowWindow) && on(TrayMenuItem::Exit),
+                "{ctx}"
+            );
+            assert_eq!(v.icon, icon, "{ctx}");
+        }
+
+        let mut long = update(TrayConn::On);
+        long.labels.server = "Я".repeat(300);
+        let tip = view(&long, true).tooltip;
+        assert_eq!(
+            (tip.chars().count(), tip.ends_with('…')),
+            (TOOLTIP_MAX_CHARS, true)
+        );
+    }
+
+    /// Контракт с UI (`ui/src/lib/tray.ts`): camelCase, слова состояния.
+    #[test]
+    fn update_parses_the_json_sent_by_the_ui() {
+        let json = r#"{"state":"connecting","labels":{"status":"s","server":"v",
+            "connect":"c","disconnect":"d","show":"o","quit":"q"}}"#;
+        let parsed: TrayUpdate = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.state, TrayConn::Connecting);
+        assert_eq!(parsed.labels.quit, "q");
+        assert!(serde_json::from_str::<TrayUpdate>(&json.replace("connecting", "bogus")).is_err());
+        assert!(!TrayLabels::default().connect.is_empty());
+    }
+
+    /// 8 значков (4 состояния × тёмная/светлая панель задач) — PNG 32×32 RGBA, разные.
+    #[test]
+    fn icons_are_32x32_rgba_png_and_states_differ() {
+        for dark in [true, false] {
+            let off = icon_png(TrayIconKind::Idle, dark);
+            assert_eq!(off, icon_png(TrayIconKind::Running, dark));
+            let others = [
+                TrayIconKind::Busy,
+                TrayIconKind::Connected,
+                TrayIconKind::Error,
+            ]
+            .map(|kind| icon_png(kind, dark));
+            for png in others.iter().chain([&off]) {
+                assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
+                let size = |at: usize| u32::from_be_bytes(png[at..at + 4].try_into().unwrap());
+                assert_eq!((size(16), size(20), png[24], png[25]), (32, 32, 8, 6));
+            }
+            assert!(others.iter().all(|png| *png != off) && others[0] != others[1]);
+            assert!(others[1] != others[2] && others[0] != others[2]);
         }
     }
 }

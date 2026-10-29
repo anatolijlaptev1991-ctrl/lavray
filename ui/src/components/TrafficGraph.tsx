@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // TrafficGraph.tsx — график трафика за сессию по прототипу v1.2:
 // canvas, заливка загрузки акцентом, пунктир отдачи, сетка, легенда,
 // пустое состояние. Данные — из StatsService.Subscribe (push-кадры).

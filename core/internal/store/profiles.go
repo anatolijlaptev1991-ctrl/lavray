@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package store
 
 import (
@@ -133,6 +135,54 @@ func (s *Store) UpdateProfile(p *model.Profile) error {
 	})
 }
 
+// SaveTestResult записывает результат теста — колонки latency_ms,
+// tested_at_ms, full_report и ключ test_result в JSON (там живёт last_error) —
+// отдельным UPDATE (T-22). Остальные поля профиля не читаются и не пишутся:
+// устаревшая копия профиля у вызывающего не может затереть правки (избранное,
+// заметки, имя), а updated_at_ms остаётся прежним — результат теста не правка
+// профиля. Пустой результат очищает прежний (ClearTestResults).
+func (s *Store) SaveTestResult(id int64, r model.TestResult) error {
+	blob, err := json.Marshal(r)
+	if err != nil {
+		return fmt.Errorf("store: marshal test result: %w", err)
+	}
+	res, err := s.db.Exec(`UPDATE profiles SET
+		latency_ms = ?, tested_at_ms = ?, full_report = ?,
+		data = json_set(data, '$.test_result', json(?))
+	WHERE id = ?`,
+		nullableLatency(&r), nullableInt64(r.TestedAtMs), nullableString(r.FullReport), string(blob), id)
+	if err != nil {
+		return fmt.Errorf("store: save test result: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
+// SaveTraffic записывает счётчики трафика профиля — колонки uplink_total,
+// downlink_total и ключ traffic в JSON — отдельным UPDATE (D-04): UpdateProfile
+// счётчики не пишет, поэтому сброс через него оставлял прежние значения. Как и
+// SaveTestResult, не читает и не пишет остальные поля и не меняет updated_at_ms.
+func (s *Store) SaveTraffic(id int64, t model.TrafficCounters) error {
+	blob, err := json.Marshal(t)
+	if err != nil {
+		return fmt.Errorf("store: marshal traffic: %w", err)
+	}
+	res, err := s.db.Exec(`UPDATE profiles SET
+		uplink_total = ?, downlink_total = ?,
+		data = json_set(data, '$.traffic', json(?))
+	WHERE id = ?`,
+		t.UplinkBytes, t.DownlinkBytes, string(blob), id)
+	if err != nil {
+		return fmt.Errorf("store: save traffic: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // profileCols — все декодируемые колонки профиля ОДНИМ запросом.
 //
 // ВАЖНО: пул соединений ограничен одним (SetMaxOpenConns(1), store.go), поэтому
@@ -184,14 +234,17 @@ func (s *Store) ListProfiles(groupID int64) ([]*model.Profile, error) {
 
 // DeleteProfile удаляет профиль (запуск запущенного проверяет слой API, FR-UI-038).
 func (s *Store) DeleteProfile(id int64) error {
-	res, err := s.db.Exec(`DELETE FROM profiles WHERE id = ?`, id)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	return nil
+	// T-51: через withTx, чтобы удаление работало и внутри InTx.
+	return s.withTx(func(tx *sql.Tx) error {
+		res, err := tx.Exec(`DELETE FROM profiles WHERE id = ?`, id)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
 }
 
 // ReorderProfiles задаёт порядок профилей в группе (FR-UI-074): перечисленные

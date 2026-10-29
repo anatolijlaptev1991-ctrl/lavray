@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package subs — каркас обновления подписок LAVRay (W3): fetch с лимитами и
 // заголовками, разбор (internal/subs/parser), дифф-флоу со снапшотом/откатом
 // (FR-UI-258) и защитой от деструктивных обновлений (LNB-29).
@@ -29,13 +31,12 @@ import (
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs/parser"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/version"
 )
 
-// Version — версия ядра для UA (W6 свяжет с билд-штампом 1.14.1-lav.N).
-const Version = "0.1.0-w3"
-
-// DefaultUserAgent — UA согласования формата (FR-UI-264).
-const DefaultUserAgent = "LAVRay/" + Version
+// DefaultUserAgent — UA согласования формата (FR-UI-264). Версия — единая
+// version.Version, а не собственный плейсхолдер пакета.
+var DefaultUserAgent = "LAVRay/" + version.Version
 
 // Параметры сети по умолчанию (план §4.1).
 const (
@@ -47,7 +48,9 @@ const (
 )
 
 // HWID — значения заголовков x-hwid/… (FR-UI-265, opt-in). ID — случайный
-// на установку (CSPRNG); os-поля заполняет вызывающая сторона или дефолты.
+// на установку (CSPRNG) и ПОСТОЯННЫЙ: его создаёт NewHWID один раз, а хранит
+// вызывающая сторона (api — настройка sub.hwid_id, D-02); os-поля заполняет
+// вызывающая сторона или дефолты.
 type HWID struct {
 	ID          string
 	DeviceOS    string
@@ -56,14 +59,21 @@ type HWID struct {
 }
 
 // NewHWID генерирует набор HWID со случайным идентификатором установки.
+// Вызывать нужно один раз и сохранить ID: новый ID на каждое обновление
+// подписки провайдер считает новым устройством (D-02).
 func NewHWID() HWID {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
 		// деградация качества недопустима для идентификатора — паники нет,
 		// fallback на временный уникальный
-		return HWID{ID: fmt.Sprintf("tmp-%d", time.Now().UnixNano()), DeviceOS: runtime.GOOS}
+		return HWIDWithID(fmt.Sprintf("tmp-%d", time.Now().UnixNano()))
 	}
-	return HWID{ID: hex.EncodeToString(b), DeviceOS: runtime.GOOS}
+	return HWIDWithID(hex.EncodeToString(b))
+}
+
+// HWIDWithID — набор HWID для уже сохранённого идентификатора установки.
+func HWIDWithID(id string) HWID {
+	return HWID{ID: id, DeviceOS: runtime.GOOS}
 }
 
 // Options — параметры подписчика (нулевые значения заменяются дефолтами).
@@ -76,6 +86,7 @@ type Options struct {
 	AllowPrivateURL bool          // «разрешить локальные адреса» (LNB-05)
 	InsecureTLS     bool          // sub_insecure — с маркером в логе (LNB-19)
 	HWIDEnabled     bool          // FR-UI-265: только явный opt-in
+	ClearBefore     bool          // FR-UI-124 (sub_clear): очистить группу перед применением ответа
 	HWID            HWID
 	// Log — приёмник предупреждений (маркер insecure и пр.); nil → нет.
 	Log func(format string, args ...any)
@@ -106,6 +117,9 @@ func (o Options) withDefaults() Options {
 	if o.MaxBodyBytes <= 0 {
 		o.MaxBodyBytes = DefaultMaxBodyBytes
 	}
+	// Запасной путь для прямых пользователей пакета: ID живёт столько же, сколько
+	// этот Subscriber. Приложение сюда не попадает — api всегда передаёт
+	// сохранённый sub.hwid_id.
 	if o.HWIDEnabled && o.HWID.ID == "" {
 		o.HWID = NewHWID()
 	}
@@ -474,6 +488,7 @@ func (s *Subscriber) Update(ctx context.Context, st StoreAPI, group *model.Group
 	result, err := Apply(st, snap, ApplyParams{
 		Next:      parsed.Profiles,
 		Confirmed: confirmed,
+		Clear:     s.opts.ClearBefore,
 		UsedURL:   resp.UsedURL,
 		Info:      info,
 	})

@@ -1,18 +1,42 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // screen_connection.tsx — «Подключение» по прототипу v1.2 (design/prototype.html
 // 1082-1127 + CSS .cx-card/.cx-top/.cx-main/.cx-meta/.cx-qa): карточка
 // состояния со знаком «Отражение», пикер сервера, кнопка подключения,
 // режим, метаданные сессии, быстрые действия. Данные — от живого ядра.
-import { useCallback, useEffect, useId, useMemo, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { Icon } from '../components/Icon';
-import { CoreState, SubscriptionProgress_Phase, TestLatencyRequest_Mode } from '../gen/lavray_pb';
+import {
+  ConnectMode,
+  CoreState,
+  SubscriptionProgress_Phase,
+  TestLatencyRequest_Mode,
+} from '../gen/lavray_pb';
+import type { Profile } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
+import { useTunBlocked } from '../hooks/useTunBlocked';
 import { useI18n } from '../hooks/useI18n';
-import { friendlyCoreError, showCoreError } from '../lib/core';
-import { applySystemProxy, coreModeFor, loadModes, saveModes } from '../lib/connection';
+import { CORE_UNAVAILABLE, showCoreError } from '../lib/core';
+import { profileTypeLabel } from '../lib/profileType';
+import {
+  applySystemProxy,
+  chooseProfile,
+  coreModeFor,
+  disconnectAll,
+  loadModes,
+  loadSelectedProfileId,
+  reconnect,
+  saveModes,
+  saveSelectedProfileId,
+} from '../lib/connection';
 import { ConnRight } from '../components/ConnRight';
+import { TunAdminNotice } from '../components/TunAdminNotice';
 import { ImportDialog } from '../components/ImportDialog';
+import { ProfileMenu } from '../components/ProfileMenu';
+import type { ProfileMenuAnchor } from '../components/ProfileMenu';
 import { geoName } from '../lib/geo';
+import { presetRuleCount, presetTitle } from '../lib/presets';
 
 
 
@@ -26,8 +50,18 @@ export function ConnectionScreen(): JSX.Element {
   const [sysProxy, setSysProxy] = useState(() => loadModes(window.localStorage).sysProxy);
   const [tunMode, setTunMode] = useState(() => loadModes(window.localStorage).tunMode);
   const [busy, setBusy] = useState(false);
+  // error — ошибки быстрых действий (тест, подписки), под карточкой;
+  // connError — подключение, режимы, выбор сервера: верхний баннер с «Повторить».
   const [error, setError] = useState('');
-  const [pickedId, setPickedId] = useState<bigint | null>(null);
+  const [connError, setConnError] = useState('');
+  // Выбранный сервер запоминается (localStorage, как и режимы): раньше выбор
+  // жил в состоянии экрана и терялся при уходе со страницы, а Ctrl+D
+  // подключал первый сервер списка.
+  const [pickedId, setPickedId] = useState<bigint | null>(() =>
+    loadSelectedProfileId(window.localStorage),
+  );
+  const [menuAnchor, setMenuAnchor] = useState<ProfileMenuAnchor | null>(null);
+  const pickRef = useRef<HTMLButtonElement | null>(null);
   const [sessionSec, setSessionSec] = useState(0);
   const rayId = `ray${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   // Быстрые действия прототипа (.cx-qa): тест задержек, импорт, обновление
@@ -38,11 +72,22 @@ export function ConnectionScreen(): JSX.Element {
   const [importOpen, setImportOpen] = useState(false);
   const [subs, setSubs] = useState<readonly { id: bigint; name: string }[]>([]);
   // Активный пресет маршрутов — для карточки «Качество связи».
-  const [presetName, setPresetName] = useState('—');
-  const [presetRules, setPresetRules] = useState(0);
+  const [preset, setPreset] = useState<{ id: string; displayName: string; rules: number } | null>(
+    null,
+  );
 
   const ready = status.state === CoreState.CONNECTED;
-  const connecting = status.state === CoreState.CONNECTING;
+  const connecting =
+    status.state === CoreState.CONNECTING || status.state === CoreState.RECONNECTING;
+  // Ядро в ошибке (старт не удался) либо пропало: когда опрос не удался,
+  // useCoreStatus кладёт в lastError код core.unavailable. Пока ядро не
+  // ответило ни разу (coreVersion пуст — холодный старт), это не ошибка:
+  // первые секунды приложение просто ждёт ядро.
+  const coreError = status.lastError ?? '';
+  const coreFailed =
+    status.state === CoreState.ERROR || (coreError !== '' && status.coreVersion !== '');
+  // T-46: TUN выбран, а прав администратора нет — подключаться бессмысленно.
+  const tunBlocked = useTunBlocked(tunMode);
 
   // Список подписок нужен для быстрого действия «Обновить подписки»:
   // обновление идёт по groupId, а не глобально.
@@ -65,16 +110,11 @@ export function ConnectionScreen(): JSX.Element {
         const res = await core.routing.listPresets({});
         const active0 = res.presets.find((p) => p.id === res.activePresetId);
         if (active0 === undefined) return;
-        setPresetName(active0.displayName);
-        setPresetRules(
-          active0.proxyDomain.length +
-            active0.directDomain.length +
-            active0.blockDomain.length +
-            active0.proxyIp.length +
-            active0.directIp.length +
-            active0.blockIp.length +
-            active0.processRules.length,
-        );
+        setPreset({
+          id: active0.id,
+          displayName: active0.displayName,
+          rules: presetRuleCount(active0),
+        });
       } catch {
         /* пресеты недоступны — карточка покажет «—» */
       }
@@ -134,13 +174,19 @@ export function ConnectionScreen(): JSX.Element {
     }
   }, [core, subs, refresh, t, tf]);
 
-  const active = useMemo(() => {
-    if (pickedId !== null) return profiles.find((p) => p.id === pickedId);
-    if (status.activeProfileId !== 0n) {
-      return profiles.find((p) => p.id === status.activeProfileId);
-    }
-    return profiles[0];
-  }, [profiles, pickedId, status.activeProfileId]);
+  // Ядро в простое присылает статус БЕЗ active_profile_id (поле optional в
+  // proto): на клиенте оно `undefined`, а не 0n. Раньше `undefined !== 0n`
+  // давало «профиль не найден» и экран «Пока нет серверов» при живом списке.
+  const runningId = status.activeProfileId ?? 0n;
+  // Пока соединение есть, карточка показывает запущенный сервер; иначе — тот,
+  // что выбран в меню (или первый, если выбора не было).
+  const active = useMemo(
+    () => profiles.find((p) => p.id === runningId) ?? chooseProfile(profiles, pickedId),
+    [profiles, pickedId, runningId],
+  );
+  // Блок с кнопкой нужен и когда соединение есть, а профиля нет в списке:
+  // иначе «Отключить» пропадает вместе с профилем.
+  const showMain = active !== undefined || ready;
 
   // D9 (аудит round 2): таймер считается от started_at_ms ядра, а не от
   // монтирования экрана — иначе при переходе между разделами время
@@ -171,15 +217,17 @@ export function ConnectionScreen(): JSX.Element {
   // networksetup + снимок прежних настроек для восстановления. В браузере
   // режим недоступен — веб-панель не управляет ОС пользователя.
   const applySys = useCallback(
-    async (on: boolean): Promise<void> => {
+    async (on: boolean): Promise<boolean> => {
       try {
         await applySystemProxy(on, status.inbound?.port ?? 2080);
+        return true;
       } catch (e) {
         if (e instanceof Error && e.message === 'mode.sys.nativeOnly') {
-          setError(t('mode.sys.nativeOnly'));
-          return;
+          setConnError(t('mode.sys.nativeOnly'));
+        } else {
+          setConnError(showCoreError(e, t));
         }
-        setError(showCoreError(e, t));
+        return false;
       }
     },
     [status.inbound, t],
@@ -187,11 +235,12 @@ export function ConnectionScreen(): JSX.Element {
 
   const toggle = useCallback(async (): Promise<void> => {
     setBusy(true);
-    setError('');
+    setConnError('');
     try {
       if (ready) {
-        await core.core.disconnect({});
-        await applySys(false);
+        // Прокси ОС снимается даже при сбое RPC (disconnectAll — try/finally):
+        // иначе браузеры остаются на мёртвом порту.
+        await disconnectAll(core);
       } else if (active !== undefined) {
         await core.core.connect({
           profileId: active.id,
@@ -200,44 +249,159 @@ export function ConnectionScreen(): JSX.Element {
         // Системный прокси — независимо от TUN (оба режима сразу).
         await applySys(sysProxy);
       } else {
-        setError(t('cx.empty.t'));
+        setConnError(t('cx.empty.t'));
       }
     } catch (e) {
-      setError(friendlyCoreError(e));
+      setConnError(showCoreError(e, t));
     } finally {
       setBusy(false);
     }
   }, [core, ready, active, t, sysProxy, tunMode, applySys]);
 
-  const stateLabel = ready
-    ? t('conn.state.on')
-    : connecting
-      ? t('conn.state.connecting')
-      : status.state === CoreState.ERROR
-        ? t('conn.state.err')
-        : t('conn.state.off');
-  const stateSub = ready
-    ? t('conn.state.on.sub')
-    : connecting
-      ? t('conn.state.connecting.sub')
-      : status.state === CoreState.ERROR
-        ? t('conn.state.err.sub')
-        : t('conn.state.off.sub');
+  // Переключатели режимов: выбор запоминается, а при активном соединении
+  // применяется сразу — раньше он лишь писался в localStorage и до следующего
+  // подключения ничего не менял. Не применилось — переключатель возвращается.
+  const changeSysProxy = useCallback(
+    async (next: boolean): Promise<void> => {
+      const prev = { sysProxy, tunMode };
+      setSysProxy(next);
+      saveModes(window.localStorage, { sysProxy: next, tunMode });
+      if (!ready) return;
+      setBusy(true);
+      setConnError('');
+      setActionMsg('');
+      if (await applySys(next)) {
+        setActionMsg(t('toast.modeApplied'));
+      } else {
+        setSysProxy(prev.sysProxy);
+        saveModes(window.localStorage, prev);
+      }
+      setBusy(false);
+    },
+    [ready, sysProxy, tunMode, applySys, t],
+  );
+
+  // TUN ядро на лету не включает: перезапуск соединения с новым режимом.
+  const changeTun = useCallback(
+    async (next: boolean): Promise<void> => {
+      const prev = { sysProxy, tunMode };
+      setTunMode(next);
+      saveModes(window.localStorage, { sysProxy, tunMode: next });
+      const running = status.mode === ConnectMode.TUN;
+      if (!ready || runningId === 0n || running === next) return;
+      setBusy(true);
+      setConnError('');
+      setActionMsg('');
+      try {
+        await reconnect({
+          core,
+          next: { profileId: runningId, modes: { sysProxy, tunMode: next } },
+          prev: { profileId: runningId, modes: { sysProxy, tunMode: running } },
+        });
+        setActionMsg(t('toast.modeApplied'));
+      } catch (e) {
+        setTunMode(prev.tunMode);
+        saveModes(window.localStorage, prev);
+        setConnError(showCoreError(e, t));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [core, ready, runningId, status.mode, sysProxy, tunMode, t],
+  );
+
+  // Состояние карточки (прототип renderConn): ошибка важнее остальных.
+  const phase = coreFailed ? 'err' : ready ? 'on' : connecting ? 'connecting' : 'off';
+  const stateLabel = t(`conn.state.${phase}`);
+  const stateSub = t(`conn.state.${phase}.sub`);
+  const typeLabel = active === undefined ? '' : profileTypeLabel(active.type, t);
+  const bannerText =
+    connError !== ''
+      ? connError
+      : coreError === CORE_UNAVAILABLE
+        ? t('core.unavailable')
+        : coreError;
 
   const session = `${String(Math.floor(sessionSec / 60)).padStart(2, '0')}:${String(
     sessionSec % 60,
   ).padStart(2, '0')}`;
 
-  const nextProfile = (): void => {
-    if (profiles.length < 2) return;
-    const idx = profiles.findIndex((p) => p.id === active?.id);
-    const next = profiles[(idx + 1) % profiles.length];
-    if (next !== undefined) setPickedId(next.id);
-  };
+  /**
+   * Выбор сервера в меню: запоминается; при активном соединении переключает
+   * его на выбранный сервер (Disconnect → Connect с теми же режимами).
+   */
+  const pickProfile = useCallback(
+    async (p: Profile): Promise<void> => {
+      setPickedId(p.id);
+      saveSelectedProfileId(window.localStorage, p.id);
+      if (!ready || runningId === 0n || p.id === runningId) return;
+      // Режим ядра остаётся прежним: берём фактический, а не переключатель.
+      const modes = { sysProxy, tunMode: status.mode === ConnectMode.TUN };
+      setBusy(true);
+      setConnError('');
+      try {
+        await reconnect({
+          core,
+          next: { profileId: p.id, modes },
+          prev: { profileId: runningId, modes },
+        });
+      } catch (e) {
+        // Остались на прежнем сервере (или без соединения): выбор возвращаем.
+        setPickedId(runningId);
+        saveSelectedProfileId(window.localStorage, runningId);
+        setConnError(showCoreError(e, t));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [core, ready, runningId, sysProxy, status.mode, t],
+  );
+
+  const closeMenu = useCallback((restoreFocus: boolean): void => {
+    setMenuAnchor(null);
+    if (restoreFocus) pickRef.current?.focus();
+  }, []);
+
+  // «Повторить»: если соединения нет — подключаемся к выбранному серверу ещё раз;
+  // если оно есть (сорвалась смена сервера или режима) — достаточно скрыть ошибку.
+  const retry = useCallback((): void => {
+    setConnError('');
+    if (!ready) void toggle();
+  }, [ready, toggle]);
 
   return (
     <div className="conn2">
-      <div className="card cx-card" id="stateCard" data-conn={ready ? 'on' : 'off'}>
+      {(coreFailed || connError !== '') && (
+        <div
+          className="banner banner-err"
+          id="connBanner"
+          role="alert"
+          style={{ gridColumn: '1 / -1', marginBottom: 0 }}
+        >
+          <span className="ic">
+            <Icon name="alert" />
+          </span>
+          <div className="bn-t">
+            <b>{t('core.err.t')}</b>
+            {bannerText !== '' && <span>{bannerText}</span>}
+          </div>
+          <div className="bn-acts">
+            <button className="btn btn-sec btn-sm" id="cbRetry" disabled={busy} onClick={retry}>
+              {t('err.retry')}
+            </button>
+            <button
+              className="btn btn-ghost btn-sm"
+              id="cbDiag"
+              onClick={() => {
+                window.location.hash = 'screen=diag&tab=checks';
+              }}
+            >
+              {t('cx.toDiag')}
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="card cx-card" id="stateCard" data-conn={phase === 'connecting' ? 'mid' : phase}>
         <div className="cx-top">
           <div className="ray" aria-hidden="true">
             {/* id градиентов уникальны (useId): на экране несколько знаков,
@@ -278,7 +442,7 @@ export function ConnectionScreen(): JSX.Element {
           </div>
         </div>
 
-        {active !== undefined ? (
+        {showMain ? (
           <div className="cx-main" id="cxMain">
             <div className="cx-server">
               <span className="cap" id="srvLbl">
@@ -286,17 +450,32 @@ export function ConnectionScreen(): JSX.Element {
               </span>
               <button
                 className="srv-pick"
+                ref={pickRef}
                 aria-haspopup="menu"
-                aria-expanded="false"
+                aria-expanded={menuAnchor !== null}
                 aria-describedby="srvLbl"
-                onClick={nextProfile}
+                disabled={busy || connecting || profiles.length === 0}
+                onClick={(e) => {
+                  if (menuAnchor !== null) {
+                    setMenuAnchor(null);
+                    return;
+                  }
+                  const r = e.currentTarget.getBoundingClientRect();
+                  setMenuAnchor({ left: r.left, bottom: r.bottom, width: r.width });
+                }}
               >
                 <span className="srv-top">
-                  <span className="srv-name">{active.name}</span>
-                  <span className="badge">{active.type}</span>
+                  <span className="srv-name">
+                    {active?.name ?? status.activeProfileName ?? '—'}
+                  </span>
+                  {active !== undefined && (
+                    <span className={`badge bt-${typeLabel.toLowerCase().replace(/[^a-z0-9]+/g, '')}`}>
+                      {typeLabel}
+                    </span>
+                  )}
                 </span>
                 <span className="srv-addr mono">
-                  {active.address}:{String(active.port)}
+                  {active !== undefined ? `${active.address}:${String(active.port)}` : ''}
                 </span>
                 <span className="srv-chg">
                   <span>{t('srv.change')}</span>
@@ -308,7 +487,7 @@ export function ConnectionScreen(): JSX.Element {
             <button
               className={`btn btn-lg ${ready ? 'btn-danger-solid' : 'btn-pri'}`}
               onClick={() => void toggle()}
-              disabled={busy || connecting}
+              disabled={busy || connecting || status.state === CoreState.DISCONNECTING || (tunBlocked && !ready)}
             >
               <Icon name="plug" />
               {ready ? t('conn.disconnect') : t('conn.connect')}
@@ -329,10 +508,9 @@ export function ConnectionScreen(): JSX.Element {
                     role="switch"
                     aria-checked={sysProxy}
                     aria-label={t('mode.sys')}
+                    disabled={busy || connecting}
                     onClick={() => {
-                      const next = !sysProxy;
-                      setSysProxy(next);
-                      saveModes(window.localStorage, { sysProxy: next, tunMode });
+                      void changeSysProxy(!sysProxy);
                     }}
                   />
                 </div>
@@ -343,15 +521,15 @@ export function ConnectionScreen(): JSX.Element {
                     role="switch"
                     aria-checked={tunMode}
                     aria-label={t('mode.tun')}
+                    disabled={busy || connecting}
                     onClick={() => {
-                      const next = !tunMode;
-                      setTunMode(next);
-                      saveModes(window.localStorage, { sysProxy, tunMode: next });
+                      void changeTun(!tunMode);
                     }}
                   />
                 </div>
               </div>
               <p className="hint">{t('mode.both.hint')}</p>
+              {tunBlocked && <TunAdminNotice />}
             </div>
 
             <dl className="cx-meta">
@@ -365,7 +543,7 @@ export function ConnectionScreen(): JSX.Element {
               </div>
               <div>
                 <dt>{t('conn.country')}</dt>
-                <dd>{active.geo === '' ? '—' : geoName(active.geo, lang)}</dd>
+                <dd>{active === undefined || active.geo === '' ? '—' : geoName(active.geo, lang)}</dd>
               </div>
             </dl>
           </div>
@@ -419,12 +597,25 @@ export function ConnectionScreen(): JSX.Element {
       <ConnRight
         connected={ready}
         latencyMs={active?.testResult?.latencyMs}
-        presetName={presetName}
-        presetRules={presetRules}
+        presetName={preset === null ? '—' : presetTitle(preset.id, preset.displayName, t)}
+        presetRules={preset?.rules ?? 0}
       />
+      {menuAnchor !== null && (
+        <ProfileMenu
+          anchor={menuAnchor}
+          profiles={profiles}
+          selectedId={active?.id}
+          onSelect={(p) => {
+            void pickProfile(p);
+          }}
+          onAllServers={() => {
+            window.location.hash = 'screen=servers&tab=profiles';
+          }}
+          onClose={closeMenu}
+        />
+      )}
       {importOpen && (
         <ImportDialog
-          groupId={0n}
           onClose={() => { setImportOpen(false); }}
           onImported={() => {
             setImportOpen(false);

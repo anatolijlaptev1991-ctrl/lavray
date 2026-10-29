@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // client.go — клиент обновлений поверх Trust (UPDATE-SYSTEM v2.0 §5):
 // порядок root → timestamp → manifest; источники sources.json опрашиваются
 // ПАРАЛЛЕЛЬНО, побеждает первый валидный timestamp (свежесть важнее

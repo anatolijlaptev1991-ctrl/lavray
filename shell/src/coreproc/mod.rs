@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Конечный автомат (FSM) жизненного цикла Go-ядра `lavray-core`.
 //!
 //! Спек: `docs/stage3/shell-lifecycle.md` §2 (диаграмма, состояния, тайминги),
@@ -10,6 +12,7 @@
 pub mod backoff;
 pub mod driver;
 pub mod logs;
+pub mod runner;
 pub mod teardown;
 
 use std::cell::RefCell;
@@ -28,6 +31,10 @@ pub const T_READY_WARNING: Duration = Duration::from_secs(5);
 pub const T_SPAWN: Duration = Duration::from_secs(10);
 /// Таймаут `CoreService.Disconnect` (LNB-06).
 pub const T_DISCONNECT_RPC: Duration = Duration::from_secs(10);
+/// Время ядру на самостоятельный выход после EOF на stdin (§3.2, §5): оно
+/// останавливает sing-box (`inst.StopTimeout`, 10 с: TUN, маршруты) и закрывает
+/// HTTP (2 с). Только потом SIGTERM/TerminateJobObject.
+pub const T_EOF_GRACE: Duration = Duration::from_secs(12);
 /// Ожидание выхода после SIGTERM/TerminateProcess по хэндлу/pgid (§5 шаг 3).
 pub const T_SIGTERM_WAIT: Duration = Duration::from_secs(5);
 /// Grace после SIGKILL/TerminateProcess(force) (§5 шаг 3).
@@ -54,10 +61,11 @@ pub const CRASH_RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 pub const BACKOFF_RESET_AFTER: Duration = Duration::from_secs(300);
 
 /// Состояния FSM ядра (§2.2, все 9 состояний спека).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CoreState {
     /// Процесса нет, сеть чиста (проверено).
+    #[default]
     Idle,
     /// Процесс запущен, ждём ready-строку + `/healthz`.
     Spawning,
@@ -294,6 +302,17 @@ pub trait CoreProcess {
     fn wait_ready(&mut self, budget: Duration) -> Result<CoreEndpoint, CoreProcessError>;
     /// Graceful-kill: SIGTERM → wait → SIGKILL в пределах `graceful_deadline` (§5).
     fn kill(&mut self, graceful_deadline: Duration) -> Result<(), CoreProcessError>;
+    /// Жив ли процесс (неблокирующий опрос): так цикл надзирателя узнаёт о
+    /// крахе (§2.2, Crashed).
+    fn is_alive(&mut self) -> bool;
+    /// Последние `n` строк stdout/stderr ядра (кольцо §4) для диагностики.
+    fn log_lines(&self, _n: usize) -> Vec<String> {
+        Vec::new()
+    }
+    /// Как завершился процесс (код выхода), если известно.
+    fn exit_info(&self) -> Option<String> {
+        None
+    }
 }
 
 /// transport-url endpoint'а мока по умолчанию (`MockCoreProcess`).
@@ -316,6 +335,10 @@ pub struct MockCoreProcess {
     pub kill_results: Vec<Result<(), CoreProcessError>>,
     /// Endpoint для `wait_ready`, когда `ready_results` пуст.
     pub default_ready_endpoint: CoreEndpoint,
+    /// Очередь ответов `is_alive` (FIFO); когда пуста, процесс считается живым.
+    pub alive_results: Vec<bool>,
+    /// Строки «кольца логов» для `log_lines`.
+    pub log_lines: Vec<String>,
     /// Все конфиги, переданные в `spawn`.
     pub spawn_calls: Vec<CoreSpawnConfig>,
     /// Бюджеты всех вызовов `wait_ready`.
@@ -333,6 +356,8 @@ impl Default for MockCoreProcess {
             default_ready_endpoint: CoreEndpoint {
                 transport_url: MOCK_ENDPOINT_URL.to_owned(),
             },
+            alive_results: Vec::new(),
+            log_lines: Vec::new(),
             spawn_calls: Vec::new(),
             ready_calls: Vec::new(),
             kill_calls: Vec::new(),
@@ -373,6 +398,14 @@ impl CoreProcess for MockCoreProcess {
     fn kill(&mut self, graceful_deadline: Duration) -> Result<(), CoreProcessError> {
         self.kill_calls.push(graceful_deadline);
         self.kill_results.pop_front_or_default_ok()
+    }
+
+    fn is_alive(&mut self) -> bool {
+        self.alive_results.is_empty() || self.alive_results.remove(0)
+    }
+
+    fn log_lines(&self, n: usize) -> Vec<String> {
+        self.log_lines[self.log_lines.len().saturating_sub(n)..].to_vec()
     }
 }
 
@@ -503,6 +536,21 @@ impl<P: CoreProcess, C: Clock> CoreSupervisor<P, C> {
     /// Текущее состояние FSM.
     pub fn state(&self) -> CoreState {
         self.state
+    }
+
+    /// Процесс ядра (для цикла надзирателя: живость, кольцо логов).
+    pub fn process(&self) -> &P {
+        &self.process
+    }
+
+    /// Процесс ядра изменяемо (опрос живости фиксирует выход).
+    pub fn process_mut(&mut self) -> &mut P {
+        &mut self.process
+    }
+
+    /// Текущий момент по часам supervisor'а.
+    pub fn now(&self) -> Instant {
+        self.clock.now()
     }
 
     /// Текущее backoff-расписание (для наблюдения/тестов).

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package presets — маршрутные пресеты LAVRay (W3): формат preset.schema.v1
 // (presets/SCHEMA.md), загрузка 5 builtin-наборов (go:embed), валидация при
 // загрузке (§4 SCHEMA) и конвертер из NekoRay 4.x (RoutingBean, §6 SCHEMA).

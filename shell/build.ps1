@@ -12,9 +12,13 @@ Pop-Location
 Write-Host '== Ядро: сборка lavray-core.exe (реальный sing-box)' -ForegroundColor Cyan
 Push-Location "$root/core"
 $env:CGO_ENABLED = '0'
-# -tags singbox_run включает настоящий раннер sing-box; with_quic — QUIC-транспорты
-# (hysteria2/TUIC), with_gvisor — userspace-стек для TUN.
-go build -tags 'singbox_run with_quic with_gvisor' -trimpath -ldflags '-s -w' -o "$root/shell/binaries/lavray-core.exe" ./cmd/lavray-core/
+# Теги сборки хранятся в ОДНОМ месте — core/BUILD_TAGS (T-02): singbox_run —
+# настоящий раннер sing-box; with_quic — hysteria2/TUIC; with_gvisor — стек
+# TUN; with_utls — REALITY и любой профиль с fp=. Копировать список в другие
+# скрипты и workflow нельзя: тест core/internal/buildtags это проверяет.
+$tags = (Get-Content "$root/core/BUILD_TAGS" -Raw).Trim()
+if ($tags -eq '') { throw 'core/BUILD_TAGS пуст' }
+go build -tags $tags -trimpath -ldflags '-s -w' -o "$root/shell/binaries/lavray-core.exe" ./cmd/lavray-core/
 if ($LASTEXITCODE -ne 0) { throw 'ядро не собралось' }
 $size = [math]::Round((Get-Item "$root/shell/binaries/lavray-core.exe").Length / 1MB, 1)
 Write-Host "   lavray-core.exe: $size MB" -ForegroundColor DarkGray

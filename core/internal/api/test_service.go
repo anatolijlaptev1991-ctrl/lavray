@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // test_service.go — TestLatency/StopTests/ClearTestResults/ResetTraffic
 // (FR-UI-200…209, 211). TCP-пинг реальный: dial address:port с таймаутом и
 // конкурентностью из запроса. URL/Full-режимы выносятся на уровень выше
@@ -23,6 +25,28 @@ const (
 	defaultTestTimeoutMs  = 10000
 	defaultTestConcurrent = 10
 )
+
+// testNAPrefix — начало TestResult.LastError для теста, который к этому
+// профилю не применим (T-23): это не «сервер недоступен». Клиент показывает
+// такой результат как «н/д» и не относит профиль к недоступным.
+const testNAPrefix = "n/a: "
+
+// tcpPingNotApplicable возвращает причину, по которой TCP-пинг не имеет
+// смысла для профиля, либо "". Hysteria2 и TUIC работают по UDP/QUIC: на их
+// порту TCP никто не слушает, и TCP-connect докладывал бы «недоступен» у
+// живого сервера (B1-10).
+func tcpPingNotApplicable(p *model.Profile) string {
+	if p == nil {
+		return ""
+	}
+	switch p.Type {
+	case model.TypeHysteria2:
+		return "Hysteria2 работает по UDP/QUIC — TCP-пинг неприменим"
+	case model.TypeTUIC:
+		return "TUIC работает по UDP/QUIC — TCP-пинг неприменим"
+	}
+	return ""
+}
 
 // testRun — отмена текущего батча (StopTests, FR-UI-203).
 type testRun struct {
@@ -61,8 +85,10 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 		return invalidArg("profile_ids не заданы")
 	}
 	if msg.Mode == lavrayv1.TestLatencyRequest_MODE_URL_TEST || msg.Mode == lavrayv1.TestLatencyRequest_MODE_FULL_TEST {
+		// T-24: отказ безусловный (T-84 реализует режимы), поэтому не врём про
+		// «запущенный инстанс» и не советуем подключиться.
 		return failedPrecondition(
-			"URL/Full-тест требует запущенного инстанса (туннель); используйте TCP-пинг или подключитесь")
+			"URL- и Full-тест пока не реализованы: используйте TCP-пинг (mode=TCP_PING)")
 	}
 
 	timeoutMs := int(msg.GetTimeoutMs())
@@ -117,12 +143,19 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			res := s.tcpPing(runCtx, p, timeout)
-			// Сохраняем результат (TestedAt/Latency/LastError) — только если
-			// профиль ещё существует (иначе UpdateProfile вернёт NotFound).
-			saved := *p
-			saved.TestResult = res
-			if err := s.st.UpdateProfile(&saved); err != nil && !errors.Is(err, store.ErrNotFound) {
+			res, aborted := s.tcpPing(runCtx, p, timeout)
+			if aborted {
+				// D-05: StopTests/обрыв стрима прервали измерение. Это не
+				// «сервер недоступен»: прошлый результат профиля не трогаем и
+				// кадр не шлём.
+				return
+			}
+			// T-22: пишем ТОЛЬКО результат (TestedAt/Latency/LastError) отдельным
+			// UPDATE. Раньше сюда шла копия профиля, прочитанная при старте
+			// батча, целиком через UpdateProfile: она затирала правки
+			// (избранное, заметки, имя) и не сохраняла задержку (UpdateProfile
+			// не пишет её колонки). Удалённый за время теста профиль — не ошибка.
+			if err := s.st.SaveTestResult(p.ID, res); err != nil && !errors.Is(err, store.ErrNotFound) {
 				s.logs.Logf("warn", "test", "сохранение результата профиля %d: %v", p.ID, err)
 			}
 
@@ -155,35 +188,49 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 }
 
 // tcpPing измеряет время установки TCP-соединения с сервером профиля.
-func (s *Server) tcpPing(ctx context.Context, p *model.Profile, timeout time.Duration) model.TestResult {
+// aborted=true — измерение прервано отменой ctx (StopTests, закрытие стрима),
+// а не ответом сервера: результат тогда сохранять и показывать нельзя (D-05).
+// Собственный таймаут измерения отменой не считается — это честное
+// «таймаут N мс».
+func (s *Server) tcpPing(ctx context.Context, p *model.Profile, timeout time.Duration) (res model.TestResult, aborted bool) {
 	now := time.Now().UnixMilli()
+	if why := tcpPingNotApplicable(p); why != "" {
+		return model.TestResult{TestedAtMs: &now, LastError: testNAPrefix + why}, false
+	}
 	if p == nil || p.Address == "" || p.Port <= 0 {
-		return model.TestResult{TestedAtMs: &now, LastError: "нет адреса/порта"}
+		return model.TestResult{TestedAtMs: &now, LastError: "нет адреса/порта"}, false
 	}
 	host := p.Address
 	if ip := net.ParseIP(host); ip == nil && host == "" {
-		return model.TestResult{TestedAtMs: &now, LastError: "пустой адрес"}
+		return model.TestResult{TestedAtMs: &now, LastError: "пустой адрес"}, false
 	}
 	addr := net.JoinHostPort(host, strconv.Itoa(p.Port))
 	dialCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	dial := s.dial
+	if dial == nil {
+		dial = (&net.Dialer{}).DialContext
+	}
 	start := time.Now()
-	var d net.Dialer
-	conn, err := d.DialContext(dialCtx, "tcp", addr)
+	conn, err := dial(dialCtx, "tcp", addr)
 	elapsed := time.Since(start)
 	if err != nil {
+		if ctx.Err() != nil {
+			// Причина — для вызывающих, которым результат всё же нужен (selfcheck).
+			return model.TestResult{LastError: ctx.Err().Error()}, true
+		}
 		msg := err.Error()
 		if errors.Is(err, context.DeadlineExceeded) {
 			msg = "таймаут " + strconv.Itoa(int(timeout/time.Millisecond)) + " мс"
 		}
-		return model.TestResult{TestedAtMs: &now, LastError: msg}
+		return model.TestResult{TestedAtMs: &now, LastError: msg}, false
 	}
 	_ = conn.Close()
 	ms := int32(elapsed / time.Millisecond)
 	if ms <= 0 {
 		ms = 1
 	}
-	return model.TestResult{LatencyMs: &ms, TestedAtMs: &now}
+	return model.TestResult{LatencyMs: &ms, TestedAtMs: &now}, false
 }
 
 // StopTests — прерывает текущий батч (FR-UI-203).
@@ -205,12 +252,8 @@ func (s *Server) ClearTestResults(ctx context.Context, req *connect.Request[lavr
 		}
 	}
 	for _, id := range ids {
-		p, err := s.st.GetProfile(id)
-		if err != nil {
-			continue
-		}
-		p.TestResult = model.TestResult{}
-		if err := s.st.UpdateProfile(p); err != nil {
+		// T-22: UpdateProfile не пишет колонки результата — сбрасываем отдельным UPDATE.
+		if err := s.st.SaveTestResult(id, model.TestResult{}); err != nil && !errors.Is(err, store.ErrNotFound) {
 			return nil, mapErr(err)
 		}
 	}
@@ -230,12 +273,9 @@ func (s *Server) ResetTraffic(ctx context.Context, req *connect.Request[lavrayv1
 		}
 	}
 	for _, id := range ids {
-		p, err := s.st.GetProfile(id)
-		if err != nil {
-			continue
-		}
-		p.Traffic = model.TrafficCounters{}
-		if err := s.st.UpdateProfile(p); err != nil {
+		// D-04: UpdateProfile не пишет колонки трафика — сбрасываем отдельным UPDATE
+		// (как T-22 для результатов тестов). Несуществующий id пропускаем.
+		if err := s.st.SaveTraffic(id, model.TrafficCounters{}); err != nil && !errors.Is(err, store.ErrNotFound) {
 			return nil, mapErr(err)
 		}
 	}

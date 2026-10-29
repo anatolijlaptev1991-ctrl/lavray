@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // profile_service.go — ProfileService (W6): CRUD, метаданные, перемещение,
 // клонирование, порядок, экспорт ссылок и двухфазный импорт контента
 // (FR-UI-116/190/191/257, LNB-25). Остальные RPC сервиса — unimplemented.go.
@@ -5,6 +7,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -12,6 +15,7 @@ import (
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/links"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs/happ"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs/parser"
 )
@@ -117,6 +121,8 @@ func (s *Server) CreateProfile(ctx context.Context, req *connect.Request[lavrayv
 		return nil, mapErr(err)
 	}
 	m.ID = 0 // назначает хранилище
+	// T-51: сервер, добавленный вручную в группу-подписку, обновление не удалит.
+	m.Manual = s.isSubscriptionGroup(m.GroupID)
 	if err := s.st.CreateProfile(m); err != nil {
 		return nil, mapErr(err)
 	}
@@ -139,6 +145,9 @@ func (s *Server) UpdateProfile(ctx context.Context, req *connect.Request[lavrayv
 	// Статистика и результаты тестов — серверные, клиент их перезаписать не может.
 	m.Traffic = old.Traffic
 	m.TestResult = old.TestResult
+	// T-51: флаг «добавлен вручную» тоже серверный; перенос профиля в
+	// группу-подписку делает его ручным.
+	m.Manual = old.Manual || (m.GroupID != old.GroupID && s.isSubscriptionGroup(m.GroupID))
 	if err := s.st.UpdateProfile(m); err != nil {
 		return nil, mapErr(err)
 	}
@@ -199,12 +208,16 @@ func (s *Server) MoveProfiles(ctx context.Context, req *connect.Request[lavrayv1
 	if _, err := s.st.GetGroup(msg.TargetGroupId); err != nil {
 		return nil, mapErr(err)
 	}
+	toSubscription := s.isSubscriptionGroup(msg.TargetGroupId) // T-51
 	for _, id := range msg.Ids {
 		p, err := s.st.GetProfile(id)
 		if err != nil {
 			return nil, mapErr(err)
 		}
 		p.GroupID = msg.TargetGroupId
+		if toSubscription {
+			p.Manual = true // перенесён вручную: обновление подписки не удалит
+		}
 		if err := s.st.UpdateProfile(p); err != nil {
 			return nil, mapErr(err)
 		}
@@ -261,9 +274,6 @@ func (s *Server) ReorderProfiles(ctx context.Context, req *connect.Request[lavra
 
 func (s *Server) ExportLinks(ctx context.Context, req *connect.Request[lavrayv1.ExportLinksRequest]) (*connect.Response[lavrayv1.ExportLinksResponse], error) {
 	msg := req.Msg
-	if len(msg.Ids) == 0 && msg.GroupId == nil {
-		return nil, invalidArg("укажите ids или group_id")
-	}
 	var list []*model.Profile
 	if len(msg.Ids) > 0 {
 		for _, id := range msg.Ids {
@@ -274,8 +284,14 @@ func (s *Server) ExportLinks(ctx context.Context, req *connect.Request[lavrayv1.
 			list = append(list, p)
 		}
 	} else {
+		// T-25: пустой запрос — все профили (как ListProfiles без group_id);
+		// с group_id — только эта группа.
+		groupID := int64(-1)
+		if msg.GroupId != nil {
+			groupID = *msg.GroupId
+		}
 		var err error
-		list, err = s.st.ListProfiles(*msg.GroupId)
+		list, err = s.st.ListProfiles(groupID)
 		if err != nil {
 			return nil, mapErr(err)
 		}
@@ -303,12 +319,22 @@ func (s *Server) ExportLinks(ctx context.Context, req *connect.Request[lavrayv1.
 
 // ImportContent — двухфазный безопасный импорт (FR-UI-257, LNB-25):
 // preview_only=true — разобрать без сохранения (parsed-профили, id=0,
-// warnings по custom-полям); иначе — сохранить в целевую группу и вернуть
+// warnings по custom-полям); иначе — сохранить в целевую группу (не задана
+// или 0 — встроенная «Default», см. importTargetGroup) и вернуть
 // added_profile_ids. Контент: ссылка/список/base64/sing-box JSON/happ://.
 func (s *Server) ImportContent(ctx context.Context, req *connect.Request[lavrayv1.ImportContentRequest]) (*connect.Response[lavrayv1.ImportContentResponse], error) {
 	msg := req.Msg
 	if strings.TrimSpace(msg.Content) == "" {
 		return nil, invalidArg("content пуст")
+	}
+	// T-19: ссылка на подписку (в том числе happ://crypt…, раскрывающийся в
+	// неё) — не профиль. Ядро сообщает kind=SUBSCRIPTION_URL, ничего не
+	// разбирает и не сохраняет; подписку создаёт клиент (CreateSubscription).
+	// intent=AS_LINKS отключает определение: разобрать как share-ссылку.
+	if msg.Intent != lavrayv1.ImportContentRequest_INTENT_AS_LINKS && isSubscriptionContent(msg.Content) {
+		return connect.NewResponse(&lavrayv1.ImportContentResponse{
+			Kind: lavrayv1.ImportContentResponse_CONTENT_KIND_SUBSCRIPTION_URL,
+		}), nil
 	}
 	res, err := parser.Parse([]byte(msg.Content), parser.Options{
 		// Расшифровка happ — в процессе (без подпроцесса, UX-15).
@@ -340,29 +366,62 @@ func (s *Server) ImportContent(ctx context.Context, req *connect.Request[lavrayv
 		}
 	}
 	resp := &lavrayv1.ImportContentResponse{
+		Kind:                contentKindOf(msg.Content, res.Format),
 		ParsedProfiles:      parsed,
 		CustomFieldWarnings: warns,
 	}
 	if optBool(msg.PreviewOnly) {
 		return connect.NewResponse(resp), nil
 	}
-	if msg.TargetGroupId == nil || *msg.TargetGroupId <= 0 {
-		return nil, invalidArg("target_group_id обязателен для сохранения (preview_only=false)")
+	groupID, err := s.importTargetGroup(msg.TargetGroupId)
+	if err != nil {
+		return nil, err
 	}
-	if _, err := s.st.GetGroup(*msg.TargetGroupId); err != nil {
+	// T-51: одна транзакция, дубли (тот же сервер) пропускаются.
+	added, skipped, err := s.commitImport(groupID, res.Profiles)
+	if err != nil {
 		return nil, mapErr(err)
 	}
-	var added []int64
-	for _, p := range res.Profiles {
-		p.ID = 0
-		p.GroupID = *msg.TargetGroupId
-		if err := s.st.CreateProfile(p); err != nil {
-			return nil, mapErr(err)
-		}
-		added = append(added, p.ID)
-	}
 	resp.AddedProfileIds = added
+	if skipped > 0 {
+		resp.Log = append(resp.Log, fmt.Sprintf("пропущено уже имеющихся серверов: %d", skipped))
+	}
 	return connect.NewResponse(resp), nil
+}
+
+// importTargetGroup выбирает группу для сохранения импорта (T-07). Диалог
+// импорта из «Подключения», меню титлбара и онбординга не знает группу и не
+// передаёт target_group_id (или передаёт 0) — тогда профили идут во
+// встроенную «Default» (store.DefaultGroupID). Если пользователь её удалил,
+// берётся первая обычная (не подписочная) группа в порядке вкладок. Явный
+// положительный id обязан существовать; отрицательный — ошибка клиента.
+func (s *Server) importTargetGroup(requested *int64) (int64, error) {
+	if requested != nil && *requested < 0 {
+		return 0, invalidArg("target_group_id не может быть отрицательным")
+	}
+	if requested != nil && *requested > 0 {
+		if _, err := s.st.GetGroup(*requested); err != nil {
+			return 0, mapErr(err)
+		}
+		return *requested, nil
+	}
+	_, err := s.st.GetGroup(store.DefaultGroupID)
+	if err == nil {
+		return store.DefaultGroupID, nil
+	}
+	if !errors.Is(err, store.ErrNotFound) {
+		return 0, mapErr(err)
+	}
+	groups, err := s.st.ListGroups()
+	if err != nil {
+		return 0, mapErr(err)
+	}
+	for _, g := range groups {
+		if g.Kind == model.GroupBasic {
+			return g.ID, nil
+		}
+	}
+	return 0, failedPrecondition("нет группы для импорта: создайте обычную группу")
 }
 
 // happDecryptInProcess — расшифровка happ:// внутри процесса (UX-15),

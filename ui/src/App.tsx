@@ -1,18 +1,25 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // App.tsx — каркас приложения строго по прототипу v1.2 (design/prototype.html):
 // титлбар по ОС, сайдбар со знаком «Отражение», шапка с вкладками, фоновое
 // поле с анимацией, статус-бар. Разметка/классы — из утверждённого прототипа;
 // стили — src/prototype.css (перенесён дословно).
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { BrandMark, Icon, type IconName } from './components/Icon';
 import { SECTIONS, type Section, type SectionTab } from './app/sections';
 import { CoreContext, useCore, useCoreClients, useCoreStatus } from './hooks/useCore';
-import { CoreState } from './gen/lavray_pb';
-import { useI18n } from './hooks/useI18n';
+import { ConnectMode, CoreState } from './gen/lavray_pb';
+import { useI18n, useStartupLanguage } from './hooks/useI18n';
+import { useSystemProxyApplied } from './hooks/useSystemProxy';
 import { useTrafficSpeed } from './hooks/useTraffic';
-import { applyDocumentLanguage, detectLanguage, formatBytes, setLanguage } from './lib/i18n';
-import { applyTheme, loadPreferences, watchSystemTheme } from './lib/theme';
+import { useTrayBridge } from './hooks/useTrayBridge';
+import { applyDocumentLanguage, formatSpeed } from './lib/i18n';
+import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
+import { focusWhenReady, hotkeyOf } from './lib/hotkeys';
 import { loadModes, toggleConnection } from './lib/connection';
+import type { TrayAction } from './lib/tray';
+import { onTablistKeyDown } from './lib/tabs';
 import { getPlatformAdapter } from './platform/adapter';
 import { ConnectionScreen } from './screens/screen_connection';
 import { ConnsScreen } from './screens/screen_conns';
@@ -38,6 +45,8 @@ const NAV_ICONS: Record<string, IconName> = {
 };
 
 export default function App(): JSX.Element {
+  // T-37: сохранённый язык применяется до первого рендера дерева.
+  useStartupLanguage();
   const clients = useCoreClients();
   return (
     <CoreContext.Provider value={clients}>
@@ -84,6 +93,8 @@ function AppInner(): JSX.Element {
   const [hotkeysOpen, setHotkeysOpen] = useState(false);
   const [licensesOpen, setLicensesOpen] = useState(false);
   const [quickImport, setQuickImport] = useState<'link' | 'qr' | 'file' | null>(null);
+  // Узкий сайдбар-рельс (600…959 px): подписи разделов скрыты, видны только иконки.
+  const [rail, setRail] = useState(() => window.innerWidth >= 600 && window.innerWidth < 960);
   // Меню титлбара (прототип tbMenuItems): импорт, подключение, справка, выход.
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null);
   const adapter = useMemo(() => getPlatformAdapter(window), []);
@@ -122,6 +133,7 @@ function AppInner(): JSX.Element {
     const apply = (w: number): void => {
       document.body.classList.toggle('w-md', w >= 600 && w < 960);
       document.body.classList.toggle('w-sm', w < 600);
+      setRail(w >= 600 && w < 960);
     };
     apply(window.innerWidth);
     const onResize = (): void => {
@@ -133,33 +145,20 @@ function AppInner(): JSX.Element {
     };
   }, []);
 
-  // D2 (аудит round 2): колбэк системной темы обязан читать АКТУАЛЬНЫЕ
-  // настройки, иначе смена темы ОС откатывала выбор пользователя.
-  const prefsRef = useRef(prefs);
-  prefsRef.current = prefs;
-
   useEffect(() => {
-    const apply = (): void => {
-      applyTheme({ theme: prefsRef.current.theme, accent: prefsRef.current.accent, doc: document, win: window, storage: window.localStorage });
-    };
-    apply();
-    return watchSystemTheme(window, apply);
-  }, []);
-
-  useEffect(() => {
-    // D3: выбор языка сохраняется; при первом запуске — из navigator.
-    const forced = new URLSearchParams(window.location.search).get('lang');
-    if (forced !== null && ['ru', 'zh', 'en', 'es', 'de'].includes(forced)) {
-      setLanguage(forced as 'ru' | 'zh' | 'en' | 'es' | 'de');
-      return;
-    }
-    const saved = localStorage.getItem('lavray.lang');
-    if (saved === null) {
-      const detected = detectLanguage([...navigator.languages]);
-      setLanguage(detected);
-      localStorage.setItem('lavray.lang', detected);
-    }
-  }, []);
+    // Первичная установка темы (с учётом ?theme=/?accent= для предпросмотра);
+    // здесь же выбор сохраняется, как и раньше.
+    applyTheme({ theme: prefs.theme, accent: prefs.accent, doc: document, win: window, storage: window.localStorage });
+    // T-37: смена темы ОС перекрашивает документ ТОЛЬКО при выборе «Как в
+    // системе» и ничего не записывает. Актуальный выбор читаем из хранилища:
+    // его пишет экран «Настройки», а `prefs` — начальные настройки, они
+    // устарели после первого же переключения темы.
+    return watchSystemTheme(window, () => {
+      const current = loadPreferences(window.localStorage);
+      if (current.theme !== 'system') return;
+      paintTheme({ theme: current.theme, accent: current.accent, doc: document, win: window });
+    });
+  }, [prefs]);
 
   const selectSection = useCallback((id: string): void => {
     setSectionId(id);
@@ -196,8 +195,9 @@ function AppInner(): JSX.Element {
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       const mod = adapter.os === 'macos' ? e.metaKey : e.ctrlKey;
-      if (mod && !e.altKey && !e.shiftKey && e.key >= '1' && e.key <= '5') {
-        const target = SECTIONS[Number(e.key) - 1];
+      const key = hotkeyOf(e); // по физической клавише: работает и на русской раскладке
+      if (mod && !e.altKey && !e.shiftKey && key >= '1' && key <= '5') {
+        const target = SECTIONS[Number(key) - 1];
         if (target !== undefined) {
           e.preventDefault();
           selectSection(target.id);
@@ -219,7 +219,8 @@ function AppInner(): JSX.Element {
         el !== null &&
         (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
       const mod = adapter.os === 'macos' ? e.metaKey : e.ctrlKey;
-      if (mod && e.key.toLowerCase() === 'd' && !typing) {
+      const key = hotkeyOf(e);
+      if (mod && key === 'd' && !typing) {
         e.preventDefault();
         // Прототип: Ctrl+D переключает соединение, а не только открывает
         // экран. При пустом списке профилей остаётся навигация.
@@ -237,7 +238,7 @@ function AppInner(): JSX.Element {
         })();
         return;
       }
-      if (mod && e.key === ',' && !typing) {
+      if (mod && key === ',' && !typing) {
         e.preventDefault();
         selectSection('settings');
         return;
@@ -246,9 +247,12 @@ function AppInner(): JSX.Element {
         e.preventDefault();
         setHotkeysOpen(true);
       }
-      if (mod && e.key.toLowerCase() === 'k' && !typing) {
+      // Ctrl/⌘+K: список серверов и фокус в поле поиска (прототип: profSearch.focus()).
+      // Работает и из других полей ввода: сочетание с модификатором текста не печатает.
+      if (mod && !e.altKey && !e.shiftKey && key === 'k') {
         e.preventDefault();
         selectSection('servers');
+        focusWhenReady('#profSearch', true);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -274,6 +278,17 @@ function AppInner(): JSX.Element {
       }
     })();
   }, [core, connOn, status.inbound, selectSection]);
+
+  // Трей: состояние и тексты уходят в оболочку, а «Подключить»/«Отключить» из
+  // меню трея выполняет UI — профиль и режимы знает он.
+  const handleTrayAction = useCallback(
+    (action: TrayAction): void => {
+      if ((action === 'connect') === connOn) return; // меню могло устареть
+      handleToggleConnect();
+    },
+    [connOn, handleToggleConnect],
+  );
+  useTrayBridge(status, handleTrayAction);
 
   const handleAbout = useCallback((): void => {
     selectSection('settings');
@@ -319,6 +334,12 @@ function AppInner(): JSX.Element {
     status.activeProfileName === undefined || status.activeProfileName === ''
       ? '—'
       : status.activeProfileName;
+  // Чипы показывают фактическое состояние, а не переключатели: TUN горит, лишь
+  // когда ядро работает в режиме TUN, системный прокси — когда оболочка его
+  // применила. Чип виден и по настройке (потускневший), и по факту.
+  const sysApplied = useSystemProxyApplied();
+  const tunOn = connOn && status.mode === ConnectMode.TUN;
+  const sysOn = connOn && sysApplied;
 
   return (
     <div
@@ -382,6 +403,7 @@ function AppInner(): JSX.Element {
         <aside id="sidebar">
           <button
             className="sb-logo"
+            tabIndex={-1}
             onClick={() => {
               selectSection('connection');
             }}
@@ -394,6 +416,8 @@ function AppInner(): JSX.Element {
               <button
                 key={s.id}
                 className={`sb-item${s.id === sectionId ? ' on' : ''}`}
+                // Подсказка нужна только когда подпись скрыта (прототип: tip у .sb-item в w-md).
+                title={rail ? t(s.navKey) : undefined}
                 onClick={() => {
                   selectSection(s.id);
                 }}
@@ -423,13 +447,27 @@ function AppInner(): JSX.Element {
               <h1 id="ghTitle">{t(section.navKey)}</h1>
               <p className="sub" id="ghSub">{tab ? t(tab.subKey) : ''}</p>
               {section.tabs.length > 1 && (
-                <div className="subtabs" id="ghTabs" role="tablist" aria-label={t('aria.tabs')}>
+                <div
+                  className="subtabs"
+                  id="ghTabs"
+                  role="tablist"
+                  aria-label={t('aria.tabs')}
+                  onKeyDown={(e) => {
+                    // T-38: ←/→/Home/End переключают вкладку и переносят на неё фокус.
+                    onTablistKeyDown(e, (i) => {
+                      const next = section.tabs[i];
+                      if (next !== undefined) setTabId(next.id);
+                    });
+                  }}
+                >
                   {section.tabs.map((tb) => (
                     <button
                       key={tb.id}
+                      id={`tab-${tb.id}`}
                       className="subtab"
                       role="tab"
                       aria-selected={tb.id === (tab?.id ?? '')}
+                      aria-controls="screen-conn"
                       tabIndex={tb.id === (tab?.id ?? '') ? 0 : -1}
                       onClick={() => {
                         setTabId(tb.id);
@@ -442,8 +480,20 @@ function AppInner(): JSX.Element {
               )}
             </div>
           )}
-          <div className="screen active" id="screen-conn">
-            {sectionId === 'connection' && <ConnectionScreen />}
+          {/* Одна панель на все вкладки раздела (прототип: #scr-*, role=tabpanel
+              только у разделов с несколькими вкладками). */}
+          <div
+            className="screen active"
+            id="screen-conn"
+            role={section !== undefined && section.tabs.length > 1 ? 'tabpanel' : undefined}
+            aria-labelledby={
+              section !== undefined && section.tabs.length > 1 && tab !== undefined
+                ? `tab-${tab.id}`
+                : undefined
+            }
+          >
+            {/* T-73: после мастера экран перечитывает режимы из localStorage (key). */}
+            {sectionId === 'connection' && <ConnectionScreen key={onboarding ? 'onboarding' : 'ready'} />}
             {sectionId === 'servers' &&
               (tab?.id === 'subscriptions' ? <SubscriptionsScreen /> : <ServersScreen />)}
             {sectionId === 'rules' && (tab?.id === 'dns' ? <DnsScreen /> : <RulesScreen />)}
@@ -461,6 +511,7 @@ function AppInner(): JSX.Element {
           onClose={() => {
             setOnboarding(false);
             window.localStorage.setItem('lavray.onboarded', '1');
+            setModes(loadModes(window.localStorage)); // чипы статус-бара без ожидания опроса
           }}
           onOpenImport={(tab) => { setQuickImport(tab ?? 'link'); }}
         />
@@ -492,7 +543,6 @@ function AppInner(): JSX.Element {
       {/* Настройки → «Лицензии и компоненты» открывают диалог событием. */}
       {quickImport !== null && (
         <ImportDialog
-          groupId={0n}
           initialTab={quickImport}
           onClose={() => { setQuickImport(null); }}
           onImported={() => {
@@ -520,22 +570,22 @@ function AppInner(): JSX.Element {
         <span className="st-item" style={{ gap: 10 }}>
           <span className="spd dn">
             <Icon name="download" size={16} />
-            <span>{formatBytes(speed.down, lang)}/s</span>
+            <span>{formatSpeed(speed.down, lang)}</span>
           </span>
           <span className="spd up">
             <Icon name="upload" size={16} />
-            <span>{formatBytes(speed.up, lang)}/s</span>
+            <span>{formatSpeed(speed.up, lang)}</span>
           </span>
         </span>
         <span className="flex1" />
-        {modes.tunMode && (
-          <span className={`st-chip${connOn ? ' on' : ''}`} title={t('set.tunD')}>
+        {(modes.tunMode || tunOn) && (
+          <span className={`st-chip${tunOn ? ' on' : ''}`} title={t('set.tunD')}>
             <span className="dot" />
             TUN
           </span>
         )}
-        {modes.sysProxy && (
-          <span className={`st-chip${connOn ? ' on' : ''}`} title={t('set.sysproxyD')}>
+        {(modes.sysProxy || sysOn) && (
+          <span className={`st-chip${sysOn ? ' on' : ''}`} title={t('set.sysproxyD')}>
             <span className="dot" />
             <span>{t('st.sysproxy')}</span>
           </span>

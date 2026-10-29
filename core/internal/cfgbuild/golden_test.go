@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 package cfgbuild
 
 // golden_test.go — golden-тесты конфигбилдера (§3.2, W4 = G01–G18).

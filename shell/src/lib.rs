@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 //! Библиотечная часть оболочки LAVRay (этап 3, скаффолд).
 //!
 //! Спек: `docs/stage3/shell-lifecycle.md` (§10 — каркас крейта). GUI-часть
@@ -9,7 +11,14 @@
 //!   пайп логов (§4), детекторы teardown-проверки сети (§6, заглушки);
 //!   интеграция с процессом — через трейт [`coreproc::CoreProcess`]
 //!   (продакшн-реализация — позже, в тестах — [`coreproc::MockCoreProcess`]);
+//! - [`endpoint`] — адрес/токен ядра для UI, событие `core-endpoint` и адаптер
+//!   к циклу надзора `coreproc::runner` (T-56): публикует адрес, шлёт событие
+//!   и снимает системный прокси при смерти ядра (T-03);
+//! - [`integrity`] — сверка SHA-256 ядра с вшитым при сборке (T-44);
+//! - `oemtext` (только Windows) — вывод консольных программ (`reg.exe`) из OEM-
+//!   кодовой страницы в строку (S-02);
 //! - [`tray`] — конфигурация меню трея (§9), проверяемая без GUI;
+//! - [`elevation`] — запущено ли приложение с повышенными правами (T-46);
 //! - [`uiprotocol`] — протокол UI ↔ shell (команды/события, serde, версия
 //!   протокола);
 //! - [`updater`] — автомат состояний автообновления TUF-lite (§8.3), без сети.
@@ -20,6 +29,11 @@
 //! `src/ipc.rs` по дереву §10, реализация при врезке реального ядра.
 
 pub mod coreproc;
+pub mod elevation;
+pub mod endpoint;
+pub mod integrity;
+#[cfg(windows)]
+mod oemtext;
 pub mod sysproxy;
 pub mod tray;
 pub mod uiprotocol;

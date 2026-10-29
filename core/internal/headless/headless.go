@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package headless — сервисный режим без UI-оболочки (W8): автозапуск
 // последнего профиля при старте, авторестарт после сбоя (CORE_STATE_
 // RECONNECTING), обработка shutdown-сигналов. Используется lavrayd

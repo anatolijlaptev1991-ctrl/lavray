@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: GPL-3.0-only
+
 // Package store — SQLite-хранилище LAVRay (modernc.org/sqlite, CGO-free;
 // core-port-plan §5). Режим WAL; одна операция UI — одна транзакция.
 //
@@ -36,6 +38,9 @@ var (
 type Store struct {
 	db  *sql.DB
 	dir string
+	// tx != nil только у транзакционного представления внутри InTx (intx.go):
+	// withTx тогда не открывает свою транзакцию, а работает в этой.
+	tx *sql.Tx
 }
 
 // Open открывает (или создаёт) хранилище в dir, применяет права и миграции.
@@ -72,9 +77,15 @@ func Open(dir string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	s.db = db
 
+	// T-50: целостность — ДО миграций (на повреждённой базе миграция ничего
+	// не пишет); файл не переименовывается и не удаляется (integrity.go).
+	if err := checkIntegrity(db, DBPath(dir)); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if err := migrate(db); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("store: migrate: %w", err)
+		return nil, openError(DBPath(dir), err)
 	}
 	if err := s.applyFileModes(); err != nil {
 		_ = db.Close()
@@ -126,6 +137,9 @@ func (s *Store) applyFileModes() error {
 
 // withTx выполняет fn в одной транзакции (rollback при ошибке).
 func (s *Store) withTx(fn func(tx *sql.Tx) error) error {
+	if s.tx != nil { // внутри InTx: commit/rollback — у владельца транзакции
+		return fn(s.tx)
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err

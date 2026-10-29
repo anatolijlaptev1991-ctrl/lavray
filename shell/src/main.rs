@@ -430,6 +430,42 @@ fn main() {
             set_system_proxy,
             recover_system_proxy
         ])
-        .run(tauri::generate_context!())
-        .expect("LAVRay shell: failed to run tauri application");
+        .build(tauri::generate_context!())
+        .expect("LAVRay shell: failed to build tauri application")
+        .run(|_app, event| {
+            on_run_event(&event, || {
+                let _ = SysProxy::new(&data_dir()).release_on_quit();
+            });
+        });
+}
+
+/// Реакция на события цикла tauri. `Exit` приходит при любом выходе, в том
+/// числе при завершении сеанса Windows (WM_ENDSESSION: tao вызывает
+/// `loop_destroyed()` и сразу `std::process::exit(0)`), — это последняя
+/// возможность вернуть системный прокси, иначе после загрузки в WinINET
+/// остаётся адрес без слушателя (A2-06, T-43). Повторный откат безвреден:
+/// без снимка `release_on_quit` ничего не делает.
+fn on_run_event(event: &tauri::RunEvent, release_proxy: impl FnOnce()) {
+    if matches!(event, tauri::RunEvent::Exit) {
+        release_proxy();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::on_run_event;
+    use std::cell::Cell;
+
+    #[test]
+    fn proxy_is_released_on_exit_event_only() {
+        let released = Cell::new(0);
+        on_run_event(&tauri::RunEvent::Exit, || released.set(released.get() + 1));
+        assert_eq!(
+            released.get(),
+            1,
+            "Exit (в том числе WM_ENDSESSION) снимает прокси"
+        );
+        on_run_event(&tauri::RunEvent::Ready, || released.set(released.get() + 1));
+        assert_eq!(released.get(), 1, "прочие события прокси не трогают");
+    }
 }

@@ -822,4 +822,7 @@ export const enDict: Record<string, string> = {
   "dns.jsonOk": "JSON is valid",
   "bk.restored": "Settings restored from file",
   "sub.dropConfirm": "The update will remove {removed}. {kept} will remain in the subscription. Continue?",
+  // T-60: ключи, которых не хватало
+  "web.title": "Web panel",
+  "geo.none": "No country",
 }

@@ -822,4 +822,7 @@ export const deDict: Record<string, string> = {
   "dns.jsonOk": "JSON ist gültig",
   "bk.restored": "Einstellungen aus Datei wiederhergestellt",
   "sub.dropConfirm": "Das Update entfernt {removed}. Danach verbleiben {kept} im Abo. Fortfahren?",
+  // T-60: ключи, которых не хватало
+  "web.title": "Webpanel",
+  "geo.none": "Kein Land",
 }

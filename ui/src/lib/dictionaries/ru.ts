@@ -1,6 +1,6 @@
 // Словарь ru — перенесён дословно из design/prototype.html (I18N.ru);
 // машинная генерация 2026-10-24 из принятого прототипа v1.2, не редактировать руками.
-export const ruDict: Record<string, string> = {
+export const ruDict = {
   "a11y.k.contrast": "Контраст",
   "a11y.k.name": "Нет доступного имени",
   "a11y.k.target": "Маленькая цель",
@@ -836,4 +836,7 @@ export const ruDict: Record<string, string> = {
   "dns.jsonOk": "JSON корректен",
   "bk.restored": "Настройки восстановлены из файла",
   "sub.dropConfirm": "Обновление удалит {removed}. После него в подписке останется {kept}. Продолжить?",
+  // T-60: ключи, которых не хватало
+  "web.title": "Веб-панель",
+  "geo.none": "Без страны",
 }

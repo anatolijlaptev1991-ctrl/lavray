@@ -19,12 +19,12 @@ import {
   type AccentPreference,
   type ThemePreference,
 } from '../lib/theme';
-import { LANGUAGES, LANG_NATIVE, type Language } from '../lib/i18n';
+import { LANGUAGES, LANG_NATIVE, type Language, type MessageKey } from '../lib/i18n';
 
 interface Section {
   readonly id: string;
   readonly icon: IconName;
-  readonly titleKey: string;
+  readonly titleKey: MessageKey;
 }
 
 const SECTIONS: readonly Section[] = [
@@ -41,8 +41,8 @@ const SECTIONS: readonly Section[] = [
 interface Row {
   readonly key: string;
   readonly type: SettingType;
-  readonly labelKey: string;
-  readonly descKey?: string;
+  readonly labelKey: MessageKey;
+  readonly descKey?: MessageKey;
 }
 
 const NETWORK_ROWS: readonly Row[] = [
@@ -263,7 +263,7 @@ export function SettingsScreen(): JSX.Element {
 
   const q = query.trim().toLowerCase();
   const matches = useCallback(
-    (labelKey: string, descKey?: string): boolean => {
+    (labelKey: MessageKey, descKey?: MessageKey): boolean => {
       if (q === '') return true;
       const label = t(labelKey).toLowerCase();
       if (label.includes(q)) return true;
@@ -272,7 +272,7 @@ export function SettingsScreen(): JSX.Element {
     [q, t],
   );
   const sectionVisible = useCallback(
-    (id: string, titleKey: string): boolean => {
+    (id: string, titleKey: MessageKey): boolean => {
       if (q === '') return true;
       if (t(titleKey).toLowerCase().includes(q)) return true;
       const rows = id === 'network' ? NETWORK_ROWS : id === 'tun' ? TUN_ROWS : id === 'core' ? CORE_ROWS : [];
@@ -380,7 +380,7 @@ export function SettingsScreen(): JSX.Element {
                 gotoSection(s.id);
               }}
             >
-              {t(s.titleKey as never)}
+              {t(s.titleKey)}
             </button>
           ))}
         </nav>
@@ -394,7 +394,7 @@ export function SettingsScreen(): JSX.Element {
         >
           {visibleSections.map((s) => (
             <option key={s.id} value={s.id}>
-              {t(s.titleKey as never)}
+              {t(s.titleKey)}
             </option>
           ))}
         </select>
@@ -462,7 +462,7 @@ export function SettingsScreen(): JSX.Element {
                 <div className="set-row" key={r.key}>
                   <div className="set-txt">
                     <label className="set-l" htmlFor={r.key}>
-                      {t(r.labelKey as never)}
+                      {t(r.labelKey)}
                     </label>
                   </div>
                   <div className="set-ctl">
@@ -528,9 +528,9 @@ export function SettingsScreen(): JSX.Element {
                   <div className="set-row" key={r.key}>
                     <div className="set-txt">
                       <label className="set-l" htmlFor={r.key}>
-                        {t(r.labelKey as never)}
+                        {t(r.labelKey)}
                       </label>
-                      {r.descKey !== undefined && <div className="set-d">{t(r.descKey as never)}</div>}
+                      {r.descKey !== undefined && <div className="set-d">{t(r.descKey)}</div>}
                     </div>
                     <div className="set-ctl set-ctl-wide">
                       {r.key === 'tun.impl' ? (
@@ -606,7 +606,7 @@ export function SettingsScreen(): JSX.Element {
               ).map(([key, kbd]) => (
                 <div className="hk-row" key={key}>
                   <div className="set-txt">
-                    <div className="set-l">{t(key as never)}</div>
+                    <div className="set-l">{t(key)}</div>
                   </div>
                   <kbd className="kbd">{kbd}</kbd>
                 </div>
@@ -642,7 +642,7 @@ export function SettingsScreen(): JSX.Element {
                           setThemePref(th);
                         }}
                       >
-                        {t(`theme.${th}` as never)}
+                        {t(`theme.${th}`)}
                       </button>
                     ))}
                   </div>
@@ -657,8 +657,8 @@ export function SettingsScreen(): JSX.Element {
                     <button
                       key={ac}
                       className={`accdot${accent === ac ? ' on' : ''}`}
-                      title={t(`accent.${ac}` as never)}
-                      aria-label={t(`accent.${ac}` as never)}
+                      title={t(`accent.${ac}`)}
+                      aria-label={t(`accent.${ac}`)}
                       onClick={() => {
                         setAccentPref(ac);
                       }}
@@ -813,9 +813,9 @@ export function SettingsScreen(): JSX.Element {
                   <div className="set-row" key={r.key}>
                     <div className="set-txt">
                       <label className="set-l" htmlFor={r.key}>
-                        {t(r.labelKey as never)}
+                        {t(r.labelKey)}
                       </label>
-                      {r.descKey !== undefined && <div className="set-d">{t(r.descKey as never)}</div>}
+                      {r.descKey !== undefined && <div className="set-d">{t(r.descKey)}</div>}
                     </div>
                     <div className="set-ctl">
                       <input

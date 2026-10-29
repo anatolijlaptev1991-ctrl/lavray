@@ -822,4 +822,7 @@ export const esDict: Record<string, string> = {
   "dns.jsonOk": "JSON válido",
   "bk.restored": "Ajustes restaurados desde el archivo",
   "sub.dropConfirm": "La actualización eliminará {removed}. Quedarán {kept} en la suscripción. ¿Continuar?",
+  // T-60: ключи, которых не хватало
+  "web.title": "Panel web",
+  "geo.none": "Sin país",
 }

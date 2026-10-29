@@ -10,7 +10,7 @@ import { useCore, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { showCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
-import { formatMs } from '../lib/i18n';
+import { formatMs, type MessageKey } from '../lib/i18n';
 import { isTestDown, isTestNotApplicable } from '../lib/testResult';
 import { ProfileEditor } from '../components/ProfileEditor';
 import { ImportDialog } from '../components/ImportDialog';
@@ -48,7 +48,7 @@ const PROTO_OPTIONS: readonly { value: string; label: string }[] = [
 type StatusFilter = 'all' | 'fav' | 'fast' | 'down';
 type SortKey = 'delay' | 'name';
 
-const STATUS_CHIPS: readonly { key: StatusFilter; labelKey: string }[] = [
+const STATUS_CHIPS: readonly { key: StatusFilter; labelKey: MessageKey }[] = [
   { key: 'all', labelKey: 'filter.all' },
   { key: 'fav', labelKey: 'filter.fav' },
   { key: 'fast', labelKey: 'filter.fast' },
@@ -56,7 +56,7 @@ const STATUS_CHIPS: readonly { key: StatusFilter; labelKey: string }[] = [
 ];
 
 export function ServersScreen(): JSX.Element {
-  const { t, tf, lang } = useI18n();
+  const { t, tf, plural, lang } = useI18n();
   const core = useCore();
   const [search, setSearch] = useState('');
   const { profiles: allProfiles, total: allTotal, refresh } = useProfiles(search);
@@ -185,7 +185,7 @@ export function ServersScreen(): JSX.Element {
           const down = isTestDown(r);
           setLatency((m) => ({
             ...m,
-            [key]: na ? t('test.na') : down ? '✕' : `${String(r?.latencyMs ?? 0)} ms`,
+            [key]: na ? t('test.na') : down ? '✕' : formatMs(r?.latencyMs ?? 0, lang),
           }));
           setProgress(tf('test.progress', { done: res.index, total: res.total }));
         }
@@ -198,7 +198,7 @@ export function ServersScreen(): JSX.Element {
         setProgress('');
       }
     },
-    [core, refresh, tf, t],
+    [core, refresh, tf, t, lang],
   );
 
   // SS-05: остановка рвёт стрим (контракт: отмена — закрытие стрима) и
@@ -383,7 +383,7 @@ export function ServersScreen(): JSX.Element {
                 setStatusFilter(c.key);
               }}
             >
-              {t(c.labelKey as never)}
+              {t(c.labelKey)}
             </button>
           ))}
         </div>
@@ -520,7 +520,7 @@ export function ServersScreen(): JSX.Element {
           </span>
         </button>
         <span className="cap mono">
-          {t('srv.current')}: {String(profiles.length)}
+          {plural('pl.p', profiles.length)}
         </span>
       </div>
 

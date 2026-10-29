@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { create } from '@bufbuild/protobuf';
 import { RoutingPresetSchema } from '../gen/lavray_pb';
-import { LANGUAGES, t } from './i18n';
+import { LANGUAGES, t, type MessageKey } from './i18n';
 import { presetDescription, presetRuleCount, presetTitle } from './presets';
 
 // Идентификаторы файлов core/internal/presets/builtin/*.json; displayName
@@ -11,7 +11,7 @@ const CORE_BUILTIN = ['lav-ru', 'lav-cn', 'global', 'all-proxy', 'all-direct'];
 
 describe('presetTitle / presetDescription', () => {
   it.each(LANGUAGES)('%s: у каждого встроенного пресета ядра есть название и описание, а не ключ', (lang) => {
-    const tr = (key: string): string => t(key, lang);
+    const tr = (key: MessageKey): string => t(key, lang);
     for (const id of CORE_BUILTIN) {
       expect(presetTitle(id, `preset.${id}`, tr), `${lang}/${id}`).not.toMatch(/^preset\./);
       const desc = presetDescription(id, tr);
@@ -27,7 +27,7 @@ describe('presetTitle / presetDescription', () => {
   });
 
   it('свой пресет показывается как есть, у него нет описания; неизвестный встроенный — по id', () => {
-    const tr = (key: string): string => t(key, 'en');
+    const tr = (key: MessageKey): string => t(key, 'en');
     expect(presetTitle('u123', 'My preset', tr)).toBe('My preset');
     expect(presetDescription('u123', tr)).toBeNull();
     expect(presetTitle('lav-xx', 'preset.lav-xx', tr)).toBe('lav-xx');

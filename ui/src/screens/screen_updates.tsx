@@ -9,6 +9,7 @@ import type { CheckUpdatesResponse, ComponentUpdate, UpdateStateResponse } from 
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import type { MessageKey } from '../lib/i18n';
 import { Icon } from '../components/Icon';
 
 interface ChannelOption {
@@ -21,7 +22,7 @@ const CHANNELS: readonly ChannelOption[] = [
   { channel: UpdateChannel.BETA, labelKey: 'upd.beta' },
 ];
 
-const COMPONENT_LABEL: Record<number, string> = {
+const COMPONENT_LABEL: Record<number, MessageKey> = {
   [UpdateComponent.APP]: 'upd.app',
   [UpdateComponent.CORE]: 'upd.core',
   [UpdateComponent.PRESETS]: 'rt.presets',
@@ -178,7 +179,7 @@ export function UpdatesScreen(): JSX.Element {
               <li key={String(c.component)} className="upd-row">
                 <div className="sub-main">
                   <span className="sub-name">
-                    {t((COMPONENT_LABEL[c.component] ?? 'upd.app') as never)}
+                    {t(COMPONENT_LABEL[c.component] ?? 'upd.app')}
                     {c.mandatory && (
                       <span className="badge badge-warn" style={{ marginInlineStart: 8 }}>
                         {t('upd.beta')}

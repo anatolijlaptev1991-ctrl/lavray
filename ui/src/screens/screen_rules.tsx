@@ -11,6 +11,7 @@ import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { presetDescription, presetRuleCount, presetTitle } from '../lib/presets';
+import type { MessageKey } from '../lib/i18n';
 import { Icon } from '../components/Icon';
 import { DialogShell } from '../components/dialogs';
 
@@ -24,7 +25,7 @@ type ListKind =
 
 interface ListDef {
   readonly kind: ListKind;
-  readonly labelKey: string;
+  readonly labelKey: MessageKey;
   readonly ip: boolean;
 }
 
@@ -37,7 +38,7 @@ const LISTS: readonly ListDef[] = [
   { kind: 'directIp', labelKey: 'out.direct', ip: true },
 ];
 
-const OUTBOUND_OPTIONS: readonly { value: OutboundEnum; labelKey: string }[] = [
+const OUTBOUND_OPTIONS: readonly { value: OutboundEnum; labelKey: MessageKey }[] = [
   { value: OutboundEnum.PROXY, labelKey: 'out.proxy' },
   { value: OutboundEnum.DIRECT, labelKey: 'out.direct' },
   { value: OutboundEnum.BLOCK, labelKey: 'out.block' },
@@ -458,7 +459,7 @@ export function RulesScreen(): JSX.Element {
             }}
           >
             {OUTBOUND_OPTIONS.map((o) => (
-              <option key={o.labelKey} value={String(o.value)}>{t(o.labelKey as never)}</option>
+              <option key={o.labelKey} value={String(o.value)}>{t(o.labelKey)}</option>
             ))}
           </select>
         </div>

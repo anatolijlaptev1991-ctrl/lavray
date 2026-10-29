@@ -12,7 +12,7 @@ import { useI18n, useStartupLanguage } from './hooks/useI18n';
 import { useSystemProxyApplied } from './hooks/useSystemProxy';
 import { useTrafficSpeed } from './hooks/useTraffic';
 import { useTrayBridge } from './hooks/useTrayBridge';
-import { applyDocumentLanguage, formatBytes } from './lib/i18n';
+import { applyDocumentLanguage, formatSpeed } from './lib/i18n';
 import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
 import { loadModes, toggleConnection } from './lib/connection';
 import type { TrayAction } from './lib/tray';
@@ -554,11 +554,11 @@ function AppInner(): JSX.Element {
         <span className="st-item" style={{ gap: 10 }}>
           <span className="spd dn">
             <Icon name="download" size={16} />
-            <span>{formatBytes(speed.down, lang)}/s</span>
+            <span>{formatSpeed(speed.down, lang)}</span>
           </span>
           <span className="spd up">
             <Icon name="upload" size={16} />
-            <span>{formatBytes(speed.up, lang)}/s</span>
+            <span>{formatSpeed(speed.up, lang)}</span>
           </span>
         </span>
         <span className="flex1" />

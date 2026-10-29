@@ -8,6 +8,7 @@ import { GetPublicIpRequest_Via, RunSelfCheckRequest_CheckKind, SelfCheckResult_
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import type { MessageKey } from '../lib/i18n';
 import { Icon } from '../components/Icon';
 
 type RunState = 'pending' | 'run' | 'ok' | 'warn' | 'err' | 'skip';
@@ -36,7 +37,7 @@ const STATE_ICON: Record<RunState, Parameters<typeof Icon>[0]['name']> = {
   skip: 'info',
 };
 
-const STATE_LABEL: Record<RunState, string> = {
+const STATE_LABEL: Record<RunState, MessageKey> = {
   pending: 'chk.st.pending',
   run: 'chk.st.run',
   ok: 'st.ok',
@@ -47,7 +48,7 @@ const STATE_LABEL: Record<RunState, string> = {
 
 /** Локализация названия проверки — по РЕАЛЬНОМУ enum контракта
  *  (SD-01 аудита round 3: прежняя таблица была сдвинута на единицу). */
-const KIND_LABEL: Record<number, string> = {
+const KIND_LABEL: Record<number, MessageKey> = {
   [RunSelfCheckRequest_CheckKind.CORE_ALIVE]: 'chk.core.t',
   [RunSelfCheckRequest_CheckKind.SERVER_REACHABLE]: 'chk.server.t',
   [RunSelfCheckRequest_CheckKind.DNS_RESOLVES]: 'chk.dns.t',
@@ -69,7 +70,7 @@ const DETAIL_CODES = new Set([
   'v6_direct',
 ]);
 
-const FIX_LABEL: Record<string, string> = {
+const FIX_LABEL: Record<string, MessageKey> = {
   // SD-05: коды по контракту (proto SelfCheckResult.fix_code).
   restart_profile: 'err.retry',
   open_dns: 'chk.fix.dns',
@@ -121,7 +122,7 @@ export function DiagScreen(): JSX.Element {
               ? {
                   ...x,
                   state: STATUS_TO_RUN[r.status] ?? 'pending',
-                  detail: DETAIL_CODES.has(r.detail ?? '') ? t(`chk.d.${r.detail ?? ''}` as never) : (r.detail ?? ''),
+                  detail: DETAIL_CODES.has(r.detail ?? '') ? t(`chk.d.${r.detail ?? ''}` as MessageKey) : (r.detail ?? ''),
                   fixCode: r.fixCode,
                 }
               : x,
@@ -197,10 +198,10 @@ export function DiagScreen(): JSX.Element {
             <li className={`chk-item chk-${r.state === 'skip' ? 'pending' : r.state}`} key={String(r.kind)}>
               <span className={`chk-st chk-${r.state === 'skip' ? 'pending' : r.state}`}>
                 <Icon name={STATE_ICON[r.state]} />
-                <span className="sr-only">{t(STATE_LABEL[r.state] as never)}</span>
+                <span className="sr-only">{t(STATE_LABEL[r.state])}</span>
               </span>
               <span className="chk-body">
-                <span className="chk-t">{t((KIND_LABEL[r.kind] ?? 'chk.core.t') as never)}</span>
+                <span className="chk-t">{t(KIND_LABEL[r.kind] ?? 'chk.core.t')}</span>
                 <span className="chk-d">{r.detail}</span>
               </span>
               {r.fixCode !== '' && FIX_LABEL[r.fixCode] !== undefined && (
@@ -220,7 +221,7 @@ export function DiagScreen(): JSX.Element {
                     window.location.hash = target;
                   }}
                 >
-                  {t(FIX_LABEL[r.fixCode] as never)}
+                  {t(FIX_LABEL[r.fixCode] ?? 'err.retry')}
                 </button>
               )}
             </li>

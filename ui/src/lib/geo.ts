@@ -1,6 +1,6 @@
 // geo.ts — страны в UI: ISO-код → эмодзи-флаг и локализованное название.
 // Источник кодов — ядро (Profile.geo, FR-UI-008); здесь только отображение.
-import type { Language } from './i18n';
+import { locale, t, type Language } from './i18n';
 
 const NAMES: Record<string, Record<'ru' | 'en', string>> = {
   ru: { ru: 'Россия', en: 'Russia' },
@@ -72,7 +72,6 @@ const NAMES: Record<string, Record<'ru' | 'en', string>> = {
   bg: { ru: 'Болгария', en: 'Bulgaria' },
   rs: { ru: 'Сербия', en: 'Serbia' },
   gr: { ru: 'Греция', en: 'Greece' },
-  hr2: { ru: 'Хорватия', en: 'Croatia' },
   ng: { ru: 'Нигерия', en: 'Nigeria' },
   ke: { ru: 'Кения', en: 'Kenya' },
 };
@@ -86,12 +85,39 @@ export function flagEmoji(code: string): string {
   );
 }
 
-/** Название страны (ru/en; прочие языки — английское написание). */
+const displayNames = new Map<Language, Intl.DisplayNames>();
+
+/**
+ * Название региона из данных CLDR самого движка (WebView2/Chromium, WebKit):
+ * для zh/es/de и для кодов вне таблицы NAMES. null — если код не двухбуквенный
+ * или движок его не знает.
+ */
+function regionName(code: string, lang: Language): string | null {
+  if (!/^[a-z]{2}$/.test(code)) return null;
+  try {
+    let dn = displayNames.get(lang);
+    if (dn === undefined) {
+      dn = new Intl.DisplayNames([locale(lang)], { type: 'region' });
+      displayNames.set(lang, dn);
+    }
+    const name = dn.of(code.toUpperCase());
+    return name === undefined || name.toUpperCase() === code.toUpperCase() ? null : name;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Название страны на языке интерфейса. ru/en берутся из выверенной таблицы
+ * NAMES, остальные языки и неизвестные коды — из CLDR; если и там нет —
+ * английское название из таблицы либо сам код в верхнем регистре.
+ */
 export function geoName(code: string, lang: Language): string {
   const c = code.trim().toLowerCase();
   const entry = NAMES[c];
-  if (entry === undefined) return c.toUpperCase();
-  return lang === 'ru' ? entry.ru : entry.en;
+  if (lang === 'ru' && entry !== undefined) return entry.ru;
+  if (lang === 'en' && entry !== undefined) return entry.en;
+  return regionName(c, lang) ?? entry?.en ?? c.toUpperCase();
 }
 
 /** Порядок групп: известные страны по алфавиту локали, «другие» в конце. */
@@ -118,7 +144,7 @@ export function groupByGeo<T>(
   for (const [code, list] of map) {
     groups.push({
       code,
-      label: code === '' ? (lang === 'ru' ? 'Без страны' : 'Unknown') : geoName(code, lang),
+      label: code === '' ? t('geo.none', lang) : geoName(code, lang),
       flag: code === '' ? '🌐' : flagEmoji(code),
       items: list,
     });

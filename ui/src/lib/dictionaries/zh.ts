@@ -815,4 +815,7 @@ export const zhDict: Record<string, string> = {
   "dns.jsonOk": "JSON 有效",
   "bk.restored": "已从文件恢复设置",
   "sub.dropConfirm": "此次更新将移除 {removed}，更新后订阅中将剩余 {kept}。是否继续？",
+  // T-60: ключи, которых не хватало
+  "web.title": "网页面板",
+  "geo.none": "无国家/地区",
 }

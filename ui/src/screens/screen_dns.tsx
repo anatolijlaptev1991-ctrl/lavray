@@ -10,14 +10,15 @@ import type { DnsSettings, DnsSettingsSchema } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import type { MessageKey } from '../lib/i18n';
 import { Icon } from '../components/Icon';
 
 // Карточки: серверы и маршрут запросов (туннель / напрямую) задаёт ядро по id
 // (поле choice); экран только показывает выбранную карточку.
 interface Preset {
   readonly id: string;
-  readonly titleKey: string;
-  readonly descKey: string;
+  readonly titleKey: MessageKey;
+  readonly descKey: MessageKey;
 }
 
 const PRESETS: readonly Preset[] = [
@@ -149,14 +150,14 @@ export function DnsScreen(): JSX.Element {
               onClick={() => void pick(p)}
             >
               <h3>
-                {t(p.titleKey as never)}
+                {t(p.titleKey)}
                 {activeId === p.id && (
                   <span className="preset-check">
                     <Icon name="check" />
                   </span>
                 )}
               </h3>
-              <span className="desc">{t(p.descKey as never)}</span>
+              <span className="desc">{t(p.descKey)}</span>
             </button>
           ))}
         </div>

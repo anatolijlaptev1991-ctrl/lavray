@@ -116,7 +116,7 @@ describe('T-11: «Совместимость» — отключение пров
         'set.insecure.confirm.t',
         'set.insecure.confirm.d',
         'set.insecure.confirm.ok',
-      ]) {
+      ] as const) {
         expect(t(key, lang), `${key} (${lang})`).not.toBe(key);
       }
     }

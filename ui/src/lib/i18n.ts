@@ -50,7 +50,11 @@ import { esDict } from './dictionaries/es';
 import { ruDict } from './dictionaries/ru';
 import { zhDict } from './dictionaries/zh';
 
-/** Полный набор ключей — по ru-словарю (самый полный: включает plural few/many). */
+/**
+ * Полный набор ключей — по ru-словарю (самый полный: включает plural few/many).
+ * ruDict намеренно объявлен БЕЗ аннотации `Record<string, string>`: с ней
+ * `keyof` давал `string`, и компилятор не ловил несуществующие ключи (T-60).
+ */
 export type MessageKey = keyof typeof ruDict;
 
 /** Словарь языка: все ключи этого языка; lookup с фолбеком en→key (см. t). */

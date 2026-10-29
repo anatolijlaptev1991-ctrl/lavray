@@ -13,7 +13,7 @@ import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
-import { LANGUAGES, LANG_NATIVE } from '../lib/i18n';
+import { LANGUAGES, LANG_NATIVE, type MessageKey } from '../lib/i18n';
 import { presetTitle } from '../lib/presets';
 
 interface ShellProps {
@@ -297,7 +297,7 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
 
 export function HotkeysDialog({ onClose }: { readonly onClose: () => void }): JSX.Element {
   const { t } = useI18n();
-  const rows: readonly (readonly [string, string])[] = [
+  const rows: readonly (readonly [MessageKey, string])[] = [
     ['hk.search', 'K'],
     ['hk.toggle', 'D'],
     ['hk.close', 'Esc'],
@@ -314,7 +314,7 @@ export function HotkeysDialog({ onClose }: { readonly onClose: () => void }): JS
     >
       {rows.map(([key, kbd]) => (
         <div className="hk-row" key={key}>
-          <div className="set-txt"><div className="set-l">{t(key as never)}</div></div>
+          <div className="set-txt"><div className="set-l">{t(key)}</div></div>
           <kbd className="kbd">{kbd}</kbd>
         </div>
       ))}

@@ -63,6 +63,13 @@ type Profile struct {
 	Tags     []string `json:"tags,omitempty"`
 	Notes    string   `json:"notes,omitempty"`
 
+	// Manual — профиль добавлен пользователем вручную в группу-подписку
+	// (T-51, B1-35): обновление подписки его не сопоставляет, не удаляет и не
+	// учитывает в пороге «удаление > 50 %». В proto не отдаётся: флаг ставит
+	// ядро (CreateProfile / ImportContent / MoveProfiles в группу-подписку),
+	// UpdateProfile его сохраняет.
+	Manual bool `json:"manual,omitempty"`
+
 	// Geo — страна/регион сервера: ISO 3166-1 alpha-2 (нижний регистр, "jp",
 	// "nl", …) либо "" если неизвестна. Заполняется импортёром/подпиской из
 	// имени (флаги, коды стран) и служит группировкой «по странам» в UI.

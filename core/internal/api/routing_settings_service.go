@@ -394,6 +394,11 @@ func (s *Server) CreateSubscription(ctx context.Context, req *connect.Request[la
 	if err != nil {
 		return nil, err
 	}
+	// T-51: локальный/приватный адрес — только с явным разрешением (LNB-05). Проверяем
+	// ссылку, которую группа сохранит (после разбора happ://), а не сырой ввод.
+	if err := validateNewSubscriptionURL(subURL); err != nil {
+		return nil, invalidArg("%v", err)
+	}
 	g := &model.Group{
 		Name:            msg.Name,
 		Kind:            model.GroupSubscription,

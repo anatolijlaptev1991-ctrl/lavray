@@ -116,7 +116,8 @@ func item(p *model.Profile) DiffItem {
 
 // ComputeDiff сравнивает текущие профили группы с новым списком.
 func ComputeDiff(existing, next []*model.Profile) *Diff {
-	next = dedupByKey(next) // W3-3: тот же дедуп, что в Apply
+	existing = managedOnly(existing) // T-51: ручные серверы подписка не трогает
+	next = dedupByKey(next)          // W3-3: тот же дедуп, что в Apply
 	d := &Diff{}
 	nextKeys := make(map[profileKey]bool, len(next))
 	for _, p := range next {
@@ -263,7 +264,14 @@ func Apply(st StoreAPI, snap *Snapshot, params ApplyParams) (*UpdateResult, erro
 	if diff.ConfirmRequired && !params.Confirmed {
 		return nil, &ConfirmRequiredError{Reason: diff.Reason, Diff: diff}
 	}
+	// T-51: все записи — одной транзакцией хранилища; без транзакций
+	// (тестовые обёртки) — откат из снимка (apply_tx.go).
+	return applyAtomically(st, snap, params, next, diff)
+}
 
+// applyWrites — записи Apply (вызывается из applyAtomically). Откат при
+// ошибке — забота вызывающего: ROLLBACK транзакции либо Rollback из снимка.
+func applyWrites(st StoreAPI, snap *Snapshot, params ApplyParams, next []*model.Profile, diff *Diff) (*UpdateResult, error) {
 	// Промежуточное применение: совпавшие — обновление на месте (id,
 	// статистика, избранное, тесты — сохраняются), новые — вставка,
 	// отсутствующие — удаление; порядок группы = порядок ответа.
@@ -274,7 +282,7 @@ func Apply(st StoreAPI, snap *Snapshot, params ApplyParams) (*UpdateResult, erro
 	// второй проход сопоставления, чтобы профиль обновлялся на месте.
 	soft := make(map[profileKey][]*model.Profile, len(snap.Profiles))
 	var existingDupes []*model.Profile
-	for _, e := range snap.Profiles {
+	for _, e := range managedOnly(snap.Profiles) { // T-51: ручные серверы не трогаем
 		k := keyOf(e)
 		if _, dup := existing[k]; dup {
 			existingDupes = append(existingDupes, e)
@@ -374,11 +382,7 @@ func Apply(st StoreAPI, snap *Snapshot, params ApplyParams) (*UpdateResult, erro
 		return nil
 	}()
 	if err != nil {
-		// Откат при ошибке (FR-UI-258): группа возвращается к снапшоту.
-		if rbErr := Rollback(st, snap); rbErr != nil {
-			return nil, fmt.Errorf("%w; откат тоже не удался: %v", err, rbErr)
-		}
-		return nil, err
+		return nil, err // откат (FR-UI-258) — у вызывающего, см. applyAtomically
 	}
 
 	// last_working_url + last_update + info группы (FR-UI-263/127).
@@ -404,9 +408,6 @@ func Apply(st StoreAPI, snap *Snapshot, params ApplyParams) (*UpdateResult, erro
 		}
 	}
 	if err := st.UpdateGroup(&g); err != nil {
-		if rbErr := Rollback(st, snap); rbErr != nil {
-			return nil, fmt.Errorf("применение: группа: %w; откат не удался: %v", err, rbErr)
-		}
 		return nil, fmt.Errorf("применение: группа: %w", err)
 	}
 	return &UpdateResult{Diff: diff, Order: order, UsedURL: params.UsedURL, Info: params.Info, Snapshot: snap}, nil

@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1connect"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
 
@@ -24,6 +26,18 @@ import (
 type t18Env struct {
 	hc  *http.Client
 	url string
+	st  *store.Store
+}
+
+// subGroup создаёт группу подписки прямо в хранилище. CreateSubscription (T-51)
+// не принимает адреса на loopback, а провайдер этих тестов — httptest на 127.0.0.1.
+func (e *t18Env) subGroup(t *testing.T, name, url string) int64 {
+	t.Helper()
+	g := &model.Group{Name: name, Kind: model.GroupSubscription, SubscriptionURL: url}
+	if err := e.st.CreateGroup(g); err != nil {
+		t.Fatal(err)
+	}
+	return g.ID
 }
 
 func newT18Env(t *testing.T) *t18Env {
@@ -46,7 +60,7 @@ func newT18Env(t *testing.T) *t18Env {
 			time.Sleep(10 * time.Millisecond)
 		}
 	})
-	return &t18Env{hc: hs.Client(), url: hs.URL}
+	return &t18Env{hc: hs.Client(), url: hs.URL, st: st}
 }
 
 func (e *t18Env) profile() lavrayv1connect.ProfileServiceClient {
@@ -74,24 +88,14 @@ func (e *t18Env) names(t *testing.T, group int64) []string {
 func TestT18_DestructiveUpdateCanBeConfirmed(t *testing.T) {
 	e := newT18Env(t)
 	ctx := context.Background()
+	// Провайдер отдаёт текущий ответ: сначала o1..o3, потом N1..N3.
+	var reply atomic.Value
+	reply.Store("trojan://p@o1.example.net:443#o1\ntrojan://p@o2.example.net:443#o2\ntrojan://p@o3.example.net:443#o3\n")
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = io.WriteString(w, "trojan://p@n1.example.net:443#N1\ntrojan://p@n2.example.net:443#N2\ntrojan://p@n3.example.net:443#N3\n")
+		_, _ = io.WriteString(w, reply.Load().(string))
 	}))
 	defer provider.Close()
-	g, err := e.subs().CreateSubscription(ctx, connect.NewRequest(&lavrayv1.CreateSubscriptionRequest{Name: "prov", Url: provider.URL}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	gid := g.Msg.Id
-	for _, n := range []string{"o1", "o2", "o3"} {
-		_, err := e.profile().CreateProfile(ctx, connect.NewRequest(&lavrayv1.CreateProfileRequest{Profile: &lavrayv1.Profile{
-			GroupId: gid, Type: lavrayv1.ProfileType_PROFILE_TYPE_TROJAN, Name: n, Address: n + ".example.org", Port: 443,
-			Detail: &lavrayv1.Profile_TrojanVless{TrojanVless: &lavrayv1.TrojanVlessDetail{Password: "pw"}},
-		}}))
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
+	gid := e.subGroup(t, "prov", provider.URL)
 	// run читает поток до конца: кадры и итоговая ошибка потока.
 	run := func(confirm bool) ([]*lavrayv1.SubscriptionProgress, error) {
 		s, err := e.subs().UpdateSubscription(ctx, connect.NewRequest(&lavrayv1.UpdateSubscriptionRequest{
@@ -106,6 +110,13 @@ func TestT18_DestructiveUpdateCanBeConfirmed(t *testing.T) {
 		}
 		return frames, s.Err()
 	}
+
+	// Серверы o1..o3 приходят от подписки, а не созданы руками: созданные вручную
+	// серверы подписки (T-51) при обновлении не удаляются, и вопроса не будет.
+	if _, err := run(false); err != nil {
+		t.Fatalf("первое обновление: %v", err)
+	}
+	reply.Store("trojan://p@n1.example.net:443#N1\ntrojan://p@n2.example.net:443#N2\ntrojan://p@n3.example.net:443#N3\n")
 
 	// Без подтверждения: кадр CONFIRM_REQUIRED с числом, штатный конец потока, группа цела.
 	frames, err := run(false)

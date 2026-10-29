@@ -119,6 +119,8 @@ func (s *Server) CreateProfile(ctx context.Context, req *connect.Request[lavrayv
 		return nil, mapErr(err)
 	}
 	m.ID = 0 // назначает хранилище
+	// T-51: сервер, добавленный вручную в группу-подписку, обновление не удалит.
+	m.Manual = s.isSubscriptionGroup(m.GroupID)
 	if err := s.st.CreateProfile(m); err != nil {
 		return nil, mapErr(err)
 	}
@@ -141,6 +143,9 @@ func (s *Server) UpdateProfile(ctx context.Context, req *connect.Request[lavrayv
 	// Статистика и результаты тестов — серверные, клиент их перезаписать не может.
 	m.Traffic = old.Traffic
 	m.TestResult = old.TestResult
+	// T-51: флаг «добавлен вручную» тоже серверный; перенос профиля в
+	// группу-подписку делает его ручным.
+	m.Manual = old.Manual || (m.GroupID != old.GroupID && s.isSubscriptionGroup(m.GroupID))
 	if err := s.st.UpdateProfile(m); err != nil {
 		return nil, mapErr(err)
 	}
@@ -201,12 +206,16 @@ func (s *Server) MoveProfiles(ctx context.Context, req *connect.Request[lavrayv1
 	if _, err := s.st.GetGroup(msg.TargetGroupId); err != nil {
 		return nil, mapErr(err)
 	}
+	toSubscription := s.isSubscriptionGroup(msg.TargetGroupId) // T-51
 	for _, id := range msg.Ids {
 		p, err := s.st.GetProfile(id)
 		if err != nil {
 			return nil, mapErr(err)
 		}
 		p.GroupID = msg.TargetGroupId
+		if toSubscription {
+			p.Manual = true // перенесён вручную: обновление подписки не удалит
+		}
 		if err := s.st.UpdateProfile(p); err != nil {
 			return nil, mapErr(err)
 		}
@@ -366,16 +375,15 @@ func (s *Server) ImportContent(ctx context.Context, req *connect.Request[lavrayv
 	if err != nil {
 		return nil, err
 	}
-	var added []int64
-	for _, p := range res.Profiles {
-		p.ID = 0
-		p.GroupID = groupID
-		if err := s.st.CreateProfile(p); err != nil {
-			return nil, mapErr(err)
-		}
-		added = append(added, p.ID)
+	// T-51: одна транзакция, дубли (тот же сервер) пропускаются.
+	added, skipped, err := s.commitImport(groupID, res.Profiles)
+	if err != nil {
+		return nil, mapErr(err)
 	}
 	resp.AddedProfileIds = added
+	if skipped > 0 {
+		resp.Log = append(resp.Log, fmt.Sprintf("пропущено уже имеющихся серверов: %d", skipped))
+	}
 	return connect.NewResponse(resp), nil
 }
 

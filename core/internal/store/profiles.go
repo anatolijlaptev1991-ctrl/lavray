@@ -209,14 +209,17 @@ func (s *Store) ListProfiles(groupID int64) ([]*model.Profile, error) {
 
 // DeleteProfile удаляет профиль (запуск запущенного проверяет слой API, FR-UI-038).
 func (s *Store) DeleteProfile(id int64) error {
-	res, err := s.db.Exec(`DELETE FROM profiles WHERE id = ?`, id)
-	if err != nil {
-		return err
-	}
-	if n, _ := res.RowsAffected(); n == 0 {
-		return ErrNotFound
-	}
-	return nil
+	// T-51: через withTx, чтобы удаление работало и внутри InTx.
+	return s.withTx(func(tx *sql.Tx) error {
+		res, err := tx.Exec(`DELETE FROM profiles WHERE id = ?`, id)
+		if err != nil {
+			return err
+		}
+		if n, _ := res.RowsAffected(); n == 0 {
+			return ErrNotFound
+		}
+		return nil
+	})
 }
 
 // ReorderProfiles задаёт порядок профилей в группе (FR-UI-074): перечисленные

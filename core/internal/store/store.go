@@ -36,6 +36,9 @@ var (
 type Store struct {
 	db  *sql.DB
 	dir string
+	// tx != nil только у транзакционного представления внутри InTx (intx.go):
+	// withTx тогда не открывает свою транзакцию, а работает в этой.
+	tx *sql.Tx
 }
 
 // Open открывает (или создаёт) хранилище в dir, применяет права и миграции.
@@ -132,6 +135,9 @@ func (s *Store) applyFileModes() error {
 
 // withTx выполняет fn в одной транзакции (rollback при ошибке).
 func (s *Store) withTx(fn func(tx *sql.Tx) error) error {
+	if s.tx != nil { // внутри InTx: commit/rollback — у владельца транзакции
+		return fn(s.tx)
+	}
 	tx, err := s.db.Begin()
 	if err != nil {
 		return err

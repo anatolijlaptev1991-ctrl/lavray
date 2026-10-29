@@ -27,11 +27,8 @@ func t21Setup(t *testing.T) (e *t18Env, gid int64, ua *atomic.Value) {
 		_, _ = io.WriteString(w, "trojan://p@a.example.net:443#A\ntrojan://p@b.example.net:443#B\n")
 	}))
 	t.Cleanup(provider.Close)
-	g, err := e.subs().CreateSubscription(context.Background(), connect.NewRequest(&lavrayv1.CreateSubscriptionRequest{Name: "prov", Url: provider.URL}))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return e, g.Msg.Id, ua
+	// Группа в обход CreateSubscription: тот не принимает loopback (T-51).
+	return e, e.subGroup(t, "prov", provider.URL), ua
 }
 
 func (e *t18Env) updateGroup(gid int64, g *lavrayv1.Group) (*lavrayv1.Group, error) {

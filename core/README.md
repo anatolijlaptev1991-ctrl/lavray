@@ -13,14 +13,18 @@ ConfigBuilder (оригинал — `db/ConfigBuilder.cpp` в nekoray, порт 
 только через гейт обновления из `docs/UPDATE-SYSTEM.md` (аудит changelog, лицензия upstream,
 перенос neko-патчей, полный прогон L1/L2, smoke-тесты коннективности, тег `core-<version>`).
 
-## Структура (целевая)
+## Структура
 
-- `cmd/lavray-core/` — точка входа (бинарь ядра, слушает ConnectRPC).
-- `internal/config/` — ConfigBuilder: профили → конфиг sing-box (golden-тесты).
-- `internal/store/` — хранилище профилей/групп/настроек (порт модели DataStore nekoray).
+- `cmd/lavray-core/` — точка входа (бинарь ядра, слушает ConnectRPC; флаги `serve`, `--listen-socket`, `--data`, `--headless`).
+- `internal/cfgbuild/` — ConfigBuilder: профили → конфиг sing-box (golden-тесты).
+- `internal/model/` — модель профилей, групп и настроек.
+- `internal/store/` — хранилище профилей/групп/настроек (SQLite); `store/nekoimport` — импортёр каталога NekoBox (в приложении не подключён).
+- `internal/links/` — парсеры ссылок.
 - `internal/subs/` — подписки, импорт/экспорт, декриптор ссылок других клиентов.
 - `internal/presets/` — формат пресетов LAVRay и конвертер из NekoRay 4.x (см. `../presets/README.md`).
-- `internal/api/` — реализация сервисов из `../proto/`.
+- `internal/inst/` — менеджер инстанса sing-box.
+- `internal/api/` — реализация сервисов из `../proto/` (часть RPC — заглушки `unimplemented`).
+- `internal/logs/`, `internal/updates/`, `internal/web/`, `internal/gateway/`, `internal/headless/` — журнал, проверка обновлений, веб-панель, шлюз OpenWrt, сервисный режим; `updates`, `web` и `gateway` в ядро пока не подключены.
 
 ## Neko-патчи над sing-box
 

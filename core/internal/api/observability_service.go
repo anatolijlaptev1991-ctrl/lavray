@@ -81,7 +81,7 @@ func (s *Server) Subscribe(ctx context.Context, req *connect.Request[lavrayv1.Su
 		}
 		return false
 	}
-	ch, cancel, tail := s.logs.Subscribe(256, tailN, func(l logs.Line) bool {
+	keep := func(l logs.Line) bool {
 		if logLevelToProto(l.Level) < minLevel {
 			return false
 		}
@@ -95,9 +95,13 @@ func (s *Server) Subscribe(ctx context.Context, req *connect.Request[lavrayv1.Su
 			return false
 		}
 		return true
-	})
+	}
+	// T-70: tail_lines — «сколько истории отдать сразу (0 = нет)». Mux.Subscribe
+	// при tail <= 0 возвращает ВЕСЬ буфер, поэтому историю берём из него сами:
+	// те же фильтры, что у живого потока, последние tailN подходящих строк.
+	ch, cancel, ring := s.logs.Subscribe(256, 0, keep)
 	defer cancel()
-	for _, l := range tail {
+	for _, l := range lastMatching(ring, min(tailN, 2000), keep) {
 		if err := stream.Send(logLineToProto(l)); err != nil {
 			return err
 		}
@@ -115,6 +119,24 @@ func (s *Server) Subscribe(ctx context.Context, req *connect.Request[lavrayv1.Su
 			}
 		}
 	}
+}
+
+// lastMatching — последние n строк из lines (от старых к новым), прошедших keep;
+// n <= 0 — пусто.
+func lastMatching(lines []logs.Line, n int, keep func(logs.Line) bool) []logs.Line {
+	if n <= 0 {
+		return nil
+	}
+	var out []logs.Line
+	for i := len(lines) - 1; i >= 0 && len(out) < n; i-- {
+		if keep(lines[i]) {
+			out = append(out, lines[i])
+		}
+	}
+	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
+		out[i], out[j] = out[j], out[i]
+	}
+	return out
 }
 
 // ---- StatsService -----------------------------------------------------------------

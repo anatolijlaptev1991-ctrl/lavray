@@ -49,7 +49,9 @@ export type IconName =
   | 'star'
   | 'dots'
   | 'arrup'
-  | 'arrdown';
+  | 'arrdown'
+  | 'pause'
+  | 'play';
 
 const PATHS: Readonly<Record<IconName, JSX.Element>> = {
   zap: <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />,
@@ -304,6 +306,13 @@ const PATHS: Readonly<Record<IconName, JSX.Element>> = {
       <path d="m19 12-7 7-7-7" />
     </>
   ),
+  pause: (
+    <>
+      <rect x="14" y="4" width="4" height="16" rx="1" />
+      <rect x="6" y="4" width="4" height="16" rx="1" />
+    </>
+  ),
+  play: <polygon points="6 3 20 12 6 21 6 3" />,
 };
 
 export interface IconProps {

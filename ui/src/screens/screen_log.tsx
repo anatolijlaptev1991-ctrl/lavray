@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import type { LogLine } from '../gen/lavray_pb';
 import { LogLevel } from '../gen/lavray_pb';
-import { showCoreError } from '../lib/core';
+import { CORE_UNAVAILABLE, friendlyCoreError, showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
@@ -32,11 +32,17 @@ const LEVEL_LABEL: Record<number, string> = {
 };
 
 const MAX_LINES = 2000;
+/** Сколько строк истории ядро отдаёт сразу при подписке. */
+const TAIL_LINES = 200;
 
 export function LogScreen(): JSX.Element {
   const { t, lang } = useI18n();
   const core = useCore();
   const [lines, setLines] = useState<LogLine[]>([]);
+  // «Пауза» (прототип #logPause): список замораживается снимком, новые строки
+  // продолжают копиться в lines и появляются после «Продолжить».
+  const [frozen, setFrozen] = useState<LogLine[] | null>(null);
+  const [streamErr, setStreamErr] = useState('');
   const [minLevel, setMinLevel] = useState<LogLevel>(LogLevel.INFO);
   const [query, setQuery] = useState('');
   const [autoscroll, setAutoscroll] = useState(true);
@@ -44,55 +50,51 @@ export function LogScreen(): JSX.Element {
   const [ok, setOk] = useState('');
   const viewRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    const ac = new AbortController();
-    void (async (): Promise<void> => {
-      try {
-        const tail = await core.logs.getTail({ lines: 200 }, { signal: ac.signal });
-        setLines(tail.lines);
-      } catch (e) {
-        if (!ac.signal.aborted) setErr(showCoreError(e, t));
-      }
-    })();
-    return (): void => {
-      ac.abort();
-    };
-  }, [core, t]);
-
+  // T-70: один источник строк. Подписка сама отдаёт историю (tail_lines) и
+  // затем новые строки одним упорядоченным потоком — отдельный GetTail давал
+  // дубли. Все уровни приходят один раз; уровень и поиск применяются при
+  // показе, поэтому смена уровня мгновенна и не переподписывается.
   useEffect(() => {
     const abort = new AbortController();
+    setLines([]);
     void (async (): Promise<void> => {
       try {
-        const stream = core.logs.subscribe(
-          { minLevel, tailLines: 0 },
-          { signal: abort.signal },
-        );
+        const stream = core.logs.subscribe({ tailLines: TAIL_LINES }, { signal: abort.signal });
         for await (const line of stream) {
+          if (abort.signal.aborted) return;
           setLines((prev) => {
             const next = prev.length >= MAX_LINES ? prev.slice(prev.length - MAX_LINES + 1) : prev;
             return [...next, line];
           });
         }
       } catch (e) {
-        if (!abort.signal.aborted) setErr(showCoreError(e, t));
+        if (!abort.signal.aborted) setStreamErr(friendlyCoreError(e));
       }
     })();
     return (): void => {
       abort.abort();
     };
-  }, [core, minLevel, t]);
+  }, [core]);
+
+  const source = frozen ?? lines;
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return source.filter(
+      (l) =>
+        l.level >= minLevel &&
+        (q === '' || l.message.toLowerCase().includes(q) || l.source.toLowerCase().includes(q)),
+    );
+  }, [source, minLevel, query]);
 
   useEffect(() => {
     if (!autoscroll) return;
     const el = viewRef.current;
     if (el !== null) el.scrollTop = el.scrollHeight;
-  }, [lines, autoscroll, t]);
+  }, [filtered, autoscroll]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    if (q === '') return lines;
-    return lines.filter((l) => l.message.toLowerCase().includes(q) || l.source.toLowerCase().includes(q));
-  }, [lines, query]);
+  const togglePause = useCallback((): void => {
+    setFrozen((f) => (f === null ? lines : null));
+  }, [lines]);
 
   const copy = useCallback(async (): Promise<void> => {
     setErr('');
@@ -121,12 +123,14 @@ export function LogScreen(): JSX.Element {
 
   return (
     <div className="log">
-      {err !== '' && (
+      {(err !== '' || streamErr !== '') && (
         <div className="banner banner-err" role="alert">
           <span className="ic">
             <Icon name="alert" />
           </span>
-          <div className="bn-t">{err}</div>
+          <div className="bn-t">
+            {err !== '' ? err : streamErr === CORE_UNAVAILABLE ? t(CORE_UNAVAILABLE) : streamErr}
+          </div>
         </div>
       )}
       {ok !== '' && <div className="toast-ok" role="status">{ok}</div>}
@@ -135,12 +139,12 @@ export function LogScreen(): JSX.Element {
         <div className="searchwrap">
           <input
             className="input"
-            placeholder={t('log.all')}
+            placeholder={t('log.searchPh')}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value);
             }}
-            aria-label={t('log.all')}
+            aria-label={t('log.searchPh')}
           />
         </div>
         <select
@@ -183,6 +187,14 @@ export function LogScreen(): JSX.Element {
 
       <div className="log-wrap">
         <div className="log-head">
+          <button
+            className={`btn btn-sm ${frozen === null ? 'btn-ghost' : 'btn-sec'}`}
+            onClick={togglePause}
+          >
+            <Icon name={frozen === null ? 'pause' : 'play'} />
+            <span>{frozen === null ? t('log.pause') : t('log.resume')}</span>
+          </button>
+          <span className="flex1" />
           <span className="cap">{t('log.exportD')}</span>
         </div>
         <div id="logView" ref={viewRef} role="log" aria-live="polite">
@@ -200,7 +212,9 @@ export function LogScreen(): JSX.Element {
               <span>{l.message}</span>
             </div>
           ))}
-          {filtered.length === 0 && <div className="muted">—</div>}
+          {filtered.length === 0 && (
+            <div className="muted">{t(source.length > 0 ? 'log.noMatch' : 'log.none')}</div>
+          )}
         </div>
       </div>
     </div>

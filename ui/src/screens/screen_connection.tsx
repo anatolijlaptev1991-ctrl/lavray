@@ -31,6 +31,7 @@ import { ImportDialog } from '../components/ImportDialog';
 import { ProfileMenu } from '../components/ProfileMenu';
 import type { ProfileMenuAnchor } from '../components/ProfileMenu';
 import { geoName } from '../lib/geo';
+import { presetRuleCount, presetTitle } from '../lib/presets';
 
 
 
@@ -63,8 +64,9 @@ export function ConnectionScreen(): JSX.Element {
   const [importOpen, setImportOpen] = useState(false);
   const [subs, setSubs] = useState<readonly { id: bigint; name: string }[]>([]);
   // Активный пресет маршрутов — для карточки «Качество связи».
-  const [presetName, setPresetName] = useState('—');
-  const [presetRules, setPresetRules] = useState(0);
+  const [preset, setPreset] = useState<{ id: string; displayName: string; rules: number } | null>(
+    null,
+  );
 
   const ready = status.state === CoreState.CONNECTED;
   const connecting = status.state === CoreState.CONNECTING;
@@ -90,16 +92,11 @@ export function ConnectionScreen(): JSX.Element {
         const res = await core.routing.listPresets({});
         const active0 = res.presets.find((p) => p.id === res.activePresetId);
         if (active0 === undefined) return;
-        setPresetName(active0.displayName);
-        setPresetRules(
-          active0.proxyDomain.length +
-            active0.directDomain.length +
-            active0.blockDomain.length +
-            active0.proxyIp.length +
-            active0.directIp.length +
-            active0.blockIp.length +
-            active0.processRules.length,
-        );
+        setPreset({
+          id: active0.id,
+          displayName: active0.displayName,
+          rules: presetRuleCount(active0),
+        });
       } catch {
         /* пресеты недоступны — карточка покажет «—» */
       }
@@ -543,8 +540,8 @@ export function ConnectionScreen(): JSX.Element {
       <ConnRight
         connected={ready}
         latencyMs={active?.testResult?.latencyMs}
-        presetName={presetName}
-        presetRules={presetRules}
+        presetName={preset === null ? '—' : presetTitle(preset.id, preset.displayName, t)}
+        presetRules={preset?.rules ?? 0}
       />
       {menuAnchor !== null && (
         <ProfileMenu

@@ -10,6 +10,7 @@ import type { RoutingPreset } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { presetDescription, presetRuleCount, presetTitle } from '../lib/presets';
 import { Icon } from '../components/Icon';
 import { DialogShell } from '../components/dialogs';
 
@@ -53,7 +54,7 @@ const ROUTE_SUGGESTIONS = [
 ] as const;
 
 export function RulesScreen(): JSX.Element {
-  const { t } = useI18n();
+  const { t, tf, plural } = useI18n();
   const core = useCore();
   const [presets, setPresets] = useState<RoutingPreset[]>([]);
   const [activeId, setActiveId] = useState('');
@@ -302,7 +303,10 @@ export function RulesScreen(): JSX.Element {
               onClick={() => {
                 setNewPresetAt(null);
                 if (active !== undefined) {
-                  void copyPreset(active.id, `${active.displayName} (${t('rt.copyName')})`);
+                  void copyPreset(
+                    active.id,
+                    tf('rt.copyName', { name: presetTitle(active.id, active.displayName, t) }),
+                  );
                 }
               }}
             >
@@ -338,13 +342,22 @@ export function RulesScreen(): JSX.Element {
               aria-pressed={p.id === activeId}
             >
               <span className="preset-top">
-                <h3>{p.displayName}</h3>
                 {p.id === activeId && (
                   <span className="preset-check"><Icon name="check" /></span>
                 )}
+                <h3>{presetTitle(p.id, p.displayName, t)}</h3>
+                <span className={`badge ${p.builtin ? 'badge-soft' : 'badge-grad'}`}>
+                  {t(p.builtin ? 'rt.builtin' : 'rt.mine')}
+                </span>
               </span>
-              <span className="muted mono">
-                rev {String(p.revision)}{p.builtin ? ' · builtin' : ''}
+              {presetDescription(p.id, t) !== null && (
+                <span className="desc">{presetDescription(p.id, t)}</span>
+              )}
+              <span className="meta">
+                <span className="badge badge-info">{plural('pl.r', presetRuleCount(p))}</span>
+                <span className="badge">
+                  {t('preset.rev')} {p.revision}
+                </span>
               </span>
             </button>
           ))}

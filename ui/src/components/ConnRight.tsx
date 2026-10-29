@@ -27,7 +27,7 @@ export function ConnRight({
   presetName,
   presetRules,
 }: ConnRightProps): JSX.Element {
-  const { t, tf, lang } = useI18n();
+  const { t, tf, lang, plural } = useI18n();
   const core = useCore();
   const [report, setReport] = useState<LeakReport | null>(null);
   const [busy, setBusy] = useState(false);
@@ -158,9 +158,7 @@ export function ConnRight({
               {presetName !== '—' && (
                 <span className="t3" style={{ fontSize: '.75rem' }}>
                   {' · '}
-                  {presetRules}
-                  {' '}
-                  {t(presetRules === 1 ? 'rt.ruleOne' : 'rt.ruleMany')}
+                  {plural('pl.r', presetRules)}
                 </span>
               )}
             </span>

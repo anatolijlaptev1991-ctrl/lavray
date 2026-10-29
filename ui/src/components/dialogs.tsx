@@ -14,6 +14,7 @@ import { useI18n } from '../hooks/useI18n';
 import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
 import { LANGUAGES, LANG_NATIVE } from '../lib/i18n';
+import { presetTitle } from '../lib/presets';
 
 interface ShellProps {
   readonly titleId: string;
@@ -483,6 +484,7 @@ export function OnboardingDialog({
     },
     [core, t],
   );
+  const chosenPreset = presets.find((p) => p.id === presetId);
 
   // T-40: мастер на общей оболочке DialogShell (портал на <body>, фокус при
   // открытии, ловушка Tab, Esc = «Пропустить», возврат фокуса). Клик по
@@ -635,7 +637,7 @@ export function OnboardingDialog({
                     aria-checked={presetId === p.id}
                     onClick={() => { void applyPreset(p.id); }}
                   >
-                    {p.displayName}
+                    {presetTitle(p.id, p.displayName, t)}
                   </button>
                 ))}
               </div>
@@ -689,7 +691,11 @@ export function OnboardingDialog({
                 </div>
                 <div>
                   <dt>{t('nav.routing')}</dt>
-                  <dd>{presets.find((p) => p.id === presetId)?.displayName ?? '—'}</dd>
+                  <dd>
+                    {chosenPreset === undefined
+                      ? '—'
+                      : presetTitle(chosenPreset.id, chosenPreset.displayName, t)}
+                  </dd>
                 </div>
                 <div>
                   <dt>{t('onb.modeTitle')}</dt>

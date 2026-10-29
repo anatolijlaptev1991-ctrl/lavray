@@ -13,10 +13,12 @@ import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useKbdLabel } from '../hooks/useKbdLabel';
+import { AgentsSettings } from '../components/AgentsSettings';
 import { AutostartRow } from '../components/AutostartRow';
 import { ConfirmDialog } from '../components/dialogs';
 import { Icon, type IconName } from '../components/Icon';
-import { withoutSecrets } from '../lib/backup';
+import { AGENT_MODE_KEY, parseAgentMode, type AgentMode } from '../lib/agents';
+import { isAccessSettingKey, withoutSecrets } from '../lib/backup';
 import {
   ACCENTS,
   THEMES,
@@ -42,6 +44,7 @@ const SECTIONS: readonly Section[] = [
   { id: 'appearance', icon: 'sun', titleKey: 'sec.appearance' },
   { id: 'backup', icon: 'save', titleKey: 'sec.backup' },
   { id: 'core', icon: 'cpu', titleKey: 'sec.core' },
+  { id: 'agents', icon: 'plug', titleKey: 'sec.agents' },
   { id: 'about', icon: 'info', titleKey: 'sec.about' },
 ];
 
@@ -127,6 +130,11 @@ const SECTION_SEARCH: Readonly<Record<string, readonly SearchRow[]>> = {
     { labelKey: 'bk.restore', descKey: 'bk.restoreD' },
   ],
   core: [{ labelKey: 'mux.title' }, { labelKey: 'set.appVersion' }, { labelKey: 'set.coreVersion' }, ...CORE_ROWS],
+  agents: [
+    { labelKey: 'agent.mode.l', descKey: 'agent.mode.d' },
+    { labelKey: 'agent.copy', descKey: 'agent.cfg.d' },
+    { labelKey: 'agent.copyCode' },
+  ],
   about: [
     { labelKey: 'about.desc' },
     { labelKey: 'about.repo' },
@@ -236,8 +244,9 @@ export function SettingsScreen(): JSX.Element {
     })();
   }, [core, t]);
 
+  /** Записывает настройку; true — ядро приняло значение. */
   const save = useCallback(
-    async (key: string, kind: SettingType, raw: string | boolean | number): Promise<void> => {
+    async (key: string, kind: SettingType, raw: string | boolean | number): Promise<boolean> => {
       setErr('');
       const revert = (): void => {
         setValues((prev) => ({ ...prev, [key]: accepted.current[key] ?? '' }));
@@ -249,7 +258,7 @@ export function SettingsScreen(): JSX.Element {
         if (n === null || (isPort && (n < 1 || n > 65535))) {
           setErr(`${key}: ${t(isPort ? 'set.portErr' : 'set.intErr')}`);
           revert();
-          return;
+          return false;
         }
       }
       setValues((prev) => ({ ...prev, [key]: raw }));
@@ -260,19 +269,27 @@ export function SettingsScreen(): JSX.Element {
         if (!res.acceptedKeys.includes(key)) {
           setErr(`${key}: ${t('set.portErr')}`);
           revert();
-          return;
+          return false;
         }
         accepted.current = { ...accepted.current, [key]: raw };
         setOk(t('toast.saved'));
         window.setTimeout(() => {
           setOk('');
         }, 1500);
+        return true;
       } catch (e) {
         setErr(showCoreError(e, t));
         revert();
+        return false;
       }
     },
     [core, t],
+  );
+
+  /** Режим доступа агентов: запись в ядро; оболочке его сообщает сам раздел. */
+  const saveAgentMode = useCallback(
+    (next: AgentMode): Promise<boolean> => save(AGENT_MODE_KEY, SettingType.STRING, next),
+    [save],
   );
 
   /** Перечитывает значения из ядра: поля показывают то, что реально применилось. */
@@ -860,7 +877,8 @@ export function SettingsScreen(): JSX.Element {
                             const payload: Record<string, SettingValue> = {};
                             for (const [k, v] of Object.entries(parsed)) {
                               const d = byKey.get(k);
-                              if (d === undefined) continue;
+                              // Доступ агентов файлом не включается: только вручную.
+                              if (d === undefined || isAccessSettingKey(k)) continue;
                               payload[k] = toSettingValue(d.type, v);
                             }
                             // Файл без известных настроек не открывает пустое подтверждение.
@@ -944,6 +962,24 @@ export function SettingsScreen(): JSX.Element {
                   </div>
                 ),
               )}
+            </div>
+          )}
+
+          {visibleSections.some((s) => s.id === 'agents') && (
+            <div
+              className="card set-card"
+              data-sec="agents"
+              ref={(el) => {
+                cardRefs.current.agents = el;
+              }}
+            >
+              <h2>
+                <span className="ic">
+                  <Icon name="plug" />
+                </span>
+                <span>{t('sec.agents')}</span>
+              </h2>
+              <AgentsSettings mode={parseAgentMode(values[AGENT_MODE_KEY])} onChange={saveAgentMode} />
             </div>
           )}
 

@@ -181,6 +181,27 @@ export function onSystemProxyChange(fn: () => void): () => void {
   };
 }
 
+// Собственные изменения соединения (кнопка, меню, Ctrl+D, трей, смена режима):
+// пока они идут, окно само расставляет системный прокси, и «следование за
+// ядром» (proxyFollow.ts) в это не вмешивается — иначе set_system_proxy ушёл
+// бы дважды.
+let ownChanges = 0;
+
+/** Идёт ли собственное подключение, отключение или перезапуск соединения. */
+export function isOwnChangeBusy(): boolean {
+  return ownChanges > 0;
+}
+
+/** Выполнить собственное изменение соединения; окно не дублирует его прокси. */
+export async function trackOwnChange<T>(change: () => Promise<T>): Promise<T> {
+  ownChanges += 1;
+  try {
+    return await change();
+  } finally {
+    ownChanges -= 1;
+  }
+}
+
 /** Включить/снять системный прокси через оболочку (только нативное окно). */
 export async function applySystemProxy(on: boolean, port: number): Promise<void> {
   if ((window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ === undefined) {
@@ -205,8 +226,10 @@ export interface ConnectArgs {
 
 /** Подключение: ядро + системный прокси согласно выбранным режимам. */
 export async function connectWith(args: ConnectArgs): Promise<void> {
-  await args.core.core.connect({ profileId: args.profileId, mode: coreModeFor(args.modes) });
-  await applySystemProxy(args.modes.sysProxy, args.port);
+  await trackOwnChange(async () => {
+    await args.core.core.connect({ profileId: args.profileId, mode: coreModeFor(args.modes) });
+    await applySystemProxy(args.modes.sysProxy, args.port);
+  });
 }
 
 /**
@@ -217,11 +240,13 @@ export async function connectWith(args: ConnectArgs): Promise<void> {
  * пользователь остаётся без интернета.
  */
 export async function disconnectAll(core: CoreClients): Promise<void> {
-  try {
-    await core.core.disconnect({});
-  } finally {
-    await applySystemProxy(false, 0);
-  }
+  await trackOwnChange(async () => {
+    try {
+      await core.core.disconnect({});
+    } finally {
+      await applySystemProxy(false, 0);
+    }
+  });
 }
 
 /** Что запущено (или должно быть запущено): сервер и режимы. */
@@ -245,28 +270,30 @@ export async function reconnect(args: {
   readonly next: RunTarget;
   readonly prev: RunTarget;
 }): Promise<void> {
-  try {
-    await args.core.core.disconnect({});
-  } catch (e) {
-    await applySystemProxy(false, 0);
-    throw e;
-  }
-  try {
-    await args.core.core.connect({
-      profileId: args.next.profileId,
-      mode: coreModeFor(args.next.modes),
-    });
-  } catch (e) {
+  await trackOwnChange(async () => {
+    try {
+      await args.core.core.disconnect({});
+    } catch (e) {
+      await applySystemProxy(false, 0);
+      throw e;
+    }
     try {
       await args.core.core.connect({
-        profileId: args.prev.profileId,
-        mode: coreModeFor(args.prev.modes),
+        profileId: args.next.profileId,
+        mode: coreModeFor(args.next.modes),
       });
-    } catch {
-      await applySystemProxy(false, 0);
+    } catch (e) {
+      try {
+        await args.core.core.connect({
+          profileId: args.prev.profileId,
+          mode: coreModeFor(args.prev.modes),
+        });
+      } catch {
+        await applySystemProxy(false, 0);
+      }
+      throw e;
     }
-    throw e;
-  }
+  });
 }
 
 /**

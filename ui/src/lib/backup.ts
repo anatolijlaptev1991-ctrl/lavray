@@ -17,11 +17,22 @@ export function isSecretSettingKey(key: string): boolean {
   return SECRET_KEY.test(key);
 }
 
-/** Копия настроек без секретных ключей; исходный объект не меняется. */
+/**
+ * Настройки доступа, которые копия не переносит ни туда, ни обратно: режим
+ * агентов (agent.mode) — решение пользователя на этом компьютере, чужой файл не
+ * должен включать управление ядром.
+ */
+const ACCESS_KEYS: ReadonlySet<string> = new Set(['agent.mode']);
+
+export function isAccessSettingKey(key: string): boolean {
+  return ACCESS_KEYS.has(key);
+}
+
+/** Копия настроек без секретных ключей и без настроек доступа; исходный объект не меняется. */
 export function withoutSecrets<T>(values: Readonly<Record<string, T>>): Record<string, T> {
   const out: Record<string, T> = {};
   for (const [key, value] of Object.entries(values)) {
-    if (!isSecretSettingKey(key)) out[key] = value;
+    if (!isSecretSettingKey(key) && !isAccessSettingKey(key)) out[key] = value;
   }
   return out;
 }

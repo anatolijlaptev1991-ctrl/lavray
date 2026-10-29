@@ -653,6 +653,7 @@ export const deDict: Record<string, string> = {
   "sub.err.auth": "Zugang gesperrt: Der Link ist veraltet oder das Abo ist beendet",
   "sub.err.badge": "Fehler",
   "sub.err.edit": "Link ändern",
+  "sub.err.generic": "Abo konnte nicht aktualisiert werden",
   "sub.err.notFound": "Unter diesem Link wurde kein Abo gefunden",
   "sub.err.timeout": "Der Abo-Server hat nicht geantwortet",
   "sub.err.zero": "Das Abo lieferte 0 Server — die bisherigen bleiben erhalten",

@@ -15,18 +15,86 @@ import { Icon } from '../components/Icon';
 import { SubscriptionSettingsDialog } from '../components/SubscriptionSettingsDialog';
 import { openExternal } from '../lib/external';
 
-/** Состояние ошибки подписки → ключ словаря (как subErrParts прототипа). */
-function subErrKey(
-  err: string,
-): 'sub.err.auth' | 'sub.err.notFound' | 'sub.err.timeout' | 'sub.err.zero' | null {
-  const code = err.trim();
-  if (code === '') return null;
-  if (code.startsWith('401') || code.startsWith('403') || /unauthor|forbidden/i.test(code))
-    return 'sub.err.auth';
-  if (code.startsWith('404') || /not found/i.test(code)) return 'sub.err.notFound';
-  if (/timeout|deadline|не ответил/i.test(code)) return 'sub.err.timeout';
-  if (/0 (профил|сервер|профилей)|zero/i.test(code)) return 'sub.err.zero';
-  return null;
+type SubErrKey =
+  | 'sub.err.auth'
+  | 'sub.err.notFound'
+  | 'sub.err.timeout'
+  | 'sub.err.zero'
+  | 'sub.err.generic';
+
+/**
+ * Текст ошибки обновления → короткий код, как sub.error прототипа: HTTP-статус,
+ * timeout, zero или error. Сам текст не сохраняется: в нём бывает ссылка с токеном.
+ */
+function subErrCode(raw: string): string {
+  const s = raw.trim();
+  const status = /HTTP\s+(\d{3})/i.exec(s)?.[1] ?? /^(\d{3})\b/.exec(s)?.[1];
+  if (status !== undefined) return status;
+  if (/unauthor/i.test(s)) return '401';
+  if (/forbidden/i.test(s)) return '403';
+  if (/not found/i.test(s)) return '404';
+  if (/timeout|deadline|не ответил/i.test(s)) return 'timeout';
+  if (/0 (профил|сервер|профилей)|zero/i.test(s)) return 'zero';
+  return 'error';
+}
+
+/** Код ошибки → ключ словаря (как subErrParts прототипа). */
+function subErrKey(code: string): SubErrKey {
+  if (code === '401' || code === '403') return 'sub.err.auth';
+  if (code === '404') return 'sub.err.notFound';
+  if (code === 'timeout') return 'sub.err.timeout';
+  if (code === 'zero') return 'sub.err.zero';
+  return 'sub.err.generic';
+}
+
+/**
+ * Ошибка последнего обновления подписки (T-68). В Group поля ошибки нет, поэтому
+ * экран хранит её сам: после возврата на вкладку и перезапуска карточка
+ * по-прежнему показывает, что обновление не удалось.
+ */
+interface StoredErr {
+  readonly code: string;
+  readonly at: number;
+}
+
+const ERR_STORE = 'lavray.subErrors';
+
+function isStoredErr(v: unknown): v is StoredErr {
+  return (
+    typeof v === 'object' &&
+    v !== null &&
+    typeof (v as StoredErr).code === 'string' &&
+    typeof (v as StoredErr).at === 'number'
+  );
+}
+
+function loadErrors(): Record<string, StoredErr> {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(ERR_STORE) ?? '{}') as unknown;
+    if (typeof parsed !== 'object' || parsed === null) return {};
+    return Object.fromEntries(Object.entries(parsed).filter(([, v]) => isStoredErr(v)));
+  } catch {
+    return {};
+  }
+}
+
+function saveErrors(errors: Record<string, StoredErr>): void {
+  try {
+    window.localStorage.setItem(ERR_STORE, JSON.stringify(errors));
+  } catch {
+    /* приватный режим: ошибка живёт до закрытия экрана */
+  }
+}
+
+/**
+ * Когда подписка обновится в следующий раз: последнее обновление + интервал
+ * (свой, иначе рекомендованный провайдером). null — автообновления нет.
+ */
+function nextUpdateMs(g: Group): number | null {
+  if (g.skipAutoUpdate || g.lastUpdateMs === undefined) return null;
+  const own = g.updateIntervalMin ?? 0;
+  const minutes = own > 0 ? own : (g.subscriptionInfo?.updateIntervalHours ?? 0) * 60;
+  return minutes > 0 ? Number(g.lastUpdateMs) + minutes * 60e3 : null;
 }
 
 function relDate(ms: number, lang: string): string {
@@ -51,7 +119,7 @@ export function SubscriptionsScreen(): JSX.Element {
   const core = useCore();
   const [subs, setSubs] = useState<Group[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [errors, setErrors] = useState<Record<string, StoredErr>>(loadErrors);
   const [url, setUrl] = useState('');
   const [name, setName] = useState('');
   const [busy, setBusy] = useState('');
@@ -73,6 +141,11 @@ export function SubscriptionsScreen(): JSX.Element {
     try {
       const res = await core.subscriptions.listSubscriptions({});
       setSubs(res.groups);
+      const alive = new Set(res.groups.map((g) => String(g.id)));
+      setErrors((m) => {
+        const kept = Object.entries(m).filter(([id]) => alive.has(id));
+        return kept.length === Object.keys(m).length ? m : Object.fromEntries(kept);
+      });
       const next: Record<string, number> = {};
       await Promise.all(
         res.groups.map(async (g) => {
@@ -96,6 +169,18 @@ export function SubscriptionsScreen(): JSX.Element {
   useEffect(() => {
     void reload();
   }, [reload, t]);
+
+  useEffect(() => {
+    saveErrors(errors);
+  }, [errors]);
+
+  const noteError = useCallback((id: bigint, raw: string): void => {
+    setErrors((m) => ({ ...m, [String(id)]: { code: subErrCode(raw), at: Date.now() } }));
+  }, []);
+
+  const dropError = useCallback((id: bigint): void => {
+    setErrors((m) => Object.fromEntries(Object.entries(m).filter(([k]) => k !== String(id))));
+  }, []);
 
   const add = useCallback(async (): Promise<void> => {
     setErr('');
@@ -154,7 +239,7 @@ export function SubscriptionsScreen(): JSX.Element {
             if (ev.phase === SubscriptionProgress_Phase.CONFIRM_REQUIRED) {
               wouldRemove = ev.wouldRemoveCount ?? 0;
             } else if (ev.phase === SubscriptionProgress_Phase.FAILED) {
-              setErrors((m) => ({ ...m, [String(id)]: ev.detail ?? t('sub.err.badge') }));
+              noteError(id, ev.detail ?? '');
             } else if (ev.phase === SubscriptionProgress_Phase.DONE) {
               done = true;
             } else {
@@ -174,28 +259,23 @@ export function SubscriptionsScreen(): JSX.Element {
             total: Math.max(counts[String(id)] ?? 0, wouldRemove),
           });
         } else if (done) {
-          setErrors((m) => {
-            const next: Record<string, string> = {};
-            for (const [k, v] of Object.entries(m)) {
-              if (k !== String(id)) next[k] = v;
-            }
-            return next;
-          });
+          dropError(id);
           setOk(tf('toast.subUpdated', { name: gname }));
           await reload();
         } else {
           setErr(t('sub.err.badge'));
         }
       } catch (e) {
-        const msg = showCoreError(e, t);
-        setErrors((m) => ({ ...m, [String(id)]: msg }));
-        setErr(msg);
+        // Код берём из сырого текста: showCoreError подменяет «HTTP 404» в
+        // сообщении ответа провайдера на «Ядро недоступно».
+        noteError(id, e instanceof Error ? e.message : String(e));
+        setErr(showCoreError(e, t));
       } finally {
         setBusy('');
         setProgress('');
       }
     },
-    [core, t, tf, reload, counts],
+    [core, t, tf, reload, counts, noteError, dropError],
   );
 
   const confirmPending = useCallback((): void => {
@@ -234,12 +314,13 @@ export function SubscriptionsScreen(): JSX.Element {
       setErr('');
       try {
         await core.subscriptions.deleteSubscription({ groupId: id });
+        dropError(id);
         await reload();
       } catch (e) {
         setErr(showCoreError(e, t));
       }
     },
-    [core, reload, t],
+    [core, reload, t, dropError],
   );
 
   const openUrl = useCallback((raw: string): void => {
@@ -268,7 +349,9 @@ export function SubscriptionsScreen(): JSX.Element {
           const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
           const expire = info?.expireMs !== undefined ? Number(info.expireMs) : 0;
           const soon = expire > 0 && expire - Date.now() < 3 * 864e5;
-          const ekey = subErrKey(errors[String(g.id)] ?? '');
+          const lastErr = errors[String(g.id)];
+          const ekey = lastErr === undefined ? null : subErrKey(lastErr.code);
+          const nextAt = nextUpdateMs(g);
           const isBusy = busy === String(g.id);
           return (
             <article key={String(g.id)} className="card sub-card">
@@ -318,6 +401,12 @@ export function SubscriptionsScreen(): JSX.Element {
                     {g.lastUpdateMs !== undefined ? relDate(Number(g.lastUpdateMs), lang) : '—'}
                   </span>
                 </div>
+                {ekey === null && (
+                  <div className="row">
+                    <span className="k">{t('subs.next')}</span>
+                    <span>{nextAt === null ? '—' : relDate(Math.max(nextAt, Date.now()), lang)}</span>
+                  </div>
+                )}
                 <div className="row">
                   <span className="k">{t('subs.expiry')}</span>
                   <span>
@@ -337,12 +426,17 @@ export function SubscriptionsScreen(): JSX.Element {
                 </div>
               </div>
 
-              {ekey !== null && (
+              {lastErr !== undefined && ekey !== null && (
                 <div className="sub-errline">
                   <Icon name="alert" />
                   <span>
-                    {t(ekey)}{' '}
-                    <span className="cap mono">({errors[String(g.id)] ?? ''})</span>
+                    {t(ekey)}
+                    {lastErr.code !== 'error' && (
+                      <>
+                        {' '}
+                        <span className="cap mono">({lastErr.code})</span>
+                      </>
+                    )}
                   </span>
                 </div>
               )}

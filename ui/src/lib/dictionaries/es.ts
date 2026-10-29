@@ -653,6 +653,7 @@ export const esDict: Record<string, string> = {
   "sub.err.auth": "Acceso denegado: el enlace está obsoleto o la suscripción terminó",
   "sub.err.badge": "Error",
   "sub.err.edit": "Editar enlace",
+  "sub.err.generic": "No se pudo actualizar la suscripción",
   "sub.err.notFound": "No hay ninguna suscripción en este enlace",
   "sub.err.timeout": "El servidor de la suscripción no respondió",
   "sub.err.zero": "La suscripción devolvió 0 servidores; se conservan los anteriores",

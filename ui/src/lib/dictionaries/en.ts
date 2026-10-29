@@ -653,6 +653,7 @@ export const enDict: Record<string, string> = {
   "sub.err.auth": "Access denied: the link is outdated or the subscription has ended",
   "sub.err.badge": "Error",
   "sub.err.edit": "Edit link",
+  "sub.err.generic": "Couldn’t update the subscription",
   "sub.err.notFound": "No subscription found at this link",
   "sub.err.timeout": "The subscription server didn’t respond",
   "sub.err.zero": "The subscription returned 0 servers; the previous ones were kept",

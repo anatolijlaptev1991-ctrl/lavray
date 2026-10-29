@@ -646,6 +646,7 @@ export const zhDict: Record<string, string> = {
   "sub.err.auth": "访问被拒：链接已过期或订阅已到期",
   "sub.err.badge": "错误",
   "sub.err.edit": "修改链接",
+  "sub.err.generic": "无法更新订阅",
   "sub.err.notFound": "此链接未找到订阅",
   "sub.err.timeout": "订阅服务器未响应",
   "sub.err.zero": "订阅返回 0 个服务器——已保留原有",

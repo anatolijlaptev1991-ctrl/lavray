@@ -14,6 +14,7 @@ import { useTrafficSpeed } from './hooks/useTraffic';
 import { applyDocumentLanguage, formatBytes } from './lib/i18n';
 import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
 import { loadModes, toggleConnection } from './lib/connection';
+import { onTablistKeyDown } from './lib/tabs';
 import { getPlatformAdapter } from './platform/adapter';
 import { ConnectionScreen } from './screens/screen_connection';
 import { ConnsScreen } from './screens/screen_conns';
@@ -419,13 +420,27 @@ function AppInner(): JSX.Element {
               <h1 id="ghTitle">{t(section.navKey)}</h1>
               <p className="sub" id="ghSub">{tab ? t(tab.subKey) : ''}</p>
               {section.tabs.length > 1 && (
-                <div className="subtabs" id="ghTabs" role="tablist" aria-label={t('aria.tabs')}>
+                <div
+                  className="subtabs"
+                  id="ghTabs"
+                  role="tablist"
+                  aria-label={t('aria.tabs')}
+                  onKeyDown={(e) => {
+                    // T-38: ←/→/Home/End переключают вкладку и переносят на неё фокус.
+                    onTablistKeyDown(e, (i) => {
+                      const next = section.tabs[i];
+                      if (next !== undefined) setTabId(next.id);
+                    });
+                  }}
+                >
                   {section.tabs.map((tb) => (
                     <button
                       key={tb.id}
+                      id={`tab-${tb.id}`}
                       className="subtab"
                       role="tab"
                       aria-selected={tb.id === (tab?.id ?? '')}
+                      aria-controls="screen-conn"
                       tabIndex={tb.id === (tab?.id ?? '') ? 0 : -1}
                       onClick={() => {
                         setTabId(tb.id);
@@ -438,7 +453,18 @@ function AppInner(): JSX.Element {
               )}
             </div>
           )}
-          <div className="screen active" id="screen-conn">
+          {/* Одна панель на все вкладки раздела (прототип: #scr-*, role=tabpanel
+              только у разделов с несколькими вкладками). */}
+          <div
+            className="screen active"
+            id="screen-conn"
+            role={section !== undefined && section.tabs.length > 1 ? 'tabpanel' : undefined}
+            aria-labelledby={
+              section !== undefined && section.tabs.length > 1 && tab !== undefined
+                ? `tab-${tab.id}`
+                : undefined
+            }
+          >
             {sectionId === 'connection' && <ConnectionScreen />}
             {sectionId === 'servers' &&
               (tab?.id === 'subscriptions' ? <SubscriptionsScreen /> : <ServersScreen />)}

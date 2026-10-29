@@ -12,6 +12,7 @@ import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
+import { onTablistKeyDown } from '../lib/tabs';
 
 type Tab = 'link' | 'qr' | 'file';
 
@@ -32,6 +33,8 @@ const TAB_KEY: Record<Tab, 'imp.tab.link' | 'imp.tab.qr' | 'imp.tab.file'> = {
   qr: 'imp.tab.qr',
   file: 'imp.tab.file',
 };
+
+const TABS: readonly Tab[] = ['link', 'qr', 'file'];
 
 export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported }: Props): JSX.Element {
   const { t, tf, plural } = useI18n();
@@ -168,13 +171,26 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
           )}
           {ok !== '' && <div className="toast-ok">{ok}</div>}
 
-          <div className="tabs" role="tablist" aria-label={t('aria.tabs')}>
-            {(['link', 'qr', 'file'] as const).map((tb) => (
+          <div
+            className="tabs"
+            role="tablist"
+            aria-label={t('aria.tabs')}
+            onKeyDown={(e) => {
+              // T-38: ←/→/Home/End переключают вкладку и переносят на неё фокус.
+              onTablistKeyDown(e, (i) => {
+                const next = TABS[i];
+                if (next !== undefined) setTab(next);
+              });
+            }}
+          >
+            {TABS.map((tb) => (
               <button
                 key={tb}
+                id={`impTab-${tb}`}
                 className={`tab${tab === tb ? ' on' : ''}`}
                 role="tab"
                 aria-selected={tab === tb}
+                aria-controls={tab === tb ? `impPane-${tb}` : undefined}
                 tabIndex={tab === tb ? 0 : -1}
                 onClick={() => { setTab(tb); }}
               >
@@ -184,7 +200,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
           </div>
 
           {tab === 'link' && (
-            <div className="imp-pane" role="tabpanel">
+            <div className="imp-pane" role="tabpanel" id="impPane-link" aria-labelledby="impTab-link">
               <div className="imp-col">
                 <div className="field">
                   <label className="req" htmlFor="impLink">{t('imp.link')}</label>
@@ -234,7 +250,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
           )}
 
           {tab === 'qr' && (
-            <div className="imp-pane" role="tabpanel">
+            <div className="imp-pane" role="tabpanel" id="impPane-qr" aria-labelledby="impTab-qr">
               <div className="imp-qr">
                 <div className="imp-qr-frame">
                   <Icon name="gauge" />
@@ -272,7 +288,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
           )}
 
           {tab === 'file' && (
-            <div className="imp-pane" role="tabpanel">
+            <div className="imp-pane" role="tabpanel" id="impPane-file" aria-labelledby="impTab-file">
               <label
                 className="imp-drop"
                 onDragOver={(e) => { e.preventDefault(); }}

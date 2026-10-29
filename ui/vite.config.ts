@@ -5,11 +5,14 @@ export default defineConfig({
   plugins: [react()],
   build: {
     target: 'es2022',
-    sourcemap: true,
+    // T-62: карты исходников не должны попадать в установщик.
+    sourcemap: false,
   },
   test: {
     environment: 'jsdom',
     setupFiles: ['src/test-setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // styles.test.ts читает текст prototype.css/base.css (?raw); без этого Vitest отдаёт ''.
+    css: { include: [/\/src\/(prototype|base)\.css/] },
   },
 });

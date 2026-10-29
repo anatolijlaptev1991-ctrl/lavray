@@ -11,7 +11,7 @@ import type { Root } from 'react-dom/client';
 import { CoreContext } from '../hooks/useCore';
 import { createCoreClients } from '../lib/core';
 import { setLanguage } from '../lib/i18n';
-import { ConfirmDialog, DialogShell, GroupsDialog, HotkeysDialog, LicensesDialog, PresetSaveDialog } from './dialogs';
+import { ConfirmDialog, DialogShell, GroupsDialog, HotkeysDialog, LicensesDialog } from './dialogs';
 import { ImportDialog } from './ImportDialog';
 
 function setActEnvironment(on: boolean): void {
@@ -60,7 +60,6 @@ describe('T-61: фокус и live-регионы', () => {
       ['GroupsDialog', (close): ReactElement => <GroupsDialog onClose={close} onChanged={() => undefined} />],
       ['HotkeysDialog', (close): ReactElement => <HotkeysDialog onClose={close} />],
       ['LicensesDialog', (close): ReactElement => <LicensesDialog onClose={close} />],
-      ['PresetSaveDialog', (close): ReactElement => <PresetSaveDialog onSave={() => undefined} onClose={close} />],
       [
         'ConfirmDialog',
         (close): ReactElement => <ConfirmDialog title="Delete" text="Sure?" confirmLabel="Delete" onConfirm={close} onClose={close} />,

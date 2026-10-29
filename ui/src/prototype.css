@@ -52,7 +52,7 @@ body{
   -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
 }
 html[lang^="zh"] body{line-height:1.6}
-html[lang^="zh"] *{letter-spacing:0 !important}
+html[lang^="zh"] *{letter-spacing:0 !important;text-transform:none !important}
 h1,h2,h3,p{margin:0}
 button{font:inherit; color:inherit; background:none; border:none; padding:0; cursor:pointer}
 button:disabled{cursor:not-allowed; opacity:.45}
@@ -140,7 +140,8 @@ html[data-shell="browser"] .tb-brand,html[data-shell="browser"] #tbMenu{display:
 .addr-warn{display:inline-flex;align-items:center;gap:4px;color:var(--warn-text);font-weight:600;white-space:nowrap}
 .tb-ic{width:32px;height:32px;border-radius:var(--r-sm);display:inline-flex;align-items:center;justify-content:center;color:var(--t2);transition:background var(--t-micro) var(--ease),color var(--t-micro) var(--ease)}
 .tb-ic:hover:not(:disabled){background:var(--hover);color:var(--t1)}
-.seg{display:inline-flex;background:var(--surface2);border:1px solid var(--b-subtle);border-radius:var(--r-md);padding:2px;gap:2px}
+/* T-62: граница сегмента — --b-control (≥3:1 к фону, WCAG 1.4.11); --b-subtle давал 1,24:1 */
+.seg{display:inline-flex;background:var(--surface2);border:1px solid var(--b-control);border-radius:var(--r-md);padding:2px;gap:2px}
 .seg button{display:inline-flex;align-items:center;gap:6px;min-height:32px;padding:4px 10px;border-radius:7px;font-size:.75rem;color:var(--t2);transition:all var(--t-micro) var(--ease),outline 0s,outline-offset 0s}
 .seg button:hover{color:var(--t1)}
 .seg button.on{box-shadow:inset 0 0 0 1.5px var(--b-control);font-weight:600;color:var(--t1)}
@@ -830,7 +831,8 @@ body.w-sm .conn-table td{border:0;padding:0}
 .set-toc{position:sticky;top:0;display:flex;flex-direction:column;gap:2px}
 .set-toc button{text-align:start;padding:7px 10px;border-radius:var(--r-md);font-size:.8125rem;color:var(--t2)}
 .set-toc button:hover{background:var(--hover);color:var(--t1)}
-.set-toc button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+/* T-62: чистый --accent на подложке accent-soft давал 4,18–4,37:1 (sage, светлая тема); подмешиваем основной текст → ≥4,5:1 при всех акцентах */
+.set-toc button.on{background:var(--accent-soft);color:color-mix(in srgb,var(--accent) 70%,var(--t1));font-weight:600}
 .set-toc-jump{display:none;margin-bottom:12px}
 .set-cols{min-width:0}
 @media (max-width:959px){
@@ -1144,7 +1146,7 @@ html[data-shell="native"][data-os="mac"] #app { height: 100vh; }
 }
 
 /* ============ checks: утечки + статусные баннеры ============ */
-.banner-ok{background:rgba(78,122,99,.10);border:1px solid rgba(78,122,99,.32)}
+.banner-ok{background:color-mix(in srgb,var(--ok) 10%,var(--surface));border:1px solid color-mix(in srgb,var(--ok) 45%,var(--b-subtle))}
 .banner-ok .ic{color:var(--ok-text)}
 .leak-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin:10px 0 0}
 .leak-grid>div{display:flex;flex-direction:column;gap:3px}

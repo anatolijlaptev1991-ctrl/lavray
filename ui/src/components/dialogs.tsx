@@ -1,6 +1,5 @@
 // dialogs.tsx — остальные диалоги прототипа v1.2 одним модулем:
-// группы серверов, подтверждение, горячие клавиши, лицензии, резервная
-// копия, сохранение пресета, онбординг, экспорт журнала, переход на бета.
+// группы серверов, подтверждение, горячие клавиши, лицензии, онбординг.
 // Общая оболочка Dialog повторяет .dlg-back/.dlg/.dlg-h/.dlg-b/.dlg-f из DS.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -349,97 +348,6 @@ export function LicensesDialog({ onClose }: { readonly onClose: () => void }): J
     </DialogShell>
   );
 }
-
-// ============================================================================
-// Экспорт журнала (dlgLogExport)
-// ============================================================================
-
-export function LogExportDialog({
-  sampleBefore,
-  sampleAfter,
-  onExport,
-  onClose,
-}: {
-  readonly sampleBefore: string;
-  readonly sampleAfter: string;
-  readonly onExport: () => void;
-  readonly onClose: () => void;
-}): JSX.Element {
-  const { t } = useI18n();
-  return (
-    <DialogShell titleId="leTitle" title={t('log.exportT')} size="md" onClose={onClose}
-      footer={
-        <>
-          <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
-          <span className="flex1" />
-          <button className="btn btn-pri" onClick={onExport}>
-            <Icon name="copy" />
-            <span>{t('log.exportBtn')}</span>
-          </button>
-        </>
-      }
-    >
-      <p style={{ fontSize: '.8125rem' }}>{t('log.exportD')}</p>
-      <div className="le-samples">
-        <div>
-          <span className="cap">{t('log.before')}</span>
-          <div className="le-sample mono">{sampleBefore}</div>
-        </div>
-        <div>
-          <span className="cap">{t('log.after')}</span>
-          <div className="le-sample mono">{sampleAfter}</div>
-        </div>
-      </div>
-    </DialogShell>
-  );
-}
-
-// ============================================================================
-// Сохранение пресета (dlgPresetSave)
-// ============================================================================
-
-export function PresetSaveDialog({
-  onSave,
-  onClose,
-}: {
-  readonly onSave: (name: string) => void;
-  readonly onClose: () => void;
-}): JSX.Element {
-  const { t } = useI18n();
-  const [name, setName] = useState('');
-  const ref = useRef<HTMLInputElement | null>(null);
-  return (
-    <DialogShell
-      titleId="psTitle"
-      title={t('rt.saveAs')}
-      size="sm"
-      onClose={onClose}
-      autofocusRef={ref}
-      footer={
-        <>
-          <button className="btn btn-ghost" onClick={onClose}>{t('common.cancel')}</button>
-          <span className="flex1" />
-          <button className="btn btn-pri" disabled={name.trim() === ''} onClick={() => { onSave(name.trim()); }}>
-            {t('common.save')}
-          </button>
-        </>
-      }
-    >
-      <div className="field">
-        <label className="req" htmlFor="psName">{t('rt.presetName')}</label>
-        <input
-          className="input"
-          id="psName"
-          ref={ref}
-          autoComplete="off"
-          value={name}
-          onChange={(e) => { setName(e.target.value); }}
-        />
-      </div>
-    </DialogShell>
-  );
-}
-
 
 // ============================================================================
 // Онбординг (dlgOnb) — 4 шага: язык → серверы → маршруты/режим → готово

@@ -26,6 +26,7 @@ import {
   makeClients,
   mountWithCore,
   profileOf,
+  typeInto,
 } from '../test-harness';
 import type { CoreClients } from '../lib/core';
 import { ServersScreen } from './screen_servers';
@@ -516,5 +517,66 @@ describe('ServersScreen (T-65)', () => {
     // вкладка группы: имя обёрнуто в .srv-gtab-name (там работает text-overflow), полное — в title
     const tab = container.querySelector('.srv-gtab[title="Provider sub"]');
     expect(tab?.querySelector('.srv-gtab-name')?.textContent).toBe('Provider sub');
+  });
+});
+
+describe('U-01: «Добавить» при фильтре «вручную» сохраняет в не подписочную группу', () => {
+  // store.DefaultGroupID из миграции ядра (ядро не меняем).
+  const CORE_DEFAULT = 2147483000n;
+  const SUB = 77n;
+  const subFirst = (): Group[] => [
+    create(GroupSchema, { id: SUB, name: 'Provider sub', kind: Group_Kind.SUBSCRIPTION }),
+    create(GroupSchema, { id: CORE_DEFAULT, name: 'Default', kind: Group_Kind.BASIC }),
+  ];
+
+  beforeEach(() => {
+    setLanguage('ru');
+  });
+
+  function pickManual(container: HTMLElement): void {
+    const select = container.querySelector<HTMLSelectElement>('#subSel');
+    const option = Array.from(select?.options ?? []).find((o) => o.text === t('srv.manual'));
+    expect(option, 'пункт «Добавлены вручную» в #subSel').toBeDefined();
+    act(() => {
+      if (select === null || option === undefined) return;
+      select.value = option.value;
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  }
+
+  it('сохраняет с groupId группы Default, а не с подпиской, которая стоит первой в списке', async () => {
+    const clients = makeClients({ groups: subFirst() });
+    const createProfile = vi
+      .spyOn(clients.profiles, 'createProfile')
+      .mockResolvedValue(profileOf(9, 'Новый'));
+    const m = await mountWithCore(clients, createElement(ServersScreen));
+    pickManual(m.container);
+    await click(buttonByText(m.container, t('prof.add')));
+    typeInto(document.getElementById('edRemark') as HTMLInputElement | null, 'Новый');
+    typeInto(document.getElementById('edAddr') as HTMLInputElement | null, 'new.example.org');
+    typeInto(document.getElementById('edPort') as HTMLInputElement | null, '443');
+    await click(buttonByText(document.body, t('common.save')));
+    expect(createProfile).toHaveBeenCalledTimes(1);
+    expect(createProfile.mock.calls[0]?.[0].profile?.groupId).toBe(CORE_DEFAULT);
+    m.unmount();
+  });
+
+  it('пока список групп не загружен, «Добавить» неактивна', async () => {
+    const clients = makeClients();
+    vi.spyOn(clients.profiles, 'listGroups').mockRejectedValue(new Error('core offline'));
+    const m = await mountWithCore(clients, createElement(ServersScreen));
+    pickManual(m.container);
+    expect(buttonByText(m.container, t('prof.add')).disabled).toBe(true);
+    m.unmount();
+  });
+
+  it('если есть только подписочные группы, «Добавить» при фильтре «вручную» неактивна', async () => {
+    const clients = makeClients({
+      groups: [create(GroupSchema, { id: SUB, name: 'Provider sub', kind: Group_Kind.SUBSCRIPTION })],
+    });
+    const m = await mountWithCore(clients, createElement(ServersScreen));
+    pickManual(m.container);
+    expect(buttonByText(m.container, t('prof.add')).disabled).toBe(true);
+    m.unmount();
   });
 });

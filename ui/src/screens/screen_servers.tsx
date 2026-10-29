@@ -11,6 +11,7 @@ import { useI18n } from '../hooks/useI18n';
 import { useKbdLabel } from '../hooks/useKbdLabel';
 import { showCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
+import { MANUAL_FILTER, newServerGroupId, numericGroupId } from '../lib/groups';
 import { formatMs, type MessageKey } from '../lib/i18n';
 import { isTestDown, isTestNotApplicable } from '../lib/testResult';
 import { ProfileEditor } from '../components/ProfileEditor';
@@ -45,14 +46,6 @@ function typeBadge(type: ProfileType, t: (key: MessageKey) => string): { cls: st
   const info = TYPE_INFO[type];
   if (info === undefined) return { cls: 'unknown', label: '?' };
   return { cls: info.cls, label: info.labelKey === undefined ? (info.label ?? '?') : t(info.labelKey) };
-}
-
-/** Значение фильтра «Добавлены вручную»: серверы групп, не являющихся подписками. */
-const MANUAL_FILTER = 'manual';
-
-/** Числовой id группы из значения фильтра; null для 'all' и 'manual'. */
-function numericGroupId(filter: string): bigint | null {
-  return /^\d+$/.test(filter) ? BigInt(filter) : null;
 }
 
 const PROTO_OPTIONS: readonly { value: string; label: string }[] = [
@@ -175,12 +168,14 @@ export function ServersScreen(): JSX.Element {
     return sorted;
   }, [allProfiles, groupFilter, subscriptionIds, protoFilter, statusFilter, sortKey, sortAsc, lang]);
 
-  // Группа для «Добавить/Импорт»: открытая вкладка/фильтр с конкретной
-  // группой, иначе первая группа списка (для 'all' и 'manual').
-  const activeGroupId = useMemo(
-    () => numericGroupId(groupFilter) ?? BigInt(targetGroup === '' ? '0' : targetGroup),
-    [groupFilter, targetGroup],
+  // Группа нового сервера (кнопка «Добавить»). null — подходящей группы нет
+  // или список групп не загружен: кнопка неактивна (см. lib/groups.ts).
+  const newGroupId = useMemo(
+    () => newServerGroupId(groupFilter, targetGroup, groups),
+    [groupFilter, targetGroup, groups],
   );
+  // Редактор: при правке — группа профиля, при создании — группа нового сервера.
+  const editorGroupId = editing === null ? newGroupId : (editing?.groupId ?? null);
 
   // Активный сервер для бейджа «Активен» (прототип: точка зелёная при
   // подключении, жёлтая при установке соединения).
@@ -618,7 +613,7 @@ export function ServersScreen(): JSX.Element {
         </button>
         <button
           className="btn btn-pri"
-          disabled={targetGroup === '' && numericGroupId(groupFilter) === null}
+          disabled={newGroupId === null}
           onClick={() => {
             setEditing(null);
           }}
@@ -758,10 +753,10 @@ export function ServersScreen(): JSX.Element {
         />
       )}
 
-      {editing !== undefined && (
+      {editing !== undefined && editorGroupId !== null && (
         <ProfileEditor
           profile={editing}
-          groupId={activeGroupId}
+          groupId={editorGroupId}
           onClose={() => {
             setEditing(undefined);
           }}

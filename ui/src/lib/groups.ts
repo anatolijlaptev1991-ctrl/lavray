@@ -1,0 +1,40 @@
+// groups.ts — правила работы с группами серверов, общие для экранов и диалогов.
+import { Group_Kind } from '../gen/lavray_pb';
+
+/** Значение фильтра «Добавлены вручную» (#subSel на экране «Серверы»). */
+export const MANUAL_FILTER = 'manual';
+
+/** Встроенная группа «Default» из миграции ядра (store.DefaultGroupID). Ядро не меняем. */
+export const DEFAULT_GROUP_ID = 2147483000n;
+
+/** Что нужно знать о группе для выбора: id и вид (подписка или нет). */
+export interface GroupRef {
+  readonly id: bigint;
+  readonly kind: Group_Kind;
+}
+
+/** id группы из значения фильтра; null для «all», «manual» и пустой строки. */
+export function numericGroupId(filter: string): bigint | null {
+  return /^\d+$/.test(filter) ? BigInt(filter) : null;
+}
+
+/**
+ * Группа для сервера, создаваемого в редакторе «Добавить».
+ * - «Добавлены вручную» — первая группа списка, не являющаяся подпиской:
+ *   ручной сервер внутри подписки сотрёт следующее обновление;
+ * - вкладка или фильтр с конкретной группой — эта группа;
+ * - иначе — группа по умолчанию (targetGroup).
+ * «0» и пустая строка означают «группы нет»: возвращается null, а кнопка
+ * «Добавить» неактивна (ядро на group_id=0 отвечает invalid_argument).
+ */
+export function newServerGroupId(
+  filter: string,
+  targetGroup: string,
+  groups: readonly GroupRef[],
+): bigint | null {
+  if (filter === MANUAL_FILTER) {
+    return groups.find((g) => g.kind !== Group_Kind.SUBSCRIPTION)?.id ?? null;
+  }
+  const id = numericGroupId(filter) ?? (targetGroup === '' ? null : BigInt(targetGroup));
+  return id === null || id === 0n ? null : id;
+}

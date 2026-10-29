@@ -17,6 +17,7 @@ import (
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/version"
 )
 
 type (
@@ -137,7 +138,7 @@ func (s *Server) checkCoreAlive() *checkResult {
 	if st.State == inst.StateCrashed {
 		return verdict(ckFail, st.LastError, "")
 	}
-	return verdict(ckOK, inst.CoreVersion, "")
+	return verdict(ckOK, version.Version, "")
 }
 
 func (s *Server) checkServer(ctx context.Context) *checkResult {

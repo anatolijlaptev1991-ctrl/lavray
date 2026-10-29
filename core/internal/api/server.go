@@ -23,6 +23,7 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/version"
 )
 
 // Deps — зависимости сервера (все внедряются: cmd/lavray-core в W8, тесты —
@@ -107,6 +108,7 @@ func NewServer(d Deps) *Server {
 		ipURL:       publicIPURL,
 		ipProbeURL:  "https://1.1.1.1/",
 		dial:        (&net.Dialer{}).DialContext,
+		appVersion:  version.Version,
 		subsRunning: map[int64]bool{},
 		subsSnap:    map[int64]*subs.Snapshot{},
 		setSubs:     map[chan *lavrayv1.SettingsChanged]struct{}{},
@@ -424,7 +426,7 @@ func (s *Server) coreStatus() *lavrayv1.CoreStatus {
 	st := s.inst.Status()
 	cs := &lavrayv1.CoreStatus{
 		State:           coreStateOf(st.State),
-		CoreVersion:     inst.CoreVersion,
+		CoreVersion:     version.Version,
 		Mode:            connectModeOf(""),
 		RoutingPresetId: strpIf(s.activePresetID()),
 	}

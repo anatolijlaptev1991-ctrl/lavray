@@ -24,11 +24,6 @@ const (
 	StopTimeout  = 10 * time.Second
 )
 
-// CoreVersion — версия ядра (core_version в CoreStatus). Схема UPDATE-SYSTEM
-// §7 — «1.14.1-lav.N»; до сборочного штампа (W8, пин форка из
-// libs/get_source_env.sh) — плейсхолдер этапа портирования.
-const CoreVersion = "0.1.0-w6"
-
 // State — FSM инстанса (FR-UI-261; тексты для UI даёт CoreState контракта).
 type State int
 
@@ -82,7 +77,7 @@ type Status struct {
 	LastConfig []byte // конфиг текущего/ПОСЛЕДНЕГО запуска (redact — слой API)
 }
 
-// CoreStateIDLE-совместимость: CoreVersion отдаётся отдельно (константа).
+// CoreStateIDLE-совместимость: версия ядра отдаётся отдельно (version.Version).
 func (s Status) ActiveProfileID() int64 {
 	if s.Run == nil {
 		return 0

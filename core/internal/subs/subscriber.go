@@ -29,13 +29,12 @@ import (
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs/parser"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/version"
 )
 
-// Version — версия ядра для UA (W6 свяжет с билд-штампом 1.14.1-lav.N).
-const Version = "0.1.0-w3"
-
-// DefaultUserAgent — UA согласования формата (FR-UI-264).
-const DefaultUserAgent = "LAVRay/" + Version
+// DefaultUserAgent — UA согласования формата (FR-UI-264). Версия — единая
+// version.Version, а не собственный плейсхолдер пакета.
+var DefaultUserAgent = "LAVRay/" + version.Version
 
 // Параметры сети по умолчанию (план §4.1).
 const (

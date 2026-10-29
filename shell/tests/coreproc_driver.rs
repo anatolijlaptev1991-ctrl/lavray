@@ -117,6 +117,7 @@ fn silent_hold_argv() -> Vec<String> {
 /// Драйвер с короткими таймингами лестницы §5.
 fn test_driver() -> RealCoreProcess {
     RealCoreProcess::with_timeouts(DriverTimeouts {
+        eof_grace: Duration::from_millis(200),
         sigterm_wait: Duration::from_millis(600),
         kill_grace: Duration::from_millis(600),
         poll_interval: Duration::from_millis(15),
@@ -310,6 +311,7 @@ fn auth_token_is_delivered_via_stdin() {
 #[test]
 fn sigterm_ignoring_core_is_killed_by_sigkill_escalation() {
     let mut driver = RealCoreProcess::with_timeouts(DriverTimeouts {
+        eof_grace: Duration::from_millis(100),
         sigterm_wait: Duration::from_millis(400),
         kill_grace: Duration::from_millis(1500),
         poll_interval: Duration::from_millis(15),

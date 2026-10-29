@@ -9,6 +9,8 @@
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
+use crate::coreproc::GRACEFUL_SHUTDOWN_TOTAL;
+
 /// Имя события Tauri с адресом ядра.
 pub const CORE_ENDPOINT_EVENT: &str = "core-endpoint";
 /// Сколько `core_endpoint` ждёт готовности ядра (больше `T_SPAWN` = 10 с).
@@ -19,8 +21,8 @@ pub const POLL_INTERVAL: Duration = Duration::from_millis(500);
 pub const BACKOFF_START: Duration = Duration::from_secs(1);
 /// Потолок паузы между перезапусками.
 pub const BACKOFF_MAX: Duration = Duration::from_secs(30);
-/// Время на мягкое завершение ядра при выходе (§5).
-pub const KILL_GRACE: Duration = Duration::from_secs(5);
+/// Время на мягкое завершение ядра при выходе (§5). T-52: весь бюджет лестницы, 15 с (было 5).
+pub const KILL_GRACE: Duration = GRACEFUL_SHUTDOWN_TOTAL;
 /// `last_error`, когда ядро умерло само.
 pub const REASON_CORE_DIED: &str = "ядро неожиданно завершилось — перезапуск";
 

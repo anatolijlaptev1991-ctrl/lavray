@@ -28,6 +28,10 @@ pub const T_READY_WARNING: Duration = Duration::from_secs(5);
 pub const T_SPAWN: Duration = Duration::from_secs(10);
 /// Таймаут `CoreService.Disconnect` (LNB-06).
 pub const T_DISCONNECT_RPC: Duration = Duration::from_secs(10);
+/// Время ядру на самостоятельный выход после EOF на stdin (§3.2, §5): оно
+/// останавливает sing-box (`inst.StopTimeout`, 10 с: TUN, маршруты) и закрывает
+/// HTTP (2 с). Только потом SIGTERM/TerminateJobObject.
+pub const T_EOF_GRACE: Duration = Duration::from_secs(12);
 /// Ожидание выхода после SIGTERM/TerminateProcess по хэндлу/pgid (§5 шаг 3).
 pub const T_SIGTERM_WAIT: Duration = Duration::from_secs(5);
 /// Grace после SIGKILL/TerminateProcess(force) (§5 шаг 3).

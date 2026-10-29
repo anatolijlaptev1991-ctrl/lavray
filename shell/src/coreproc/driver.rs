@@ -32,7 +32,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use super::logs::{FloodGate, LogLine, LogRing};
 use super::{
     CoreEndpoint, CoreProcess, CoreProcessError, CoreSpawnConfig, SecretToken, AUTH_TOKEN_BYTES,
-    T_KILL_GRACE, T_SIGTERM_WAIT,
+    T_EOF_GRACE, T_KILL_GRACE, T_SIGTERM_WAIT,
 };
 
 /// Префикс ready-строки ядра (§3.4): `LAVRAY_CORE_READY <transport-url>`.
@@ -48,6 +48,9 @@ const READY_FLUSH_GRACE: Duration = Duration::from_millis(200);
 /// лестницу с короткими значениями, продакшн берёт нормы §2.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DriverTimeouts {
+    /// Шаг 0 §5: сколько ждать самостоятельного выхода ядра после EOF на
+    /// stdin (оно останавливает sing-box и снимает TUN) до SIGTERM/hard-kill.
+    pub eof_grace: Duration,
     /// Шаг 3 §5: сколько ждать выхода после SIGTERM/TerminateJobObject.
     pub sigterm_wait: Duration,
     /// Шаг 3 §5: grace после SIGKILL/TerminateProcess(force).
@@ -59,6 +62,7 @@ pub struct DriverTimeouts {
 impl Default for DriverTimeouts {
     fn default() -> Self {
         Self {
+            eof_grace: T_EOF_GRACE,
             sigterm_wait: T_SIGTERM_WAIT,
             kill_grace: T_KILL_GRACE,
             poll_interval: Duration::from_millis(20),
@@ -225,24 +229,31 @@ impl RealCoreProcess {
     ///
     /// Инвариант выхода: `Ok`/`Err(Kill)` — живого процесса в драйвере нет
     /// (последний добивается дропом Job/pgid-SIGKILL перед ошибкой).
-    fn shutdown(&mut self, graceful_deadline: Duration) -> Result<(), CoreProcessError> {
+    ///
+    /// `eof_grace` — сколько ждать самостоятельного выхода ядра после EOF на
+    /// stdin; для молчащего ядра (провал ready) ждать нечего — `Duration::ZERO`.
+    fn shutdown(
+        &mut self,
+        graceful_deadline: Duration,
+        eof_grace: Duration,
+    ) -> Result<(), CoreProcessError> {
         let Some(mut run) = self.running.take() else {
             return Ok(()); // убивать нечего — идемпотентно
         };
-        // Шаг 0 (не из §5): EOF на stdin = «смерть оболочки» (§3.2) — ядро
-        // обязано завершиться само graceful; это бесплатный мягкий сигнал.
-        // NB (D4, ревью): на Unix далее идёт перехватываемый SIGTERM — ядро
-        // успевает доработать; на Windows следующий шаг (TerminateJobObject)
-        // — немедленный hard-kill: шанса на само-выход по EOF нет, окно
-        // само-выключения ядра целиком на RPC-шагах 1–2 (W6).
+        let deadline = Instant::now() + graceful_deadline;
+        let poll = self.timeouts.poll_interval;
+
+        // Шаг 0 (не из §5): EOF на stdin = «смерть оболочки» (§3.2) — ядро по
+        // нему останавливает sing-box (TUN, маршруты) и выходит само; ждём этого
+        // `eof_grace`. Раньше был один `try_wait`, и на Windows сразу шёл
+        // TerminateJobObject (hard-kill за ~20 мс): ядро не успевало ничего
+        // закрыть (A2-12).
         run.child.stdin.take();
-        if let Ok(Some(status)) = run.child.try_wait() {
+        let eof_deadline = deadline.min(Instant::now() + eof_grace);
+        if let Some(status) = wait_exit_until(&mut run.child, eof_deadline, poll) {
             self.last_exit = Some(status);
             return Ok(());
         }
-
-        let deadline = Instant::now() + graceful_deadline;
-        let poll = self.timeouts.poll_interval;
 
         // Шаг 3 §5: SIGTERM (Unix, по pgid — LNB-09) / TerminateJobObject
         // (Windows, всё дерево ядра) ПО ХЭНДЛУ/ГРУППЕ — никогда по имени.
@@ -427,13 +438,15 @@ impl CoreProcess for RealCoreProcess {
                     budget,
                     reason: format!("no `{READY_LINE_PREFIX}<url>` line on stdout within budget"),
                 };
-                let _ = self.shutdown(self.timeouts.sigterm_wait + self.timeouts.kill_grace);
+                let budget = self.timeouts.sigterm_wait + self.timeouts.kill_grace;
+                let _ = self.shutdown(budget, Duration::ZERO); // молчащее ядро stdin не читает
                 Err(err)
             }
             WaitOutcome::Poll(err) => {
                 // D5 (ревью): «не могу опросить статус» ≠ «не готов» —
                 // классифицируем как Spawn-ошибку опроса.
-                let _ = self.shutdown(self.timeouts.sigterm_wait + self.timeouts.kill_grace);
+                let budget = self.timeouts.sigterm_wait + self.timeouts.kill_grace;
+                let _ = self.shutdown(budget, Duration::ZERO);
                 Err(CoreProcessError::Spawn(format!("waitpid failed: {err}")))
             }
         }
@@ -446,7 +459,7 @@ impl CoreProcess for RealCoreProcess {
     /// `CoreService.Shutdown(REASON_EXIT)`) — ConnectRPC-клиент, врезка W6
     /// (`src/ipc.rs`): ДО него лестница стартует с шага 3.
     fn kill(&mut self, graceful_deadline: Duration) -> Result<(), CoreProcessError> {
-        self.shutdown(graceful_deadline)
+        self.shutdown(graceful_deadline, self.timeouts.eof_grace)
     }
 }
 
@@ -455,7 +468,8 @@ impl Drop for RealCoreProcess {
     /// Полная лестница §5; ошибки игнорируются — Drop не паникует. Нормальный
     /// путь (kill по команде) уже очистил `running` и здесь ничего не делает.
     fn drop(&mut self) {
-        let _ = self.shutdown(self.timeouts.sigterm_wait + self.timeouts.kill_grace);
+        let budget = self.timeouts.sigterm_wait + self.timeouts.kill_grace;
+        let _ = self.shutdown(budget, self.timeouts.eof_grace);
     }
 }
 
@@ -899,6 +913,7 @@ mod tests {
     #[test]
     fn driver_timeouts_default_to_spec_values() {
         let t = DriverTimeouts::default();
+        assert_eq!(t.eof_grace, T_EOF_GRACE);
         assert_eq!(t.sigterm_wait, T_SIGTERM_WAIT);
         assert_eq!(t.kill_grace, T_KILL_GRACE);
     }

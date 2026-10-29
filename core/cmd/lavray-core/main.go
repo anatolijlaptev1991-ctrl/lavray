@@ -122,6 +122,10 @@ func main() {
 	// appVersion — билд-флаг платформенных репо.
 	root := http.NewServeMux()
 	server.Register(root)
+	// RPC CoreService.Shutdown: инстанс он останавливает сам, а выход из
+	// процесса — здесь (T-52: раньше OnShutdown не назначался).
+	exitReq := newExitRequest()
+	server.OnShutdown = exitReq.trigger
 	httpSrv := newHTTPServer(authMiddleware(root, authToken, mux)) // T-50: таймауты и лимит заголовков
 
 	errCh := make(chan error, 1)
@@ -143,14 +147,16 @@ func main() {
 		mux.Logf(logs.LevelInfo, "core", "сигнал завершения")
 	case <-parentDead:
 		mux.Logf(logs.LevelInfo, "core", "оболочка умерла (stdin EOF) — graceful выход")
+	case <-exitReq.done():
+		mux.Logf(logs.LevelInfo, "core", "RPC Shutdown — выход")
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			mux.Logf(logs.LevelError, "core", "serve: %v", err)
 		}
 	}
-	shCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	_ = httpSrv.Shutdown(shCtx)
+	// T-52: сначала sing-box (TUN снимается), затем HTTP; раньше при EOF и
+	// сигнале закрывался только HTTP-сервер, и ждал он до 10 с.
+	gracefulExit(server, httpSrv, mux, os.Stderr, 2*time.Second)
 }
 
 // listenSocket — UDS (unix:///…|/…), named pipe (\\.\pipe\…), TCP (host:port).

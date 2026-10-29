@@ -115,8 +115,8 @@ OPENWRT-GATEWAY §7). Version-штамп ядра — схема `1.14.1-lav.N` 
 3. **Inbounds**: mixed (listen/port/users), tun (interface_name **lavray-tun**
    — настраиваемое имя, THREAT-MODEL «детект VPN»; auto_route, strict_route,
    mtu 9000, stack, адреса, endpoint_independent_nat), custom_inbound мерж,
-   direct-inbound `tag-<id>-mapping`. В режиме TUN mixed-слушатель отключается
-   полностью (FR-UI-279: в TUN слушателей на loopback нет вообще).
+   direct-inbound `tag-<id>-mapping`. В режиме TUN mixed-слушатель остаётся
+   (паритет с NekoBox, решение владельца 2026-10-29; FR-UI-279: наружу — только с авторизацией).
 4. **DNS typed 1.12+/1.14** (`makeDnsServer`): разбор legacy-строк → типи-
    зированные серверы; dns-remote (detour=proxy), dns-direct, dns-local,
    dns-fake (только tun); правила remote/direct-списков (включая `full:`
@@ -209,7 +209,7 @@ chain×routing×dns×tun); осознанные отклонения от C++-or
 | G17 | custom internal outbound + custom_outbound мерж (allowlist ok) | точки расширения |
 | G18 | custom internal-full | конфиг «как есть» после allowlist |
 | G19 | custom external (за флагом; mapping inbound, плейсхолдеры) | FR-UI-235 |
-| G20 | TUN-конфиг (mtu/stack/strict; mixed-слушатель ОТСУТСТВУЕТ) | FR-UI-184/279 |
+| G20 | TUN-конфиг (mtu/stack/strict; mixed-слушатель остаётся на loopback) | FR-UI-184/279 |
 | G21 | TUN whitelist-режим (инвертирует только tun-списки) | поправка №28 |
 | G22 | kill switch on/off в TUN | FR-UI-275 |
 | G23 | geosite:/geoip: → .srs из поставки + cache_file + detour=proxy | FR-UI-143/266, LNB-31/36 |

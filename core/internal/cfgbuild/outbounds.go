@@ -215,10 +215,14 @@ func buildHysteria2(p *model.Profile) (map[string]any, error) {
 	if d.DownloadMbps > 0 {
 		out["down_mbps"] = d.DownloadMbps
 	}
-	// LNB-35/FR-UI-268: имена полей sing-box 1.14 — server_ports (строка
-	// «a:b» / «a:b,c:d») + hop_interval (Duration-строка); оракул эмитил
+	// LNB-35/FR-UI-268: имена полей sing-box 1.14 — server_ports (список
+	// диапазонов «a:b», D-01) + hop_interval (Duration-строка); оракул эмитил
 	// hop_ports + int — баг, не переносим (deviations.yaml, вектор G14).
-	if ports := strings.TrimSpace(d.ServerPorts); ports != "" {
+	ports, err := hysteria2ServerPorts(d.ServerPorts)
+	if err != nil {
+		return nil, err
+	}
+	if len(ports) > 0 {
 		out["server_ports"] = ports
 		if hi := strings.TrimSpace(d.HopInterval); hi != "" {
 			out["hop_interval"] = hi

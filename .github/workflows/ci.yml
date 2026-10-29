@@ -128,8 +128,15 @@ jobs:
         # Полная проверка golden-эталонов реальным sing-box (форк 628a9ed):
         # box.New + Close. Локально без сети к прокси — выключена тегом;
         # CI-сеть качает форк через proxy.golang.org (публичное зеркало).
-        run: go test -tags singbox_check ./internal/cfgbuild/ -run TestGoldenSingBoxCheck -count=1 -timeout 300s
+        # D-01: теги ядра (with_quic/with_gvisor/with_utls) — из core/BUILD_TAGS,
+        # иначе hysteria2/TUIC не собираются и проверка молча урезается; с этими
+        # тегами «is not included in this build» в тесте — провал.
+        run: |
+          TAGS="$(tr -d '[:space:]' < BUILD_TAGS)"
+          test -n "$TAGS"
+          go test -tags "singbox_check,$TAGS" ./internal/cfgbuild/ -run TestGoldenSingBoxCheck -count=1 -timeout 300s
         env:
+          CGO_ENABLED: '0'
           GOPRIVATE: github.com/anatolijlaptev1991-ctrl/*
           GOFLAGS: -mod=mod
       - name: go build

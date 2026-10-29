@@ -228,11 +228,19 @@ fn retry(mut op: impl FnMut() -> Result<(), String>) -> Result<(), String> {
     last
 }
 
-/// Удалить файл; его отсутствие — не ошибка.
+/// Удалить файл; его отсутствие — не ошибка. Родитель-не-каталог (Unix:
+/// ENOTDIR, Windows отвечает NotFound) тоже значит, что файла нет.
 fn remove_file(path: &Path) -> Result<(), String> {
     retry(|| match std::fs::remove_file(path) {
         Ok(()) => Ok(()),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e)
+            if matches!(
+                e.kind(),
+                std::io::ErrorKind::NotFound | std::io::ErrorKind::NotADirectory
+            ) =>
+        {
+            Ok(())
+        }
         Err(e) => Err(format!("{}: {e}", path.display())),
     })
 }

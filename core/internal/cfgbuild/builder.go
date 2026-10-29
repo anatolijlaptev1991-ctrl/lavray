@@ -50,7 +50,7 @@ type TunSettings struct {
 	MTU           int    `json:"mtu,omitempty"`            // default 9000
 	Stack         string `json:"stack,omitempty"`          // gvisor | system | mixed; default gvisor
 	StrictRoute   bool   `json:"strict_route,omitempty"`
-	IPv6          bool   `json:"ipv6,omitempty"`           // +fdfe:dcba:9876::1/126
+	IPv6          bool   `json:"ipv6,omitempty"`           // +fd4c:4156:5259::1/126
 	FakeDNS       bool   `json:"fake_dns,omitempty"`       // FR-UI-151
 	BypassProcess string `json:"bypass_process,omitempty"` // многострочник имён процессов
 	BypassCIDR    string `json:"bypass_cidr,omitempty"`    // многострочник CIDR

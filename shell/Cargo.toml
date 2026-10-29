@@ -49,6 +49,8 @@ windows-sys = { version = "0.61", features = [
   # CoInitializeEx для вызова вне потока окна, SW_SHOWNORMAL
   "Win32_System_Com",
   "Win32_System_Registry",
+  # T-82 (ревью): SID пользователя из токена (ConvertSidToStringSidW)
+  "Win32_Security_Authorization",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
 ] }

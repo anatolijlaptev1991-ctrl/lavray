@@ -22,6 +22,12 @@
 //!   перезапуск от администратора (T-81);
 //! - [`launch`] — аргументы запуска `--tray`, `--elevated-relaunch`,
 //!   `--wait-pid` и ожидание выхода прежнего экземпляра (T-81, T-82);
+//! - [`token`] — SID пользователя и тип повышения токена процесса (T-81, T-82);
+//! - [`single_instance`] — проверка мьютекса single-instance между разными
+//!   уровнями прав (T-81);
+//! - [`profile`] — каталог данных WebView повышенного экземпляра и передача
+//!   записей `localStorage` при перезапуске (T-81);
+//! - [`msgbox`] — сообщения до появления окна (T-81);
 //! - [`autostart`] — автозапуск с системой: задача планировщика или `Run`
 //!   в реестре, команды — через внедряемый исполнитель (T-82);
 //! - [`uiprotocol`] — протокол UI ↔ shell (команды/события, serde, версия
@@ -39,9 +45,13 @@ pub mod elevation;
 pub mod endpoint;
 pub mod integrity;
 pub mod launch;
+pub mod msgbox;
 #[cfg(windows)]
 mod oemtext;
+pub mod profile;
+pub mod single_instance;
 pub mod sysproxy;
+pub mod token;
 pub mod tray;
 pub mod uiprotocol;
 pub mod updater;

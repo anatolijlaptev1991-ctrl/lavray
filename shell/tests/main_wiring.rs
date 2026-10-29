@@ -159,3 +159,53 @@ fn autostart_commands_are_registered_and_run_off_the_main_thread() {
         assert!(body.contains("spawn_blocking"), "{name}: {body}");
     }
 }
+
+/// T-81 (ревью): мьютекс single-instance проверяется ДО плагина (повышенный
+/// экземпляр прячет свой мьютекс от обычного, и плагин принял бы себя за
+/// первый); не вышедший за срок прежний экземпляр — сообщение и выход, а не
+/// передача аргументов старому окну.
+#[test]
+fn single_instance_is_checked_before_the_plugin_and_a_stuck_parent_stops_the_start() {
+    let main_rs = source("main.rs");
+    let check = main_rs
+        .find("single_instance::check(")
+        .expect("проверка мьютекса");
+    let plugin = main_rs
+        .find("tauri_plugin_single_instance::init")
+        .expect("плагин single-instance");
+    assert!(check < plugin, "проверка мьютекса должна идти до плагина");
+    assert!(main_rs.contains("Verdict::ElevatedInstanceRunning"));
+    assert!(main_rs.contains("msgbox::ALREADY_RUNNING_ELEVATED"));
+
+    let wait = main_rs
+        .find("if !wait_for_exit(pid)")
+        .expect("ожидание pid");
+    let tail = &main_rs[wait..check];
+    assert!(tail.contains("msgbox::previous_instance_alive("));
+    assert!(tail.contains("std::process::exit(1)"));
+}
+
+/// T-81 (ревью): сбой создания окна — сообщение с причиной, не паника; UI
+/// получает признак перезапуска и записи `localStorage` командой оболочки,
+/// а не через `localStorage` старого профиля.
+#[test]
+fn window_failure_is_reported_and_the_handoff_commands_are_registered() {
+    let main_rs = source("main.rs");
+    assert!(main_rs.contains("msgbox::window_failed(&reason)"));
+    assert!(
+        !main_rs.contains(".expect(\"LAVRay shell: failed to build tauri application\")"),
+        "сбой сборки приложения не должен быть тихой паникой"
+    );
+    for needed in [
+        "            launch_info,",
+        "            save_ui_handoff,",
+        "            window_show,",
+    ] {
+        assert!(
+            main_rs.contains(needed),
+            "нет в generate_handler!: {needed}"
+        );
+    }
+    // обычному пользователю UAC потребовал бы пароль чужой учётной записи
+    assert!(main_rs.contains("can_elevate: token::can_self_elevate("));
+}

@@ -33,6 +33,9 @@ pub enum RelaunchOutcome {
 pub const ERR_ALREADY_ELEVATED: &str = "already_elevated";
 /// Код ошибки для UI: на этой ОС перезапуск с повышением не поддерживается.
 pub const ERR_UNSUPPORTED: &str = "unsupported";
+/// Код ошибки для UI: учётная запись обычная, повысить права без пароля другого
+/// пользователя нельзя — `runas` вызывать незачем, нужен администратор.
+pub const ERR_ADMIN_ACCOUNT_REQUIRED: &str = "admin_account_required";
 
 /// Почему запуск с повышением не состоялся.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,6 +74,10 @@ pub struct RelaunchRequest<'a> {
     pub window_hidden: bool,
     /// Права текущего процесса (`is_elevated()` на момент вызова).
     pub elevated: bool,
+    /// Процесс может повыситься сам (UAC спросит только согласие): тип токена
+    /// не `Default`. Обычному пользователю UAC потребовал бы пароль чужой
+    /// учётной записи — тогда запрос не выполняется.
+    pub can_elevate: bool,
 }
 
 /// Перезапустить приложение от администратора. Сам выход текущего экземпляра
@@ -84,6 +91,9 @@ pub fn relaunch_elevated(
 ) -> Result<RelaunchOutcome, String> {
     if request.elevated {
         return Err(ERR_ALREADY_ELEVATED.to_string());
+    }
+    if !request.can_elevate {
+        return Err(ERR_ADMIN_ACCOUNT_REQUIRED.to_string());
     }
     let args = relaunch_args(request.parent_pid, request.window_hidden);
     match elevator.run_elevated(request.exe, &args) {
@@ -254,6 +264,7 @@ mod tests {
             parent_pid: 1234,
             window_hidden,
             elevated,
+            can_elevate: true,
         }
     }
 
@@ -308,6 +319,18 @@ mod tests {
             Err(ERR_ALREADY_ELEVATED.to_string())
         );
         assert!(elevator.calls.borrow().is_empty(), "UAC не вызывался");
+    }
+
+    #[test]
+    fn a_standard_user_never_reaches_the_uac_credentials_prompt() {
+        let elevator = FakeElevator::answering(Ok(()));
+        let mut standard = request(false, false);
+        standard.can_elevate = false;
+        assert_eq!(
+            relaunch_elevated(&elevator, &standard),
+            Err(ERR_ADMIN_ACCOUNT_REQUIRED.to_string())
+        );
+        assert!(elevator.calls.borrow().is_empty(), "runas не вызывался");
     }
 
     #[test]

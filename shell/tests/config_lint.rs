@@ -60,13 +60,21 @@ fn opener_plugin_is_registered_and_limited_to_http_and_https() {
 
 /// T-82/Э-2: окно создаётся скрытым, а показывает его `setup()` (кроме запуска
 /// с `--tray`): иначе автозапуск мигал бы окном перед тем, как его спрятать.
+/// T-81 (ревью): само окно создаёт код (`create: false` в конфигурации), чтобы
+/// у повышенного экземпляра был свой каталог данных WebView.
 #[test]
-fn main_window_is_created_hidden_and_shown_by_setup_unless_tray() {
+fn main_window_is_created_by_code_hidden_and_shown_unless_tray() {
     let window = &read_json("tauri.conf.json")["app"]["windows"][0];
+    assert_eq!(window["label"], "main");
     assert_eq!(window["visible"], Value::Bool(false));
+    assert_eq!(window["create"], Value::Bool(false));
 
     let main_rs = read("src/main.rs");
     assert!(main_rs.contains("let start_hidden = launch.tray;"));
+    assert!(main_rs.contains("fn create_main_window"));
+    assert!(main_rs.contains("WebviewWindowBuilder::from_config"));
+    assert!(main_rs.contains("profile::webview_data_dir("));
+    assert!(main_rs.contains(".data_directory(dir)"));
     let setup = main_rs
         .split("tray_ui::install(app)?;")
         .nth(1)

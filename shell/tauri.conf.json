@@ -12,6 +12,7 @@
     "windows": [
       {
         "label": "main",
+        "create": false,
         "title": "LAVRay",
         "width": 960,
         "height": 640,

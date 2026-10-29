@@ -13,6 +13,7 @@ import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useKbdLabel } from '../hooks/useKbdLabel';
+import { AutostartRow } from '../components/AutostartRow';
 import { ConfirmDialog } from '../components/dialogs';
 import { Icon, type IconName } from '../components/Icon';
 import { withoutSecrets } from '../lib/backup';
@@ -108,7 +109,10 @@ interface SearchRow {
  * разделе должна попасть и сюда.
  */
 const SECTION_SEARCH: Readonly<Record<string, readonly SearchRow[]>> = {
-  general: [{ labelKey: 'set.lang', descKey: 'set.langD' }],
+  general: [
+    { labelKey: 'set.lang', descKey: 'set.langD' },
+    { labelKey: 'set.autostart', descKey: 'set.autostartD' },
+  ],
   network: [{ labelKey: 'set.local' }, ...NETWORK_ROWS],
   tun: TUN_ROWS,
   hotkeys: [{ labelKey: 'set.hotkeysD' }, ...HOTKEYS.map(([labelKey]) => ({ labelKey }))],
@@ -541,6 +545,7 @@ export function SettingsScreen(): JSX.Element {
                   </select>
                 </div>
               </div>
+              <AutostartRow />
             </div>
           )}
 

@@ -878,4 +878,10 @@ export const zhDict: Record<string, string> = {
   "tun.dlg.cancelled": "已拒绝系统提示：LAVRay 仍无管理员权限，TUN 模式未开启。",
   "tun.dlg.failed": "无法以管理员身份重新启动",
   "tun.dlg.unsupported": "仅 Windows 支持自动以管理员身份重新启动。请自行以管理员（root）权限启动 LAVRay。",
+  "set.autostart.viaTask": "已启用，使用管理员权限（计划任务）：登录后 TUN 即可使用。",
+  "set.autostart.viaRun": "已启用，普通方式（无管理员权限）：使用 TUN 需要以管理员身份重新启动。",
+  "set.autostart.willTask": "LAVRay 正以管理员身份运行：自启将使用带管理员权限的计划任务，登录后 TUN 即可使用。",
+  "set.autostart.willRun": "没有管理员权限时，自启为普通方式。若要登录后立即使用 TUN，请在以管理员身份运行的 LAVRay 中开启。",
+  "set.autostart.needAdmin": "LAVRay 的计划任务以管理员权限创建，没有管理员权限无法删除。请以管理员身份启动 LAVRay 后重试。",
+  "set.autostart.failed": "无法更改自启设置",
 }

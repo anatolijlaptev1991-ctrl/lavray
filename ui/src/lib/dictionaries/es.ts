@@ -885,4 +885,10 @@ export const esDict: Record<string, string> = {
   "tun.dlg.cancelled": "Petición del sistema rechazada: LAVRay sigue sin permisos de administrador y el modo TUN no está activado.",
   "tun.dlg.failed": "No se pudo reiniciar como administrador",
   "tun.dlg.unsupported": "El reinicio automático como administrador solo existe en Windows. Inicia LAVRay tú mismo con permisos de administrador (root).",
+  "set.autostart.viaTask": "Activado con permisos de administrador (tarea programada): TUN funciona nada más iniciar sesión.",
+  "set.autostart.viaRun": "Activado de forma normal, sin permisos de administrador: para TUN habrá que reiniciar como administrador.",
+  "set.autostart.willTask": "LAVRay se ejecuta como administrador: el arranque automático será una tarea programada con permisos de administrador y TUN funcionará nada más iniciar sesión.",
+  "set.autostart.willRun": "Sin permisos de administrador el arranque automático es el normal. Para tener TUN nada más iniciar sesión, actívalo en LAVRay ejecutado como administrador.",
+  "set.autostart.needAdmin": "La tarea programada de LAVRay se creó con permisos de administrador y no se puede quitar sin ellos. Inicia LAVRay como administrador e inténtalo de nuevo.",
+  "set.autostart.failed": "No se pudo cambiar el arranque automático",
 }

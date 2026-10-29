@@ -885,4 +885,10 @@ export const enDict: Record<string, string> = {
   "tun.dlg.cancelled": "System prompt declined: LAVRay stays without administrator rights, TUN mode is not on.",
   "tun.dlg.failed": "Could not restart as administrator",
   "tun.dlg.unsupported": "Automatic restart as administrator is available on Windows only. Start LAVRay with administrator (root) rights yourself.",
+  "set.autostart.viaTask": "On, with administrator rights (scheduled task): TUN works right after sign-in.",
+  "set.autostart.viaRun": "On, the regular way without administrator rights: TUN will need a restart as administrator.",
+  "set.autostart.willTask": "LAVRay is running as administrator: autostart will be a scheduled task with administrator rights, so TUN works right after sign-in.",
+  "set.autostart.willRun": "Without administrator rights autostart is the regular kind. For TUN right after sign-in, turn it on in LAVRay running as administrator.",
+  "set.autostart.needAdmin": "The LAVRay scheduled task was created with administrator rights and cannot be removed without them. Start LAVRay as administrator and try again.",
+  "set.autostart.failed": "Could not change autostart",
 }

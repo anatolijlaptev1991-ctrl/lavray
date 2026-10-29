@@ -885,4 +885,10 @@ export const deDict: Record<string, string> = {
   "tun.dlg.cancelled": "Systemabfrage abgelehnt: LAVRay bleibt ohne Administratorrechte, der TUN-Modus ist nicht aktiv.",
   "tun.dlg.failed": "Neustart als Administrator fehlgeschlagen",
   "tun.dlg.unsupported": "Der automatische Neustart als Administrator ist nur unter Windows verfügbar. Starte LAVRay selbst mit Administrator-(root-)Rechten.",
+  "set.autostart.viaTask": "An, mit Administratorrechten (geplante Aufgabe): TUN funktioniert gleich nach der Anmeldung.",
+  "set.autostart.viaRun": "An, auf normalem Weg ohne Administratorrechte: Für TUN ist ein Neustart als Administrator nötig.",
+  "set.autostart.willTask": "LAVRay läuft als Administrator: Der Autostart wird eine geplante Aufgabe mit Administratorrechten, TUN funktioniert gleich nach der Anmeldung.",
+  "set.autostart.willRun": "Ohne Administratorrechte ist der Autostart der normale. Für TUN gleich nach der Anmeldung schalte ihn in LAVRay als Administrator ein.",
+  "set.autostart.needAdmin": "Die geplante Aufgabe von LAVRay wurde mit Administratorrechten angelegt und lässt sich ohne sie nicht entfernen. Starte LAVRay als Administrator und versuche es erneut.",
+  "set.autostart.failed": "Autostart konnte nicht geändert werden",
 }

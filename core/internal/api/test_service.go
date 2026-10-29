@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // test_service.go — TestLatency/StopTests/ClearTestResults/ResetTraffic
-// (FR-UI-200…209, 211). TCP-пинг реальный: dial address:port с таймаутом и
-// конкурентностью из запроса. URL/Full-режимы выносятся на уровень выше
-// (нужен запущенный инстанс), здесь — честная проверка доступности сервера,
-// результат сохраняется в профиль (TestResult) и отдаётся стримом.
+// (FR-UI-200…209, 211). TCP-пинг — dial address:port с таймаутом и
+// конкурентностью из запроса. URL- и Full-тест (T-84) идут через временный
+// инстанс sing-box на профиль (test_instance.go). Результат сохраняется в
+// профиль (TestResult) и отдаётся стримом.
 package api
 
 import (
@@ -84,13 +84,6 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 	if len(msg.ProfileIds) == 0 {
 		return invalidArg("profile_ids не заданы")
 	}
-	if msg.Mode == lavrayv1.TestLatencyRequest_MODE_URL_TEST || msg.Mode == lavrayv1.TestLatencyRequest_MODE_FULL_TEST {
-		// T-24: отказ безусловный (T-84 реализует режимы), поэтому не врём про
-		// «запущенный инстанс» и не советуем подключиться.
-		return failedPrecondition(
-			"URL- и Full-тест пока не реализованы: используйте TCP-пинг (mode=TCP_PING)")
-	}
-
 	timeoutMs := int(msg.GetTimeoutMs())
 	if timeoutMs <= 0 {
 		timeoutMs = defaultTestTimeoutMs
@@ -103,6 +96,22 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 		concurrency = 64
 	}
 	timeout := time.Duration(timeoutMs) * time.Millisecond
+
+	// TCP-пинг по умолчанию; URL- и Full-тест — через временные инстансы: их
+	// параметры и число одновременных инстансов проверяются до любой работы.
+	probe := func(ctx context.Context, p *model.Profile) (model.TestResult, bool) {
+		return s.tcpPing(ctx, p, timeout)
+	}
+	if msg.Mode == lavrayv1.TestLatencyRequest_MODE_URL_TEST || msg.Mode == lavrayv1.TestLatencyRequest_MODE_FULL_TEST {
+		plan, err := s.planInstanceTest(msg)
+		if err != nil {
+			return err
+		}
+		concurrency = plan.concurrency
+		probe = func(ctx context.Context, p *model.Profile) (model.TestResult, bool) {
+			return s.instanceTest(ctx, p, plan)
+		}
+	}
 
 	// Профили читаем заранее: стрим не должен падать на середине из-за
 	// удалённого во время теста профиля.
@@ -143,7 +152,7 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			res, aborted := s.tcpPing(runCtx, p, timeout)
+			res, aborted := probe(runCtx, p)
 			if aborted {
 				// D-05: StopTests/обрыв стрима прервали измерение. Это не
 				// «сервер недоступен»: прошлый результат профиля не трогаем и

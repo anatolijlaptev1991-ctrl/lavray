@@ -468,6 +468,7 @@ func profileToProto(m *model.Profile) *lavrayv1.Profile {
 	if m.TestResult.LastError != "" {
 		tr.LastError = strp(m.TestResult.LastError)
 	}
+	tr.FullReport = parseFullReport(m.TestResult.FullReport)
 	p.TestResult = tr
 	p.Traffic = &lavrayv1.TrafficCounters{
 		UplinkBytes:   m.Traffic.UplinkBytes,
@@ -1014,5 +1015,6 @@ func testResultToProto(m model.TestResult) *lavrayv1.TestResult {
 	if m.LastError != "" {
 		tr.LastError = strp(m.LastError)
 	}
+	tr.FullReport = parseFullReport(m.FullReport)
 	return tr
 }

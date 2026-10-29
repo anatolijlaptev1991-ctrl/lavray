@@ -19,6 +19,8 @@ var intRanges = map[string][2]int64{
 	"tun.mtu":         {1280, 9000},
 	"tun.impl":        {1, 3},
 	"mux.concurrency": {-1, 1024},
+	"test.concurrent": {1, 16},  // параллельные тестовые инстансы (T-84)
+	"test.dl_timeout": {1, 300}, // секунды
 }
 
 // stringChoices — настройки с фиксированным набором значений.
@@ -69,6 +71,17 @@ func validateSetting(key string, d model.SettingDescriptor, v *lavrayv1.SettingV
 			}
 		}
 		return invalidArg("%s: значение %q недопустимо (%v)", key, s, list)
+	}
+	// T-84: адреса URL- и полного теста — http/https с хостом, UDP-цель — host:port.
+	if testURLSettings[key] {
+		if err := validateTestURL(v.GetStringValue()); err != nil {
+			return invalidArg("%s: %v", key, err)
+		}
+	}
+	if key == "test.udp_target" {
+		if err := validateUDPTarget(v.GetStringValue()); err != nil {
+			return invalidArg("%s: %v", key, err)
+		}
 	}
 	if key == "inbound.address" {
 		if a := v.GetStringValue(); a != "localhost" && net.ParseIP(a) == nil {

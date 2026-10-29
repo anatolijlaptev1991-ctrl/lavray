@@ -254,12 +254,9 @@ func (s *Server) ResetTraffic(ctx context.Context, req *connect.Request[lavrayv1
 		}
 	}
 	for _, id := range ids {
-		p, err := s.st.GetProfile(id)
-		if err != nil {
-			continue
-		}
-		p.Traffic = model.TrafficCounters{}
-		if err := s.st.UpdateProfile(p); err != nil {
+		// D-04: UpdateProfile не пишет колонки трафика — сбрасываем отдельным UPDATE
+		// (как T-22 для результатов тестов). Несуществующий id пропускаем.
+		if err := s.st.SaveTraffic(id, model.TrafficCounters{}); err != nil && !errors.Is(err, store.ErrNotFound) {
 			return nil, mapErr(err)
 		}
 	}

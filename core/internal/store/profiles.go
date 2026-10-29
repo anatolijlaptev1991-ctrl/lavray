@@ -158,6 +158,29 @@ func (s *Store) SaveTestResult(id int64, r model.TestResult) error {
 	return nil
 }
 
+// SaveTraffic записывает счётчики трафика профиля — колонки uplink_total,
+// downlink_total и ключ traffic в JSON — отдельным UPDATE (D-04): UpdateProfile
+// счётчики не пишет, поэтому сброс через него оставлял прежние значения. Как и
+// SaveTestResult, не читает и не пишет остальные поля и не меняет updated_at_ms.
+func (s *Store) SaveTraffic(id int64, t model.TrafficCounters) error {
+	blob, err := json.Marshal(t)
+	if err != nil {
+		return fmt.Errorf("store: marshal traffic: %w", err)
+	}
+	res, err := s.db.Exec(`UPDATE profiles SET
+		uplink_total = ?, downlink_total = ?,
+		data = json_set(data, '$.traffic', json(?))
+	WHERE id = ?`,
+		t.UplinkBytes, t.DownlinkBytes, string(blob), id)
+	if err != nil {
+		return fmt.Errorf("store: save traffic: %w", err)
+	}
+	if n, _ := res.RowsAffected(); n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // profileCols — все декодируемые колонки профиля ОДНИМ запросом.
 //
 // ВАЖНО: пул соединений ограничен одним (SetMaxOpenConns(1), store.go), поэтому

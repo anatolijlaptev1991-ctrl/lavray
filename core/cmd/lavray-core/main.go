@@ -7,13 +7,18 @@
 //	                  [--data <dir>] [--headless]
 //
 // Протокол запуска: токен авторизации (32 байта CSPRNG → base64url) читается
-// ОДНОЙ строкой из stdin; после инициализации ядро печатает
-// `LAVRAY_CORE_READY <transport-url>` в stdout и работает. stdin держится
-// открытым: EOF = смерть оболочки → graceful-выход (страховка §3.2).
+// ОДНОЙ строкой из stdin; необязательная вторая строка — агентский токен MCP
+// (доступ агентов к ядру, см. stdin.go и internal/api/agent.go); после
+// инициализации ядро печатает `LAVRAY_CORE_READY <transport-url>` в stdout и
+// работает. stdin держится открытым: EOF = смерть оболочки → graceful-выход
+// (страховка §3.2).
+//
+// Вторая подкоманда — `lavray-core mcp`: MCP-сервер по stdio для ИИ-агентов
+// (Claude Desktop, Claude Code, Cursor). Он подключается к уже запущенному
+// приложению по agent-endpoint.json и ядро не стартует (mcp_cmd.go).
 package main
 
 import (
-	"bufio"
 	"context"
 	"crypto/subtle"
 	"errors"
@@ -39,8 +44,12 @@ import (
 const readyPrefix = "LAVRAY_CORE_READY"
 
 func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "mcp" {
+		os.Exit(runMCP(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	}
 	if len(os.Args) < 2 || os.Args[1] != "serve" {
 		fmt.Fprintln(os.Stderr, "использование: lavray-core serve --listen-socket <path> [--data dir] [--headless]")
+		fmt.Fprintln(os.Stderr, "               lavray-core mcp [--data dir]   (MCP-сервер по stdio для ИИ-агентов)")
 		os.Exit(2)
 	}
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
@@ -56,25 +65,11 @@ func main() {
 	// дальше stdin остаётся открытым (EOF = смерть оболочки → выход).
 	// ОДИН читатель: первую строку отдаёт в tokenCh, дальше следит за EOF.
 	// Токен читается ровно один раз — гонки двух получателей нет.
+	// Вторая строка (необязательная) — агентский токен MCP, см. stdin.go.
 	tokenCh := make(chan string, 1)
+	agentTokenCh := make(chan string, 1)
 	parentDead := make(chan struct{})
-	go func() {
-		sc := bufio.NewReader(os.Stdin)
-		line, err := sc.ReadString('\n')
-		if err != nil && line == "" {
-			tokenCh <- ""
-		} else {
-			tokenCh <- strings.TrimSpace(line)
-		}
-		buf := make([]byte, 1)
-		for {
-			_, err := os.Stdin.Read(buf)
-			if err != nil {
-				close(parentDead)
-				return
-			}
-		}
-	}()
+	go readStartupStdin(os.Stdin, tokenCh, agentTokenCh, parentDead)
 
 	mux := logs.NewMux(1000)
 	mux.Logf(logs.LevelInfo, "core", "lavray-core запускается: listen=%s data=%s", *listen, *dataDir)
@@ -116,7 +111,19 @@ func main() {
 	// L24 аудита №1: pickRunner() выбирает реальный sing-box в сборке с
 	// тегом singbox_run; раньше хардкод NopRunner означал, что туннель не
 	// запускался НИ В ОДНОЙ сборке.
-	server := api.NewServer(api.Deps{Store: st, Logs: mux, Runner: pickRunner()})
+	server := api.NewServer(api.Deps{Store: st, Logs: mux, Runner: pickRunner(), TunCheck: tunPrivilegeCheck})
+	// Агентский токен (MCP) приходит второй строкой stdin сразу за основным,
+	// но может не прийти вовсе (старая оболочка, тесты): тогда агентский
+	// доступ закрыт. Режим доступа — настройка agent.mode.
+	go func() {
+		if tok, ok := <-agentTokenCh; ok {
+			if len(tok) < minAgentTokenLen {
+				mux.Logf(logs.LevelWarn, "core", "агентский токен слишком короткий — агентский доступ отключён")
+				return
+			}
+			server.SetAgentToken(tok)
+		}
+	}()
 	// Автообновление подписок (FR-UI-126, T-20): таймер обновляет группы, у
 	// которых прошёл интервал; skip_auto_update и архив пропускаются.
 	stopAutoUpdate := server.StartSubscriptionScheduler(context.Background())
@@ -128,7 +135,7 @@ func main() {
 	// процесса — здесь (T-52: раньше OnShutdown не назначался).
 	exitReq := newExitRequest()
 	server.OnShutdown = exitReq.trigger
-	httpSrv := newHTTPServer(authMiddleware(root, authToken, mux)) // T-50: таймауты и лимит заголовков
+	httpSrv := newHTTPServer(authMiddlewareAgent(root, authToken, server, mux)) // T-50: таймауты и лимит заголовков
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- httpSrv.Serve(ln) }()
@@ -186,9 +193,21 @@ func listenSocket(spec string) (net.Listener, string, error) {
 	return ln, "tcp://" + ln.Addr().String(), nil
 }
 
+// agentAuthorizer — проверка агентского токена (api.Server).
+type agentAuthorizer interface {
+	AuthorizeAgent(r *http.Request, bearer string) (*http.Request, bool)
+}
+
 // authMiddleware — Bearer-токен на каждом запросе (кроме healthz и OPTIONS).
 // Токен фиксирован (read-once до Serve) — гонок и блокировок нет.
 func authMiddleware(next http.Handler, token string, mux *logs.Mux) http.Handler {
+	return authMiddlewareAgent(next, token, nil, mux)
+}
+
+// authMiddlewareAgent — то же с агентским токеном (MCP): запрос с ним проходит
+// с отметкой агента в контексте, а что именно ему разрешено, решает интерсептор
+// api по режиму agent.mode. Основной токен ядра агентам не выдаётся.
+func authMiddlewareAgent(next http.Handler, token string, agent agentAuthorizer, mux *logs.Mux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/healthz" {
 			w.WriteHeader(http.StatusOK)
@@ -202,11 +221,19 @@ func authMiddleware(next http.Handler, token string, mux *logs.Mux) http.Handler
 		// Fail-closed: пустой токен = отказ всем (оболочка не передала секрет).
 		// T-53: схема «Bearer» обязательна; голый токен в заголовке не принимается.
 		got, hasScheme := bearerToken(r.Header.Get("Authorization"))
-		if token == "" || !hasScheme || got == "" || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
-			http.Error(w, `{"code":"unauthenticated"}`, http.StatusUnauthorized)
-			return
+		if hasScheme && got != "" {
+			if token != "" && subtle.ConstantTimeCompare([]byte(got), []byte(token)) == 1 {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if agent != nil {
+				if agentReq, ok := agent.AuthorizeAgent(r, got); ok {
+					next.ServeHTTP(w, agentReq)
+					return
+				}
+			}
 		}
-		next.ServeHTTP(w, r)
+		http.Error(w, `{"code":"unauthenticated"}`, http.StatusUnauthorized)
 	})
 }
 

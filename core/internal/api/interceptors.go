@@ -4,6 +4,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"runtime/debug"
 
@@ -18,12 +19,18 @@ import (
 //     ядра — клиенту уходит INTERNAL, трейс — в лог-мультиплексор
 //     (THREAT-MODEL «паника ядра», LNB-13/32; stack redact-нут по общим
 //     правилам мультиплексора);
-//  2. маппинг ошибок mapErr: хендлеры возвращают доменные ошибки как есть.
+//  2. маппинг ошибок mapErr: хендлеры возвращают доменные ошибки как есть;
+//  3. агентский доступ (agent.go): запросы с агентским токеном пропускаются
+//     только к процедурам белого списка режима `agent.mode`, их параметры
+//     ограничиваются, а ответы очищаются от адресов и секретов.
 type interceptor struct {
 	logs *logs.Mux
+	mode func() string // текущий agent.mode; nil = off
 }
 
-func newInterceptor(lg *logs.Mux) *interceptor { return &interceptor{logs: lg} }
+func newInterceptor(lg *logs.Mux, mode func() string) *interceptor {
+	return &interceptor{logs: lg, mode: mode}
+}
 
 func (i *interceptor) recoverLog(rcv any) {
 	msg := fmt.Sprintf("ПАНИКА хендлера: %v", rcv)
@@ -44,8 +51,25 @@ func (i *interceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 					fmt.Errorf("внутренняя ошибка ядра (паника обработана); подробности в журнале"))
 			}
 		}()
+		agent := IsAgent(ctx)
+		if err = i.agentBefore(ctx, req.Spec().Procedure, req.Header()); err != nil {
+			return nil, err
+		}
+		if agent {
+			if err = i.agentMessage(req.Spec().Procedure, req.Any()); err != nil {
+				return nil, err
+			}
+		}
 		resp, err = next(ctx, req)
 		err = mapErr(err)
+		if agent {
+			if err != nil {
+				return nil, agentSanitizeError(err)
+			}
+			if resp != nil {
+				agentRedactResponse(resp.Any())
+			}
+		}
 		return resp, err
 	}
 }
@@ -60,7 +84,24 @@ func (i *interceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) co
 					fmt.Errorf("внутренняя ошибка ядра (паника обработана); подробности в журнале"))
 			}
 		}()
+		agent := IsAgent(ctx)
+		if agent {
+			if err = i.agentBefore(ctx, conn.Spec().Procedure, conn.RequestHeader()); err != nil {
+				return err
+			}
+			procedure := conn.Spec().Procedure
+			conn = agentStream{StreamingHandlerConn: conn, check: func(msg any) error {
+				return i.agentMessage(procedure, msg)
+			}}
+		}
 		err = mapErr(next(ctx, conn))
+		if agent && err != nil {
+			// отказ политики уже понятен и чист; ошибки хендлера чистятся от адресов
+			var ce *connect.Error
+			if !errors.As(err, &ce) || ce.Code() != connect.CodePermissionDenied {
+				err = agentSanitizeError(err)
+			}
+		}
 		return err
 	}
 }

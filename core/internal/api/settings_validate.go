@@ -25,7 +25,8 @@ var intRanges = map[string][2]int64{
 
 // stringChoices — настройки с фиксированным набором значений.
 var stringChoices = map[string][]string{
-	"mux.protocol": {"h2mux", "smux", "yamux"},
+	"mux.protocol":   {"h2mux", "smux", "yamux"},
+	SettingAgentMode: {AgentModeOff, AgentModeRead, AgentModeControl},
 }
 
 // validateSetting проверяет одно значение известного ключа (неизвестные ключи

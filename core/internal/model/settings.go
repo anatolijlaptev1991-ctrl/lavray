@@ -38,7 +38,7 @@ const SettingHWIDID = "sub.hwid_id"
 // SettingGroups — секции UI настроек (stable-ключи).
 var SettingGroups = []string{
 	"inbound", "test", "routing", "sub", "remember", "ui", "tun",
-	"hotkeys", "core", "security", "mux", "update", "misc",
+	"hotkeys", "core", "security", "mux", "update", "misc", "agent",
 }
 
 // SettingDescriptors — каталог известных ключей LAVRay (скелет W1 по
@@ -136,6 +136,9 @@ func SettingDescriptors() []SettingDescriptor {
 		{Key: "mux.concurrency", Type: SettingInt, GroupID: "mux", DefaultValue: `-1`, DeprecatedBy: "mux_concurrency"},
 		{Key: "mux.padding", Type: SettingBool, GroupID: "mux", DeprecatedBy: "mux_padding"},
 		{Key: "mux.default_on", Type: SettingBool, GroupID: "mux", DeprecatedBy: "mux_default_on"},
+
+		// ---- Агенты (MCP): off | read | control; смена действует без перезапуска ----
+		{Key: "agent.mode", Type: SettingString, GroupID: "agent", DefaultValue: `"off"`},
 
 		// ---- Прочее ----
 		{Key: "win.sp_format", Type: SettingString, GroupID: "misc", ShellOwned: true, DeprecatedBy: "sp_format"},

@@ -52,6 +52,14 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 		return nil, nil, invalidArg("режимы шлюза (GATEWAY_*) доступны только в сборке OpenWrt (W8); на десктопе — SYSTEM_PROXY/TUN")
 	}
 
+	// Режим TUN без прав: понятная причина вместо сырой ошибки sing-box
+	// (подключение из MCP не может показать диалог перезапуска от администратора).
+	if mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN && s.tunCheck != nil {
+		if err := s.tunCheck(); err != nil {
+			return nil, nil, failedPrecondition("%v", err)
+		}
+	}
+
 	st := s.buildSettings(mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN)
 	var warnings []string
 	if mode != lavrayv1.ConnectMode_CONNECT_MODE_TUN {

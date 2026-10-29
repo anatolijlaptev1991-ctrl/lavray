@@ -2652,9 +2652,10 @@ type CoreStatus struct {
 	RoutingPresetId *string      `protobuf:"bytes,10,opt,name=routing_preset_id,json=routingPresetId,proto3,oneof" json:"routing_preset_id,omitempty"`
 	Tun             *TunInfo     `protobuf:"bytes,11,opt,name=tun,proto3" json:"tun,omitempty"`
 	// Проверка связи после подключения (0.2.1): инстанс запущен, но запрос test.url
-	// через исходящее не прошёл. Краткая причина; пусто — проверка прошла, не
-	// выполнялась или выключена (connect.health_check). Сбрасывается при
-	// отключении и новом запуске.
+	// через исходящее не прошёл. Краткая причина: код типового сбоя (refused,
+	// reset, no_host, timeout — интерфейс переводит их) либо текст ошибки; пусто —
+	// проверка прошла, не выполнялась или выключена (connect.health_check).
+	// Сбрасывается при отключении и новом запуске.
 	HealthError   *string `protobuf:"bytes,12,opt,name=health_error,json=healthError,proto3,oneof" json:"health_error,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

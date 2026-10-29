@@ -186,7 +186,7 @@ func (s *Server) finishHealth(gen uint64, ms int32, err error) {
 	s.health.mu.Unlock()
 	if err != nil {
 		s.logs.Logf(logs.LevelWarn, logs.SourceCore,
-			"проверка связи после подключения не прошла: %s (адрес проверки — настройка test.url)", reason)
+			"проверка связи после подключения не прошла: %s (адрес проверки — настройка test.url)", healthReasonText(reason))
 	} else {
 		s.logs.Logf(logs.LevelInfo, logs.SourceCore, "проверка связи после подключения прошла: %d мс", ms)
 	}
@@ -203,9 +203,22 @@ var outboundPrefix = regexp.MustCompile(`^.*using outbound/\S+: `)
 // журнал (его читает и агент) не попадает.
 var dialPrefix = regexp.MustCompile(`^(?:dial|read|write) (?:tcp|udp)[46]? \S+(?: -> \S+)?: `)
 
-// healthReason — краткая причина сбоя для интерфейса и журнала: типовые сбои
-// названы словами, остальное — текст ошибки без адресов и служебных префиксов.
+// Коды типовых причин (CoreStatus.health_error): интерфейс переводит их на язык
+// пользователя, остальные причины приходят текстом ошибки как есть.
+const (
+	healthRefused = "refused" // сервер отклонил соединение (порт закрыт)
+	healthReset   = "reset"   // сервер оборвал соединение (EOF, сброс)
+	healthNoHost  = "no_host" // имя сервера не нашлось
+	healthTimeout = "timeout" // ответ не пришёл за отведённое время
+)
+
+// healthReason — краткая причина сбоя: код типового сбоя либо текст ошибки без
+// адресов и служебных префиксов.
 func healthReason(err error) string {
+	var timeout *probeTimeoutError
+	if errors.As(err, &timeout) {
+		return healthTimeout
+	}
 	var ue *url.Error
 	if errors.As(err, &ue) && ue.Err != nil {
 		err = ue.Err
@@ -215,19 +228,34 @@ func healthReason(err error) string {
 	low := strings.ToLower(text)
 	switch {
 	case text == "":
-		return "нет ответа"
+		return healthTimeout
 	case strings.Contains(low, "actively refused"), strings.Contains(low, "connection refused"):
-		return "сервер отклонил соединение"
+		return healthRefused
 	case strings.Contains(low, "no such host"), strings.Contains(low, "nxdomain"):
-		return "не удалось найти адрес сервера"
+		return healthNoHost
 	case text == "EOF", strings.HasSuffix(text, ": EOF"), strings.Contains(low, "connection reset"),
 		strings.Contains(low, "forcibly closed"), strings.Contains(low, "broken pipe"):
-		return "сервер оборвал соединение"
+		return healthReset
 	}
 	if r := []rune(text); len(r) > maxHealthReason {
 		text = string(r[:maxHealthReason]) + "…"
 	}
 	return text
+}
+
+// healthReasonText — причина словами для журнала и запасного текста события.
+func healthReasonText(reason string) string {
+	switch reason {
+	case healthRefused:
+		return "сервер отклонил соединение"
+	case healthReset:
+		return "сервер оборвал соединение"
+	case healthNoHost:
+		return "не удалось найти адрес сервера"
+	case healthTimeout:
+		return "сервер не ответил вовремя"
+	}
+	return reason
 }
 
 // healthWarningEvent — предупреждение для потока событий (nil — сбоя нет).
@@ -240,7 +268,7 @@ func (s *Server) healthWarningEvent() *lavrayv1.CoreEvent {
 		TsMs: nowMs(),
 		Kind: &lavrayv1.CoreEvent_WarningRaised{WarningRaised: &lavrayv1.CoreWarning{
 			Code:    warnNoTraffic,
-			Message: "Подключено, но через сервер ничего не проходит: " + reason + ". Выберите другой сервер или проверьте подписку.",
+			Message: "Подключено, но через сервер ничего не проходит: " + healthReasonText(reason) + ". Выберите другой сервер или проверьте подписку.",
 		}},
 	}
 }

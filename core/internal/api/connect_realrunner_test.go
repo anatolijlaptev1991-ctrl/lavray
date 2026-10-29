@@ -110,8 +110,8 @@ func TestHealthCheckRealRunnerDeadServer(t *testing.T) {
 		t.Fatalf("состояние %v: ядро стартует и при мёртвом сервере", st.State)
 	}
 	waitUntil(t, "health_error", func() bool { return s.coreStatus().GetHealthError() != "" })
-	if got := s.coreStatus().GetHealthError(); got != "сервер отклонил соединение" {
-		t.Errorf("причина %q, ожидалось «сервер отклонил соединение» (без адреса сервера)", got)
+	if got := s.coreStatus().GetHealthError(); got != "refused" {
+		t.Errorf("причина %q, ожидался код «refused» (без адреса сервера)", got)
 	}
 	if !journalContains(s, "проверка связи после подключения не прошла") {
 		t.Error("в журнале нет строки о неудачной проверке")

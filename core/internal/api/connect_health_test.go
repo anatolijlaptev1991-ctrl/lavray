@@ -106,8 +106,8 @@ func TestHealthCheckBrokenUpstreamRaisesWarning(t *testing.T) {
 	e.broken()
 	e.connect(t)
 	waitUntil(t, "health_error в статусе", func() bool { return e.healthError() != "" })
-	if got := e.healthError(); got != "сервер оборвал соединение" {
-		t.Errorf("health_error = %q, ожидалась краткая причина без адресов и тегов sing-box", got)
+	if got := e.healthError(); got != "reset" {
+		t.Errorf("health_error = %q, ожидался код причины «reset» без адресов и тегов sing-box", got)
 	}
 	waitUntil(t, "строка в журнале", func() bool {
 		return e.journalHas("проверка связи после подключения не прошла: сервер оборвал соединение")
@@ -173,7 +173,7 @@ func TestHealthCheckWarningClearedByRestartAndDisconnect(t *testing.T) {
 	}
 }
 
-// Таймаут: причина — «таймаут N мс», повтор не делается (ждать ещё столько же незачем).
+// Таймаут: причина — код timeout, повтор не делается (ждать ещё столько же незачем).
 func TestHealthCheckTimeoutReason(t *testing.T) {
 	e := newHealthEnv(t)
 	e.srv.healthTimeout = 100 * time.Millisecond
@@ -184,8 +184,8 @@ func TestHealthCheckTimeoutReason(t *testing.T) {
 	}
 	e.connect(t)
 	waitUntil(t, "health_error", func() bool { return e.healthError() != "" })
-	if got := e.healthError(); got != "таймаут 100 мс" {
-		t.Errorf("health_error = %q, ожидалось «таймаут 100 мс»", got)
+	if got := e.healthError(); got != "timeout" {
+		t.Errorf("health_error = %q, ожидался код «timeout»", got)
 	}
 	if n := e.calls.Load(); n != 1 {
 		t.Errorf("соединений открыто %d, ожидалось 1 (по таймауту не повторяем)", n)
@@ -279,7 +279,7 @@ func TestHealthCheckEvents(t *testing.T) {
 	}
 }
 
-// healthReason: типовые сбои названы словами, адреса и префиксы sing-box убраны,
+// healthReason: типовые сбои сведены к кодам, адреса и префиксы sing-box убраны,
 // длинный текст обрезан.
 func TestHealthReason(t *testing.T) {
 	long := strings.Repeat("ж", maxHealthReason+40)
@@ -288,14 +288,15 @@ func TestHealthReason(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"EOF в обёртке sing-box", errors.New("open connection to a.example:443 using outbound/vless[proxy]: EOF"), "сервер оборвал соединение"},
-		{"сброс соединения", errors.New("read tcp 10.0.0.2:5000->203.0.113.5:443: wsarecv: An existing connection was forcibly closed by the remote host."), "сервер оборвал соединение"},
-		{"отказ в соединении", errors.New("dial tcp 203.0.113.5:443: connectex: No connection could be made because the target machine actively refused it."), "сервер отклонил соединение"},
-		{"нет имени", errors.New("lookup nowhere.example: no such host"), "не удалось найти адрес сервера"},
+		{"EOF в обёртке sing-box", errors.New("open connection to a.example:443 using outbound/vless[proxy]: EOF"), "reset"},
+		{"сброс соединения", errors.New("read tcp 10.0.0.2:5000->203.0.113.5:443: wsarecv: An existing connection was forcibly closed by the remote host."), "reset"},
+		{"отказ в соединении", errors.New("dial tcp 203.0.113.5:443: connectex: No connection could be made because the target machine actively refused it."), "refused"},
+		{"нет имени", errors.New("lookup nowhere.example: no such host"), "no_host"},
 		{"url.Error разворачивается", &url.Error{Op: "Get", URL: "https://www.gstatic.com/generate_204", Err: errors.New("remote error: tls: bad certificate")}, "remote error: tls: bad certificate"},
 		{"префикс dial убирается", errors.New("dial tcp 203.0.113.5:443: i/o weird"), "i/o weird"},
-		{"таймаут", &probeTimeoutError{msg: "таймаут 8000 мс"}, "таймаут 8000 мс"},
-		{"пустой текст", errors.New("   "), "нет ответа"},
+		{"таймаут", &probeTimeoutError{msg: "таймаут 8000 мс"}, "timeout"},
+		{"таймаут в url.Error", &url.Error{Op: "Get", URL: "http://x/", Err: &probeTimeoutError{msg: "таймаут 8000 мс"}}, "timeout"},
+		{"пустой текст", errors.New("   "), "timeout"},
 		{"длинный текст обрезается", errors.New(long), strings.Repeat("ж", maxHealthReason) + "…"},
 	}
 	for _, c := range cases {

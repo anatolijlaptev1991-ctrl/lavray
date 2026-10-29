@@ -3,24 +3,31 @@
 //! Автозапуск с системой (T-82/Э-2). Состояние всегда читается из ОС (FR-UI-013),
 //! в настройках не хранится. Способов два:
 //!
-//! - **с правами администратора** — задача планировщика `LAVRay` (триггер входа
-//!   пользователя, `RunLevel=HighestAvailable`): приложение, а с ним и ядро,
-//!   стартует повышенным, и TUN работает сразу после входа, как у NekoBox;
-//! - **без прав** — значение `LAVRay` в `HKCU\...\Run`.
+//! - **с правами администратора из установленной версии** — задача планировщика
+//!   `LAVRay-<SID>` (триггер входа пользователя, `RunLevel=HighestAvailable`):
+//!   приложение, а с ним и ядро, стартует повышенным, и TUN работает сразу после
+//!   входа, как у NekoBox. Задача создаётся, только если exe лежит под Program
+//!   Files: повышенная задача на exe в каталоге, доступном пользователю на
+//!   запись (portable, Загрузки), позволила бы обойти UAC подменой файла;
+//! - **иначе** — значение `LAVRay` в `HKCU\...\Run`.
 //!
 //! Команды (`reg.exe`, `schtasks.exe`) идут через внедряемый [`Exec`], как в
 //! `sysproxy`: тесты проверяют точные аргументы и текст XML на подставке и
 //! не трогают ни реестр, ни планировщик. Приложение стартует с флагом `--tray`
 //! (окно скрыто, только значок).
 
+mod task;
+
 use crate::launch::ARG_TRAY;
 use serde::Serialize;
-use std::fs::File;
-use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use task::{
+    encode_task_file, is_under_any, listed_in_csv, program_files_dirs, task_name, task_xml,
+    TaskFile,
+};
 
-/// Имя задачи планировщика.
-pub const TASK_NAME: &str = "LAVRay";
+pub use task::TASK_PREFIX;
+
 /// Имя значения в разделе `Run`.
 pub const RUN_VALUE: &str = "LAVRay";
 /// Раздел автозапуска текущего пользователя.
@@ -78,6 +85,9 @@ pub enum Method {
 pub enum Notice {
     /// Задачу планировщика без прав администратора не удалить: она осталась.
     TaskNeedsAdmin,
+    /// Задача с правами администратора — только для установленной версии
+    /// (Program Files): из этой копии включён обычный автозапуск.
+    TaskInstalledOnly,
 }
 
 /// Состояние автозапуска для UI.
@@ -89,8 +99,13 @@ pub struct AutostartState {
     pub enabled: bool,
     /// Каким способом (если включён); при обоих сразу — задача.
     pub method: Option<Method>,
-    /// Процесс сейчас с правами администратора: так включится задача.
+    /// Процесс сейчас с правами администратора.
     pub elevated: bool,
+    /// Exe лежит под Program Files: только тогда допустима задача с правами.
+    pub installed: bool,
+    /// Узнать, есть ли задача планировщика, не удалось (ошибка `schtasks`, а не
+    /// «не найдено»): «выключено» тут было бы неправдой.
+    pub unknown: bool,
     /// Что не удалось довести до конца (только в ответе на изменение).
     pub notice: Option<Notice>,
 }
@@ -103,35 +118,47 @@ impl AutostartState {
             enabled: false,
             method: None,
             elevated: false,
+            installed: false,
+            unknown: false,
             notice: None,
         }
     }
 }
 
-/// Окружение текущего процесса для включения автозапуска.
+/// Окружение текущего процесса для автозапуска.
 #[derive(Debug, Clone)]
 pub struct Env {
     /// Путь к собственному exe: его запускает автозапуск.
     pub exe: PathBuf,
-    /// Учётная запись `ДОМЕН\имя` для триггера входа задачи.
-    pub user: Option<String>,
+    /// SID пользователя из токена процесса: имя задачи и `UserId` в XML.
+    pub sid: Option<String>,
     /// Процесс запущен с правами администратора.
     pub elevated: bool,
+    /// Exe (канонизированный) лежит под Program Files.
+    pub installed: bool,
 }
 
 impl Env {
     pub fn detect() -> Result<Self, String> {
         let exe = std::env::current_exe().map_err(|e| format!("путь к LAVRay.exe: {e}"))?;
-        let name = std::env::var("USERNAME").ok().filter(|v| !v.is_empty());
-        let user = name.map(|name| match std::env::var("USERDOMAIN") {
-            Ok(domain) if !domain.is_empty() => format!("{domain}\\{name}"),
-            _ => name,
-        });
+        // Ссылку из Program Files на чужой каталог проверка должна разворачивать.
+        let real = std::fs::canonicalize(&exe).unwrap_or_else(|_| exe.clone());
         Ok(Self {
+            installed: is_under_any(&real, &program_files_dirs()),
             exe,
-            user,
+            sid: crate::token::user_sid(),
             elevated: crate::elevation::is_elevated(),
         })
+    }
+
+    /// Имя задачи этого пользователя.
+    fn task_name(&self) -> Option<String> {
+        self.sid.as_deref().map(task_name)
+    }
+
+    /// Можно ли включить автозапуск задачей: права есть и exe установлен.
+    fn can_task(&self) -> bool {
+        self.elevated && self.installed
     }
 }
 
@@ -139,24 +166,58 @@ fn argv(items: &[&str]) -> Vec<String> {
     items.iter().map(|item| (*item).to_string()).collect()
 }
 
+/// Результат поиска задачи.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Seen {
+    Yes,
+    No,
+    /// Ошибка планировщика, а не «не найдено».
+    Unknown,
+}
+
 /// Что сейчас есть в ОС.
 #[derive(Debug, Clone, Copy)]
 struct Presence {
-    task: bool,
+    task: Seen,
     run: bool,
 }
 
-fn presence(exec: &impl Exec) -> Result<Presence, String> {
-    let task = exec.run(Tool::Schtasks, &argv(&["/Query", "/TN", TASK_NAME]))?;
+/// Есть ли задача. `schtasks /Query /TN` падает одинаково на «нет такой задачи»
+/// и на любую другую ошибку (текст зависит от языка ОС), поэтому при отказе
+/// список задач читается целиком: список прочитан и имени в нём нет — задачи
+/// действительно нет, список не прочитан — состояние неизвестно.
+fn probe_task(exec: &impl Exec, name: Option<&str>) -> Seen {
+    let Some(name) = name else {
+        return Seen::Unknown;
+    };
+    match exec.run(Tool::Schtasks, &argv(&["/Query", "/TN", name])) {
+        Ok(out) if out.success => return Seen::Yes,
+        Ok(_) => {}
+        Err(_) => return Seen::Unknown,
+    }
+    match exec.run(Tool::Schtasks, &argv(&["/Query", "/FO", "CSV", "/NH"])) {
+        Ok(list) if list.success => {
+            if listed_in_csv(&list.stdout, name) {
+                Seen::Yes
+            } else {
+                Seen::No
+            }
+        }
+        _ => Seen::Unknown,
+    }
+}
+
+fn presence(exec: &impl Exec, env: &Env) -> Result<Presence, String> {
+    let task = probe_task(exec, env.task_name().as_deref());
     let run = exec.run(Tool::Reg, &argv(&["query", RUN_KEY, "/v", RUN_VALUE]))?;
     Ok(Presence {
-        task: task.success,
+        task,
         run: run.success,
     })
 }
 
-fn state_of(found: Presence, elevated: bool) -> AutostartState {
-    let method = if found.task {
+fn state_of(found: Presence, env: &Env) -> AutostartState {
+    let method = if found.task == Seen::Yes {
         Some(Method::Task)
     } else if found.run {
         Some(Method::Registry)
@@ -167,14 +228,16 @@ fn state_of(found: Presence, elevated: bool) -> AutostartState {
         supported: true,
         enabled: method.is_some(),
         method,
-        elevated,
+        elevated: env.elevated,
+        installed: env.installed,
+        unknown: found.task == Seen::Unknown,
         notice: None,
     }
 }
 
 /// Прочитать состояние из ОС (задача планировщика и значение `Run`).
-pub fn read_state(exec: &impl Exec, elevated: bool) -> Result<AutostartState, String> {
-    Ok(state_of(presence(exec)?, elevated))
+pub fn read_state(exec: &impl Exec, env: &Env) -> Result<AutostartState, String> {
+    Ok(state_of(presence(exec, env)?, env))
 }
 
 /// Строка запуска: `"<exe>" --tray`.
@@ -182,167 +245,18 @@ pub fn run_command(exe: &Path) -> String {
     format!("\"{}\" {ARG_TRAY}", exe.display())
 }
 
-/// Текст в узел XML: только символы, которые разбор считает разметкой.
-fn xml_escape(text: &str) -> String {
-    text.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-}
-
-/// XML задачи планировщика. `schtasks` по умолчанию не запускает задачу от
-/// батареи и снимает её при переходе на батарею, поэтому настройки заданы
-/// явно (ноутбук). `IgnoreNew` не даёт второй копии задачи стартовать поверх
-/// первой.
-pub fn task_xml(exe: &Path, user: &str) -> String {
-    let user = xml_escape(user);
-    let command = xml_escape(&format!("\"{}\"", exe.display()));
-    let workdir = exe
-        .parent()
-        .map(|dir| {
-            format!(
-                "\n      <WorkingDirectory>{}</WorkingDirectory>",
-                xml_escape(&dir.display().to_string())
-            )
-        })
-        .unwrap_or_default();
-    format!(
-        r#"<?xml version="1.0" encoding="UTF-16"?>
-<Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
-  <RegistrationInfo>
-    <Description>LAVRay: start after user logon</Description>
-  </RegistrationInfo>
-  <Triggers>
-    <LogonTrigger>
-      <Enabled>true</Enabled>
-      <UserId>{user}</UserId>
-    </LogonTrigger>
-  </Triggers>
-  <Principals>
-    <Principal id="Author">
-      <UserId>{user}</UserId>
-      <LogonType>InteractiveToken</LogonType>
-      <RunLevel>HighestAvailable</RunLevel>
-    </Principal>
-  </Principals>
-  <Settings>
-    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
-    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
-    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
-    <AllowHardTerminate>true</AllowHardTerminate>
-    <StartWhenAvailable>false</StartWhenAvailable>
-    <RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>
-    <AllowStartOnDemand>true</AllowStartOnDemand>
-    <Enabled>true</Enabled>
-    <Hidden>false</Hidden>
-    <RunOnlyIfIdle>false</RunOnlyIfIdle>
-    <WakeToRun>false</WakeToRun>
-    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
-    <Priority>7</Priority>
-  </Settings>
-  <Actions Context="Author">
-    <Exec>
-      <Command>{command}</Command>
-      <Arguments>{ARG_TRAY}</Arguments>{workdir}
-    </Exec>
-  </Actions>
-</Task>
-"#
-    )
-}
-
-/// XML в виде, который понимает `schtasks /XML`: UTF-16 LE с BOM (кодировка
-/// объявлена в заголовке; пути с кириллицей не теряются).
-pub fn encode_task_file(xml: &str) -> Vec<u8> {
-    let mut bytes = vec![0xFF, 0xFE];
-    for unit in xml.encode_utf16() {
-        bytes.extend_from_slice(&unit.to_le_bytes());
-    }
-    bytes
-}
-
-/// Временный файл с XML задачи. Создаётся эксклюзивно (`create_new`, случайное
-/// имя), затем открывается на чтение с запретом записи и удаления для других
-/// (Windows: `FILE_SHARE_READ`), содержимое сверяется с записанным, и файл
-/// удерживается открытым до удаления. Иначе процесс того же пользователя мог
-/// бы подменить XML между записью и чтением `schtasks`, а задача с
-/// `HighestAvailable` исполнялась бы с правами администратора.
-struct TaskFile {
-    path: PathBuf,
-    handle: Option<File>,
-}
-
-impl TaskFile {
-    fn create(bytes: &[u8]) -> Result<Self, String> {
-        let mut random = [0u8; 8];
-        getrandom::fill(&mut random).map_err(|e| format!("случайное имя файла: {e}"))?;
-        let name = format!(
-            "lavray-task-{}.xml",
-            random
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<String>()
-        );
-        let path = std::env::temp_dir().join(name);
-        let mut writer = std::fs::OpenOptions::new();
-        writer.write(true).create_new(true);
-        let mut file = writer
-            .open(&path)
-            .map_err(|e| format!("временный файл задачи {}: {e}", path.display()))?;
-        // С этого места файл существует: при любой ошибке Drop его уберёт.
-        let mut task_file = Self { path, handle: None };
-        file.write_all(bytes)
-            .and_then(|()| file.flush())
-            .map_err(|e| format!("запись {}: {e}", task_file.path.display()))?;
-        drop(file);
-
-        let mut reader = std::fs::OpenOptions::new();
-        reader.read(true);
-        #[cfg(windows)]
-        {
-            use std::os::windows::fs::OpenOptionsExt;
-            reader.share_mode(1); // FILE_SHARE_READ: писать и удалять никто не может
-        }
-        let mut locked = reader
-            .open(&task_file.path)
-            .map_err(|e| format!("блокировка {}: {e}", task_file.path.display()))?;
-        let mut stored = Vec::with_capacity(bytes.len());
-        locked
-            .read_to_end(&mut stored)
-            .map_err(|e| format!("чтение {}: {e}", task_file.path.display()))?;
-        if stored != bytes {
-            return Err(format!(
-                "файл {} изменён сторонним процессом",
-                task_file.path.display()
-            ));
-        }
-        task_file.handle = Some(locked);
-        Ok(task_file)
-    }
-
-    fn path_arg(&self) -> String {
-        self.path.display().to_string()
-    }
-}
-
-impl Drop for TaskFile {
-    fn drop(&mut self) {
-        drop(self.handle.take()); // сначала закрыть, потом удалять
-        let _ = std::fs::remove_file(&self.path);
-    }
-}
-
 fn create_task(exec: &impl Exec, env: &Env) -> Result<(), String> {
-    let user = env
-        .user
+    let sid = env
+        .sid
         .as_deref()
-        .ok_or("не определена учётная запись Windows (USERDOMAIN/USERNAME)")?;
-    let file = TaskFile::create(&encode_task_file(&task_xml(&env.exe, user)))?;
+        .ok_or("не удалось определить SID пользователя из токена процесса")?;
+    let file = TaskFile::create(&encode_task_file(&task_xml(&env.exe, sid)))?;
     let out = exec.run(
         Tool::Schtasks,
         &[
             "/Create".to_string(),
             "/TN".to_string(),
-            TASK_NAME.to_string(),
+            task_name(sid),
             "/XML".to_string(),
             file.path_arg(),
             "/F".to_string(),
@@ -355,8 +269,11 @@ fn create_task(exec: &impl Exec, env: &Env) -> Result<(), String> {
     }
 }
 
-fn delete_task(exec: &impl Exec) -> Result<(), String> {
-    let out = exec.run(Tool::Schtasks, &argv(&["/Delete", "/TN", TASK_NAME, "/F"]))?;
+fn delete_task(exec: &impl Exec, env: &Env) -> Result<(), String> {
+    let name = env
+        .task_name()
+        .ok_or("не удалось определить SID пользователя из токена процесса")?;
+    let out = exec.run(Tool::Schtasks, &argv(&["/Delete", "/TN", &name, "/F"]))?;
     if out.success {
         Ok(())
     } else {
@@ -406,19 +323,22 @@ fn enable(exec: &impl Exec, env: &Env, before: Presence) -> Result<Option<Notice
             env.exe.display()
         ));
     }
-    if env.elevated {
+    if env.can_task() {
         create_task(exec, env)?;
         if before.run {
             delete_run_value(exec)?; // чтобы не стартовать дважды
         }
         return Ok(None);
     }
+    // Обычный автозапуск. С правами, но из не установленной копии, он единственный
+    // допустимый: об этом говорит уведомление.
     add_run_value(exec, &env.exe)?;
-    // Старую задачу удалить без прав может не получиться — тогда она остаётся.
-    if before.task && delete_task(exec).is_err() {
-        return Ok(Some(Notice::TaskNeedsAdmin));
+    let mut notice = (env.elevated && !env.installed).then_some(Notice::TaskInstalledOnly);
+    // Старая задача: удалить без прав может не получиться — тогда она остаётся.
+    if before.task != Seen::No && delete_task(exec, env).is_err() && before.task == Seen::Yes {
+        notice = Some(Notice::TaskNeedsAdmin);
     }
-    Ok(None)
+    Ok(notice)
 }
 
 fn disable(exec: &impl Exec, env: &Env, before: Presence) -> Result<Option<Notice>, String> {
@@ -428,12 +348,15 @@ fn disable(exec: &impl Exec, env: &Env, before: Presence) -> Result<Option<Notic
         Ok(())
     };
     let mut notice = None;
-    if before.task {
-        if let Err(reason) = delete_task(exec) {
-            if env.elevated {
-                return Err(reason);
+    // «Неизвестно» тоже пробуем удалить, но отказ там не ошибка: задачи могло и не быть.
+    if before.task != Seen::No {
+        if let Err(reason) = delete_task(exec, env) {
+            if before.task == Seen::Yes {
+                if env.elevated {
+                    return Err(reason);
+                }
+                notice = Some(Notice::TaskNeedsAdmin);
             }
-            notice = Some(Notice::TaskNeedsAdmin);
         }
     }
     run_result?;
@@ -441,16 +364,16 @@ fn disable(exec: &impl Exec, env: &Env, before: Presence) -> Result<Option<Notic
 }
 
 /// Включить или выключить автозапуск и вернуть состояние, заново прочитанное
-/// из ОС. Включение с правами администратора создаёт задачу планировщика (и
-/// убирает значение `Run`), без прав — пишет значение `Run`.
+/// из ОС. Включение с правами администратора из установленной копии создаёт
+/// задачу планировщика (и убирает значение `Run`), иначе пишет значение `Run`.
 pub fn set_enabled(exec: &impl Exec, env: &Env, enabled: bool) -> Result<AutostartState, String> {
-    let before = presence(exec)?;
+    let before = presence(exec, env)?;
     let notice = if enabled {
         enable(exec, env, before)?
     } else {
         disable(exec, env, before)?
     };
-    let mut state = read_state(exec, env.elevated)?;
+    let mut state = read_state(exec, env)?;
     state.notice = notice;
     Ok(state)
 }
@@ -504,7 +427,7 @@ pub fn current_state() -> Result<AutostartState, String> {
     if !supported() {
         return Ok(AutostartState::unsupported());
     }
-    read_state(&System, crate::elevation::is_elevated())
+    read_state(&System, &Env::detect()?)
 }
 
 /// Изменить автозапуск в этой ОС (команда `set_autostart`).

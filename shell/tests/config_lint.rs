@@ -85,29 +85,49 @@ fn main_window_is_created_by_code_hidden_and_shown_unless_tray() {
 }
 
 /// T-81/Э-3, T-82: при удалении приложения установщик убирает автозапуск
-/// (значение `Run` и задачу планировщика `LAVRay`), но не при обновлении.
-/// Службы и отдельного `wintun.dll` нет: wintun встроен в sing-tun.
+/// (значение `Run` и задачи планировщика `LAVRay*` всех пользователей), но не
+/// при обновлении. Хук стоит в POSTUNINSTALL: к тому моменту деинсталлятор уже
+/// проверил, что приложение не запущено. Службы и отдельного `wintun.dll` нет:
+/// wintun встроен в sing-tun. Выпускается только NSIS (у MSI хука нет).
 #[test]
 fn nsis_uninstall_hook_removes_autostart_but_not_on_update() {
-    let nsis = &read_json("tauri.conf.json")["bundle"]["windows"]["nsis"];
+    let conf = read_json("tauri.conf.json");
+    let nsis = &conf["bundle"]["windows"]["nsis"];
     let hooks = nsis["installerHooks"].as_str().expect("installerHooks");
     let text = read(hooks);
-    assert!(text.contains("!macro NSIS_HOOK_PREUNINSTALL"));
+    assert!(text.contains("!macro NSIS_HOOK_POSTUNINSTALL"));
+    assert!(
+        !text.contains("!macro NSIS_HOOK_PREUNINSTALL"),
+        "до проверки запущенного приложения автозапуск не трогаем"
+    );
     assert!(text.contains(
         r#"DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "LAVRay""#
     ));
-    assert!(text.contains(r#"nsExec::Exec '"$SYSDIR\schtasks.exe" /Delete /TN LAVRay /F'"#));
+    // задачи по схеме имён `LAVRay-<SID>` (и прежнее простое имя), PowerShell по полному пути
+    assert!(text.contains("Get-ScheduledTask -TaskName 'LAVRay','LAVRay-*'"));
+    assert!(text.contains("Unregister-ScheduledTask -Confirm:$$false"));
+    assert!(text.contains(r#"$WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"#));
+    assert!(
+        text.contains("${DisableX64FSRedirection}") && text.contains("${EnableX64FSRedirection}")
+    );
     assert!(
         text.contains("${If} $UpdateMode <> 1"),
         "обновление не должно сбрасывать автозапуск"
     );
     // имена совпадают с теми, что пишет оболочка
-    assert_eq!(lavray_shell::autostart::TASK_NAME, "LAVRay");
+    assert_eq!(lavray_shell::autostart::TASK_PREFIX, "LAVRay");
     assert_eq!(lavray_shell::autostart::RUN_VALUE, "LAVRay");
     assert!(text.is_ascii(), "NSIS читает .nsh без BOM в ANSI-кодировке");
-    let resources = read_json("tauri.conf.json")["bundle"]["resources"].to_string();
+    let resources = conf["bundle"]["resources"].to_string();
     assert!(
         !resources.contains("wintun"),
         "wintun встроен в sing-tun, отдельная DLL не нужна"
     );
+    let targets: Vec<&str> = conf["bundle"]["targets"]
+        .as_array()
+        .expect("bundle.targets")
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert_eq!(targets, ["nsis"], "у MSI нет хука удаления автозапуска");
 }

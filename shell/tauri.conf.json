@@ -37,8 +37,7 @@
       "icons/icon.png"
     ],
     "targets": [
-      "nsis",
-      "msi"
+      "nsis"
     ],
     "resources": [
       "binaries/lavray-core.exe"

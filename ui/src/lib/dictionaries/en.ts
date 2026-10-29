@@ -867,4 +867,6 @@ export const enDict: Record<string, string> = {
   "bk.restoreConfirm": "Settings to change: {n}. Current values will be replaced with the values from the file.",
   "bk.restorePartial": "The core did not accept these settings: {keys}",
   "bk.restoreEmpty": "The file has no known settings",
+  // U-03: встроенная группа «Default» (id 2147483000) показывается переведённым именем
+  "grp.default": "Default",
 }

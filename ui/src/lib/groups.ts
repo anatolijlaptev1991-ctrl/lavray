@@ -1,5 +1,6 @@
 // groups.ts — правила работы с группами серверов, общие для экранов и диалогов.
 import { Group_Kind } from '../gen/lavray_pb';
+import type { MessageKey } from './i18n';
 
 /** Значение фильтра «Добавлены вручную» (#subSel на экране «Серверы»). */
 export const MANUAL_FILTER = 'manual';
@@ -37,4 +38,16 @@ export function newServerGroupId(
   }
   const id = numericGroupId(filter) ?? (targetGroup === '' ? null : BigInt(targetGroup));
   return id === null || id === 0n ? null : id;
+}
+
+/**
+ * Имя группы для показа. Встроенная «Default» (DEFAULT_GROUP_ID) показывается
+ * переводом grp.default, пока пользователь не переименовал её; любое другое
+ * имя показывается как есть. Ядро не меняется: имя в нём остаётся «Default».
+ */
+export function groupDisplayName(
+  group: { readonly id: bigint; readonly name: string },
+  t: (key: MessageKey) => string,
+): string {
+  return group.id === DEFAULT_GROUP_ID && group.name === 'Default' ? t('grp.default') : group.name;
 }

@@ -867,4 +867,6 @@ export const esDict: Record<string, string> = {
   "bk.restoreConfirm": "Ajustes que se cambiarán: {n}. Los valores actuales se sustituirán por los del archivo.",
   "bk.restorePartial": "El núcleo no aceptó estos ajustes: {keys}",
   "bk.restoreEmpty": "El archivo no contiene ajustes conocidos",
+  // U-03: встроенная группа «Default» (id 2147483000) показывается переведённым именем
+  "grp.default": "Predeterminado",
 }

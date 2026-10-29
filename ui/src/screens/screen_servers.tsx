@@ -11,7 +11,7 @@ import { useI18n } from '../hooks/useI18n';
 import { useKbdLabel } from '../hooks/useKbdLabel';
 import { showCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
-import { MANUAL_FILTER, newServerGroupId, numericGroupId } from '../lib/groups';
+import { MANUAL_FILTER, groupDisplayName, newServerGroupId, numericGroupId } from '../lib/groups';
 import { formatMs, type MessageKey } from '../lib/i18n';
 import { isTestDown, isTestNotApplicable } from '../lib/testResult';
 import { ProfileEditor } from '../components/ProfileEditor';
@@ -406,12 +406,12 @@ export function ServersScreen(): JSX.Element {
               className={`srv-gtab${groupFilter === String(g.id) ? ' on' : ''}`}
               role="tab"
               aria-selected={groupFilter === String(g.id)}
-              title={g.name}
+              title={groupDisplayName(g, t)}
               onClick={() => {
                 setGroupFilter(String(g.id));
               }}
             >
-              <span className="srv-gtab-name">{g.name}</span>
+              <span className="srv-gtab-name">{groupDisplayName(g, t)}</span>
             </button>
           ))}
           <button
@@ -499,7 +499,7 @@ export function ServersScreen(): JSX.Element {
             <option value={MANUAL_FILTER}>{t('srv.manual')}</option>
             {groups.map((g) => (
               <option key={String(g.id)} value={String(g.id)}>
-                {g.name}
+                {groupDisplayName(g, t)}
               </option>
             ))}
           </select>
@@ -808,7 +808,7 @@ export function ServersScreen(): JSX.Element {
                 }}
               >
                 <Icon name="layers" size={16} />
-                <span>{g.name}</span>
+                <span>{groupDisplayName(g, t)}</span>
               </button>
             ))}
         </ContextMenu>

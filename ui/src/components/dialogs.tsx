@@ -14,6 +14,7 @@ import { useKbdLabel } from '../hooks/useKbdLabel';
 import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
 import { loadModes, saveModes } from '../lib/connection';
+import { groupDisplayName } from '../lib/groups';
 import { LANGUAGES, LANG_NATIVE, type MessageKey } from '../lib/i18n';
 import { presetTitle } from '../lib/presets';
 
@@ -230,7 +231,7 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
         {groups.map((g) => (
           <div className="grp-dlg-row" key={String(g.id)}>
             <span className="n">
-              {g.name}
+              {groupDisplayName(g, t)}
               <small>
                 {plural('pl.p', g.profileOrder.length)}
                 {g.kind === Group_Kind.SUBSCRIPTION ? ` · ${t('nav.subscriptions')}` : ''}
@@ -238,8 +239,10 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
             </span>
             <button
               className="btn btn-ic btn-sm"
-              aria-label={`${t('common.edit')} ${g.name}`}
+              aria-label={`${t('common.edit')} ${groupDisplayName(g, t)}`}
               onClick={() => {
+                // В поле — настоящее имя из ядра: перевод туда не подставляем, иначе
+                // «ОК» без правок переименовал бы встроенную группу.
                 const next = window.prompt(t('common.edit'), g.name);
                 if (next !== null) void rename(g, next);
               }}
@@ -248,7 +251,7 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
             </button>
             <button
               className="btn btn-ic btn-sm"
-              aria-label={`${t('common.delete')} ${g.name}`}
+              aria-label={`${t('common.delete')} ${groupDisplayName(g, t)}`}
               disabled={groups.length <= 1}
               onClick={() => { setPendingDelete(g); }}
             >
@@ -277,7 +280,7 @@ export function GroupsDialog({ onClose, onChanged }: GroupsDialogProps): JSX.Ele
       {pendingDelete !== null && (
         <ConfirmDialog
           title={t('grp.delete')}
-          text={tf('grp.delConfirm', { name: pendingDelete.name, n: pendingDelete.profileOrder.length })}
+          text={tf('grp.delConfirm', { name: groupDisplayName(pendingDelete, t), n: pendingDelete.profileOrder.length })}
           confirmLabel={t('grp.delete')}
           danger
           onConfirm={() => {

@@ -3,8 +3,10 @@
 // строка означают «группы нет» (ядро на group_id=0 отвечает invalid_argument).
 import { describe, expect, it } from 'vitest';
 import { Group_Kind } from '../gen/lavray_pb';
-import { DEFAULT_GROUP_ID, MANUAL_FILTER, newServerGroupId } from './groups';
+import { DEFAULT_GROUP_ID, MANUAL_FILTER, groupDisplayName, newServerGroupId } from './groups';
 import type { GroupRef } from './groups';
+import { t } from './i18n';
+import type { Language, MessageKey } from './i18n';
 
 const SUB_ID = 77n;
 const WORK_ID = 5n;
@@ -36,5 +38,29 @@ describe('U-01: группа для нового сервера', () => {
   it('вкладка с конкретной группой отдаёт её id; фильтр «0» — группы нет', () => {
     expect(newServerGroupId(String(WORK_ID), '', SUB_FIRST)).toBe(WORK_ID);
     expect(newServerGroupId('0', String(WORK_ID), SUB_FIRST)).toBeNull();
+  });
+});
+
+/** Перевод ключа на заданный язык (как t из i18n, но без текущего языка приложения). */
+const inLang = (lang: Language) => (key: MessageKey): string => t(key, lang);
+
+describe('U-03: отображаемое имя группы', () => {
+  it.each([
+    ['ru', 'Основная'],
+    ['en', 'Default'],
+    ['de', 'Standard'],
+    ['es', 'Predeterminado'],
+    ['zh', '默认'],
+  ] as const)('встроенная группа «Default» в языке %s называется «%s»', (lang, name) => {
+    expect(groupDisplayName({ id: DEFAULT_GROUP_ID, name: 'Default' }, inLang(lang))).toBe(name);
+  });
+
+  it('переименованная встроенная группа показывает своё имя', () => {
+    expect(groupDisplayName({ id: DEFAULT_GROUP_ID, name: 'Мои серверы' }, inLang('ru'))).toBe('Мои серверы');
+  });
+
+  it('обычная группа с именем «Default» остаётся как есть: переводится только встроенная', () => {
+    expect(groupDisplayName({ id: WORK_ID, name: 'Default' }, inLang('ru'))).toBe('Default');
+    expect(groupDisplayName({ id: WORK_ID, name: 'Work' }, inLang('ru'))).toBe('Work');
   });
 });

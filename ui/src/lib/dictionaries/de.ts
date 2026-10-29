@@ -867,4 +867,6 @@ export const deDict: Record<string, string> = {
   "bk.restoreConfirm": "Einstellungen, die geändert werden: {n}. Die aktuellen Werte werden durch die Werte aus der Datei ersetzt.",
   "bk.restorePartial": "Der Core hat diese Einstellungen nicht übernommen: {keys}",
   "bk.restoreEmpty": "Die Datei enthält keine bekannten Einstellungen",
+  // U-03: встроенная группа «Default» (id 2147483000) показывается переведённым именем
+  "grp.default": "Standard",
 }

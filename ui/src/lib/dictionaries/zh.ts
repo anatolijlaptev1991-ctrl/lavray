@@ -860,4 +860,6 @@ export const zhDict: Record<string, string> = {
   "bk.restoreConfirm": "将更改 {n} 项设置。当前值将被文件中的值替换。",
   "bk.restorePartial": "内核未接受这些设置：{keys}",
   "bk.restoreEmpty": "文件中没有可识别的设置",
+  // U-03: встроенная группа «Default» (id 2147483000) показывается переведённым именем
+  "grp.default": "默认",
 }

@@ -580,3 +580,26 @@ describe('U-01: «Добавить» при фильтре «вручную» с
     m.unmount();
   });
 });
+
+describe('U-03: встроенная группа «Default» показывается переведённым именем', () => {
+  // store.DefaultGroupID из миграции ядра: только у неё имя переводится.
+  const CORE_DEFAULT = 2147483000n;
+
+  it('вкладки и фильтр показывают «Основная» (ru), переименованная группа — своё имя', async () => {
+    setLanguage('ru');
+    const clients = makeClients({
+      groups: [
+        create(GroupSchema, { id: CORE_DEFAULT, name: 'Default', kind: Group_Kind.BASIC }),
+        create(GroupSchema, { id: 5n, name: 'Work', kind: Group_Kind.BASIC }),
+      ],
+    });
+    const m = await mountWithCore(clients, createElement(ServersScreen));
+    const tabs = Array.from(m.container.querySelectorAll('.srv-gtab-name')).map((e) => e.textContent);
+    expect(tabs).toEqual([t('grp.default'), 'Work']);
+    expect(m.container.querySelector(`.srv-gtab[title="${t('grp.default')}"]`)).not.toBeNull();
+    const options = Array.from(m.container.querySelectorAll('#subSel option')).map((o) => o.textContent);
+    expect(options).toContain(t('grp.default'));
+    expect(options).not.toContain('Default');
+    m.unmount();
+  });
+});

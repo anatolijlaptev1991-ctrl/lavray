@@ -32,6 +32,8 @@ struct FakeSystem {
     scheduler_down: bool,
     /// `schtasks /Query /TN` отказывает, хотя в общем списке задача видна.
     query_by_name_denied: bool,
+    /// Задача создана прежней версией: XML без дескриптора безопасности и ревизии.
+    legacy_task: Cell<bool>,
 }
 
 impl FakeSystem {
@@ -92,6 +94,26 @@ impl Exec for FakeSystem {
             return failed("ERROR: The Task Scheduler service is not available.");
         }
         match (tool, args[0].as_str()) {
+            (Tool::Schtasks, "/Query") if args[1] == "/TN" && args.get(3).is_some() => {
+                assert_eq!(args[2], TASK);
+                assert_eq!(args[3], "/XML");
+                if !self.task.get() || self.query_by_name_denied {
+                    return failed(NOT_FOUND);
+                }
+                let xml = if self.legacy_task.get() {
+                    "<Task><RegistrationInfo><Description>LAVRay: start after user logon</Description></RegistrationInfo></Task>".to_string()
+                } else {
+                    self.created_xml
+                        .borrow()
+                        .clone()
+                        .unwrap_or_else(|| task_xml(Path::new(EXE), SID))
+                };
+                Ok(Output {
+                    success: true,
+                    stdout: xml,
+                    stderr: String::new(),
+                })
+            }
             (Tool::Schtasks, "/Query") if args[1] == "/TN" => {
                 assert_eq!(args[2], TASK, "задача ищется по имени пользователя");
                 if self.task.get() && !self.query_by_name_denied {
@@ -124,6 +146,7 @@ impl Exec for FakeSystem {
                     return failed("ERROR: Access is denied.");
                 }
                 self.task.set(true);
+                self.legacy_task.set(false);
                 ok()
             }
             (Tool::Schtasks, "/Delete") => {
@@ -479,7 +502,11 @@ fn task_xml_has_the_logon_trigger_sid_and_battery_flags() {
     }
     assert!(xml.starts_with(r#"<?xml version="1.0" encoding="UTF-16"?>"#));
     assert_eq!(xml.matches("<LogonTrigger>").count(), 1);
-    assert_eq!(xml.matches(SID).count(), 2, "SID в триггере и в субъекте");
+    assert_eq!(
+        xml.matches(SID).count(),
+        3,
+        "SID в триггере, субъекте и дескрипторе"
+    );
 }
 
 #[test]
@@ -600,6 +627,141 @@ mod installed {
         let me = std::fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
         assert!(!is_under_any(&me, &dirs), "{me:?}");
     }
+}
+
+/// Записи SDDL задачи: (субъект, права).
+fn aces(sddl: &str) -> Vec<(String, String)> {
+    sddl.trim_start_matches("D:")
+        .split('(')
+        .skip(1)
+        .map(|ace| {
+            let parts: Vec<&str> = ace.trim_end_matches(')').split(';').collect();
+            assert_eq!(parts[0], "A", "только разрешающие записи: {ace}");
+            (parts[5].to_string(), parts[2].to_string())
+        })
+        .collect()
+}
+
+#[test]
+fn task_xml_carries_the_security_descriptor_with_read_only_for_the_user() {
+    let sddl = task_sddl(SID);
+    assert_eq!(
+        sddl,
+        format!("D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;FR;;;{SID})"),
+        "администраторы и SYSTEM — всё, пользователь — только чтение"
+    );
+    let rights = aces(&sddl);
+    assert_eq!(rights.len(), 3);
+    assert!(rights.contains(&("BA".to_string(), "FA".to_string())));
+    assert!(rights.contains(&("SY".to_string(), "FA".to_string())));
+    // у пользователя ни записи (FW), ни запуска (FX), ни полного доступа
+    assert!(rights.contains(&(SID.to_string(), "FR".to_string())));
+    assert!(!sddl.contains("FW") && !sddl.contains("FX") && !sddl.contains("GA"));
+
+    let xml = task_xml(Path::new(EXE), SID);
+    assert!(
+        xml.contains(&format!("<SecurityDescriptor>{sddl}</SecurityDescriptor>")),
+        "{xml}"
+    );
+    let info = xml
+        .split("<RegistrationInfo>")
+        .nth(1)
+        .and_then(|rest| rest.split("</RegistrationInfo>").next())
+        .expect("RegistrationInfo");
+    assert!(
+        info.contains("<SecurityDescriptor>"),
+        "дескриптор — в RegistrationInfo: {info}"
+    );
+    assert!(
+        info.contains(&format!("({TASK_REVISION})")),
+        "ревизия в описании: {info}"
+    );
+}
+
+#[test]
+fn an_elevated_instance_recreates_a_legacy_task_once() {
+    let os = FakeSystem::with_task();
+    os.legacy_task.set(true);
+
+    let state = read_state(&os, &env(true)).unwrap();
+
+    assert_eq!(
+        (state.enabled, state.method, state.unknown),
+        (true, Some(Method::Task), false)
+    );
+    let calls = os.mutating_calls();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert_eq!(calls[0].1[..4], ["/Create", "/TN", TASK, "/XML"]);
+    assert!(os
+        .calls
+        .borrow()
+        .contains(&call(Tool::Schtasks, &["/Query", "/TN", TASK, "/XML"])));
+    assert_eq!(
+        os.created_xml.borrow().clone().unwrap(),
+        task_xml(Path::new(EXE), SID),
+        "пересоздана с актуальным XML"
+    );
+    assert!(!os.legacy_task.get());
+
+    // следующее чтение задачу уже не трогает
+    read_state(&os, &env(true)).unwrap();
+    assert_eq!(os.mutating_calls().len(), 1);
+}
+
+#[test]
+fn a_current_task_is_left_alone_and_other_instances_never_touch_it() {
+    let current = FakeSystem::with_task();
+    read_state(&current, &env(true)).unwrap();
+    assert!(
+        current.mutating_calls().is_empty(),
+        "актуальная задача не пересоздаётся"
+    );
+
+    for (label, env) in [
+        ("без прав", env(false)),
+        ("не установленная копия", portable(true)),
+    ] {
+        let old = FakeSystem::with_task();
+        old.legacy_task.set(true);
+        let state = read_state(&old, &env).unwrap();
+        assert!(state.enabled, "{label}: состояние всё равно точное");
+        assert!(
+            old.mutating_calls().is_empty(),
+            "{label}: задачу менять нельзя"
+        );
+        assert!(
+            !old.calls
+                .borrow()
+                .iter()
+                .any(|(_, args)| args.last().is_some_and(|a| a == "/XML")),
+            "{label}: XML не запрашивался"
+        );
+    }
+}
+
+#[test]
+fn a_failed_upgrade_does_not_break_reading_the_state() {
+    let os = FakeSystem {
+        fail_create: true,
+        ..FakeSystem::with_task()
+    };
+    os.legacy_task.set(true);
+    let state = read_state(&os, &env(true)).unwrap();
+    assert!(state.enabled && !state.unknown);
+    let file = os.created_file.borrow().clone().unwrap();
+    assert!(!file.exists(), "временный XML убран и после сбоя");
+}
+
+#[test]
+fn an_unreadable_task_xml_leaves_the_task_as_is() {
+    // задача есть, но её XML не отдаётся: не пересоздаём вслепую
+    let os = FakeSystem {
+        query_by_name_denied: true,
+        ..FakeSystem::with_task()
+    };
+    let state = read_state(&os, &env(true)).unwrap();
+    assert!(state.enabled);
+    assert!(os.mutating_calls().is_empty());
 }
 
 #[test]

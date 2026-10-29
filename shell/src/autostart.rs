@@ -23,10 +23,10 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use task::{
     encode_task_file, is_under_any, listed_in_csv, program_files_dirs, task_name, task_xml,
-    TaskFile,
+    TaskFile, TASK_REVISION,
 };
 
-pub use task::TASK_PREFIX;
+pub use task::{task_sddl, TASK_PREFIX};
 
 /// Имя значения в разделе `Run`.
 pub const RUN_VALUE: &str = "LAVRay";
@@ -235,9 +235,28 @@ fn state_of(found: Presence, env: &Env) -> AutostartState {
     }
 }
 
-/// Прочитать состояние из ОС (задача планировщика и значение `Run`).
+/// Задача старого вида (без дескриптора безопасности, ревизия в описании
+/// другая) пересоздаётся с актуальным XML. Это делает только повышенный
+/// экземпляр из установленной копии: обычному процессу задачу не изменить.
+/// Сбой чтения или пересоздания не мешает показать состояние.
+fn upgrade_old_task(exec: &impl Exec, env: &Env) {
+    let Some(name) = env.task_name() else { return };
+    let current = exec.run(Tool::Schtasks, &argv(&["/Query", "/TN", &name, "/XML"]));
+    if let Ok(out) = current {
+        if out.success && !out.stdout.contains(TASK_REVISION) {
+            let _ = create_task(exec, env);
+        }
+    }
+}
+
+/// Прочитать состояние из ОС (задача планировщика и значение `Run`). Повышенный
+/// экземпляр заодно пересоздаёт задачи старого вида.
 pub fn read_state(exec: &impl Exec, env: &Env) -> Result<AutostartState, String> {
-    Ok(state_of(presence(exec, env)?, env))
+    let found = presence(exec, env)?;
+    if found.task == Seen::Yes && env.can_task() {
+        upgrade_old_task(exec, env);
+    }
+    Ok(state_of(found, env))
 }
 
 /// Строка запуска: `"<exe>" --tray`.

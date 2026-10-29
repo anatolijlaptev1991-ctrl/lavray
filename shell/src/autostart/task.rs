@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Задача планировщика для автозапуска с правами администратора (T-82):
-//! имя на пользователя, XML, временный файл, проверка «exe установлен».
+//! имя на пользователя, XML с дескриптором безопасности, временный файл,
+//! проверка «exe установлен».
 
 use crate::launch::ARG_TRAY;
 use std::fs::File;
@@ -10,6 +11,22 @@ use std::path::{Component, Path, PathBuf, Prefix};
 
 /// Общее начало имени задач LAVRay; установщик удаляет все `LAVRay-*`.
 pub const TASK_PREFIX: &str = "LAVRay";
+
+/// Ревизия XML задачи. Метка лежит в описании задачи (его планировщик хранит и
+/// отдаёт как есть, в отличие от SDDL, который он может переписать в своей
+/// записи): по ней повышенный экземпляр узнаёт задачи старого вида и пересоздаёт.
+pub const TASK_REVISION: &str = "acl-v2";
+
+/// Дескриптор безопасности задачи (SDDL): полный доступ у администраторов и
+/// SYSTEM, у пользователя — только чтение (`FR`). Читать задачу
+/// (`schtasks /Query`) обычный процесс сможет, а менять и удалять её, то есть
+/// подменить действие задачи с наивысшими правами, — нет. Планировщик по
+/// документации сам добавляет разрешающую запись субъекту задачи (флаг
+/// `TASK_DONT_ADD_PRINCIPAL_ACE` через `schtasks /XML` не передать); записи на
+/// изменение это не даёт.
+pub fn task_sddl(sid: &str) -> String {
+    format!("D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;FR;;;{sid})")
+}
 
 /// Имя задачи пользователя: `LAVRay-<SID>`. Задачи разных учётных записей на
 /// одном ПК не пересекаются, а `UserId` в XML — тот же SID.
@@ -30,6 +47,7 @@ fn xml_escape(text: &str) -> String {
 /// первой. Пользователь задан SID из токена процесса.
 pub fn task_xml(exe: &Path, sid: &str) -> String {
     let user = xml_escape(sid);
+    let sddl = xml_escape(&task_sddl(sid));
     let command = xml_escape(&format!("\"{}\"", exe.display()));
     let workdir = exe
         .parent()
@@ -44,7 +62,8 @@ pub fn task_xml(exe: &Path, sid: &str) -> String {
         r#"<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>LAVRay: start after user logon</Description>
+    <SecurityDescriptor>{sddl}</SecurityDescriptor>
+    <Description>LAVRay: start after user logon ({TASK_REVISION})</Description>
   </RegistrationInfo>
   <Triggers>
     <LogonTrigger>

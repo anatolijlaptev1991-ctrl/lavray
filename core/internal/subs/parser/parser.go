@@ -35,6 +35,10 @@ import (
 const (
 	// MaxContentBytes — лимит размера содержимого подписки (64 МиБ, план §4.1).
 	MaxContentBytes = 64 << 20
+	// MaxClashYAMLBytes — лимит Clash/Clash.Meta YAML (T-50, A1-14): разбор
+	// YAML раздувает память в ~36 раз (60 МиБ → 2,2 ГиБ ОЗУ, замер A1);
+	// реальные подписки — десятки КиБ, файлы с большими rules — единицы МиБ.
+	MaxClashYAMLBytes = 8 << 20
 	// DefaultMaxProfiles — лимит числа профилей из одной подписки.
 	DefaultMaxProfiles = 10000
 	maxNesting         = 3 // base64/happ рекурсия
@@ -144,6 +148,12 @@ func Parse(content []byte, opts Options) (*Result, error) {
 	// отдают именно этот формат. Детектор дешёвый (строка «proxies:»),
 	// полный YAML-разбор — только после него.
 	if looksLikeClash(s) {
+		if len(s) > MaxClashYAMLBytes {
+			// Msg остаётся ErrTooLargeMsg: api.mapErr по нему выбирает
+			// RESOURCE_EXHAUSTED; подробности — в Inner.
+			return nil, &Error{Msg: ErrTooLargeMsg, Inner: fmt.Errorf(
+				"Clash YAML %d МиБ при лимите %d МиБ", (len(s)+(1<<20)-1)>>20, MaxClashYAMLBytes>>20)}
+		}
 		res, err := parseClash([]byte(s), opts)
 		if err != nil {
 			return nil, err

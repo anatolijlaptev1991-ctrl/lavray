@@ -72,9 +72,15 @@ func Open(dir string) (*Store, error) {
 	db.SetMaxOpenConns(1)
 	s.db = db
 
+	// T-50: целостность — ДО миграций (на повреждённой базе миграция ничего
+	// не пишет); файл не переименовывается и не удаляется (integrity.go).
+	if err := checkIntegrity(db, DBPath(dir)); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if err := migrate(db); err != nil {
 		_ = db.Close()
-		return nil, fmt.Errorf("store: migrate: %w", err)
+		return nil, openError(DBPath(dir), err)
 	}
 	if err := s.applyFileModes(); err != nil {
 		_ = db.Close()

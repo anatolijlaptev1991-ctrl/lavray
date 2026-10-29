@@ -86,7 +86,11 @@ func main() {
 
 	st, err := store.Open(*dataDir)
 	if err != nil {
-		mux.Logf(logs.LevelError, "core", "store: %v", err)
+		// T-50: причина и инструкция — в stderr (оболочка/пользователь) и в
+		// журнал; раньше выход с кодом 1 был молчаливым.
+		msg := describeStoreError(*dataDir, err)
+		mux.Logf(logs.LevelError, "core", "store: %s", oneLine(msg))
+		fmt.Fprintln(os.Stderr, msg)
 		os.Exit(1)
 	}
 	defer st.Close()
@@ -118,7 +122,7 @@ func main() {
 	// appVersion — билд-флаг платформенных репо.
 	root := http.NewServeMux()
 	server.Register(root)
-	httpSrv := &http.Server{Handler: authMiddleware(root, authToken, mux)}
+	httpSrv := newHTTPServer(authMiddleware(root, authToken, mux)) // T-50: таймауты и лимит заголовков
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- httpSrv.Serve(ln) }()

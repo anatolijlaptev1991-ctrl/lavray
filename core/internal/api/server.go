@@ -116,6 +116,7 @@ func NewServer(d Deps) *Server {
 func (s *Server) HandlerOptions() []connect.HandlerOption {
 	return []connect.HandlerOption{
 		connect.WithInterceptors(newInterceptor(s.logs)),
+		connect.WithReadMaxBytes(MaxRequestBytes), // T-50: лимит тела запроса
 	}
 }
 

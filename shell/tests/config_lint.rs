@@ -75,3 +75,31 @@ fn main_window_is_created_hidden_and_shown_by_setup_unless_tray() {
     assert!(setup.contains("if !start_hidden"), "{setup}");
     assert!(setup.contains("tray_ui::show_main_window(app.handle())"));
 }
+
+/// T-81/Э-3, T-82: при удалении приложения установщик убирает автозапуск
+/// (значение `Run` и задачу планировщика `LAVRay`), но не при обновлении.
+/// Службы и отдельного `wintun.dll` нет: wintun встроен в sing-tun.
+#[test]
+fn nsis_uninstall_hook_removes_autostart_but_not_on_update() {
+    let nsis = &read_json("tauri.conf.json")["bundle"]["windows"]["nsis"];
+    let hooks = nsis["installerHooks"].as_str().expect("installerHooks");
+    let text = read(hooks);
+    assert!(text.contains("!macro NSIS_HOOK_PREUNINSTALL"));
+    assert!(text.contains(
+        r#"DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "LAVRay""#
+    ));
+    assert!(text.contains(r#"nsExec::Exec '"$SYSDIR\schtasks.exe" /Delete /TN LAVRay /F'"#));
+    assert!(
+        text.contains("${If} $UpdateMode <> 1"),
+        "обновление не должно сбрасывать автозапуск"
+    );
+    // имена совпадают с теми, что пишет оболочка
+    assert_eq!(lavray_shell::autostart::TASK_NAME, "LAVRay");
+    assert_eq!(lavray_shell::autostart::RUN_VALUE, "LAVRay");
+    assert!(text.is_ascii(), "NSIS читает .nsh без BOM в ANSI-кодировке");
+    let resources = read_json("tauri.conf.json")["bundle"]["resources"].to_string();
+    assert!(
+        !resources.contains("wintun"),
+        "wintun встроен в sing-tun, отдельная DLL не нужна"
+    );
+}

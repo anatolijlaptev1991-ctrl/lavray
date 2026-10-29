@@ -46,6 +46,7 @@
       "nsis": {
         "installMode": "perMachine",
         "displayLanguageSelector": false,
+        "installerHooks": "windows/hooks.nsh",
         "languages": [
           "Russian",
           "English"

@@ -2,9 +2,11 @@
 // FR-UI-230…240): канал stable/beta, проверка через TUF-цепочку,
 // доступные компоненты (приложение/ядро/пресеты/гео), заметки, состояние
 // цепочки доверия и ручная проверка из файла.
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
-import { UpdateChannel, UpdateComponent } from '../gen/lavray_pb';
+import { create } from '@bufbuild/protobuf';
+import { Code, ConnectError } from '@connectrpc/connect';
+import { SettingValueSchema, UpdateChannel, UpdateComponent } from '../gen/lavray_pb';
 import type { CheckUpdatesResponse, ComponentUpdate, UpdateStateResponse } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
@@ -21,6 +23,14 @@ const CHANNELS: readonly ChannelOption[] = [
   { channel: UpdateChannel.STABLE, labelKey: 'upd.stable' },
   { channel: UpdateChannel.BETA, labelKey: 'upd.beta' },
 ];
+
+/** Ключ настройки: выбранный канал обновлений (stable | beta). */
+const CHANNEL_SETTING = 'update.channel';
+
+/** Подсистема обновлений не подключена: ядро отвечает failed_precondition (эпик T-75). */
+function isUnavailable(e: unknown): boolean {
+  return ConnectError.from(e).code === Code.FailedPrecondition;
+}
 
 const COMPONENT_LABEL: Record<number, MessageKey> = {
   [UpdateComponent.APP]: 'upd.app',
@@ -45,21 +55,62 @@ export function UpdatesScreen(): JSX.Element {
   const [state, setState] = useState<UpdateStateResponse | null>(null);
   const [checked, setChecked] = useState<CheckUpdatesResponse | null>(null);
   const [busy, setBusy] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
+  // Пользователь уже выбрал канал: запоздавший ответ getSettings его не перезапишет.
+  const picked = useRef(false);
 
   const loadState = useCallback(async (): Promise<void> => {
     try {
       const res = await core.updates.getUpdateState({});
       setState(res);
-    } catch {
-      /* подсистема может быть не сконфигурирована */
+    } catch (e) {
+      if (isUnavailable(e)) setUnavailable(true);
     }
   }, [core]);
 
   useEffect(() => {
     void loadState();
   }, [loadState, t]);
+
+  // T-72: канал переживает перезапуск — хранится в настройке update.channel.
+  useEffect(() => {
+    const ac = new AbortController();
+    void (async (): Promise<void> => {
+      try {
+        const res = await core.settings.getSettings({ keys: [CHANNEL_SETTING] }, { signal: ac.signal });
+        const v = res.values[CHANNEL_SETTING]?.value;
+        if (!picked.current && v?.case === 'stringValue') {
+          setChannel(v.value === 'beta' ? UpdateChannel.BETA : UpdateChannel.STABLE);
+        }
+      } catch {
+        /* настройка недоступна: остаётся стабильный канал */
+      }
+    })();
+    return (): void => {
+      ac.abort();
+    };
+  }, [core]);
+
+  const pickChannel = useCallback(
+    async (next: UpdateChannel): Promise<void> => {
+      picked.current = true;
+      setChannel(next);
+      try {
+        await core.settings.setSettings({
+          values: {
+            [CHANNEL_SETTING]: create(SettingValueSchema, {
+              value: { case: 'stringValue', value: next === UpdateChannel.BETA ? 'beta' : 'stable' },
+            }),
+          },
+        });
+      } catch (e) {
+        setErr(showCoreError(e, t));
+      }
+    },
+    [core, t],
+  );
 
   const check = useCallback(async (): Promise<void> => {
     setErr('');
@@ -71,7 +122,9 @@ export function UpdatesScreen(): JSX.Element {
       if (res.available.length === 0) setOk(t('upd.upToDate'));
       await loadState();
     } catch (e) {
-      setErr(showCoreError(e, t));
+      // Подсистема не подключена — не ошибка пользователя, а известное состояние.
+      if (isUnavailable(e)) setUnavailable(true);
+      else setErr(showCoreError(e, t));
     } finally {
       setBusy(false);
     }
@@ -139,7 +192,7 @@ export function UpdatesScreen(): JSX.Element {
             value={String(channel)}
             onChange={(e) => {
               const chosen = CHANNELS.find((c) => String(c.channel) === e.target.value);
-              if (chosen !== undefined) setChannel(chosen.channel);
+              if (chosen !== undefined) void pickChannel(chosen.channel);
             }}
           >
             {CHANNELS.map((c) => (
@@ -148,10 +201,21 @@ export function UpdatesScreen(): JSX.Element {
               </option>
             ))}
           </select>
-          <button className="btn btn-pri btn-sm" disabled={busy} onClick={() => void check()}>
+          <button className="btn btn-pri btn-sm" disabled={busy || unavailable} onClick={() => void check()}>
             {busy ? t('upd.checking') : t('upd.checkNow')}
           </button>
         </div>
+
+        {unavailable && (
+          <div className="infoblock" role="status" style={{ marginTop: 12 }}>
+            <span className="ic">
+              <Icon name="info" />
+            </span>
+            <div className="t">
+              <b>{t('upd.unavailable')}</b>
+            </div>
+          </div>
+        )}
 
         {CHANNELS.find((c) => c.channel === channel)?.labelKey === 'upd.beta' && (
           <div className="infoblock" style={{ marginTop: 12 }}>
@@ -182,7 +246,7 @@ export function UpdatesScreen(): JSX.Element {
                     {t(COMPONENT_LABEL[c.component] ?? 'upd.app')}
                     {c.mandatory && (
                       <span className="badge badge-warn" style={{ marginInlineStart: 8 }}>
-                        {t('upd.beta')}
+                        {t('upd.mandatory')}
                       </span>
                     )}
                   </span>
@@ -220,7 +284,7 @@ export function UpdatesScreen(): JSX.Element {
         </div>
       )}
 
-      {state?.chainState !== undefined && (
+      {state?.chainState !== undefined && !unavailable && (
         <div className="card">
           <div className="card-h">
             <span className="ic">

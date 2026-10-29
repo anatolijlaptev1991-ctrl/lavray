@@ -185,11 +185,11 @@ fn single_instance_is_checked_before_the_plugin_and_a_stuck_parent_stops_the_sta
     assert!(tail.contains("std::process::exit(1)"));
 }
 
-/// T-81 (ревью): сбой создания окна — сообщение с причиной, не паника; UI
-/// получает признак перезапуска и записи `localStorage` командой оболочки,
-/// а не через `localStorage` старого профиля.
+/// T-81 (ревью): сбой создания окна — сообщение с причиной, не паника; общие
+/// настройки UI читаются и пишутся командами оболочки (файл `ui-state.json`),
+/// а признак перезапуска — из флага `--elevated-relaunch`.
 #[test]
-fn window_failure_is_reported_and_the_handoff_commands_are_registered() {
+fn window_failure_is_reported_and_the_ui_state_commands_are_registered() {
     let main_rs = source("main.rs");
     assert!(main_rs.contains("msgbox::window_failed(&reason)"));
     assert!(
@@ -198,7 +198,8 @@ fn window_failure_is_reported_and_the_handoff_commands_are_registered() {
     );
     for needed in [
         "            launch_info,",
-        "            save_ui_handoff,",
+        "            ui_state_load,",
+        "            ui_state_set,",
         "            window_show,",
     ] {
         assert!(
@@ -208,4 +209,48 @@ fn window_failure_is_reported_and_the_handoff_commands_are_registered() {
     }
     // обычному пользователю UAC потребовал бы пароль чужой учётной записи
     assert!(main_rs.contains("can_elevate: token::can_self_elevate("));
+}
+
+/// T-81 (ревью): повышенный процесс создаёт общий файл настроек с явным доступом
+/// для текущего пользователя (SID из токена), а признак перезапуска не читается
+/// из файлов.
+#[test]
+fn ui_state_file_is_opened_to_the_user_when_an_elevated_process_writes_it() {
+    let main_rs = source("main.rs");
+    let command = main_rs
+        .split("async fn ui_state_set")
+        .nth(1)
+        .and_then(|rest| {
+            rest.split(
+                "
+}
+",
+            )
+            .next()
+        })
+        .expect("команда ui_state_set");
+    assert!(command.contains("process_is_elevated()"));
+    assert!(command.contains("token::user_sid()"));
+    assert!(command.contains("ui_state::set(&data_dir(), &key, value, owner.as_deref())"));
+    assert!(
+        command.contains("spawn_blocking"),
+        "запись с fsync — не в потоке команд"
+    );
+
+    let launch = main_rs
+        .split("fn launch_info")
+        .nth(1)
+        .and_then(|rest| {
+            rest.split(
+                "
+}
+",
+            )
+            .next()
+        })
+        .expect("команда launch_info");
+    assert!(
+        !launch.contains("data_dir"),
+        "признак берётся из флага, не из файла"
+    );
 }

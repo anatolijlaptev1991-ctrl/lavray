@@ -25,8 +25,9 @@
 //! - [`token`] — SID пользователя и тип повышения токена процесса (T-81, T-82);
 //! - [`single_instance`] — проверка мьютекса single-instance между разными
 //!   уровнями прав (T-81);
-//! - [`profile`] — каталог данных WebView повышенного экземпляра и передача
-//!   записей `localStorage` при перезапуске (T-81);
+//! - [`profile`] — отдельный каталог данных WebView повышенного экземпляра (T-81);
+//! - [`ui_state`] — общий файл настроек UI `ui-state.json` для обоих профилей
+//!   WebView (T-81);
 //! - [`msgbox`] — сообщения до появления окна (T-81);
 //! - [`autostart`] — автозапуск с системой: задача планировщика или `Run`
 //!   в реестре, команды — через внедряемый исполнитель (T-82);
@@ -53,5 +54,6 @@ pub mod single_instance;
 pub mod sysproxy;
 pub mod token;
 pub mod tray;
+pub mod ui_state;
 pub mod uiprotocol;
 pub mod updater;

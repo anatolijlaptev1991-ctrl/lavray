@@ -8,7 +8,8 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { CoreContext } from '../hooks/useCore';
 import { createCoreClients, type CoreClients } from '../lib/core';
-import { applyLaunchInfo } from '../lib/launch';
+import { loadLaunchInfo } from '../lib/launch';
+import { hydrateUiState } from '../lib/uiState';
 import { requestTunDialog } from '../lib/tunRequest';
 import { toggleConnection } from '../lib/connection';
 import { setLanguage } from '../lib/i18n';
@@ -238,14 +239,15 @@ describe('TUN without administrator rights (T-46, T-81)', () => {
     // выбор TUN записан заранее: и в окне, и в настройке ядра remember.modes
     expect(stored()).toEqual({ sysProxy: false, tunMode: true });
     expect(rememberedModes()).toEqual([{ stringListValue: { items: ['tun'] } }]);
-    // у повышенного экземпляра свой профиль WebView: записи окна уходят оболочке до запуска
+    // у повышенного экземпляра свой профиль WebView: общие настройки уходят в файл оболочки до запуска
     const calls = shell.invoke.mock.calls.map(([cmd]) => cmd);
-    expect(calls.indexOf('save_ui_handoff')).toBeGreaterThan(-1);
-    expect(calls.indexOf('save_ui_handoff')).toBeLessThan(calls.indexOf('relaunch_elevated'));
-    const handoff = shell.invoke.mock.calls.find(([cmd]) => cmd === 'save_ui_handoff')?.[1] as {
-      entries: Record<string, string>;
-    };
-    expect(JSON.parse(handoff.entries['lavray.modes'] ?? 'null')).toEqual({ sysProxy: false, tunMode: true });
+    expect(calls.indexOf('ui_state_set')).toBeGreaterThan(-1);
+    expect(calls.indexOf('ui_state_set')).toBeLessThan(calls.indexOf('relaunch_elevated'));
+    const written = shell.invoke.mock.calls
+      .filter(([cmd]) => cmd === 'ui_state_set')
+      .map(([, args]) => args as { key: string; value: string | null });
+    const modes = written.find((w) => w.key === 'lavray.modes');
+    expect(JSON.parse(modes?.value ?? 'null')).toEqual({ sysProxy: false, tunMode: true });
     // приложение закрывается само: диалог остаётся занятым
     expect(document.querySelector<HTMLButtonElement>('#tunRelaunch')?.disabled).toBe(true);
     expect(connectCalls()).toBe(0);
@@ -288,18 +290,20 @@ describe('TUN without administrator rights (T-46, T-81)', () => {
     expect(dialog()).not.toBeNull();
   });
 
-  it('after the elevated relaunch the shell hands over the window settings and the screen says so once', async () => {
-    // новый профиль WebView пуст: настройки пришли от оболочки (launch_info), а не из localStorage
+  it('after the elevated relaunch the new profile gets the shared settings and the screen says so once', async () => {
+    // новый профиль WebView пуст: настройки в файле оболочки, признак перезапуска — из --elevated-relaunch
     shell.invoke.mockReset().mockImplementation((cmd: string) => {
-      if (cmd === 'launch_info') {
+      if (cmd === 'launch_info') return Promise.resolve({ elevated_relaunch: true });
+      if (cmd === 'ui_state_load') {
         return Promise.resolve({
-          elevated_relaunch: true,
-          handoff: { 'lavray.modes': JSON.stringify({ sysProxy: false, tunMode: true }) },
+          exists: true,
+          entries: { 'lavray.modes': JSON.stringify({ sysProxy: false, tunMode: true }) },
         });
       }
       return Promise.resolve(cmd === 'is_elevated' ? true : null);
     });
-    await applyLaunchInfo(window.localStorage);
+    await hydrateUiState(window.localStorage);
+    await loadLaunchInfo();
     render();
     for (let i = 0; i < 40 && button() === null; i += 1) await pause();
     await pause(30);

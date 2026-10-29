@@ -23,15 +23,15 @@ use lavray_shell::endpoint::{
 use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
 use lavray_shell::launch::{wait_for_exit, LaunchArgs, WAIT_PID_TIMEOUT};
 use lavray_shell::msgbox;
-use lavray_shell::profile::{self, Entries};
+use lavray_shell::profile;
 use lavray_shell::single_instance::{self, Verdict};
 use lavray_shell::sysproxy::{validate_port, SysProxy};
 use lavray_shell::token;
 use lavray_shell::tray::TrayUpdate;
+use lavray_shell::ui_state;
 use lavray_shell::uiprotocol::IPC_PROTOCOL_VERSION;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
 use tauri::{Emitter, Manager};
 
 mod tray_ui;
@@ -101,45 +101,54 @@ async fn relaunch_elevated(app: tauri::AppHandle) -> Result<RelaunchOutcome, Str
     Ok(outcome)
 }
 
-/// Что UI узнаёт о запуске: перезапущен ли экземпляр от администратора и записи
-/// `localStorage`, которые передал прежний экземпляр (у повышенного экземпляра
-/// отдельный профиль WebView, см. `profile`).
+/// Что UI узнаёт о запуске: перезапущен ли экземпляр от администратора.
 #[derive(serde::Serialize)]
 struct LaunchInfo {
     elevated_relaunch: bool,
-    handoff: Entries,
 }
 
 /// Состояние запуска: запущен ли экземпляр с `--elevated-relaunch`; ответ
-/// `launch_info` выдаётся один раз (перезагрузка страницы не повторяет подсказку
-/// и не затирает записи более новыми старыми).
+/// `launch_info` с признаком выдаётся один раз (перезагрузка страницы не
+/// повторяет подсказку «TUN включён»).
 struct LaunchState {
     elevated_relaunch: bool,
     answered: AtomicBool,
 }
 
-/// launch_info — флаг перезапуска от администратора и переданные записи
-/// `localStorage`; файл передачи читается только у экземпляра с
-/// `--elevated-relaunch`, один раз.
+/// launch_info — признак «приложение только что перезапущено от администратора»
+/// (по флагу `--elevated-relaunch`, а не по файлам и `localStorage`).
 #[tauri::command]
 fn launch_info(state: tauri::State<'_, LaunchState>) -> LaunchInfo {
     let first = !state.answered.swap(true, Ordering::SeqCst);
-    let relaunched = state.elevated_relaunch && first;
     LaunchInfo {
-        elevated_relaunch: relaunched,
-        handoff: if relaunched {
-            profile::take(&data_dir(), SystemTime::now())
-        } else {
-            Entries::new()
-        },
+        elevated_relaunch: state.elevated_relaunch && first,
     }
 }
 
-/// save_ui_handoff — UI перед перезапуском от администратора передаёт записи
-/// `localStorage` новому экземпляру (лишние ключи и крупные значения отбрасываются).
+/// ui_state_load — общие настройки UI из `ui-state.json` в каталоге данных
+/// (источник истины для обоих профилей WebView; `localStorage` — кэш).
 #[tauri::command]
-fn save_ui_handoff(entries: Entries) -> Result<(), String> {
-    profile::save(&data_dir(), entries)
+async fn ui_state_load() -> Result<ui_state::Loaded, String> {
+    tauri::async_runtime::spawn_blocking(|| ui_state::load(&data_dir()))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// ui_state_set — записать (`value`) или удалить (`null`) одну настройку из
+/// явного списка ключей. Повышенный процесс создаёт файл с явным доступом для
+/// текущего пользователя, чтобы обычный экземпляр мог его перезаписать.
+#[tauri::command]
+async fn ui_state_set(key: String, value: Option<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let owner = if process_is_elevated() {
+            token::user_sid()
+        } else {
+            None
+        };
+        ui_state::set(&data_dir(), &key, value, owner.as_deref())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// window_show — показать и развернуть главное окно (трей и Ctrl+D просят
@@ -610,7 +619,8 @@ fn main() {
             set_system_proxy,
             relaunch_elevated,
             launch_info,
-            save_ui_handoff,
+            ui_state_load,
+            ui_state_set,
             window_show,
             autostart_state,
             set_autostart

@@ -33,7 +33,8 @@ import {
   saveSelectedProfileId,
 } from '../lib/connection';
 import { relaunchElevated, tunNeedsElevation } from '../lib/elevation';
-import { sendHandoff, takeRelaunched } from '../lib/launch';
+import { takeRelaunched } from '../lib/launch';
+import { saveUiStateNow } from '../lib/uiState';
 import { onTunDialogRequest, takeTunDialogRequest } from '../lib/tunRequest';
 import type { RelaunchOutcome } from '../lib/elevation';
 import { ConnRight } from '../components/ConnRight';
@@ -378,9 +379,10 @@ export function ConnectionScreen(): JSX.Element {
     };
     saveModes(window.localStorage, next);
     await rememberModes(core, next);
-    // У повышенного экземпляра свой профиль WebView: язык, тема, выбор сервера
-    // и режимы переходят к нему через оболочку.
-    await sendHandoff(window.localStorage);
+    // У повышенного экземпляра свой профиль WebView: общие настройки (режимы,
+    // язык, тема, выбор сервера) он читает из файла оболочки, поэтому запись
+    // должна завершиться до запуска нового экземпляра.
+    await saveUiStateNow(window.localStorage);
     try {
       const outcome = await relaunchElevated();
       if (outcome === 'cancelled') revert();

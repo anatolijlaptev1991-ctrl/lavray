@@ -2,8 +2,9 @@
 
 // customFields.ts — что считается custom-содержимым профиля (T-08B). Подтверждение
 // считает ядро; клиенту нужно только решить, есть ли что подтверждать: непустой
-// custom_outbound_json / custom_config_json или полный конфиг профиля CUSTOM_CONFIG
-// (core = internal-full). Пустая строка и `{}` — не custom-содержимое.
+// custom_outbound_json / custom_config_json или профиль CUSTOM_CONFIG с core =
+// internal-full (как model.HasCustomContent: такой профиль подтверждается всегда,
+// даже с пустым конфигом). Пустая строка и `{}` в custom-полях — не содержимое.
 import { CustomDetail_Core } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 
@@ -27,11 +28,7 @@ export function isCustomJson(json: string | undefined): boolean {
 export function hasCustomContent(profile: Profile): boolean {
   if (isCustomJson(profile.customOutboundJson) || isCustomJson(profile.customConfigJson)) return true;
   const detail = profile.detail;
-  return (
-    detail.case === 'custom' &&
-    detail.value.core === CustomDetail_Core.INTERNAL_FULL &&
-    isCustomJson(detail.value.fullConfigJson)
-  );
+  return detail.case === 'custom' && detail.value.core === CustomDetail_Core.INTERNAL_FULL;
 }
 
 /** Custom-содержимое есть, но ядро его ещё не подтвердило: оно не применяется к конфигу. */

@@ -288,10 +288,7 @@ func buildSingBoxConfig(req BuildRequest, st *BuildSettings, res *BuildResult) (
 
 // ---- internal-full ----------------------------------------------------------
 
-func isInternalFull(p *model.Profile) bool {
-	d, ok := p.Detail.(*model.CustomDetail)
-	return ok && p.Type == model.TypeCustomConfig && d.Core == "internal-full"
-}
+func isInternalFull(p *model.Profile) bool { return model.IsInternalFull(p) }
 
 func internalFullConfig(p *model.Profile) (map[string]any, error) {
 	d := p.Detail.(*model.CustomDetail)

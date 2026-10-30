@@ -116,9 +116,9 @@ func (s *Server) CreateProfile(ctx context.Context, req *connect.Request[lavrayv
 	if in.GroupId <= 0 {
 		return nil, invalidArg("group_id обязателен при создании профиля")
 	}
-	m, err := profileToModel(in)
+	m, err := profileFromClient(in, nil) // T-08B: без подтверждения custom-полей
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, err
 	}
 	m.ID = 0 // назначает хранилище
 	// T-51: сервер, добавленный вручную в группу-подписку, обновление не удалит.
@@ -138,9 +138,9 @@ func (s *Server) UpdateProfile(ctx context.Context, req *connect.Request[lavrayv
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	m, err := profileToModel(in)
+	m, err := profileFromClient(in, old) // T-08B: хэш подтверждения — со старой версии
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, err
 	}
 	// Статистика и результаты тестов — серверные, клиент их перезаписать не может.
 	m.Traffic = old.Traffic

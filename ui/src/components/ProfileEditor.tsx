@@ -10,9 +10,12 @@ import type { JSX } from 'react';
 import { ProfileType } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 import { friendlyCoreError } from '../lib/core';
+import { needsCustomConfirm } from '../lib/customFields';
 import { useCore } from '../hooks/useCore';
+import { useCustomFieldsConfirm } from '../hooks/useCustomFieldsConfirm';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
+import { CustomFieldsDiffDialog } from './CustomFieldsDiffDialog';
 import { DialogShell } from './dialogs';
 import { CustomJsonFields } from './profile-editor/CustomJsonFields';
 import { customFromProfile, firstInvalidCustom, withCustom } from './profile-editor/customJson';
@@ -59,6 +62,12 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
   const [errors, setErrors] = useState<FormErrors>({});
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
+  // T-08B: редактор завершается, когда диалог подтверждения custom-полей закрыт (или не нужен).
+  const finish = useCallback((): void => {
+    onSaved();
+    onClose();
+  }, [onSaved, onClose]);
+  const { dialogProps: cfProps, open: openCf } = useCustomFieldsConfirm({ onClosed: finish });
 
   useEffect(() => {
     setF(initialForm(profile));
@@ -86,15 +95,15 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
     setBusy(true);
     try {
       // T-08B: подтверждение custom-полей считает ядро; редактор шлёт только текст.
-      await persistProfile(core, profile, withCustom(toProfile(f, profile?.id ?? 0n, groupId), custom));
-      onSaved();
-      onClose();
+      const saved = await persistProfile(core, profile, withCustom(toProfile(f, profile?.id ?? 0n, groupId), custom));
+      if (needsCustomConfirm(saved)) openCf(saved.id, saved.name);
+      else finish();
     } catch (e) {
       setErr(friendlyCoreError(e));
     } finally {
       setBusy(false);
     }
-  }, [core, f, custom, profile, groupId, onSaved, onClose, t, tf]);
+  }, [core, openCf, f, custom, profile, groupId, finish, t, tf]);
 
   const title = profile === null ? t('ed.titleNew') : t('ed.titleEdit');
 
@@ -207,6 +216,7 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
           }}
         />
       </div>
+      {cfProps !== null && <CustomFieldsDiffDialog {...cfProps} />}
     </DialogShell>
   );
 }

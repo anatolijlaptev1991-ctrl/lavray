@@ -1589,6 +1589,10 @@ message Connection {
   optional string inbound = 8; // mixed-in / tun-in
   optional string rule = 9; // какое правило маршрутизовало (UX-12)
   optional string process = 10; // TUN-режим (FR-UI-271/274)
+  int64 upload_bytes = 11; // отправлено через соединение (T-79)
+  int64 download_bytes = 12; // получено через соединение (T-79)
+  string network = 13; // "tcp" | "udp" (T-79)
+  repeated string chain = 14; // теги исходящих от первого к конечному (T-79)
 }
 
 message CloseConnectionRequest {

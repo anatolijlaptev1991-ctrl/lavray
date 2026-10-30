@@ -10601,6 +10601,10 @@ type Connection struct {
 	Inbound             *string                `protobuf:"bytes,8,opt,name=inbound,proto3,oneof" json:"inbound,omitempty"`                                                    // mixed-in / tun-in
 	Rule                *string                `protobuf:"bytes,9,opt,name=rule,proto3,oneof" json:"rule,omitempty"`                                                          // какое правило маршрутизовало (UX-12)
 	Process             *string                `protobuf:"bytes,10,opt,name=process,proto3,oneof" json:"process,omitempty"`                                                   // TUN-режим (FR-UI-271/274)
+	UploadBytes         int64                  `protobuf:"varint,11,opt,name=upload_bytes,json=uploadBytes,proto3" json:"upload_bytes,omitempty"`                             // отправлено через соединение (T-79)
+	DownloadBytes       int64                  `protobuf:"varint,12,opt,name=download_bytes,json=downloadBytes,proto3" json:"download_bytes,omitempty"`                       // получено через соединение (T-79)
+	Network             string                 `protobuf:"bytes,13,opt,name=network,proto3" json:"network,omitempty"`                                                         // "tcp" | "udp" (T-79)
+	Chain               []string               `protobuf:"bytes,14,rep,name=chain,proto3" json:"chain,omitempty"`                                                             // теги исходящих от первого к конечному (T-79)
 	unknownFields       protoimpl.UnknownFields
 	sizeCache           protoimpl.SizeCache
 }
@@ -10703,6 +10707,34 @@ func (x *Connection) GetProcess() string {
 		return *x.Process
 	}
 	return ""
+}
+
+func (x *Connection) GetUploadBytes() int64 {
+	if x != nil {
+		return x.UploadBytes
+	}
+	return 0
+}
+
+func (x *Connection) GetDownloadBytes() int64 {
+	if x != nil {
+		return x.DownloadBytes
+	}
+	return 0
+}
+
+func (x *Connection) GetNetwork() string {
+	if x != nil {
+		return x.Network
+	}
+	return ""
+}
+
+func (x *Connection) GetChain() []string {
+	if x != nil {
+		return x.Chain
+	}
+	return nil
 }
 
 type CloseConnectionRequest struct {
@@ -14748,7 +14780,7 @@ const file_lavray_proto_rawDesc = "" +
 	"\x06active\x18\x01 \x03(\v2\x15.lavray.v1.ConnectionR\x06active\x12\x1d\n" +
 	"\n" +
 	"closed_ids\x18\x02 \x03(\tR\tclosedIds\x12\x1c\n" +
-	"\ttruncated\x18\x03 \x01(\bR\ttruncated\"\x8e\x04\n" +
+	"\ttruncated\x18\x03 \x01(\bR\ttruncated\"\x88\x05\n" +
 	"\n" +
 	"Connection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\"\n" +
@@ -14761,7 +14793,11 @@ const file_lavray_proto_rawDesc = "" +
 	"\ainbound\x18\b \x01(\tH\x02R\ainbound\x88\x01\x01\x12\x17\n" +
 	"\x04rule\x18\t \x01(\tH\x03R\x04rule\x88\x01\x01\x12\x1d\n" +
 	"\aprocess\x18\n" +
-	" \x01(\tH\x04R\aprocess\x88\x01\x01\"Z\n" +
+	" \x01(\tH\x04R\aprocess\x88\x01\x01\x12!\n" +
+	"\fupload_bytes\x18\v \x01(\x03R\vuploadBytes\x12%\n" +
+	"\x0edownload_bytes\x18\f \x01(\x03R\rdownloadBytes\x12\x18\n" +
+	"\anetwork\x18\r \x01(\tR\anetwork\x12\x14\n" +
+	"\x05chain\x18\x0e \x03(\tR\x05chain\"Z\n" +
 	"\x06Status\x12\x16\n" +
 	"\x12STATUS_UNSPECIFIED\x10\x00\x12\x11\n" +
 	"\rSTATUS_ACTIVE\x10\x01\x12\x11\n" +

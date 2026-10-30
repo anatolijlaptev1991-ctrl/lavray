@@ -1,0 +1,3 @@
+# <версия> <sha256 текста миграции>. Только дописывать строки, см. migrate_guard_test.go.
+1 c34599d81949297ef9878ed7395ae30a6fce78447a488c8753573a2e90bbae7d
+2 0e66c2926520ed8b206f5cf05a830aefea02eb5bec46a1682ce04a3d99b8ce41

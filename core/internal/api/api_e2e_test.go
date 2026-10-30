@@ -30,7 +30,10 @@ type clients struct {
 	st      *store.Store
 }
 
-func newE2E(t *testing.T) *clients {
+// newE2EServer поднимает настоящий сервер на временном Store и httptest-слушателе
+// (только loopback). setup, если задан, правит Server до первого запроса —
+// так тесты подменяют сеть и набор номера. Deps.Store подставляется здесь.
+func newE2EServer(t *testing.T, d Deps, setup func(*Server)) (*store.Store, *httptest.Server) {
 	t.Helper()
 	// Не t.TempDir(): гонка RemoveAll с -wal/-shm на Windows (см. store_test).
 	dir, err := os.MkdirTemp("", "lavray-api-e2e-*")
@@ -50,12 +53,15 @@ func newE2E(t *testing.T) *clients {
 			time.Sleep(10 * time.Millisecond)
 		}
 	})
-	srv := NewServer(Deps{Store: st, Runner: &inst.FakeRunner{}})
+	d.Store = st
+	srv := NewServer(d)
+	if setup != nil {
+		setup(srv)
+	}
 	mux := http.NewServeMux()
 	srv.Register(mux)
 	httpSrv := httptest.NewServer(mux)
 	t.Cleanup(httpSrv.Close)
-	hc := httpSrv.Client()
 	if _, err := st.GetGroup(1); err != nil {
 		// Дефолтная группа (id=1) — как первый запуск приложения (W6 Product
 		// Starter делает это при старте; тестам нужна гарантированная группа).
@@ -63,6 +69,13 @@ func newE2E(t *testing.T) *clients {
 			t.Fatal(err)
 		}
 	}
+	return st, httpSrv
+}
+
+func newE2E(t *testing.T) *clients {
+	t.Helper()
+	st, httpSrv := newE2EServer(t, Deps{Runner: &inst.FakeRunner{}}, nil)
+	hc := httpSrv.Client()
 	return &clients{
 		profile: lavrayv1connect.NewProfileServiceClient(hc, httpSrv.URL),
 		routing: lavrayv1connect.NewRoutingServiceClient(hc, httpSrv.URL),
@@ -232,12 +245,10 @@ func TestRoutingActivateAndGetActive(t *testing.T) {
 	}
 }
 
-func TestUnimplementedRPCAnswersCode(t *testing.T) {
+// Контракт «не реализованный RPC отвечает UNIMPLEMENTED, а не паникой» для всех
+// процедур proto проверяет TestUnimplementedRatchet (rpc_ratchet_test.go).
+func TestResetTrafficEmptyListMeansAll(t *testing.T) {
 	cs := newE2E(t)
-	// Ещё не реализованный RPC обязан отвечать UNIMPLEMENTED, а не паникой.
-	if _, err := cs.profile.ResolveDomains(context.Background(), connect.NewRequest(&lavrayv1.ResolveDomainsRequest{Ids: []int64{1}})); connect.CodeOf(err) != connect.CodeUnimplemented {
-		t.Fatalf("resolve domains: code=%v err=%v", connect.CodeOf(err), err)
-	}
 	// ResetTraffic реализован (FR-UI-211) — пустой список = все профили, ok.
 	if _, err := cs.profile.ResetTraffic(context.Background(), connect.NewRequest(&lavrayv1.ResetTrafficRequest{})); err != nil {
 		t.Fatalf("reset traffic: %v", err)

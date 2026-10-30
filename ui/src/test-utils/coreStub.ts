@@ -9,6 +9,7 @@ import { createRoot } from 'react-dom/client';
 import { vi } from 'vitest';
 import { CoreContext } from '../hooks/useCore';
 import { createCoreClients } from '../lib/core';
+import { decodeConnectBody, StreamReply, streamFetch } from './streamStub';
 
 /** Дословный GetStatus ядра в простое (go-тест TestB1_TunStatusAndWarning): поля active_profile_id нет. */
 export const RAW_IDLE_STATUS =
@@ -70,7 +71,7 @@ export class Down {
   readonly down = true;
 }
 
-type Reply = Json | Failure | Down;
+type Reply = Json | Failure | Down | StreamReply;
 type RouteFn = (call: number, body: unknown) => Reply;
 /** Ответ на RPC или функция (номер вызова с 0, тело запроса) → ответ. */
 export type Route = Reply | RouteFn;
@@ -86,14 +87,20 @@ export interface CoreStub {
   bodies: (rpc: string) => unknown[];
 }
 
-function decode(body: unknown): unknown {
-  if (typeof body === 'string') return JSON.parse(body) as unknown;
+function decode(body: unknown, headers: HeadersInit | undefined): unknown {
+  if (typeof body === 'string') return decodeConnectBody(body, null);
   // isView, а не instanceof Uint8Array: в jsdom этот класс «чужой» (другой realm).
-  if (ArrayBuffer.isView(body)) return JSON.parse(new TextDecoder().decode(body)) as unknown;
+  if (ArrayBuffer.isView(body)) {
+    const bytes = new Uint8Array(body.buffer, body.byteOffset, body.byteLength);
+    return decodeConnectBody(bytes, new Headers(headers).get('Content-Type'));
+  }
   return null;
 }
 
-/** Подменяет глобальный fetch ядром-заглушкой. Нет маршрута — ответ `{}`. */
+/**
+ * Подменяет глобальный fetch ядром-заглушкой. Нет маршрута — ответ `{}`.
+ * Ответ-стрим для server-stream RPC: `routes['LogService/Subscribe'] = new StreamReply([...])`.
+ */
 export function stubCore(routes: Record<string, Route>): CoreStub {
   const calls: CoreStub['calls'][number][] = [];
   const counts = new Map<string, number>();
@@ -103,13 +110,15 @@ export function stubCore(routes: Record<string, Route>): CoreStub {
       const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
       // …/lavray.v1.CoreService/Connect → CoreService/Connect
       const rpc = url.split('/').slice(-2).join('/').replace(/^lavray\.v1\./, '');
-      const body = decode(init?.body);
+      const body = decode(init?.body, init?.headers);
       calls.push({ rpc, body });
       const n = counts.get(rpc) ?? 0;
       counts.set(rpc, n + 1);
       const route = routes[rpc] ?? {};
       const reply = isRouteFn(route) ? route(n, body) : route;
       if (reply instanceof Down) return Promise.reject(new TypeError('Failed to fetch'));
+      // Server-stream: кадры application/connect+json, abort обрывает чтение (streamStub.ts).
+      if (reply instanceof StreamReply) return streamFetch(reply, init?.signal);
       const failed = reply instanceof Failure;
       return Promise.resolve(
         new Response(JSON.stringify(failed ? { code: reply.code, message: reply.message } : reply), {

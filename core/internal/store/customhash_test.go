@@ -207,3 +207,57 @@ func mustCustomHash(t *testing.T, p *model.Profile) string {
 	}
 	return h
 }
+
+func TestStaleWriteDoesNotReviveConfirmation(t *testing.T) {
+	// R1 прочитал подтверждённое A; R2 правит на B, R3 обратно на A
+	// (подтверждение снято); затем R1 пишет свою устаревшую копию с хэшем A.
+	s := openTemp(t)
+	p := customProfile(`{"dns":{"final":"remote"}}`)
+	if err := s.CreateProfile(p); err != nil {
+		t.Fatal(err)
+	}
+	stale := confirm(t, s, p) // R1: A + H(A)
+	for _, cfg := range []string{`{"dns":{"final":"local"}}`, `{"dns":{"final":"remote"}}`} {
+		cur, _ := s.GetProfile(p.ID)
+		cur.CustomConfigJSON = cfg
+		if err := s.UpdateProfile(cur); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stale.Name = "R1"
+	if err := s.UpdateProfile(stale); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetProfile(p.ID); got.CustomFieldsConfirmed || got.Name != "R1" {
+		t.Fatalf("устаревшая копия вернула подтверждение: %+v", got)
+	}
+}
+
+func TestCreateProfileDropsHash(t *testing.T) {
+	// Клон и любой новый профиль не подтверждены, даже если модель несёт
+	// верный хэш содержимого.
+	s := openTemp(t)
+	p := customProfile(`{"dns":{"final":"remote"}}`)
+	p.CustomHash = mustCustomHash(t, p)
+	if err := s.CreateProfile(p); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetProfile(p.ID); got.CustomFieldsConfirmed || got.CustomHash != "" {
+		t.Fatal("CreateProfile принял хэш подтверждения")
+	}
+}
+
+func TestImportProfileKeepsValidHash(t *testing.T) {
+	// ImportProfile — восстановление снимка (откат подписки): прежнее
+	// подтверждение возвращается, если содержимое то же.
+	s := openTemp(t)
+	p := customProfile(`{"dns":{"final":"remote"}}`)
+	p.ID = 42
+	p.CustomHash = mustCustomHash(t, p)
+	if err := s.ImportProfile(p); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.GetProfile(42); !got.CustomFieldsConfirmed {
+		t.Fatal("снимок с верным хэшем должен остаться подтверждённым")
+	}
+}

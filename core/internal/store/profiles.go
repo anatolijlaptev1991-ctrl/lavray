@@ -20,7 +20,7 @@ const sortKeyStep = 1024 // вставка со сдвигом шагом 1024 (
 // CreateProfile сохраняет новый профиль. ID==0 → назначается хранилищем;
 // sort_key — в конец группы.
 func (s *Store) CreateProfile(p *model.Profile) error {
-	return s.createProfile(p, true)
+	return s.createProfile(withoutCustomHash(p), true) // T-08B: новый не подтверждён
 }
 
 // ImportProfile сохраняет профиль с СОХРАНЁННЫМ id (импортёр NekoBox, §5.3):
@@ -86,8 +86,7 @@ func (s *Store) UpdateProfile(p *model.Profile) error {
 		return fmt.Errorf("store: profile id is required")
 	}
 	return s.withTx(func(tx *sql.Tx) error {
-		var oldGroup int64
-		err := tx.QueryRow(`SELECT group_id FROM profiles WHERE id = ?`, p.ID).Scan(&oldGroup)
+		oldGroup, err := loadGroupAndCustomHash(tx, p) // T-08B: хэш — только из БД
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}

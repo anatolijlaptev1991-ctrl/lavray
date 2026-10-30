@@ -4,9 +4,11 @@ package store
 
 // customhash.go — подтверждение custom-полей в хранилище (T-08B). Инвариант:
 // в profiles.custom_hash лежит либо пустое значение, либо хэш, совпадающий с
-// текущим содержимым профиля. Устаревший хэш при записи стирается, поэтому
-// правка A→B→A подтверждение не возвращает, а CustomFieldsConfirmed всегда
-// вычисляется, а не берётся из модели.
+// текущим содержимым профиля. Хэш пишет только ConfirmCustomFields (и
+// ImportProfile — восстановление снимка подписки); CreateProfile его
+// стирает, UpdateProfile берёт из БД. Устаревший хэш при записи стирается,
+// поэтому правка A→B→A подтверждение не возвращает, а CustomFieldsConfirmed
+// всегда вычисляется, а не берётся из модели.
 
 import (
 	"database/sql"
@@ -31,6 +33,24 @@ func normalizeCustomHash(p *model.Profile) {
 	if !p.CustomFieldsConfirmed {
 		p.CustomHash = ""
 	}
+}
+
+// withoutCustomHash — CreateProfile: новый профиль (в том числе клон) не
+// подтверждён, какой бы хэш ни пришёл с моделью.
+func withoutCustomHash(p *model.Profile) *model.Profile {
+	p.CustomHash = ""
+	return p
+}
+
+// loadGroupAndCustomHash — UpdateProfile: группа и хэш подтверждения из БД в
+// той же транзакции. Хэш вызывающего не используется: устаревшая копия
+// профиля (прочитанная до чужой правки) не вернёт снятое подтверждение.
+func loadGroupAndCustomHash(tx *sql.Tx, p *model.Profile) (int64, error) {
+	var group int64
+	var hash sql.NullString
+	err := tx.QueryRow(`SELECT group_id, custom_hash FROM profiles WHERE id = ?`, p.ID).Scan(&group, &hash)
+	p.CustomHash = hash.String
+	return group, err
 }
 
 // profileData — канонический JSON профиля для profiles.data; перед этим

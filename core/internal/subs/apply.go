@@ -357,12 +357,11 @@ func applyWrites(st StoreAPI, snap *Snapshot, params ApplyParams, next []*model.
 				}
 				// T-09 (A1-02): custom-поля пользователь задаёт профилю сам, а
 				// подписка их не доставляет — парсер вырезает (stripNekoCustomCore).
-				// Берём со старого профиля вместе с подтверждением: оно относится
-				// именно к этим полям. Всё, что прислал провайдер, не подтверждено
-				// и пользовательское не подменяет (LNB-25).
+				// Берём со старого профиля; подтверждение хранилище оставит само,
+				// раз содержимое прежнее (T-08B). Всё, что прислал провайдер, не
+				// подтверждено и пользовательское не подменяет (LNB-25).
 				merged.CustomOutboundJSON = old.CustomOutboundJSON
 				merged.CustomConfigJSON = old.CustomConfigJSON
-				merged.CustomHash = old.CustomHash // хранилище сотрёт, если содержимое иное (T-08B)
 				if err := st.UpdateProfile(&merged); err != nil {
 					return fmt.Errorf("применение: обновление профиля %d: %w", old.ID, err)
 				}

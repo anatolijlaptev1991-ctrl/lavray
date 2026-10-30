@@ -81,8 +81,10 @@ func TestApplyKeepsUserCustomFields(t *testing.T) {
 			old.Favorite, old.Notes = true, "основной"
 			old.CustomOutboundJSON = customOut
 			old.CustomConfigJSON = customCfg
-			old.CustomHash = mustCustomHash(t, old) // подтверждено (T-08B: хэш содержимого)
 			if err := st.CreateProfile(old); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.ConfirmCustomFields(old.ID, mustCustomHash(t, old)); err != nil { // T-08B
 				t.Fatal(err)
 			}
 			snap, err := TakeSnapshot(st, g.ID)
@@ -124,8 +126,10 @@ func TestApplyProviderCustomFieldsDoNotOverrideUser(t *testing.T) {
 		Detail:           &model.TrojanVlessDetail{Password: "p"},
 		CustomConfigJSON: `{"log":{"level":"debug"}}`,
 	}
-	old.CustomHash = mustCustomHash(t, old)
 	if err := st.CreateProfile(old); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ConfirmCustomFields(old.ID, mustCustomHash(t, old)); err != nil {
 		t.Fatal(err)
 	}
 	snap, err := TakeSnapshot(st, g.ID)

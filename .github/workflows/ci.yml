@@ -295,3 +295,30 @@ jobs:
         run: npx vitest run
       - name: vite build
         run: npm run build
+
+  # --------------------------------------------------------------------------
+  # hygiene: размерная трещотка, SPDX, окончания строк LF и тесты скриптов (Ф1.0).
+  # Только стандартная библиотека Python, пакеты не ставятся.
+  # --------------------------------------------------------------------------
+  hygiene:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: "Размерная трещотка (новый файл до 200 строк, большие не растут)"
+        run: python scripts/size_ratchet.py
+      - name: SPDX-заголовки
+        run: python scripts/add-spdx.py --check
+      - name: "Окончания строк: в индексе только LF"
+        run: |
+          # Колонка index: i/lf, i/crlf, i/mixed, i/-text (двоичные), i/none.
+          bad="$(git ls-files --eol | awk -F'\t' '$1 ~ /^i\/(crlf|mixed)/ {print $2}')"
+          if [ -n "$bad" ]; then
+            echo "::error::CRLF в индексе, нужен LF:"
+            echo "$bad"
+            exit 1
+          fi
+      - name: Тесты скриптов (unittest)
+        run: python -m unittest discover -s scripts/tests

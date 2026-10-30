@@ -43,6 +43,8 @@ export const deDict: Record<string, string> = {
   "cf.ack": "Ich verstehe, dass dies die Konfiguration ändert",
   "cf.already": "Dieser Inhalt ist bereits bestätigt. Eine erneute Bestätigung ändert nichts.",
   "cf.apply": "Anwenden",
+  "cf.badge": "Custom: nicht bestätigt",
+  "cf.badgeTip": "Die Custom-Felder sind nicht bestätigt und werden nicht angewendet. Klicken, um die Konfigurationsänderungen zu prüfen.",
   "cf.changed": "Der Inhalt hat sich seit dem Öffnen dieser Ansicht geändert. Prüfen Sie den neuen Diff und bestätigen Sie erneut.",
   "cf.config": "Custom-Config-JSON",
   "cf.configHint": "Wird in die Wurzel der sing-box-Konfiguration eingemischt; der Kern übernimmt nur erlaubte Schlüssel. Leer oder {} bedeutet ungenutzt.",

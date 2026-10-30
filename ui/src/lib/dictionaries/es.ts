@@ -43,6 +43,8 @@ export const esDict: Record<string, string> = {
   "cf.ack": "Entiendo que esto cambia la configuración",
   "cf.already": "Este contenido ya está confirmado. Confirmarlo de nuevo no cambia nada.",
   "cf.apply": "Aplicar",
+  "cf.badge": "custom: sin confirmar",
+  "cf.badgeTip": "Los campos personalizados no están confirmados y no se aplican. Haz clic para revisar los cambios de la configuración.",
   "cf.changed": "El contenido cambió desde que abriste esta vista. Revisa el nuevo diff y confirma de nuevo.",
   "cf.config": "JSON de configuración personalizada",
   "cf.configHint": "Se combina con la raíz de la configuración de sing-box; el núcleo solo aplica las claves permitidas. Vacío o {} significa que no se usa.",

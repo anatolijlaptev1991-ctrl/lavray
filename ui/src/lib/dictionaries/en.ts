@@ -43,6 +43,8 @@ export const enDict: Record<string, string> = {
   "cf.ack": "I understand this changes the config",
   "cf.already": "This content is already confirmed. Confirming it again changes nothing.",
   "cf.apply": "Apply",
+  "cf.badge": "custom: not confirmed",
+  "cf.badgeTip": "Custom fields are not confirmed and are not applied. Click to review the config changes.",
   "cf.changed": "The content changed since you opened this view. Review the new diff and confirm again.",
   "cf.config": "Custom config JSON",
   "cf.configHint": "Merged into the sing-box config root; the core applies allowed keys only. Empty or {} means unused.",

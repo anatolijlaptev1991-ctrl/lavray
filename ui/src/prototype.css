@@ -1334,3 +1334,7 @@ html[data-shell="native"][data-os="mac"] #app { height: 100vh; }
 .cf-ack input{flex:none;width:24px;height:24px;margin:0;accent-color:var(--accent);cursor:pointer}
 .cf-ack span{padding-top:3px}
 .diffv+.cf-note{margin-top:8px}
+/* Бейдж «custom: не подтверждено» — настоящая кнопка (цель не меньше 24px, WCAG 2.2) */
+.cf-badge{flex:none;height:24px;padding-inline:8px;border:0;font:inherit;font-size:.6875rem;font-weight:600;cursor:pointer}
+.cf-badge .ic{width:14px;height:14px}
+.cf-badge:hover{background:color-mix(in srgb,var(--warn) 24%,var(--surface))}

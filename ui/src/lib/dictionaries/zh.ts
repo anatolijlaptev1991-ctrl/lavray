@@ -43,6 +43,8 @@ export const zhDict: Record<string, string> = {
   "cf.ack": "我了解这会更改配置",
   "cf.already": "此内容已确认，再次确认不会有任何变化。",
   "cf.apply": "应用",
+  "cf.badge": "自定义：未确认",
+  "cf.badgeTip": "自定义字段尚未确认，不会生效。点击查看配置变更。",
   "cf.changed": "自打开此视图以来内容已更改。请查看新的差异并重新确认。",
   "cf.config": "自定义配置 JSON",
   "cf.configHint": "合并到 sing-box 配置的根部；核心只应用允许的键。留空或 {} 表示不使用。",

@@ -19,39 +19,14 @@ import { testRequest } from '../lib/testRequest';
 import type { TestRun } from '../lib/testRequest';
 import { formatFullReport, isTestDown, isTestNotApplicable, resultLabel } from '../lib/testResult';
 import { ProfileEditor } from '../components/ProfileEditor';
+import { CustomBadge } from '../components/servers/CustomBadge';
+import { typeBadge } from '../components/servers/typeBadge';
 import { ImportDialog } from '../components/ImportDialog';
 import { FullTestDialog } from '../components/FullTestDialog';
 import { ContextMenu } from '../components/ContextMenu';
 import type { MenuAnchor } from '../components/ContextMenu';
 import { ConfirmDialog, GroupsDialog } from '../components/dialogs';
 import { Icon } from '../components/Icon';
-
-/** Бейдж типа (прототип .badge.bt-*, нейтральный: цвет — только у статусов). */
-interface TypeInfo {
-  readonly cls: string;
-  readonly label?: string;
-  readonly labelKey?: MessageKey;
-}
-
-const TYPE_INFO: Record<number, TypeInfo> = {
-  [ProfileType.SOCKS]: { cls: 'socks', label: 'SOCKS5' },
-  [ProfileType.HTTP]: { cls: 'https', label: 'HTTPS' },
-  [ProfileType.SHADOWSOCKS]: { cls: 'ss', label: 'Shadowsocks' },
-  [ProfileType.TROJAN]: { cls: 'trojan', label: 'Trojan' },
-  [ProfileType.VMESS]: { cls: 'vmess', label: 'VMess' },
-  [ProfileType.VLESS]: { cls: 'vless', label: 'VLESS' },
-  [ProfileType.HYSTERIA2]: { cls: 'hy2', label: 'Hysteria2' },
-  [ProfileType.TUIC]: { cls: 'tuic', label: 'TUIC' },
-  [ProfileType.CHAIN]: { cls: 'chain', labelKey: 'ed.t.chain' },
-  [ProfileType.CUSTOM_OUTBOUND]: { cls: 'json', labelKey: 'ed.t.json' },
-  [ProfileType.CUSTOM_CONFIG]: { cls: 'json', labelKey: 'ed.t.json' },
-};
-
-function typeBadge(type: ProfileType, t: (key: MessageKey) => string): { cls: string; label: string } {
-  const info = TYPE_INFO[type];
-  if (info === undefined) return { cls: 'unknown', label: '?' };
-  return { cls: info.cls, label: info.labelKey === undefined ? (info.label ?? '?') : t(info.labelKey) };
-}
 
 const PROTO_OPTIONS: readonly { value: string; label: string }[] = [
   { value: 'all', label: '' },
@@ -371,6 +346,7 @@ export function ServersScreen(): JSX.Element {
         // Удаление сервера необратимо — прототип всегда спрашивает.
         setConfirmDelete({ ids: [p.id], count: 1 });
       },
+      onCustomConfirmed: refresh,
       menuOpen: rowMenu?.profile.id === p.id,
       // Повторный клик по «≡» закрывает меню своей строки.
       onRowMenu: (anchor: MenuAnchor): void => {
@@ -380,7 +356,7 @@ export function ServersScreen(): JSX.Element {
       active: activeId !== 0n && p.id === activeId,
       activeDot,
     }),
-    [compact, selected, latency, reports, rowMenu, toggleSelect, toggleFav, t, activeId, activeDot],
+    [compact, selected, latency, reports, rowMenu, toggleSelect, toggleFav, t, activeId, activeDot, refresh],
   );
 
   return (
@@ -932,6 +908,8 @@ interface RowProps {
   readonly onEdit: () => void;
   readonly onFav: () => void;
   readonly onDelete: () => void;
+  /** Custom-поля подтверждены: список перечитывается, бейдж «не подтверждено» уходит. */
+  readonly onCustomConfirmed: () => void;
   /** Меню строки открыто: aria-expanded у кнопки «≡». */
   readonly menuOpen: boolean;
   /** Меню строки (копировать ссылку / тест / удалить): прототип profileMenu. */
@@ -953,6 +931,7 @@ function ProfileRow({
   onEdit,
   onFav,
   onDelete,
+  onCustomConfirmed,
   menuOpen,
   onRowMenu,
   badge,
@@ -1029,6 +1008,7 @@ function ProfileRow({
           </span>
         )}
       </button>
+      <CustomBadge profile={p} onConfirmed={onCustomConfirmed} />
       <span className="prow-res">
         <span className={`prow-lat mono${down ? ' err' : delay === '—' ? ' na' : ''}`}>{delay}</span>
         {report !== '' && (

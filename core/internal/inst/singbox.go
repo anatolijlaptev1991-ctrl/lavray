@@ -17,12 +17,14 @@ package inst
 import (
 	"context"
 	"fmt"
+	"net"
 	"sync"
 
 	box "github.com/sagernet/sing-box"
 	"github.com/sagernet/sing-box/include"
 	"github.com/sagernet/sing-box/option"
 	sbjson "github.com/sagernet/sing/common/json"
+	M "github.com/sagernet/sing/common/metadata"
 )
 
 // SingBoxRunner — запуск форка sing-box в текущем процессе (одновременно —
@@ -176,4 +178,27 @@ func (r *SingBoxRunner) Stop(ctx context.Context) error {
 	}
 }
 
-var _ Runner = (*SingBoxRunner)(nil)
+// DialProxy открывает соединение через исходящее "proxy" работающего инстанса
+// (проверка связи после подключения). Если в конфиге нет исходящего с таким
+// тегом (internal-full конфиг пользователя), берётся исходящее по умолчанию.
+func (r *SingBoxRunner) DialProxy(ctx context.Context, network, address string) (net.Conn, error) {
+	r.mu.Lock()
+	instance := r.instance
+	r.mu.Unlock()
+	if instance == nil {
+		return nil, ErrNotRunning
+	}
+	out, ok := instance.Outbound().Outbound(TestOutboundTag)
+	if !ok {
+		out = instance.Outbound().Default()
+	}
+	if out == nil {
+		return nil, fmt.Errorf("singbox: в конфиге нет исходящего %q", TestOutboundTag)
+	}
+	return out.DialContext(ctx, network, M.ParseSocksaddr(address))
+}
+
+var (
+	_ Runner      = (*SingBoxRunner)(nil)
+	_ ProxyDialer = (*SingBoxRunner)(nil)
+)

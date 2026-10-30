@@ -39,6 +39,7 @@ import { saveUiStateNow } from '../lib/uiState';
 import { onTunDialogRequest, takeTunDialogRequest } from '../lib/tunRequest';
 import type { RelaunchOutcome } from '../lib/elevation';
 import { ConnRight } from '../components/ConnRight';
+import { TrafficWarning } from '../components/TrafficWarning';
 import { TunAdminNotice } from '../components/TunAdminNotice';
 import { TunDialog } from '../components/TunDialog';
 import { ImportDialog } from '../components/ImportDialog';
@@ -487,6 +488,9 @@ export function ConnectionScreen(): JSX.Element {
             </button>
           </div>
         </div>
+      )}
+      {ready && (status.healthError ?? '') !== '' && (
+        <TrafficWarning reason={status.healthError ?? ''} />
       )}
       <div className="card cx-card" id="stateCard" data-conn={phase === 'connecting' ? 'mid' : phase}>
         <div className="cx-top">

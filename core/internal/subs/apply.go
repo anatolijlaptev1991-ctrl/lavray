@@ -241,6 +241,9 @@ type UpdateResult struct {
 	Order   []int64 // фактический порядок группы после применения
 	UsedURL string
 	Info    *model.SubscriptionInfo
+	// SkippedLines — строки ответа, не превратившиеся в сервер (ошибка разбора
+	// ссылки); 0.2.1: раньше такие строки пропадали молча.
+	SkippedLines int
 	// Snapshot — состояние группы ДО применения (для честного отката через
 	// RollbackSubscription; A15 аудита round 1: API снимал снапшот после
 	// apply, поэтому «откат» возвращал ровно то же состояние).
@@ -341,7 +344,11 @@ func applyWrites(st StoreAPI, snap *Snapshot, params ApplyParams, next []*model.
 				merged.Favorite = old.Favorite
 				merged.TestResult = old.TestResult
 				merged.Traffic = old.Traffic
-				merged.Notes = old.Notes
+				// 0.2.1: описание сервера от провайдера (?serverDescription=) кладётся
+				// в заметки только пока они пусты — пользовательские не перетираются.
+				if old.Notes != "" {
+					merged.Notes = old.Notes
+				}
 				merged.Tags = old.Tags
 				// L26 аудита №1: geo — пользовательская метаданная; сохраняем
 				// его, если новый разбор страну не определил.

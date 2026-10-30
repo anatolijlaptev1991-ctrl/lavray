@@ -97,6 +97,13 @@ type Server struct {
 
 	// tunCheck — проверка прав на TUN перед стартом (nil — не проверять).
 	tunCheck func() error
+
+	// health — итог проверки связи после подключения (connect_health.go).
+	health connHealth
+	// healthRetryDelay — пауза перед повтором быстро упавшей проверки,
+	// healthTimeout — время ожидания ответа; тесты подменяют оба.
+	healthRetryDelay time.Duration
+	healthTimeout    time.Duration
 }
 
 // NewServer создаёт сервер зависимостями (Deps.Store обязателен).
@@ -120,18 +127,20 @@ func NewServer(d Deps) *Server {
 		})
 	}
 	return &Server{
-		st:          d.Store,
-		logs:        lg,
-		inst:        inst.NewManager(d.Runner),
-		http:        httpc,
-		ipURL:       publicIPURL,
-		ipProbeURL:  "https://1.1.1.1/",
-		dial:        (&net.Dialer{}).DialContext,
-		appVersion:  version.Version,
-		tunCheck:    d.TunCheck,
-		subsRunning: map[int64]bool{},
-		subsSnap:    map[int64]*subs.Snapshot{},
-		setSubs:     map[chan *lavrayv1.SettingsChanged]struct{}{},
+		st:               d.Store,
+		logs:             lg,
+		inst:             inst.NewManager(d.Runner),
+		http:             httpc,
+		ipURL:            publicIPURL,
+		ipProbeURL:       "https://1.1.1.1/",
+		dial:             (&net.Dialer{}).DialContext,
+		appVersion:       version.Version,
+		tunCheck:         d.TunCheck,
+		healthRetryDelay: healthRetryDelay,
+		healthTimeout:    healthCheckTimeout,
+		subsRunning:      map[int64]bool{},
+		subsSnap:         map[int64]*subs.Snapshot{},
+		setSubs:          map[chan *lavrayv1.SettingsChanged]struct{}{},
 	}
 }
 
@@ -467,6 +476,9 @@ func (s *Server) coreStatus() *lavrayv1.CoreStatus {
 		if st.Run.StartedAtMs != 0 {
 			cs.StartedAtMs = int64p(st.Run.StartedAtMs)
 		}
+	}
+	if st.State == inst.StateReady {
+		cs.HealthError = strpIf(s.healthFailure())
 	}
 	inb := s.buildSettings(false).Inbound
 	cs.Inbound = &lavrayv1.InboundInfo{

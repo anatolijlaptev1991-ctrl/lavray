@@ -16,7 +16,10 @@
 //     любого прокси-клиента: mixed слушает loopback, а не сеть;
 //   - endpoint_independent_nat не эмитится — поле удалено в sing-box 1.14
 //     (Deprecated: removed, option/tun.go);
-//   - interface_name по умолчанию lavray-tun (darwin: utun9), не neko-tun.
+//   - interface_name по умолчанию lavray-tun (darwin: utun9), не neko-tun;
+//   - адрес TUN по умолчанию не пересекается с NekoBox (172.19.0.1/28 и
+//     fdfe:dcba:9876::1/126): на одном ПК они работают рядом, и одинаковая
+//     подсеть у двух интерфейсов ломала маршрутизацию обоих (0.2.1).
 package cfgbuild
 
 import (
@@ -24,6 +27,13 @@ import (
 	"net"
 	"runtime"
 	"strings"
+)
+
+// Адреса TUN-интерфейса по умолчанию (FR-UI-184). Не совпадают с NekoBox, который
+// на том же компьютере занимает 172.19.0.1/28 и fdfe:dcba:9876::1/126.
+const (
+	tunIPv4Address = "172.18.0.1/30"
+	tunIPv6Address = "fd4c:4156:5259::1/126"
 )
 
 // defaultTunName — имя TUN-интерфейса по умолчанию (plan §3.1.3:
@@ -79,9 +89,9 @@ func buildInbounds(st *BuildSettings, forTest bool) ([]any, error) {
 		if mtu <= 0 {
 			mtu = 9000
 		}
-		address := []any{"172.19.0.1/28"}
+		address := []any{tunIPv4Address}
 		if st.Tun.IPv6 {
-			address = append(address, "fdfe:dcba:9876::1/126")
+			address = append(address, tunIPv6Address)
 		}
 		in := map[string]any{
 			"tag":            "tun-in",

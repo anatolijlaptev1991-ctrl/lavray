@@ -25,10 +25,10 @@ func explainStartError(err error, inboundPort int) error {
 	}
 	if inboundPort > 0 && regexp.MustCompile(`:`+strconv.Itoa(inboundPort)+`(\D|$)`).MatchString(err.Error()) {
 		return failedPrecondition("порт %d уже занят другой программой (например, NekoBox или второй копией LAVRay): "+
-			"закройте её или укажите другой порт в «Настройки → Входящее подключение» (inbound.port)", inboundPort)
+			"закройте её или смените порт в «Настройки → Сеть и прокси»", inboundPort)
 	}
 	return failedPrecondition("порт входящего подключения уже занят другой программой: " +
-		"закройте её или укажите другой порт в «Настройки → Входящее подключение» (inbound.port)")
+		"закройте её или смените порт в «Настройки → Сеть и прокси»")
 }
 
 // tunMixedWarning — предупреждение режима TUN, построенное по ФАКТИЧЕСКОМУ

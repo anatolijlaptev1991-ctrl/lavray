@@ -9,6 +9,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
@@ -273,16 +274,29 @@ func (s *Server) updateOne(ctx context.Context, groupID int64, stream *connect.S
 			TotalCount:   int32p(int32(res.Diff.Kept + res.Diff.Updated + len(res.Diff.Added))),
 		})
 		sendPhase(lavrayv1.SubscriptionProgress_PHASE_SAVING, "")
+		skipped := skippedLinesDetail(res.SkippedLines)
 		if res.Info != nil {
 			send(&lavrayv1.SubscriptionProgress{
 				Phase:    lavrayv1.SubscriptionProgress_PHASE_DONE,
+				Detail:   strpIf(skipped),
 				UserInfo: subscriptionInfoToProto(res.Info),
 			})
 			return nil
 		}
+		sendPhase(lavrayv1.SubscriptionProgress_PHASE_DONE, skipped)
+		return nil
 	}
 	sendPhase(lavrayv1.SubscriptionProgress_PHASE_DONE, "")
 	return nil
+}
+
+// skippedLinesDetail — пояснение к PHASE_DONE, если часть строк ответа не
+// разобралась (0.2.1); пусто, когда пропусков нет.
+func skippedLinesDetail(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("не разобрано строк ответа: %d (причины — в журнале)", n)
 }
 
 // subscriptionConfirmed — подтверждение деструктивного обновления

@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -98,6 +99,17 @@ type Runner interface {
 	Start(ctx context.Context, configJSON []byte) error
 	Stop(ctx context.Context) error
 }
+
+// ProxyDialer — раннер, умеющий открыть соединение через исходящее "proxy"
+// запущенного инстанса (проверка связи после подключения, 0.2.1). Не входит в
+// Runner: раннеры без этой возможности (NopRunner, FakeRunner без подставной
+// функции) проверку связи просто пропускают.
+type ProxyDialer interface {
+	DialProxy(ctx context.Context, network, address string) (net.Conn, error)
+}
+
+// ErrDialUnsupported — раннер не умеет открывать соединения через исходящее.
+var ErrDialUnsupported = errors.New("inst: раннер не умеет открывать соединения через исходящее")
 
 // NopRunner — раннер по умолчанию в сборке без тега singbox_run: внятная
 // ошибка вместо падения (десктоп-оболочка собирается с тегом; CI собирает
@@ -352,6 +364,23 @@ func (m *Manager) Status() Status {
 		st.LastConfig = append([]byte(nil), m.lastConfig...)
 	}
 	return st
+}
+
+// DialProxy открывает соединение через исходящее "proxy" работающего инстанса
+// (имя хоста уходит серверу профиля, трафик в обход исходящего невозможен).
+// Нет работающего инстанса — ErrNotRunning; раннер не умеет — ErrDialUnsupported.
+func (m *Manager) DialProxy(ctx context.Context, network, address string) (net.Conn, error) {
+	m.mu.Lock()
+	state, runner := m.state, m.runner
+	m.mu.Unlock()
+	if state != StateReady {
+		return nil, ErrNotRunning
+	}
+	d, ok := runner.(ProxyDialer)
+	if !ok {
+		return nil, ErrDialUnsupported
+	}
+	return d.DialProxy(ctx, network, address)
 }
 
 // Subscribe — поток событий состояний. Первый кадр подписчик получает сам

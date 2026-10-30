@@ -213,10 +213,16 @@ func probeError(parent, probe context.Context, err error, timeout time.Duration)
 		return parent.Err()
 	}
 	if probe.Err() != nil || errors.Is(err, context.DeadlineExceeded) || isTimeout(err) {
-		return errors.New("таймаут " + strconv.Itoa(int(timeout/time.Millisecond)) + " мс")
+		return &probeTimeoutError{msg: "таймаут " + strconv.Itoa(int(timeout/time.Millisecond)) + " мс"}
 	}
 	return err
 }
+
+// probeTimeoutError — замер не уложился во время; отличается от прочих сбоев
+// типом (проверка связи после подключения не повторяет запрос по таймауту).
+type probeTimeoutError struct{ msg string }
+
+func (e *probeTimeoutError) Error() string { return e.msg }
 
 func isTimeout(err error) bool {
 	var ne net.Error

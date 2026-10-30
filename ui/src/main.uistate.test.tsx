@@ -5,6 +5,7 @@
 // язык и признак онбординга уже верные, а последующие изменения уходят в файл.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DICTIONARIES } from './lib/i18n';
+import { flushUiState } from './lib/uiState';
 
 const shell = vi.hoisted(() => ({
   releaseLoad: undefined as undefined | (() => void),
@@ -90,16 +91,20 @@ describe('первый запуск повышенного экземпляра 
     // порядок обращений к оболочке: файл настроек — раньше адреса ядра
     const order = shell.calls.map((c) => c.cmd);
     expect(order.indexOf('ui_state_load')).toBeLessThan(order.indexOf('core_endpoint'));
-    // применение файла не считается изменением и обратно в файл не пишется
-    expect(shell.calls.filter((c) => c.cmd === 'ui_state_set')).toEqual([]);
+    // применение файла не считается изменением и обратно в файл не пишется.
+    // Очередь записи асинхронная: дожидаемся её, иначе на медленной машине
+    // проверка зависит от того, успел ли уйти вызов. Тему и акцент App
+    // сохраняет при монтировании сам, это не значения из файла.
+    await flushUiState();
+    const setArgs = (): unknown[] => shell.calls.filter((c) => c.cmd === 'ui_state_set').map((c) => c.args);
+    const fileKeys = ['lavray.lang', 'lavray.onboarded'];
+    expect(setArgs().filter((a) => fileKeys.includes((a as { key: string }).key))).toEqual([]);
 
     // последующее изменение отслеживаемого ключа уходит в файл сразу
-    window.localStorage.setItem('lavray.theme', 'dark');
+    // (значение отличается от умолчания, которое App уже сохранил при старте)
+    window.localStorage.setItem('lavray.theme', 'light');
     await vi.waitFor(() => {
-      expect(shell.calls.filter((c) => c.cmd === 'ui_state_set').map((c) => c.args)).toContainEqual({
-        key: 'lavray.theme',
-        value: 'dark',
-      });
+      expect(setArgs()).toContainEqual({ key: 'lavray.theme', value: 'light' });
     });
   }, 20000);
 });

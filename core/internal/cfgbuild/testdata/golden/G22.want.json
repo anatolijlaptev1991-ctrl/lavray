@@ -44,7 +44,7 @@
   "inbounds": [
     {
       "address": [
-        "172.19.0.1/28"
+        "172.18.0.1/30"
       ],
       "auto_route": true,
       "interface_name": "lavray-tun",

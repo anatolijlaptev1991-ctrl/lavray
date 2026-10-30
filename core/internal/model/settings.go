@@ -126,6 +126,9 @@ func SettingDescriptors() []SettingDescriptor {
 		// T-49: уровень лога sing-box (trace|debug|info|warn|error|fatal|panic);
 		// неизвестное значение cfgbuild заменяет на "info".
 		{Key: "log.level", Type: SettingString, GroupID: "core", DefaultValue: `"info"`, RequiresProfileRestart: true, DeprecatedBy: "log_level"},
+		// 0.2.1: после подключения ядро один раз запрашивает test.url через исходящее
+		// профиля; неудача — предупреждение «Подключено, но трафик не идёт».
+		{Key: "connect.health_check", Type: SettingBool, GroupID: "core", DefaultValue: `true`},
 
 		// ---- Безопасность ----
 		{Key: "security.allow_insecure_default", Type: SettingBool, GroupID: "security", DeprecatedBy: "skip_cert"},

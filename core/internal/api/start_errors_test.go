@@ -90,7 +90,7 @@ func TestConnectExplainsBusyInboundPort(t *testing.T) {
 	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("код ошибки %v, ожидался FAILED_PRECONDITION (err=%v)", connect.CodeOf(err), err)
 	}
-	for _, want := range []string{strconv.Itoa(port), "занят", "inbound.port"} {
+	for _, want := range []string{strconv.Itoa(port), "занят", "NekoBox", "Настройки → Сеть и прокси"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("в сообщении нет %q: %v", want, err)
 		}

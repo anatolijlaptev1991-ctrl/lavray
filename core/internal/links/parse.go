@@ -29,6 +29,18 @@ func ParseLink(raw string) (*model.Profile, error) {
 		return nil, fmt.Errorf("схема не распознана (ожидается «протокол://…», например vmess://): %s", truncate(s, 64))
 	}
 	scheme := strings.ToLower(s[:i])
+	// 0.2.1: хвост «?serverDescription=<base64>» в имени — служебный (description.go).
+	s, description := splitLinkDescription(s)
+	p, err := parseScheme(scheme, s)
+	if err != nil {
+		return nil, err
+	}
+	applyServerDescription(p, description)
+	return p, nil
+}
+
+// parseScheme разбирает ссылку по схеме (scheme в нижнем регистре).
+func parseScheme(scheme, s string) (*model.Profile, error) {
 	switch scheme {
 	case "ss":
 		return parseSS(s)

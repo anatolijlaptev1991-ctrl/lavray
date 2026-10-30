@@ -496,6 +496,13 @@ func (s *Subscriber) Update(ctx context.Context, st StoreAPI, group *model.Group
 		return nil, err
 	}
 	result.Info = info
+	// Строки, которые не разобрались, не должны пропадать молча: сервер из
+	// ответа провайдера просто не появлялся в списке, и причины никто не видел.
+	// Текст строки в журнал не пишется (там секреты), только номер и причина.
+	result.SkippedLines = len(parsed.Errors)
+	for _, le := range parsed.Errors {
+		s.opts.logf("подписка %d: строка %d не разобрана и пропущена: %s", group.ID, le.Line, le.Err)
+	}
 	for _, w := range parsed.Warnings {
 		s.opts.logf("подписка %d: %s", group.ID, w)
 	}

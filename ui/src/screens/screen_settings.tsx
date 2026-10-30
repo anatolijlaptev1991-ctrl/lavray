@@ -90,6 +90,8 @@ const CORE_ROWS: readonly Row[] = [
   // Подпись называет действие прямо; включение идёт через подтверждение.
   { key: INSECURE_TLS_KEY, type: SettingType.BOOL, labelKey: 'set.insecure', descKey: 'set.insecure.d' },
   { key: 'enable_external_cores', type: SettingType.BOOL, labelKey: 'core.external' },
+  // 0.2.1: проверка связи после подключения («Подключено» не гарантирует трафик).
+  { key: 'connect.health_check', type: SettingType.BOOL, labelKey: 'set.healthCheck', descKey: 'set.healthCheck.d' },
 ];
 
 /** Список горячих клавиш раздела: [ключ подписи, клавиша]. */

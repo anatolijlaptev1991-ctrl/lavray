@@ -7,18 +7,20 @@
 // Состояние формы и преобразования — profile-editor/form.ts, поля — profile-editor/*.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
-import { create } from '@bufbuild/protobuf';
-import { ProfileSchema, ProfileType } from '../gen/lavray_pb';
+import { ProfileType } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 import { friendlyCoreError } from '../lib/core';
-import { mergeDetail, mergeStream } from '../lib/profileMerge';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
 import { DialogShell } from './dialogs';
+import { CustomJsonFields } from './profile-editor/CustomJsonFields';
+import { customFromProfile, firstInvalidCustom, withCustom } from './profile-editor/customJson';
+import type { CustomJson } from './profile-editor/customJson';
 import { TextAreaField, TextField } from './profile-editor/fields';
 import { emptyForm, fromProfile, isSpecialType, toProfile, validateForm } from './profile-editor/form';
 import type { Form, FormErrors } from './profile-editor/form';
+import { persistProfile } from './profile-editor/saveProfile';
 import { TypeFields } from './profile-editor/TypeFields';
 import type { SetField } from './profile-editor/TypeFields';
 import { TypePicker } from './profile-editor/TypePicker';
@@ -53,12 +55,14 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
   const { t, tf } = useI18n();
   const core = useCore();
   const [f, setF] = useState<Form>(() => initialForm(profile));
+  const [custom, setCustom] = useState<CustomJson>(() => customFromProfile(profile));
   const [errors, setErrors] = useState<FormErrors>({});
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     setF(initialForm(profile));
+    setCustom(customFromProfile(profile));
     setErrors({});
   }, [profile]);
 
@@ -74,36 +78,15 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
     setErr('');
     const problems = validateForm(f, t, tf);
     setErrors(problems);
-    const bad = ERROR_FOCUS.find(([key]) => problems[key] !== undefined);
-    if (bad !== undefined) {
-      document.getElementById(bad[1])?.focus();
+    const bad = ERROR_FOCUS.find(([key]) => problems[key] !== undefined)?.[1] ?? firstInvalidCustom(custom);
+    if (bad !== null) {
+      document.getElementById(bad)?.focus();
       return;
     }
     setBusy(true);
     try {
-      const model = toProfile(f, profile?.id ?? 0n, groupId);
-      if (profile === null) {
-        await core.profiles.createProfile({ profile: model });
-      } else {
-        // D1 (аудит round 2): UpdateProfile — ПОЛНАЯ замена. Переносим
-        // серверные/пользовательские метаданные из исходного профиля, иначе
-        // пропадали избранное, теги, custom-поля и профиль уезжал в чужую
-        // группу.
-        // PE-01 (аудит round 3) и T-10: значения формы накладываются на исходные
-        // detail/stream (lib/profileMerge.ts), а не заменяют их: поля вне формы
-        // (obfs, plugin, packet_encoding…) уцелеют, а очищенное в форме поле очистится.
-        const merged = create(ProfileSchema, {
-          ...model,
-          detail: mergeDetail(profile.detail, model.detail),
-          stream: mergeStream(profile.stream, model.stream),
-          groupId: profile.groupId,
-          favorite: profile.favorite,
-          tags: profile.tags,
-          customOutboundJson: profile.customOutboundJson,
-          customConfigJson: profile.customConfigJson,
-        });
-        await core.profiles.updateProfile({ profile: merged });
-      }
+      // T-08B: подтверждение custom-полей считает ядро; редактор шлёт только текст.
+      await persistProfile(core, profile, withCustom(toProfile(f, profile?.id ?? 0n, groupId), custom));
       onSaved();
       onClose();
     } catch (e) {
@@ -111,7 +94,7 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
     } finally {
       setBusy(false);
     }
-  }, [core, f, profile, groupId, onSaved, onClose, t, tf]);
+  }, [core, f, custom, profile, groupId, onSaved, onClose, t, tf]);
 
   const title = profile === null ? t('ed.titleNew') : t('ed.titleEdit');
 
@@ -211,6 +194,7 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
         </div>
 
         <TypeFields f={f} set={set} errors={errors} selfId={profile?.id ?? 0n} />
+        <CustomJsonFields value={custom} onChange={setCustom} />
 
         <TextAreaField
           id="edNotes"

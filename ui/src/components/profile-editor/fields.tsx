@@ -99,10 +99,12 @@ interface TextAreaFieldProps extends BaseProps {
   readonly rows?: number;
   /** Моноширинный шрифт (сертификат, JSON); для заметок выключен. */
   readonly mono?: boolean;
+  /** Пояснение под полем; связано с ним через aria-describedby. */
+  readonly hint?: string;
 }
 
 export function TextAreaField(props: TextAreaFieldProps): JSX.Element {
-  const { id, label, value, onChange, rows = 3, mono = true } = props;
+  const { id, label, value, onChange, rows = 3, mono = true, hint } = props;
   return (
     <div className={fieldClass(props)}>
       <label htmlFor={id}>{label}</label>
@@ -113,10 +115,12 @@ export function TextAreaField(props: TextAreaFieldProps): JSX.Element {
         value={value}
         spellCheck={false}
         aria-invalid={props.error === undefined ? undefined : true}
+        aria-describedby={hint === undefined ? undefined : `${id}-hint`}
         onChange={(e) => {
           onChange(e.target.value);
         }}
       />
+      {hint !== undefined && <span className="hint" id={`${id}-hint`}>{hint}</span>}
       {props.error !== undefined && <span className="field-err" role="alert">{props.error}</span>}
     </div>
   );

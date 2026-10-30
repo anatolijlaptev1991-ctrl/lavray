@@ -8,6 +8,9 @@ package model
 // (json.Number, без округления до float64), HTML не экранируется.
 // Дубли ключей отвергаются: наш разбор и разбор sing-box могли бы понять такой
 // документ по-разному, и подтверждённое содержимое разошлось бы с применённым.
+//
+// Документ сначала разбирается в дерево, затем выводится одним проходом в
+// общий буфер — время линейно по размеру, а не «размер × вложенность».
 
 import (
 	"bytes"
@@ -19,137 +22,155 @@ import (
 	"strings"
 )
 
-// maxCanonDepth — предел вложенности (у encoding/json свой предел 10000; наш
-// меньше, чтобы рекурсия обхода оставалась короткой).
-const maxCanonDepth = 512
+const (
+	// maxCanonDepth — предел вложенности (у encoding/json свой, 10000).
+	maxCanonDepth = 512
+	// MaxCanonBytes — предел документа: больше custom-JSON не бывает (API
+	// принимает до 256 КиБ), а канонизация идёт при каждом чтении профиля.
+	MaxCanonBytes = 1 << 20
+)
 
-// ErrDuplicateKey — в объекте JSON один ключ встречается дважды.
-var ErrDuplicateKey = errors.New("повторяющийся ключ в объекте JSON")
+var (
+	// ErrDuplicateKey — в объекте JSON один ключ встречается дважды.
+	ErrDuplicateKey = errors.New("повторяющийся ключ в объекте JSON")
+	// ErrCanonTooLarge — документ больше MaxCanonBytes.
+	ErrCanonTooLarge = fmt.Errorf("JSON больше %d КиБ", MaxCanonBytes>>10)
+)
 
 // CanonicalJSON возвращает канонический вид документа raw. Пустой (или из
 // одних пробелов) документ — пустая строка без ошибки.
 func CanonicalJSON(raw string) (string, error) {
+	if len(raw) > MaxCanonBytes {
+		return "", ErrCanonTooLarge
+	}
 	if strings.TrimSpace(raw) == "" {
 		return "", nil
 	}
 	dec := json.NewDecoder(strings.NewReader(raw))
 	dec.UseNumber()
-	var out bytes.Buffer
-	if err := canonValue(dec, &out, 0); err != nil {
+	tree, err := parseValue(dec, 0)
+	if err != nil {
 		return "", err
 	}
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
 		return "", errors.New("после документа JSON есть лишние данные")
 	}
+	var out bytes.Buffer
+	out.Grow(len(raw))
+	writeCanon(&out, tree)
 	return out.String(), nil
 }
 
-// canonValue читает одно значение из dec и пишет его канонический вид в out.
-func canonValue(dec *json.Decoder, out *bytes.Buffer, depth int) error {
+// parseValue читает одно значение: map[string]any, []any, string,
+// json.Number, bool или nil.
+func parseValue(dec *json.Decoder, depth int) (any, error) {
 	if depth > maxCanonDepth {
-		return fmt.Errorf("вложенность JSON больше %d", maxCanonDepth)
+		return nil, fmt.Errorf("вложенность JSON больше %d", maxCanonDepth)
 	}
 	tok, err := dec.Token()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	switch v := tok.(type) {
 	case json.Delim:
-		if v == '{' {
-			return canonObject(dec, out, depth)
+		switch v {
+		case '{':
+			return parseObject(dec, depth)
+		case '[':
+			return parseArray(dec, depth)
 		}
-		if v == '[' {
-			return canonArray(dec, out, depth)
+		return nil, fmt.Errorf("неожиданный разделитель %q", v)
+	case string, json.Number, bool, nil:
+		return v, nil
+	}
+	return nil, fmt.Errorf("неожиданный токен %T", tok)
+}
+
+func parseObject(dec *json.Decoder, depth int) (any, error) {
+	obj := map[string]any{}
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return nil, err
 		}
-		return fmt.Errorf("неожиданный разделитель %q", v)
+		key, ok := tok.(string)
+		if !ok {
+			return nil, fmt.Errorf("ключ объекта не строка: %v", tok)
+		}
+		if _, dup := obj[key]; dup {
+			return nil, fmt.Errorf("%w: %q", ErrDuplicateKey, key)
+		}
+		val, err := parseValue(dec, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		obj[key] = val
+	}
+	_, err := dec.Token() // '}'
+	return obj, err
+}
+
+func parseArray(dec *json.Decoder, depth int) (any, error) {
+	arr := []any{}
+	for dec.More() {
+		val, err := parseValue(dec, depth+1)
+		if err != nil {
+			return nil, err
+		}
+		arr = append(arr, val)
+	}
+	_, err := dec.Token() // ']'
+	return arr, err
+}
+
+// writeCanon выводит дерево parseValue: ключи — по порядку байтов UTF-8.
+func writeCanon(out *bytes.Buffer, v any) {
+	switch x := v.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(x))
+		for k := range x {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		out.WriteByte('{')
+		for i, k := range keys {
+			if i > 0 {
+				out.WriteByte(',')
+			}
+			writeString(out, k)
+			out.WriteByte(':')
+			writeCanon(out, x[k])
+		}
+		out.WriteByte('}')
+	case []any:
+		out.WriteByte('[')
+		for i, e := range x {
+			if i > 0 {
+				out.WriteByte(',')
+			}
+			writeCanon(out, e)
+		}
+		out.WriteByte(']')
 	case string:
-		return writeString(out, v)
+		writeString(out, x)
 	case json.Number:
-		out.WriteString(v.String())
+		out.WriteString(x.String())
 	case bool:
-		if v {
+		if x {
 			out.WriteString("true")
 		} else {
 			out.WriteString("false")
 		}
-	case nil:
+	default: // nil
 		out.WriteString("null")
-	default:
-		return fmt.Errorf("неожиданный токен %T", tok)
 	}
-	return nil
-}
-
-// canonObject — тело объекта после '{': ключи по порядку байтов UTF-8.
-func canonObject(dec *json.Decoder, out *bytes.Buffer, depth int) error {
-	members := map[string]string{}
-	for dec.More() {
-		tok, err := dec.Token()
-		if err != nil {
-			return err
-		}
-		key, ok := tok.(string)
-		if !ok {
-			return fmt.Errorf("ключ объекта не строка: %v", tok)
-		}
-		if _, dup := members[key]; dup {
-			return fmt.Errorf("%w: %q", ErrDuplicateKey, key)
-		}
-		var val bytes.Buffer
-		if err := canonValue(dec, &val, depth+1); err != nil {
-			return err
-		}
-		members[key] = val.String()
-	}
-	if _, err := dec.Token(); err != nil { // '}'
-		return err
-	}
-	keys := make([]string, 0, len(members))
-	for k := range members {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	out.WriteByte('{')
-	for i, k := range keys {
-		if i > 0 {
-			out.WriteByte(',')
-		}
-		if err := writeString(out, k); err != nil {
-			return err
-		}
-		out.WriteByte(':')
-		out.WriteString(members[k])
-	}
-	out.WriteByte('}')
-	return nil
-}
-
-// canonArray — тело массива после '['; порядок элементов значим.
-func canonArray(dec *json.Decoder, out *bytes.Buffer, depth int) error {
-	out.WriteByte('[')
-	for i := 0; dec.More(); i++ {
-		if i > 0 {
-			out.WriteByte(',')
-		}
-		if err := canonValue(dec, out, depth+1); err != nil {
-			return err
-		}
-	}
-	if _, err := dec.Token(); err != nil { // ']'
-		return err
-	}
-	out.WriteByte(']')
-	return nil
 }
 
 // writeString — строка JSON без HTML-экранирования (<, >, & как есть).
-func writeString(out *bytes.Buffer, s string) error {
+func writeString(out *bytes.Buffer, s string) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	enc.SetEscapeHTML(false)
-	if err := enc.Encode(s); err != nil {
-		return err
-	}
+	_ = enc.Encode(s) // строка Go кодируется всегда
 	out.Write(bytes.TrimSuffix(buf.Bytes(), []byte("\n")))
-	return nil
 }

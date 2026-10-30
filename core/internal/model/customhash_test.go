@@ -2,7 +2,10 @@
 
 package model
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func mustHash(t *testing.T, p *Profile) string {
 	t.Helper()
@@ -116,5 +119,19 @@ func TestCustomConfirmed(t *testing.T) {
 	empty := &Profile{CustomHash: mustHash(t, &Profile{})}
 	if CustomConfirmed(empty) {
 		t.Fatal("без custom-содержимого подтверждать нечего")
+	}
+}
+
+func TestCustomFieldsHash_OverLimitUnconfirmable(t *testing.T) {
+	p := &Profile{CustomConfigJSON: `{"route":{"x":"` + strings.Repeat("a", MaxCanonBytes) + `"}}`}
+	if !HasCustomContent(p) {
+		t.Fatal("слишком большой custom-JSON — всё равно содержимое")
+	}
+	if _, err := CustomFieldsHash(p); err == nil {
+		t.Fatal("ждём ошибку для документа больше MaxCanonBytes")
+	}
+	p.CustomHash = strings.Repeat("a", 64)
+	if CustomConfirmed(p) {
+		t.Fatal("неканонизируемое содержимое не подтверждается")
 	}
 }

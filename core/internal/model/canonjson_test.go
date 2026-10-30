@@ -109,3 +109,28 @@ func FuzzCanonicalJSON(f *testing.F) {
 		}
 	})
 }
+
+func TestCanonicalJSON_TooLarge(t *testing.T) {
+	// Граница ровно на MaxCanonBytes: столько — можно, на байт больше — нет.
+	body := `{"a":"` + strings.Repeat("x", MaxCanonBytes-len(`{"a":""}`)) + `"}`
+	if len(body) != MaxCanonBytes {
+		t.Fatalf("длина %d", len(body))
+	}
+	if _, err := CanonicalJSON(body); err != nil {
+		t.Fatalf("ровно MaxCanonBytes: %v", err)
+	}
+	if _, err := CanonicalJSON(body + " "); !errors.Is(err, ErrCanonTooLarge) {
+		t.Fatalf("MaxCanonBytes+1: %v", err)
+	}
+}
+
+func BenchmarkCanonicalJSONDeep(b *testing.B) {
+	// Глубина × размер не перемножаются: вывод одним проходом.
+	doc := strings.Repeat(`{"k":`, 500) + `"` + strings.Repeat("v", 200<<10) + `"` + strings.Repeat("}", 500)
+	b.ResetTimer()
+	for range b.N {
+		if _, err := CanonicalJSON(doc); err != nil {
+			b.Fatal(err)
+		}
+	}
+}

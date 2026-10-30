@@ -13,7 +13,8 @@ package model
 //
 // seg(x) — CanonicalJSON(x), пустой документ и "{}" дают "" (сборка конфига
 // их тоже не применяет). Канонический JSON не содержит байта 0x00, поэтому
-// разделитель однозначен: (x, "") и ("", x) дают разные хэши.
+// разделитель однозначен: (x, "") и ("", x) дают разные хэши. Документ больше
+// MaxCanonBytes не канонизируется — такое содержимое подтвердить нельзя.
 
 import (
 	"crypto/sha256"
@@ -31,8 +32,8 @@ func IsInternalFull(p *Profile) bool {
 	return ok && p.Type == TypeCustomConfig && d.Core == "internal-full"
 }
 
-// internalFullJSON — полный конфиг internal-full профиля ("" у остальных).
-func internalFullJSON(p *Profile) string {
+// InternalFullJSON — полный конфиг internal-full профиля ("" у остальных).
+func InternalFullJSON(p *Profile) string {
 	if !IsInternalFull(p) {
 		return ""
 	}
@@ -48,6 +49,35 @@ func customSegment(raw string) (string, error) {
 	return c, nil
 }
 
+// customDigest — хэш содержимого и есть ли что подтверждать; err — одно из
+// полей не канонизируется (тогда has = true: содержимое есть, но невалидно).
+func customDigest(p *Profile) (hash string, has bool, err error) {
+	out, errOut := customSegment(p.CustomOutboundJSON)
+	cfg, errCfg := customSegment(p.CustomConfigJSON)
+	full := IsInternalFull(p)
+	has = full || out != "" || cfg != "" || errOut != nil || errCfg != nil
+	if errOut != nil {
+		return "", has, errOut
+	}
+	if errCfg != nil {
+		return "", has, errCfg
+	}
+	h := sha256.New()
+	h.Write([]byte(customHashDomain))
+	h.Write([]byte(out))
+	h.Write([]byte{0})
+	h.Write([]byte(cfg))
+	if full {
+		canon, err := CanonicalJSON(InternalFullJSON(p))
+		if err != nil {
+			return "", has, err
+		}
+		h.Write([]byte{0})
+		h.Write([]byte(canon))
+	}
+	return hex.EncodeToString(h.Sum(nil)), has, nil
+}
+
 // HasCustomContent — есть ли у профиля что подтверждать: непустое
 // custom_outbound/custom_config (невалидный JSON тоже считается содержимым)
 // или профиль internal-full.
@@ -55,50 +85,26 @@ func HasCustomContent(p *Profile) bool {
 	if IsInternalFull(p) {
 		return true
 	}
-	for _, raw := range []string{p.CustomOutboundJSON, p.CustomConfigJSON} {
-		if strings.TrimSpace(raw) == "" {
-			continue
-		}
-		if seg, err := customSegment(raw); err != nil || seg != "" {
-			return true
-		}
+	if strings.TrimSpace(p.CustomOutboundJSON) == "" && strings.TrimSpace(p.CustomConfigJSON) == "" {
+		return false
 	}
-	return false
+	_, has, _ := customDigest(p)
+	return has
 }
 
 // CustomFieldsHash — sha256 (64 hex) custom-содержимого профиля. Ошибка —
-// одно из полей не разбирается как JSON (или в нём дубли ключей).
+// одно из полей не разбирается как JSON (дубли ключей, больше MaxCanonBytes).
 func CustomFieldsHash(p *Profile) (string, error) {
-	out, err := customSegment(p.CustomOutboundJSON)
-	if err != nil {
-		return "", err
-	}
-	cfg, err := customSegment(p.CustomConfigJSON)
-	if err != nil {
-		return "", err
-	}
-	h := sha256.New()
-	h.Write([]byte(customHashDomain))
-	h.Write([]byte(out))
-	h.Write([]byte{0})
-	h.Write([]byte(cfg))
-	if IsInternalFull(p) {
-		full, err := CanonicalJSON(internalFullJSON(p))
-		if err != nil {
-			return "", err
-		}
-		h.Write([]byte{0})
-		h.Write([]byte(full))
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	h, _, err := customDigest(p)
+	return h, err
 }
 
 // CustomConfirmed — подтверждено ли текущее содержимое: есть что подтверждать
 // и сохранённый CustomHash равен хэшу текущего содержимого.
 func CustomConfirmed(p *Profile) bool {
-	if p.CustomHash == "" || !HasCustomContent(p) {
+	if p.CustomHash == "" {
 		return false
 	}
-	h, err := CustomFieldsHash(p)
-	return err == nil && h == p.CustomHash
+	h, has, err := customDigest(p)
+	return err == nil && has && h == p.CustomHash
 }

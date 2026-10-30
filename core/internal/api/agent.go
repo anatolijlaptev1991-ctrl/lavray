@@ -31,7 +31,6 @@ import (
 	"connectrpc.com/connect"
 
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
-	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1connect"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
 )
 
@@ -96,29 +95,14 @@ func (s *Server) AgentMode() string {
 	return AgentModeOff
 }
 
-// agentReadProcedures — процедуры режима read. Экспорт ссылок и конфига,
-// GetRuntimeConfig, настройки, DNS, правила, импорт, создание и удаление
-// серверов и подписок в списки не входят ни в одном режиме.
-var agentReadProcedures = map[string]bool{
-	lavrayv1connect.CoreServiceGetStatusProcedure:                 true,
-	lavrayv1connect.ProfileServiceListProfilesProcedure:           true,
-	lavrayv1connect.ProfileServiceListGroupsProcedure:             true,
-	lavrayv1connect.SubscriptionServiceListSubscriptionsProcedure: true,
-	lavrayv1connect.StatsServiceSubscribeProcedure:                true,
-	lavrayv1connect.StatsServiceGetTrafficTotalsProcedure:         true,
-	lavrayv1connect.DiagnosticsServiceGetPublicIpProcedure:        true,
-	lavrayv1connect.LogServiceGetTailProcedure:                    true,
-}
+// agentReadProcedures — процедуры режима read. Строятся из agentTable
+// (agent_table.go). Экспорт ссылок и конфига, GetRuntimeConfig, настройки, DNS,
+// правила, импорт, создание и удаление серверов и подписок в списки не входят
+// ни в одном режиме.
+var agentReadProcedures = agentProcedures(agentRead)
 
 // agentControlProcedures — процедуры, которые режим control добавляет к read.
-var agentControlProcedures = map[string]bool{
-	lavrayv1connect.CoreServiceConnectProcedure:                        true,
-	lavrayv1connect.CoreServiceDisconnectProcedure:                     true,
-	lavrayv1connect.ProfileServiceTestLatencyProcedure:                 true,
-	lavrayv1connect.ProfileServiceStopTestsProcedure:                   true,
-	lavrayv1connect.SubscriptionServiceUpdateSubscriptionProcedure:     true,
-	lavrayv1connect.SubscriptionServiceUpdateAllSubscriptionsProcedure: true,
-}
+var agentControlProcedures = agentProcedures(agentControl)
 
 // agentAllowed — можно ли агенту вызвать процедуру в режиме mode.
 func agentAllowed(mode, procedure string) error {

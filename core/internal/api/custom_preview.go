@@ -10,9 +10,11 @@ package api
 // заново.
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -50,11 +52,11 @@ func (s *Server) PreviewCustomFields(ctx context.Context, req *connect.Request[l
 		return nil, err
 	}
 	diff, truncated := textdiff.Unified(before.text, after.text, diffContextLines, maxDiffLines)
-	touched := touchedKeys(before.tree, after.tree)
+	touched := touchedKeys(before.tree, after.tree) // предупреждения — по полному списку
 	return connect.NewResponse(&lavrayv1.PreviewCustomFieldsResponse{
 		CustomHash:       hash,
 		Diff:             diff,
-		TouchedKeys:      touched,
+		TouchedKeys:      capTouchedKeys(touched),
 		Warnings:         customWarnings(p, touched),
 		AlreadyConfirmed: p.CustomFieldsConfirmed,
 		DiffTruncated:    truncated,
@@ -79,8 +81,9 @@ func (s *Server) ConfirmCustomFields(ctx context.Context, req *connect.Request[l
 	return connect.NewResponse(profileToProto(p)), nil
 }
 
-// builtConfig — собранный конфиг: текст для diff (с маскированием) и дерево
-// encoding/json для путей.
+// builtConfig — собранный конфиг: текст для diff (секреты замаскированы
+// структурно, preview_redact.go) и исходное дерево encoding/json для путей
+// (в ответ уходят только пути, не значения).
 type builtConfig struct {
 	text string
 	tree map[string]any
@@ -101,26 +104,32 @@ func (s *Server) customConfigPair(p *model.Profile) (before, after builtConfig, 
 	return before, after, err
 }
 
-// previewBuild собирает конфиг без запуска; ошибка сборки — INVALID_ARGUMENT
-// с замаскированным текстом.
+// previewBuild собирает конфиг без запуска. Код ошибки — как у сборки
+// (INVALID_ARGUMENT, FAILED_PRECONDITION, NOT_FOUND…), текст замаскирован.
 func (s *Server) previewBuild(p *model.Profile) (builtConfig, error) {
 	res, err := s.dryRunBuild(p, lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY)
 	if err != nil {
-		msg := err.Error()
+		code, msg := connect.CodeInvalidArgument, err.Error()
 		if ce := new(connect.Error); errors.As(mapErr(err), &ce) {
-			msg = ce.Message()
+			code, msg = ce.Code(), ce.Message()
 		}
-		return builtConfig{}, invalidArg("сборка конфига: %s", logs.Redact(msg))
+		return builtConfig{}, connect.NewError(code, fmt.Errorf("сборка конфига: %s", logs.Redact(msg)))
 	}
 	raw, err := cfgbuild.MarshalIndent(res.Config)
 	if err != nil {
-		return builtConfig{}, err
+		return builtConfig{}, connect.NewError(connect.CodeInternal, err)
 	}
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber() // числа в diff — как в конфиге, без float64
 	var tree map[string]any
-	if err := json.Unmarshal(raw, &tree); err != nil {
-		return builtConfig{}, err
+	if err := dec.Decode(&tree); err != nil {
+		return builtConfig{}, connect.NewError(connect.CodeInternal, err)
 	}
-	return builtConfig{text: logs.Redact(string(raw)) + "\n", tree: tree}, nil
+	masked, err := json.MarshalIndent(redactTree(tree, false), "", "  ")
+	if err != nil {
+		return builtConfig{}, connect.NewError(connect.CodeInternal, err)
+	}
+	return builtConfig{text: string(masked) + "\n", tree: tree}, nil
 }
 
 // customWarnings — коды предупреждений для диалога подтверждения.

@@ -138,7 +138,7 @@ func (s *Server) UpdateProfile(ctx context.Context, req *connect.Request[lavrayv
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	m, err := profileFromClient(in, old) // T-08B: хэш подтверждения — со старой версии
+	m, err := profileFromClient(in, old) // T-08B: хэш подтверждения хранилище берёт из БД
 	if err != nil {
 		return nil, err
 	}

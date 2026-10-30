@@ -4,8 +4,8 @@ package api
 
 // custom_policy.go — custom-поля в профилях от клиента (T-08B). Флаг
 // подтверждения клиента не читается (profileToModel), подтверждение — хэш,
-// который ставит только ConfirmCustomFields. При UpdateProfile хэш берётся со
-// старой версии: хранилище само сотрёт его, если содержимое изменилось.
+// который ставит только ConfirmCustomFields; при UpdateProfile хранилище
+// берёт его из БД и стирает, если содержимое изменилось.
 
 import (
 	"fmt"
@@ -20,7 +20,7 @@ import (
 const maxCustomJSONBytes = 256 << 10
 
 // profileFromClient — профиль из Create/UpdateProfile (old — текущая версия,
-// nil при создании) с проверкой custom-JSON и переносом хэша подтверждения.
+// nil при создании) с проверкой изменённых custom-JSON.
 func profileFromClient(in *lavrayv1.Profile, old *model.Profile) (*model.Profile, error) {
 	m, err := profileToModel(in)
 	if err != nil {
@@ -28,9 +28,6 @@ func profileFromClient(in *lavrayv1.Profile, old *model.Profile) (*model.Profile
 	}
 	if err := checkCustomJSON(m, old); err != nil {
 		return nil, err
-	}
-	if old != nil {
-		m.CustomHash = old.CustomHash
 	}
 	return m, nil
 }
@@ -44,15 +41,7 @@ type customField struct {
 var customFields = []customField{
 	{"custom_outbound_json", func(p *model.Profile) string { return p.CustomOutboundJSON }},
 	{"custom_config_json", func(p *model.Profile) string { return p.CustomConfigJSON }},
-	{"custom.full_config_json", fullConfigOf},
-}
-
-// fullConfigOf — полный конфиг internal-full профиля ("" у остальных).
-func fullConfigOf(p *model.Profile) string {
-	if !model.IsInternalFull(p) {
-		return ""
-	}
-	return p.Detail.(*model.CustomDetail).FullConfigJSON
+	{"custom.full_config_json", model.InternalFullJSON},
 }
 
 // checkCustomJSON проверяет изменённые custom-JSON поля: не больше

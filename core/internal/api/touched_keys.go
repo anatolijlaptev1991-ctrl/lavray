@@ -33,10 +33,15 @@ func touchedKeys(a, b map[string]any) []string {
 		out = append(out, k)
 	}
 	sort.Strings(out)
-	if len(out) > maxTouchedKeys {
-		out = out[:maxTouchedKeys]
-	}
 	return out
+}
+
+// capTouchedKeys — первые maxTouchedKeys путей для ответа.
+func capTouchedKeys(keys []string) []string {
+	if len(keys) > maxTouchedKeys {
+		return keys[:maxTouchedKeys]
+	}
+	return keys
 }
 
 // walkTouched сравнивает значения по пути path; depth — сколько сегментов

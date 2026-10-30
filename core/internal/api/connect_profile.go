@@ -11,9 +11,13 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 )
 
-// warnInlineCustomIgnored — предупреждение Connect: custom-поля inline-профиля
-// отброшены.
-const warnInlineCustomIgnored = "inline_custom_ignored: custom-поля inline-профиля не применяются — сохраните профиль и подтвердите их"
+const (
+	// warnInlineCustomIgnored — custom-поля inline-профиля отброшены.
+	warnInlineCustomIgnored = "inline_custom_ignored: custom-поля inline-профиля не применяются — сохраните профиль и подтвердите их"
+	// warnCustomUnconfirmed — custom-поля сохранённого профиля не подтверждены
+	// (в том числе сброшены миграцией 0.3.0) и в конфиг не входят.
+	warnCustomUnconfirmed = "custom_unconfirmed: custom-поля профиля не подтверждены и не применяются — откройте diff и подтвердите их"
+)
 
 // connectProfile — профиль запроса и предупреждения о нём.
 func (s *Server) connectProfile(in *lavrayv1.ConnectRequest) (*model.Profile, []string, error) {
@@ -22,7 +26,10 @@ func (s *Server) connectProfile(in *lavrayv1.ConnectRequest) (*model.Profile, []
 		return nil, nil, invalidArg("задан и profile_id, и inline_profile — ровно один источник")
 	case in.ProfileId != nil:
 		p, err := s.st.GetProfile(in.GetProfileId())
-		return p, nil, err
+		if err != nil {
+			return nil, nil, err
+		}
+		return p, unconfirmedWarning(p), nil
 	case in.InlineProfile != nil:
 		// inline: подключение без сохранения — группа может быть не указана
 		return inlineProfile(in.InlineProfile)
@@ -46,4 +53,14 @@ func inlineProfile(in *lavrayv1.Profile) (*model.Profile, []string, error) {
 	}
 	p.CustomOutboundJSON, p.CustomConfigJSON = "", ""
 	return p, []string{warnInlineCustomIgnored}, nil
+}
+
+// unconfirmedWarning — предупреждение для профиля с неподтверждёнными
+// custom-полями. internal-full без подтверждения не собирается вовсе — там
+// понятная ошибка сборки, предупреждение не нужно.
+func unconfirmedWarning(p *model.Profile) []string {
+	if p.CustomFieldsConfirmed || model.IsInternalFull(p) || !model.HasCustomContent(p) {
+		return nil
+	}
+	return []string{warnCustomUnconfirmed}
 }

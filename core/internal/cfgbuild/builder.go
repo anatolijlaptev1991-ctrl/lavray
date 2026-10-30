@@ -161,7 +161,7 @@ func Build(req BuildRequest) (*BuildResult, error) {
 		// профиль открывал 0.0.0.0:9 без ведома пользователя.
 		if !req.Profile.CustomFieldsConfirmed {
 			return nil, invalidArgument("custom.bean.core",
-				"internal-full конфиг требует подтверждения (custom_fields_confirmed)")
+				"internal-full конфиг не подтверждён: откройте diff и подтвердите (PreviewCustomFields → ConfirmCustomFields)")
 		}
 		var err error
 		cfg, err = internalFullConfig(req.Profile)

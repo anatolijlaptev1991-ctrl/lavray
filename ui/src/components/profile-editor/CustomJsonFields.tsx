@@ -16,15 +16,21 @@ interface Props {
   readonly onChange: (next: CustomJson) => void;
 }
 
-export function CustomJsonFields({ value, onChange }: Props): JSX.Element {
+/** Тексты ошибок обоих полей; пересчитываются только при правке. */
+function useCustomErrors(value: CustomJson): { outbound?: string | undefined; config?: string | undefined } {
   const { t, tf } = useI18n();
-  const errors = useMemo(
+  return useMemo(
     () => ({
       outbound: customErrorText(checkJsonObject(value.outbound), t, tf),
       config: customErrorText(checkJsonObject(value.config), t, tf),
     }),
     [value, t, tf],
   );
+}
+
+export function CustomJsonFields({ value, onChange }: Props): JSX.Element {
+  const { t } = useI18n();
+  const errors = useCustomErrors(value);
   // Блок свёрнут, пока пуст; ошибка раскрывает его, чтобы фокус при сохранении не ушёл в скрытое.
   const [open, setOpen] = useState(value.outbound !== '' || value.config !== '');
   const shown = open || errors.outbound !== undefined || errors.config !== undefined;

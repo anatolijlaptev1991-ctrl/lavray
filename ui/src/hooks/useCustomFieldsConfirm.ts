@@ -9,6 +9,7 @@ import { useCallback, useRef, useState } from 'react';
 import { Code, ConnectError } from '@connectrpc/connect';
 import type { PreviewCustomFieldsResponse, Profile } from '../gen/lavray_pb';
 import { friendlyCoreError } from '../lib/core';
+import type { CoreClients } from '../lib/core';
 import { useCore } from './useCore';
 
 export type CfPhase = 'loading' | 'ready' | 'error';
@@ -55,6 +56,66 @@ export interface CustomFieldsConfirm {
 
 const isStale = (e: unknown): boolean => e instanceof ConnectError && e.code === Code.FailedPrecondition;
 
+const initialState = (profileId: bigint, name: string): CfState => ({
+  profileId,
+  name,
+  phase: 'loading',
+  preview: null,
+  error: '',
+  changed: false,
+  acknowledged: false,
+  busy: false,
+});
+
+/** Превью без исключений: итог — изменения состояния для patch(). */
+async function fetchPreview(core: CoreClients, profileId: bigint, changed: boolean): Promise<Partial<CfState>> {
+  try {
+    const preview = await core.profiles.previewCustomFields({ profileId });
+    return { phase: 'ready', preview, changed, acknowledged: false };
+  } catch (e) {
+    return { phase: 'error', preview: null, error: friendlyCoreError(e) };
+  }
+}
+
+type Outcome =
+  | { readonly kind: 'done'; readonly profile: Profile }
+  | { readonly kind: 'stale' }
+  | { readonly kind: 'failed'; readonly error: string };
+
+/** ConfirmCustomFields с хэшем просмотренного превью; FAILED_PRECONDITION — «содержимое изменилось». */
+async function submitConfirm(core: CoreClients, profileId: bigint, customHash: string): Promise<Outcome> {
+  try {
+    return { kind: 'done', profile: await core.profiles.confirmCustomFields({ profileId, customHash }) };
+  } catch (e) {
+    return isStale(e) ? { kind: 'stale' } : { kind: 'failed', error: friendlyCoreError(e) };
+  }
+}
+
+type Patch = (change: Partial<CfState>) => void;
+
+function toDialogProps(
+  state: CfState,
+  handlers: { readonly patch: Patch; readonly apply: () => Promise<void>; readonly close: () => void },
+): CustomFieldsDialogProps {
+  const { name, phase, preview, error, changed, acknowledged, busy } = state;
+  return {
+    name,
+    phase,
+    preview,
+    error,
+    changed,
+    acknowledged,
+    busy,
+    onAcknowledge: (on: boolean): void => {
+      handlers.patch({ acknowledged: on });
+    },
+    onApply: (): void => {
+      void handlers.apply();
+    },
+    onClose: handlers.close,
+  };
+}
+
 export function useCustomFieldsConfirm(options: CustomFieldsConfirmOptions = {}): CustomFieldsConfirm {
   const core = useCore();
   const [state, setState] = useState<CfState | null>(null);
@@ -65,7 +126,7 @@ export function useCustomFieldsConfirm(options: CustomFieldsConfirmOptions = {})
   const optionsRef = useRef(options);
   optionsRef.current = options;
 
-  const patch = useCallback((change: Partial<CfState>): void => {
+  const patch: Patch = useCallback((change) => {
     setState((cur) => (cur === null ? cur : { ...cur, ...change }));
   }, []);
 
@@ -81,12 +142,8 @@ export function useCustomFieldsConfirm(options: CustomFieldsConfirmOptions = {})
     async (profileId: bigint, changed: boolean): Promise<void> => {
       const mine = ++seq.current;
       patch({ phase: 'loading', error: '', busy: false });
-      try {
-        const preview = await core.profiles.previewCustomFields({ profileId });
-        if (mine === seq.current) patch({ phase: 'ready', preview, changed, acknowledged: false });
-      } catch (e) {
-        if (mine === seq.current) patch({ phase: 'error', preview: null, error: friendlyCoreError(e) });
-      }
+      const result = await fetchPreview(core, profileId, changed);
+      if (mine === seq.current) patch(result);
     },
     [core, patch],
   );
@@ -94,16 +151,7 @@ export function useCustomFieldsConfirm(options: CustomFieldsConfirmOptions = {})
   const open = useCallback(
     (profileId: bigint, name: string): void => {
       active.current = true;
-      setState({
-        profileId,
-        name,
-        phase: 'loading',
-        preview: null,
-        error: '',
-        changed: false,
-        acknowledged: false,
-        busy: false,
-      });
+      setState(initialState(profileId, name));
       void load(profileId, false);
     },
     [load],
@@ -114,35 +162,15 @@ export function useCustomFieldsConfirm(options: CustomFieldsConfirmOptions = {})
     const { profileId, preview } = state;
     const mine = ++seq.current;
     patch({ busy: true, error: '' });
-    try {
-      const profile = await core.profiles.confirmCustomFields({ profileId, customHash: preview.customHash });
-      optionsRef.current.onConfirmed?.(profile);
-      if (mine === seq.current) finish();
-    } catch (e) {
-      if (mine !== seq.current) return;
-      if (isStale(e)) await load(profileId, true);
-      else patch({ busy: false, error: friendlyCoreError(e) });
-    }
+    const outcome = await submitConfirm(core, profileId, preview.customHash);
+    if (outcome.kind === 'done') optionsRef.current.onConfirmed?.(outcome.profile);
+    if (mine !== seq.current) return; // диалог закрыли, пока ждали ядро
+    if (outcome.kind === 'done') finish();
+    else if (outcome.kind === 'stale') await load(profileId, true);
+    else patch({ busy: false, error: outcome.error });
   }, [core, state, patch, load, finish]);
 
-  const dialogProps: CustomFieldsDialogProps | null =
-    state === null
-      ? null
-      : {
-          name: state.name,
-          phase: state.phase,
-          preview: state.preview,
-          error: state.error,
-          changed: state.changed,
-          acknowledged: state.acknowledged,
-          busy: state.busy,
-          onAcknowledge: (on: boolean): void => {
-            patch({ acknowledged: on });
-          },
-          onApply: (): void => {
-            void apply();
-          },
-          onClose: finish,
-        };
+  const dialogProps =
+    state === null ? null : toDialogProps(state, { patch, apply, close: finish });
   return { dialogProps, open, close: finish };
 }

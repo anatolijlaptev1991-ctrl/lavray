@@ -133,4 +133,34 @@ describe('CustomBadge (T-08B)', () => {
     });
     expect(document.activeElement).toBe(el);
   });
+
+  it('правый клик и Shift+F10 внутри диалога не доходят до строки списка (меню строки), а Esc работает', async () => {
+    const rowMenu = vi.fn();
+    const clients = makeClients();
+    vi.spyOn(clients.profiles, 'previewCustomFields').mockResolvedValue(
+      create(PreviewCustomFieldsResponseSchema, { customHash: 'f'.repeat(64), diff: '' }),
+    );
+    // Родитель с теми же обработчиками, что у <li> строки в screen_servers.tsx.
+    const row = createElement(
+      'div',
+      { onContextMenu: rowMenu, onKeyDown: rowMenu },
+      createElement(CustomBadge, { profile: profile({ customOutboundJson: '{"a":1}' }), onConfirmed: vi.fn() }),
+    );
+    mounted = await mountWithCore(clients, row);
+    await click(badge());
+    const dlg = document.querySelector<HTMLElement>('[role="dialog"]');
+    expect(dlg).not.toBeNull();
+
+    act(() => {
+      dlg?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      dlg?.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true }));
+      dlg?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', bubbles: true }));
+    });
+    expect(rowMenu).not.toHaveBeenCalled();
+
+    act(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    });
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+  });
 });

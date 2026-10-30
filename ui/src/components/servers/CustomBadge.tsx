@@ -5,7 +5,7 @@
 // применяется к конфигу). Это настоящая кнопка: достаётся Tab-ом и срабатывает Enter/
 // Space, а нажатие открывает тот же diff-диалог, что и редактор профиля. Кнопка стоит
 // рядом с основной кнопкой строки, а не внутри неё: вложенные кнопки недопустимы.
-import type { JSX } from 'react';
+import type { JSX, KeyboardEvent, SyntheticEvent } from 'react';
 import { useCustomFieldsConfirm } from '../../hooks/useCustomFieldsConfirm';
 import { useI18n } from '../../hooks/useI18n';
 import type { Profile } from '../../gen/lavray_pb';
@@ -17,6 +17,18 @@ interface Props {
   readonly profile: Profile;
   /** Ядро подтвердило содержимое: вызывающий перечитывает список профилей. */
   readonly onConfirmed: () => void;
+}
+
+/*
+ * Диалог рисуется порталом в <body>, но события React идут вверх по дереву компонентов,
+ * то есть в <li> строки: правый клик и Shift+F10 внутри диалога открывали бы меню строки.
+ * Останавливаем только их: Esc и Tab ловит useModal на document, их трогать нельзя.
+ */
+function stopRowMenu(e: SyntheticEvent): void {
+  e.stopPropagation();
+}
+function stopRowMenuKey(e: KeyboardEvent): void {
+  if (e.key === 'F10' || e.key === 'ContextMenu') e.stopPropagation();
 }
 
 export function CustomBadge({ profile, onConfirmed }: Props): JSX.Element {
@@ -40,7 +52,11 @@ export function CustomBadge({ profile, onConfirmed }: Props): JSX.Element {
         </button>
       )}
       {/* Диалог живёт, пока открыт, даже если список успел перечитаться и бейдж ушёл. */}
-      {dialogProps !== null && <CustomFieldsDiffDialog {...dialogProps} />}
+      {dialogProps !== null && (
+        <div style={{ display: 'contents' }} onContextMenu={stopRowMenu} onKeyDown={stopRowMenuKey}>
+          <CustomFieldsDiffDialog {...dialogProps} />
+        </div>
+      )}
     </>
   );
 }

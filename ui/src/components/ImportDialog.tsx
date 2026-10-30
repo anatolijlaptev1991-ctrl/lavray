@@ -137,13 +137,11 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
     setErr('');
     setBusy(true);
     try {
-      // ID-02 (аудит round 3): custom-поля разрешаем ТОЛЬКО когда были
-      // предупреждения и пользователь нажал «Добавить» после их просмотра
-      // (LNB-25/FR-UI-257). Иначе двухфазное подтверждение обходилось.
+      // T-08B: клиент ничего не разрешает — custom-поля импортированных профилей
+      // остаются неподтверждёнными, пока их не подтвердят через diff (CustomBadge).
       const res = await core.profiles.importContent({
         content: link,
         ...(groupId === undefined ? {} : { targetGroupId: groupId }),
-        allowCustomFields: warnings.length > 0,
       });
       setOk(tf('toast.imported', { n: res.addedProfileIds.length }));
       onImported();
@@ -153,7 +151,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
     } finally {
       setBusy(false);
     }
-  }, [core, link, groupId, tf, onImported, onClose, warnings.length]);
+  }, [core, link, groupId, tf, onImported, onClose]);
 
   const addAsSubscription = useCallback(async (): Promise<void> => {
     setErr('');

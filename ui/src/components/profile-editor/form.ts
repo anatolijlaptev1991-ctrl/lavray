@@ -397,8 +397,6 @@ export function toProfile(f: Form, id: bigint, groupId: bigint): Profile {
     geo: f.geo.trim().toLowerCase(),
     favorite: false,
     tags: [],
-    // создано вручную — custom-поля можно применять без diff-подтверждения
-    customFieldsConfirmed: true,
     notes: f.notes.trim(),
   });
   base.detail = buildDetail(f);

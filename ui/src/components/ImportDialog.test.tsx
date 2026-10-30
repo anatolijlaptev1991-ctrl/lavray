@@ -10,7 +10,11 @@ import { create } from '@bufbuild/protobuf';
 import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import App from '../App';
-import { ImportContentResponse_ContentKind, ImportContentResponseSchema } from '../gen/lavray_pb';
+import {
+  CustomFieldWarningSchema,
+  ImportContentResponse_ContentKind,
+  ImportContentResponseSchema,
+} from '../gen/lavray_pb';
 import { ConnectionScreen } from '../screens/screen_connection';
 import { ServersScreen } from '../screens/screen_servers';
 import { setLanguage, t, tf } from '../lib/i18n';
@@ -417,5 +421,46 @@ describe('ImportDialog (T-67)', () => {
     await click(button(t('imp.do')));
     expect(document.querySelector('.errcard')).toBeNull();
     expect(text(document.querySelector('.banner-err'))).toContain('unsupported link');
+  });
+});
+
+describe('T-08B: импорт не разрешает custom-поля', () => {
+  beforeEach(() => {
+    setLanguage('en');
+  });
+  afterEach(() => {
+    document.body.innerHTML = '';
+    vi.restoreAllMocks();
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
+  });
+
+  it('import_does_not_send_allow_custom_fields: после предупреждений коммит без флага разрешения', async () => {
+    const clients = makeClients();
+    const importContent = vi.spyOn(clients.profiles, 'importContent').mockImplementation((req) =>
+      Promise.resolve(
+        req.previewOnly === true
+          ? create(ImportContentResponseSchema, {
+              parsedProfiles: [profileOf(0, 'T08B')],
+              customFieldWarnings: [
+                create(CustomFieldWarningSchema, { profileIndex: 0, droppedFields: ['experimental'] }),
+              ],
+            })
+          : create(ImportContentResponseSchema, { addedProfileIds: [102n] }),
+      ),
+    );
+    const m = await mountWithCore(clients, createElement(ImportDialog, { onClose: vi.fn(), onImported: vi.fn() }));
+    const dialog = document.querySelector<HTMLElement>('[role="dialog"]');
+    if (dialog === null) throw new Error('диалог импорта не открыт');
+    typeInto(dialog.querySelector<HTMLInputElement>('#impLink'), LINK);
+    await click(buttonByText(dialog, 'Import'));
+    expect(dialog.textContent).toContain('experimental'); // предупреждение показано
+    await click(buttonByText(dialog, 'Add'));
+    const commit = importContent.mock.calls.map(([req]) => req).find((req) => req.previewOnly !== true);
+    expect(commit).toBeDefined();
+    expect(Object.keys(commit ?? {})).not.toContain('allowCustomFields');
+    expect(JSON.stringify(commit, (_k, v: unknown) => (typeof v === 'bigint' ? String(v) : v))).not.toMatch(
+      /allow_?custom/i,
+    );
+    m.unmount();
   });
 });

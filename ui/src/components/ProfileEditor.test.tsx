@@ -374,4 +374,25 @@ describe('ProfileEditor (T-66)', () => {
       value: { obfsPassword: 'obfs-secret', uploadMbps: 50, serverPorts: '20000:30000', hopInterval: '30s', allowInsecure: true },
     });
   });
+
+  it('editor_does_not_send_confirmed_true: ядро само считает подтверждение, редактор его не шлёт', async () => {
+    const fake = fakeClients();
+    await open(fake);
+    pick('VLESS');
+    type('edRemark', 'V');
+    type('edAddr', 'v.example.org');
+    type('edPort', '443');
+    type('edf-secret', '12345678-90ab-cdef-1234-567890abcdef');
+    await save();
+    expect(fake.createProfile.mock.calls[0]?.[0].profile.customFieldsConfirmed).toBe(false);
+
+    // правка профиля, у которого флаг уже true: он не переносится в запрос
+    const confirmed = create(ProfileSchema, {
+      ...candidate(5, 'Confirmed'),
+      customFieldsConfirmed: true,
+    });
+    await open(fake, confirmed);
+    await save();
+    expect(fake.updateProfile.mock.calls[0]?.[0].profile.customFieldsConfirmed).toBe(false);
+  });
 });

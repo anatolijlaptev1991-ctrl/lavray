@@ -101,7 +101,6 @@ export function ProfileEditor({ profile, groupId, onClose, onSaved }: Props): JS
           tags: profile.tags,
           customOutboundJson: profile.customOutboundJson,
           customConfigJson: profile.customConfigJson,
-          customFieldsConfirmed: profile.customFieldsConfirmed,
         });
         await core.profiles.updateProfile({ profile: merged });
       }

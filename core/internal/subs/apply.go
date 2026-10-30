@@ -362,7 +362,7 @@ func applyWrites(st StoreAPI, snap *Snapshot, params ApplyParams, next []*model.
 				// и пользовательское не подменяет (LNB-25).
 				merged.CustomOutboundJSON = old.CustomOutboundJSON
 				merged.CustomConfigJSON = old.CustomConfigJSON
-				merged.CustomFieldsConfirmed = old.CustomFieldsConfirmed
+				merged.CustomHash = old.CustomHash // хранилище сотрёт, если содержимое иное (T-08B)
 				if err := st.UpdateProfile(&merged); err != nil {
 					return fmt.Errorf("применение: обновление профиля %d: %w", old.ID, err)
 				}

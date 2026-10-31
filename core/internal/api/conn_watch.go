@@ -22,9 +22,6 @@ const (
 	minWatchIntervalMs     = 250
 	maxWatchIntervalMs     = 10000
 	defaultWatchLimit      = 500
-	// maxPendingClosed — сколько закрытий по событиям копится между кадрами;
-	// сверх этого закрытия найдёт разность списков.
-	maxPendingClosed = 10000
 )
 
 // watchInterval: не задан или 0 — 1000 мс; меньше 0 — INVALID_ARGUMENT; иначе
@@ -53,16 +50,13 @@ func watchLimit(v *int32) (int, error) {
 	return n, nil
 }
 
-// connWatch — состояние одного потока: что отправлено, на какой источник
-// подписан. Источник меняется при перезапуске инстанса, поток при этом живёт.
+// connWatch — состояние одного потока: какие соединения были активны в
+// прошлом кадре. Источник меняется при перезапуске инстанса, поток при этом
+// живёт: соединения старого инстанса уходят в closed_ids.
 type connWatch struct {
-	filter  connFilter
-	limit   int
-	src     traffic.Source
-	events  <-chan traffic.Event
-	cancel  func()
-	prev    map[string]struct{} // все подходящие активные прошлого кадра
-	pending map[string]struct{} // закрытия по событиям с прошлого кадра
+	filter connFilter
+	limit  int
+	prev   map[string]struct{} // все подходящие активные прошлого кадра
 }
 
 func newConnWatch(msg *lavrayv1.WatchConnectionsRequest) (*connWatch, time.Duration, error) {
@@ -75,57 +69,19 @@ func newConnWatch(msg *lavrayv1.WatchConnectionsRequest) (*connWatch, time.Durat
 		return nil, 0, err
 	}
 	return &connWatch{
-		filter:  newConnFilter(msg.OutboundFilter, msg.DestinationFilter),
-		limit:   limit,
-		prev:    map[string]struct{}{},
-		pending: map[string]struct{}{},
+		filter: newConnFilter(msg.OutboundFilter, msg.DestinationFilter),
+		limit:  limit,
+		prev:   map[string]struct{}{},
 	}, interval, nil
 }
 
-// bind подписывается на src; при смене источника старая подписка снимается.
-func (w *connWatch) bind(src traffic.Source) {
-	if src == w.src {
-		return
-	}
-	w.release()
-	w.src = src
-	if src != nil {
-		w.events, w.cancel = src.Subscribe()
-	}
-}
-
-// release снимает подписку.
-func (w *connWatch) release() {
-	if w.cancel != nil {
-		w.cancel()
-	}
-	w.events, w.cancel, w.src = nil, nil, nil
-}
-
-// drainEvents собирает закрытия, пришедшие с прошлого кадра.
-func (w *connWatch) drainEvents() {
-	for {
-		select {
-		case ev, ok := <-w.events:
-			if !ok {
-				w.events = nil
-				return
-			}
-			if ev.Kind == traffic.EventClosed && len(w.pending) < maxPendingClosed {
-				w.pending[ev.ID] = struct{}{}
-			}
-		default:
-			return
-		}
-	}
-}
-
 // frame строит кадр по текущему источнику (nil — инстанса нет: активных нет).
-// Закрытые = исчезнувшие из списка с прошлого кадра ∪ закрытия по событиям;
-// каждый id попадает ровно в один кадр.
+// Закрытые — те, что были активны в прошлом кадре и пропали из списка: каждый
+// id попадает ровно в один кадр, и только если клиент мог его видеть.
+// Соединение, открывшееся и закрывшееся между кадрами, не называется вовсе.
+// События источника для этого не нужны: они асинхронны и приходят позже
+// изменения списка, отчего закрытие объявлялось бы дважды.
 func (w *connWatch) frame(src traffic.Source) *lavrayv1.ConnectionSnapshot {
-	w.bind(src)
-	w.drainEvents()
 	var all []traffic.ConnInfo
 	if src != nil {
 		all = sortedActive(src, w.filter)
@@ -145,26 +101,13 @@ func (w *connWatch) frame(src traffic.Source) *lavrayv1.ConnectionSnapshot {
 	return snap
 }
 
-// closedIDs — закрытия для кадра по множеству cur; сбрасывает накопленное.
+// closedIDs — id прошлого кадра, которых нет в cur, по возрастанию.
 func (w *connWatch) closedIDs(cur map[string]struct{}) []string {
-	seen := map[string]struct{}{}
+	var ids []string
 	for id := range w.prev {
 		if _, alive := cur[id]; !alive {
-			seen[id] = struct{}{}
+			ids = append(ids, id)
 		}
-	}
-	for id := range w.pending {
-		if _, alive := cur[id]; !alive {
-			seen[id] = struct{}{}
-		}
-	}
-	clear(w.pending)
-	if len(seen) == 0 {
-		return nil
-	}
-	ids := make([]string, 0, len(seen))
-	for id := range seen {
-		ids = append(ids, id)
 	}
 	sort.Strings(ids)
 	return ids
@@ -175,7 +118,6 @@ func (s *Server) WatchConnections(ctx context.Context, req *connect.Request[lavr
 	if err != nil {
 		return err
 	}
-	defer w.release()
 	tick := time.NewTicker(interval)
 	defer tick.Stop()
 	for {

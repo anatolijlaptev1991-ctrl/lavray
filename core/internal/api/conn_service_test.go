@@ -292,7 +292,6 @@ func TestWatchAcrossInstanceRestart(t *testing.T) {
 	if f, _ := next(ch, 3*time.Second); f == nil || snapIDs(f) != "a" {
 		t.Fatalf("до остановки: %+v", f)
 	}
-	eventually(t, "подписка на первый источник", func() bool { return e.src.Subscribers() == 1 })
 
 	e.disconnect(&lavrayv1.DisconnectRequest{})
 	var closed []string
@@ -310,7 +309,6 @@ func TestWatchAcrossInstanceRestart(t *testing.T) {
 	if len(closed) != 1 || closed[0] != idA {
 		t.Fatalf("закрытые после остановки: %v", closed)
 	}
-	eventually(t, "снятие подписки со старого источника", func() bool { return e.src.Subscribers() == 0 })
 
 	// Новый запуск — новый источник (у настоящего раннера так и есть).
 	second := traffic.NewFakeSource()
@@ -326,7 +324,6 @@ func TestWatchAcrossInstanceRestart(t *testing.T) {
 			break
 		}
 	}
-	eventually(t, "подписка на новый источник", func() bool { return second.Subscribers() == 1 })
 }
 
 func TestWatchCancelUnsubscribes(t *testing.T) {
@@ -336,9 +333,12 @@ func TestWatchCancelUnsubscribes(t *testing.T) {
 	var werr error
 	ch := e.watch(ctx, &lavrayv1.WatchConnectionsRequest{IntervalMs: int32p(250)}, &werr)
 	next(ch, 3*time.Second)
-	eventually(t, "подписка", func() bool { return e.src.Subscribers() == 1 })
+	// Поток берёт список на каждом кадре и подписок на источник не держит:
+	// утечь после отмены нечему.
+	if n := e.src.Subscribers(); n != 0 {
+		t.Fatalf("WatchConnections держит %d подписок на источник", n)
+	}
 	cancel()
-	eventually(t, "отписка после отмены", func() bool { return e.src.Subscribers() == 0 })
 	for range ch { // поток закрылся
 	}
 }

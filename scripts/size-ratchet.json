@@ -84,7 +84,7 @@
   "ui/src/screens/screen_log.tsx": 224,
   "ui/src/screens/screen_rules.tsx": 593,
   "ui/src/screens/screen_servers.tsx": 1041,
-  "ui/src/screens/screen_settings.tsx": 1075,
+  "ui/src/screens/screen_settings.tsx": 949,
   "ui/src/screens/screen_subscriptions.tsx": 597,
   "ui/src/screens/screen_updates.tsx": 313,
   "ui/src/test-utils/coreStub.ts": 210

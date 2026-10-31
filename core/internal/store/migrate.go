@@ -122,6 +122,11 @@ var migrations = []migration{
 		version: sessionsSchemaVersion,
 		stmts:   sessionsSchema,
 	},
+	{
+		// T-76: пользователи веб-панели (web_users_schema.go).
+		version: webUsersSchemaVersion,
+		stmts:   webUsersSchema,
+	},
 }
 
 // schemaVersion читает текущую версию схемы (0 — свежая база).

@@ -48,7 +48,6 @@
   "core/internal/testsocks/socks.go": 304,
   "core/internal/updates/client.go": 429,
   "core/internal/updates/meta.go": 803,
-  "core/internal/web/web.go": 353,
   "design/tools/a11y_sweep.py": 276,
   "shell/src/agent.rs": 249,
   "shell/src/autostart.rs": 461,

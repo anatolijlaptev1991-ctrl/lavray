@@ -15,6 +15,7 @@ import { useI18n } from '../hooks/useI18n';
 import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
 import { onTablistKeyDown } from '../lib/tabs';
+import { QrTab } from './import/QrTab';
 
 type Tab = 'link' | 'qr' | 'file';
 
@@ -168,19 +169,26 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
     }
   }, [core, link, name, onImported, onClose]);
 
+  /** Текст из файла или QR-кода идёт тем же путём, что вставленная ссылка: вкладка «Ссылка» и предпросмотр. */
+  const acceptText = useCallback(
+    async (text: string): Promise<void> => {
+      setLink(text);
+      setTab('link');
+      await doPreview(text);
+    },
+    [doPreview],
+  );
+
   const readFile = useCallback(
     async (file: File): Promise<void> => {
       setErr('');
       try {
-        const text = await file.text();
-        setLink(text);
-        setTab('link');
-        await doPreview(text);
+        await acceptText(await file.text());
       } catch (e) {
         setErr(friendlyCoreError(e));
       }
     },
-    [doPreview],
+    [acceptText],
   );
 
   // T-06: портал на <body> (см. DialogShell) — диалог не зависит от transform
@@ -346,43 +354,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
             </div>
           )}
 
-          {tab === 'qr' && (
-            <div className="imp-pane" role="tabpanel" id="impPane-qr" aria-labelledby="impTab-qr">
-              <div className="imp-qr">
-                <div className="imp-qr-frame">
-                  <Icon name="gauge" />
-                </div>
-                <p className="t2">{t('imp.qrHint')}</p>
-                <div className="imp-qr-acts">
-                  <button
-                    className="btn btn-sec"
-                    onClick={() => {
-                      // Область экрана — нативная возможность оболочки;
-                      // в браузере недоступна, честно сообщаем.
-                      setErr(t('toast.window'));
-                    }}
-                  >
-                    <Icon name="list" />
-                    <span>{t('imp.qrRegion')}</span>
-                  </button>
-                  <label className="btn btn-sec">
-                    <Icon name="copy" />
-                    <span>{t('imp.qrPaste')}</span>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="sr-only"
-                      onChange={(e) => {
-                        const f = e.target.files?.[0];
-                        if (f === undefined) return;
-                        setErr(t('toast.window'));
-                      }}
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
-          )}
+          {tab === 'qr' && <QrTab onDecoded={(text) => { void acceptText(text); }} />}
 
           {tab === 'file' && (
             <div className="imp-pane" role="tabpanel" id="impPane-file" aria-labelledby="impTab-file">

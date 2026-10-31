@@ -18,10 +18,6 @@ import (
 
 var errNotYetW6 = connect.NewError(connect.CodeUnimplemented, errors.New("RPC запланирован, но ещё не реализован в W6"))
 
-func (s *Server) DeduplicateProfiles(ctx context.Context, req *connect.Request[lavrayv1.DeduplicateProfilesRequest]) (*connect.Response[lavrayv1.DeduplicateResponse], error) {
-	return nil, errNotYetW6
-}
-
 func (s *Server) ExportConfig(ctx context.Context, req *connect.Request[lavrayv1.ExportConfigRequest]) (*connect.Response[lavrayv1.ExportConfigResponse], error) {
 	return nil, errNotYetW6
 }

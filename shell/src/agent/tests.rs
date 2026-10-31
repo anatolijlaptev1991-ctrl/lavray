@@ -252,6 +252,18 @@ mod windows_acl {
             .to_owned()
     }
 
+    /// Как SDDL называет учётную запись: встроенные администратор и гость
+    /// записываются сокращениями `LA`/`LG`, остальные — SID.
+    fn sddl_alias_of(sid: &str) -> &str {
+        if sid.ends_with("-500") {
+            "LA"
+        } else if sid.ends_with("-501") {
+            "LG"
+        } else {
+            sid
+        }
+    }
+
     /// Записи DACL: (флаги, права, субъект).
     fn aces(sddl: &str) -> Vec<(String, String, String)> {
         sddl.split('(')
@@ -292,6 +304,9 @@ mod windows_acl {
             .map(|(_, _, who)| {
                 if who == "S-1-5-18" {
                     "SY".to_owned()
+                } else if sddl_alias_of(&sid) == who {
+                    // встроенный администратор (RID 500, раннер CI) в SDDL — «LA»
+                    sid.clone()
                 } else {
                     who.clone()
                 }

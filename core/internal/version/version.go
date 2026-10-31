@@ -13,4 +13,4 @@ package version
 // переменную со строковым литералом, поэтому остальные пакеты читают именно её):
 //
 //	go build -ldflags "-s -w -X github.com/anatolijlaptev1991-ctrl/lavray/core/internal/version.Version=1.2.3"
-var Version = "0.2.1"
+var Version = "0.3.0"

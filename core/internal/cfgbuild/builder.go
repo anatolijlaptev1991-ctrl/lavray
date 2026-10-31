@@ -79,9 +79,9 @@ type BuildSettings struct {
 	// CacheFilePath — experimental.cache_file.path; "" → путь по умолчанию sing-box.
 	CacheFilePath string `json:"cache_file_path,omitempty"`
 	// GOOS — платформа для процессных правил пресета ("" → runtime.GOOS).
-	GOOS string `json:"goos,omitempty"`
-	// OpenWRT — сборка шлюза: процессные правила опускаются (SCHEMA §2.1).
-	OpenWRT bool `json:"openwrt,omitempty"`
+	GOOS    string         `json:"goos,omitempty"`
+	OpenWRT bool           `json:"openwrt,omitempty"` // --platform openwrt: без процессных правил (SCHEMA §2.1)
+	TProxy  TProxySettings `json:"tproxy"`            // tproxy-вход шлюза (tproxy.go)
 	// DNSRemoteDirect — запросы к dns-remote идут напрямую, без detour в
 	// туннель (карточка «DoH» экрана DNS); по умолчанию — внутри туннеля.
 	DNSRemoteDirect bool `json:"dns_remote_direct,omitempty"`

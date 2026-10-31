@@ -89,17 +89,31 @@ fn system_proxy_command_validates_the_port_it_is_given() {
     assert!(!command.contains("port: u16"));
 }
 
+/// T-82: `reg.exe`, WinINET и RAS не работают в потоке команд: команда
+/// асинхронная и отдаёт тело `sysproxy::set_blocking`, а то идёт в пул
+/// блокирующих потоков.
+#[test]
+fn system_proxy_command_runs_in_the_blocking_pool() {
+    let main_rs = source("main.rs");
+    let command = main_rs
+        .split("async fn set_system_proxy")
+        .nth(1)
+        .and_then(|rest| rest.split("fn request_quit").next())
+        .expect("асинхронная команда set_system_proxy");
+    assert!(command.contains("set_blocking(data, enabled, port).await"));
+    assert!(
+        !command.contains("SysProxy::new"),
+        "тело вернулось в обработчик команды"
+    );
+    assert!(source("sysproxy/command.rs").contains("spawn_blocking(job)"));
+}
+
 /// S-02: вывод `reg.exe` читается в OEM-кодовой странице, а не как UTF-8
 /// (запуск `reg.exe` в тестах не нужен - проверяется проводка Windows-бэкенда;
 /// macOS/Linux читают UTF-8 законно).
 #[test]
 fn reg_output_is_decoded_with_the_oem_codepage() {
-    let sysproxy_rs = source("sysproxy.rs");
-    let windows_backend = sysproxy_rs
-        .split("use super::wininet::{self")
-        .nth(1)
-        .and_then(|rest| rest.split("// macOS: networksetup").next())
-        .expect("Windows-бэкенд sysproxy");
+    let windows_backend = source("sysproxy/registry.rs");
     assert!(windows_backend.contains("decode_console_output(&out.stdout)"));
     assert!(windows_backend.contains("decode_console_output(&out.stderr)"));
     for banned in [

@@ -37,7 +37,7 @@ pub fn parse_sha256_hex(text: &str) -> Option<[u8; 32]> {
         return None;
     }
     let mut out = [0u8; 32];
-    for (byte, pair) in out.iter_mut().zip(raw.chunks_exact(2)) {
+    for (byte, pair) in out.iter_mut().zip(raw.as_chunks::<2>().0) {
         let high = char::from(pair[0]).to_digit(16)?;
         let low = char::from(pair[1]).to_digit(16)?;
         *byte = u8::try_from(high * 16 + low).ok()?;

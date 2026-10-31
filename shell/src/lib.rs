@@ -66,6 +66,7 @@ pub mod token;
 pub mod tray;
 pub mod ui_state;
 pub mod uiprotocol;
+pub mod update;
 pub mod updater;
 pub mod window_geometry;
 pub mod window_policy;

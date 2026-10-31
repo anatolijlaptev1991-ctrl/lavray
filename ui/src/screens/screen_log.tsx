@@ -11,6 +11,7 @@ import { CORE_UNAVAILABLE, friendlyCoreError, showCoreError } from '../lib/core'
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
+import { saveFile } from '../lib/saveFile';
 
 interface LevelOption {
   readonly level: LogLevel;
@@ -111,17 +112,16 @@ export function LogScreen(): JSX.Element {
     }
   }, [filtered, t]);
 
-  const download = useCallback((): void => {
+  const download = useCallback(async (): Promise<void> => {
     const text = filtered
       .map((l) => `${new Date(Number(l.tsMs)).toISOString()} ${LEVEL_LABEL[l.level] ?? 'INFO'} ${l.source}: ${l.message}`)
       .join('\n');
-    const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `lavray-log-${String(Date.now())}.txt`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  }, [filtered]);
+    try {
+      if ((await saveFile(`lavray-log-${String(Date.now())}`, 'txt', text)) === 'saved') setOk(t('toast.fileSaved'));
+    } catch (e) {
+      setErr(`${t('file.saveFailed')}: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }, [filtered, t]);
 
   return (
     <div className="log">
@@ -182,7 +182,7 @@ export function LogScreen(): JSX.Element {
           <Icon name="copy" />
           <span>{t('log.copy')}</span>
         </button>
-        <button className="btn btn-ghost btn-sm" onClick={download}>
+        <button className="btn btn-ghost btn-sm" onClick={() => void download()}>
           {t('log.export')}
         </button>
       </div>

@@ -47,6 +47,7 @@ pub mod autostart;
 pub mod coreproc;
 pub mod elevation;
 pub mod endpoint;
+pub mod files;
 pub mod hotkey;
 pub mod integrity;
 pub mod launch;

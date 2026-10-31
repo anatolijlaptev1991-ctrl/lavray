@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Интеграция с ОС (T-82) в одном месте: плагины окна, уведомлений и
-//! глобального сочетания, их общее состояние и команды. `main.rs` только
+//! Интеграция с ОС (T-82) в одном месте: плагины окна, уведомлений,
+//! глобального сочетания и диалога «Сохранить как», их общее состояние и команды. `main.rs` только
 //! подключает этот модуль.
 
 use crate::hotkey::{self, register::HotkeySlot};
@@ -22,6 +22,7 @@ pub fn attach<R: Runtime>(builder: tauri::Builder<R>, data_dir: PathBuf) -> taur
         .plugin(window_geometry::plugin())
         .plugin(tauri_plugin_notification::init())
         .plugin(hotkey::plugin())
+        .plugin(tauri_plugin_dialog::init())
         .manage(DataDir(data_dir))
         .manage(NotifyGate::default())
         .manage(HotkeySlot::default())

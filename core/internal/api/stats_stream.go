@@ -46,20 +46,19 @@ func (s statsSvc) Subscribe(ctx context.Context, req *connect.Request[lavrayv1.S
 			}
 			continue
 		}
-		if err := s.streamSession(ctx, stream, src, interval, keep, events); err != nil {
-			return err
-		}
-		if ctx.Err() != nil {
-			return nil
+		closed, err := s.streamSession(ctx, stream, src, interval, keep, events)
+		if err != nil || closed || ctx.Err() != nil {
+			return err // closed — Shutdown ядра: финальный кадр уже отправлен
 		}
 	}
 }
 
 // streamSession ведёт поток одной сессии до её конца (финальный кадр отправлен)
 // или до отмены. База скоростей берётся сразу при входе, поэтому первый кадр
-// приходит через interval и уже со скоростью, а не с нулём.
+// приходит через interval и уже со скоростью, а не с нулём. closed — канал
+// событий закрыт (Shutdown ядра): ждать следующей сессии бессмысленно.
 func (s statsSvc) streamSession(ctx context.Context, stream *connect.ServerStream[lavrayv1.StatsSnapshot],
-	src traffic.Source, interval time.Duration, keep func(string) bool, events <-chan inst.Event) error {
+	src traffic.Source, interval time.Duration, keep func(string) bool, events <-chan inst.Event) (closed bool, err error) {
 	run := s.inst.Status().Run
 	meter := traffic.NewMeter()
 	var tick <-chan time.Time
@@ -72,10 +71,10 @@ func (s statsSvc) streamSession(ctx context.Context, stream *connect.ServerStrea
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return false, nil
 		case now := <-tick:
 			if s.inst.Traffic() != src { // события могли потеряться: сверяем по источнику
-				return stream.Send(finalFrame(run, src, meter, keep))
+				return false, stream.Send(finalFrame(run, src, meter, keep))
 			}
 			frame := &lavrayv1.StatsSnapshot{
 				TsMs:    now.UnixMilli(),
@@ -83,14 +82,27 @@ func (s statsSvc) streamSession(ctx context.Context, stream *connect.ServerStrea
 				Session: sessionStat(run, src),
 			}
 			if err := stream.Send(frame); err != nil {
-				return err
+				return false, err
 			}
 		case ev, ok := <-events:
-			if !ok || ev.Status.State == inst.StateIdle || ev.Status.State == inst.StateCrashed {
-				return stream.Send(finalFrame(run, src, meter, keep))
+			if end, closed := sessionOver(ev, ok, s.inst.Traffic(), src); end {
+				return closed, stream.Send(finalFrame(run, src, meter, keep))
 			}
 		}
 	}
+}
+
+// sessionOver — чем событие инстанса оборачивается для потока сессии src: end —
+// сессия кончилась (пора слать итог), closed — канал событий закрыт (Shutdown
+// ядра). Событие остановки, пока источник инстанса всё ещё src, пролежало в
+// буфере, пока поток ждал Send, и относится к прошлой сессии: оно пропускается,
+// иначе посреди живой сессии ушёл бы ложный финальный кадр.
+func sessionOver(ev inst.Event, ok bool, cur, src traffic.Source) (end, closed bool) {
+	if !ok {
+		return true, true
+	}
+	stopped := ev.Status.State == inst.StateIdle || ev.Status.State == inst.StateCrashed
+	return stopped && cur != src, false
 }
 
 // finalFrame — кадр после остановки: итоги сессии и накопленные объёмы по тегам.

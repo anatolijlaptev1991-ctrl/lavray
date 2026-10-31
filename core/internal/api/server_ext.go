@@ -13,7 +13,7 @@ import "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1conn
 // serverExt — включённые необязательные сервисы; задаются до Register.
 type serverExt struct {
 	web     lavrayv1connect.WebSessionServiceHandler
-	gateway lavrayv1connect.GatewayServiceHandler
+	gateway *gatewayRPC // не nil только при --platform openwrt (EnableGateway)
 }
 
 // webSessionHandler — включённый сервис либо заглушка UNIMPLEMENTED.

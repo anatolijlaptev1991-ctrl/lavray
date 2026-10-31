@@ -20,6 +20,7 @@ const ENTRY = new Set([
   './test-harness.ts',
   './test-utils/coreStub.ts',
   './test-utils/connsKit.ts',
+  './test-utils/presetKit.ts',
   './test-utils/settingsKit.tsx',
   './test-utils/tauriStub.ts',
   './test-utils/qrKit.ts',

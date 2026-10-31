@@ -70,6 +70,12 @@ func TestDetectAndParseInvalid(t *testing.T) {
 			t.Errorf("DetectAndParse(%q): err = %v, want ErrFormat", in, err)
 		}
 	}
+	for _, v := range []string{"0", "2", "-1"} {
+		in := `{"version":` + v + `,"id":"x","name":{"en":"X"},"routing":{"def_outbound":"proxy"},"dns":{"mode":"simple"}}`
+		if _, _, err := DetectAndParse([]byte(in), ""); !errors.Is(err, ErrFormat) || !strings.Contains(err.Error(), "version") {
+			t.Errorf("version %s: err = %v", v, err)
+		}
+	}
 	if _, _, err := DetectAndParse([]byte(`{"def_outbound":"weird"}`), ""); err == nil {
 		t.Error("недопустимый def_outbound NekoRay принят")
 	}
@@ -98,5 +104,19 @@ func TestDetectKeepsRawFields(t *testing.T) {
 	}
 	if got.ID != "custom:x" || got.SourceID != "global" {
 		t.Fatalf("разбор исказил поля: %+v", got)
+	}
+}
+
+// ParseNekoRoute: только объект; «null», массив и пустой ввод — ErrFormat, а
+// пустой объект — допустимый маршрут со значениями по умолчанию.
+func TestParseNekoRouteStrict(t *testing.T) {
+	for _, in := range []string{"", "null", "[]", `"x"`, "{oops"} {
+		if _, _, err := ParseNekoRoute([]byte(in), "n"); !errors.Is(err, ErrFormat) {
+			t.Errorf("ParseNekoRoute(%q): err = %v, want ErrFormat", in, err)
+		}
+	}
+	p, _, err := ParseNekoRoute([]byte(`{}`), "Пустой")
+	if err != nil || p.Name["en"] != "Пустой" || p.Routing.DefOutbound != "proxy" {
+		t.Fatalf("{}: %+v %v", p, err)
 	}
 }

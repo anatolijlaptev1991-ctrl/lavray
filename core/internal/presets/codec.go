@@ -49,7 +49,7 @@ func DetectAndParse(data []byte, name string) (*Preset, []string, error) {
 	}
 	for _, k := range nekoKeys {
 		if _, ok := top[k]; ok {
-			return parseNeko(data, name)
+			return ParseNekoRoute(data, name)
 		}
 	}
 	return nil, nil, fmt.Errorf("%w: нет ни routing, ни полей маршрута NekoRay", ErrFormat)
@@ -63,10 +63,23 @@ func parseLavray(data, routing []byte) (*Preset, []string, error) {
 	if err := json.Unmarshal(data, &p); err != nil {
 		return nil, nil, fmt.Errorf("%w: %v", ErrFormat, err)
 	}
+	// Вставка выставит свою версию схемы, поэтому версию файла проверяем здесь.
+	if p.Version <= 0 || p.Version > SchemaVersion {
+		return nil, nil, fmt.Errorf("%w: version: схема %d не поддерживается (поддерживается ≤ %d)", ErrFormat, p.Version, SchemaVersion)
+	}
 	return &p, nil, nil
 }
 
-func parseNeko(data []byte, name string) (*Preset, []string, error) {
+// ParseNekoRoute читает маршрут NekoRay 4.x (RoutingBean) и конвертирует его в
+// пользовательский набор; name — его имя (пусто → «NekoRay»). Предупреждения —
+// что конвертер отбросил или заменил. Ошибки: ErrTooLarge, ErrFormat.
+func ParseNekoRoute(data []byte, name string) (*Preset, []string, error) {
+	if len(data) > MaxImportBytes {
+		return nil, nil, ErrTooLarge
+	}
+	if t := bytes.TrimSpace(data); len(t) == 0 || t[0] != '{' {
+		return nil, nil, fmt.Errorf("%w: маршрут NekoRay — ожидался JSON-объект", ErrFormat)
+	}
 	var src NekoRayRoute
 	if err := json.Unmarshal(data, &src); err != nil {
 		return nil, nil, fmt.Errorf("%w: маршрут NekoRay: %v", ErrFormat, err)

@@ -25,6 +25,9 @@ func NewCustomFrom(src *Preset, id string) *Preset {
 	return c
 }
 
+// Clone — глубокая копия набора без изменения полей.
+func (p *Preset) Clone() *Preset { return clonePreset(p) }
+
 // clonePreset — глубокая копия без изменения полей.
 func clonePreset(src *Preset) *Preset {
 	c := *src

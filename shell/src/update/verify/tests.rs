@@ -2,49 +2,7 @@
 
 use super::*;
 use crate::update::hash::{sha256_reader, to_hex};
-use crate::update::testkit::{staged_name, MemFs};
-use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
-use std::io::Cursor;
-
-/// Файлы в памяти; считает открытия, чтобы доказать «один дескриптор».
-#[derive(Default)]
-struct MemOpener {
-    files: RefCell<HashMap<PathBuf, Vec<u8>>>,
-    opens: Cell<u32>,
-    unreadable: bool,
-}
-
-impl MemOpener {
-    fn with(path: &Path, bytes: &[u8]) -> Self {
-        let opener = Self::default();
-        opener
-            .files
-            .borrow_mut()
-            .insert(path.to_path_buf(), bytes.to_vec());
-        opener
-    }
-}
-
-struct Broken;
-
-impl Read for Broken {
-    fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
-        Err(io::Error::other("диск отвалился"))
-    }
-}
-
-impl LockedOpener for MemOpener {
-    fn open_locked(&self, path: &Path) -> io::Result<Box<dyn LockedFile>> {
-        self.opens.set(self.opens.get() + 1);
-        if self.unreadable {
-            return Ok(Box::new(Broken));
-        }
-        let bytes = self.files.borrow().get(path).cloned();
-        let bytes = bytes.ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
-        Ok(Box::new(Cursor::new(bytes)))
-    }
-}
+use crate::update::testkit::{staged_name, MemFs, MemOpener};
 
 fn sum_of(bytes: &[u8]) -> String {
     to_hex(&sha256_reader(&mut &bytes[..]).unwrap())

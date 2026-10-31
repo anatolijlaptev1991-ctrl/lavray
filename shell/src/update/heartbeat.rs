@@ -37,6 +37,11 @@ fn bare(version: &str) -> &str {
     version.trim().trim_start_matches('v')
 }
 
+/// [`HEARTBEAT_GRACE`] в миллисекундах: единый источник — `updater.rs`.
+pub fn grace_ms() -> u64 {
+    u64::try_from(HEARTBEAT_GRACE.as_millis()).unwrap_or(u64::MAX)
+}
+
 /// Оценить отметку. Годная — версия совпадает с ожидаемой и сделана не раньше
 /// запуска (`started_at`): отметка прошлого запуска той же версии не в счёт.
 /// Отметка другой версии считается отсутствующей.
@@ -48,8 +53,7 @@ pub fn evaluate(
 ) -> HealthVerdict {
     let valid =
         health.is_some_and(|h| bare(&h.version) == bare(expected_version) && h.ok_at >= started_at);
-    let grace = u64::try_from(HEARTBEAT_GRACE.as_millis()).unwrap_or(u64::MAX);
-    match (valid, now.saturating_sub(started_at) >= grace) {
+    match (valid, now.saturating_sub(started_at) >= grace_ms()) {
         (true, _) => HealthVerdict::Ok,
         (false, false) => HealthVerdict::Pending,
         (false, true) => HealthVerdict::Missing,

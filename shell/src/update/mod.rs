@@ -30,10 +30,15 @@ pub mod clock;
 pub mod error;
 pub mod hash;
 pub mod heartbeat;
+pub mod install;
 pub mod layout;
 pub mod paths;
+pub mod prepare;
 pub mod previous;
+pub mod rollback;
 pub mod verify;
+pub mod watchdog;
+pub mod watchdog_args;
 
 #[cfg(test)]
 mod testkit;

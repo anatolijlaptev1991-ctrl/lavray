@@ -5,9 +5,10 @@
 //! не трогают; файлы создаются только во временной папке.
 
 use super::paths::FsProbe;
-use std::cell::RefCell;
+use super::verify::{LockedFile, LockedOpener};
+use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
-use std::io;
+use std::io::{self, Cursor, Read};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -104,4 +105,74 @@ impl FsProbe for MemFs {
 /// Имя установщика в staging для суммы из одной цифры (64 символа).
 pub fn staged_name(digit: char, file: &str) -> String {
     format!("{}-{file}", digit.to_string().repeat(64))
+}
+
+/// Читатель, который падает на первом чтении.
+pub struct Broken;
+
+impl Read for Broken {
+    fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+        Err(io::Error::other("диск отвалился"))
+    }
+}
+
+/// Дескриптор в памяти; пишет в журнал, когда его отпускают.
+struct Tracked {
+    inner: Cursor<Vec<u8>>,
+    log: Option<Log>,
+}
+
+impl Read for Tracked {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.inner.read(buf)
+    }
+}
+
+impl Drop for Tracked {
+    fn drop(&mut self) {
+        if let Some(log) = &self.log {
+            log.push("handle.drop");
+        }
+    }
+}
+
+/// Открытие файлов из памяти; считает открытия, чтобы доказать «один дескриптор».
+#[derive(Default)]
+pub struct MemOpener {
+    pub files: RefCell<HashMap<PathBuf, Vec<u8>>>,
+    pub opens: Cell<u32>,
+    pub unreadable: bool,
+    pub log: Option<Log>,
+}
+
+impl MemOpener {
+    pub fn with(path: &Path, bytes: &[u8]) -> Self {
+        let opener = Self::default();
+        opener.put(path, bytes);
+        opener
+    }
+
+    pub fn put(&self, path: &Path, bytes: &[u8]) {
+        self.files
+            .borrow_mut()
+            .insert(path.to_path_buf(), bytes.to_vec());
+    }
+}
+
+impl LockedOpener for MemOpener {
+    fn open_locked(&self, path: &Path) -> io::Result<Box<dyn LockedFile>> {
+        self.opens.set(self.opens.get() + 1);
+        if let Some(log) = &self.log {
+            log.push("verify_open");
+        }
+        if self.unreadable {
+            return Ok(Box::new(Broken));
+        }
+        let bytes = self.files.borrow().get(path).cloned();
+        let bytes = bytes.ok_or_else(|| io::Error::from(io::ErrorKind::NotFound))?;
+        Ok(Box::new(Tracked {
+            inner: Cursor::new(bytes),
+            log: self.log.clone(),
+        }))
+    }
 }

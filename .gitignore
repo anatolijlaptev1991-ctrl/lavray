@@ -25,6 +25,9 @@ dist/
 dist-ssr/
 .vite/
 *.tsbuildinfo
+# Playwright (web-e2e): отчёты и трассы
+test-results/
+playwright-report/
 
 # --- Локальные секреты и окружение ---
 *.local

@@ -21,13 +21,14 @@ import (
 // до этого, пропасть не должны.
 func (s *Server) Disconnect(ctx context.Context, req *connect.Request[lavrayv1.DisconnectRequest]) (*connect.Response[lavrayv1.DisconnectResponse], error) {
 	s.resetHealth()
-	// Запуск и источник берутся до остановки: потом менеджер их уже не отдаёт, а
-	// счётчики источника читаются и после остановки.
-	run, src := s.inst.Status().Run, s.inst.Traffic()
+	// Запуск, источник и сессия учёта берутся до остановки: потом менеджер их уже
+	// не отдаёт, а счётчики источника читаются и после остановки. Завершается
+	// именно эта сессия, а не та, что мог открыть Connect, успевший между ними.
+	run, src, sess := s.inst.Status().Run, s.inst.Traffic(), s.currentSession()
 	stopCtx, cancel := context.WithTimeout(ctx, inst.StopTimeout)
 	defer cancel()
 	err := s.inst.Stop(stopCtx)
-	s.endAccounting()
+	s.endSession(sess)
 	if err != nil {
 		return nil, err
 	}

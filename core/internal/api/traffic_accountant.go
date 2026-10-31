@@ -80,6 +80,9 @@ func (s *Server) beginAccounting() {
 		s.logs.Logf(logs.LevelWarn, logs.SourceCore, "учёт трафика: очистка старых сессий: %v", err)
 	}
 	sess := &acctSession{id: id, profileID: run.ProfileID, src: s.inst.Traffic(), stop: make(chan struct{})}
+	if sess.src == nil {
+		s.logs.Logf(logs.LevelWarn, logs.SourceCore, "учёт трафика: у инстанса нет источника соединений, сессия %d останется нулевой", id)
+	}
 	a := &s.acct
 	a.mu.Lock()
 	a.cur = sess
@@ -97,7 +100,10 @@ func (s *Server) beginAccounting() {
 }
 
 // watchSession сбрасывает счётчики по таймеру и завершает сессию, когда
-// инстанс остановился или упал.
+// инстанс остановился или упал. Закрытый канал событий — Manager.Shutdown:
+// подписки он закрывает ДО остановки инстанса, поэтому итог здесь не пишется,
+// а сессию завершает вызвавший Shutdown (RPC Shutdown, StopInstance) после
+// остановки — иначе байты, переданные во время Stop, пропали бы.
 func (s *Server) watchSession(sess *acctSession, ticks <-chan time.Time, events <-chan inst.Event) {
 	for {
 		select {
@@ -106,7 +112,10 @@ func (s *Server) watchSession(sess *acctSession, ticks <-chan time.Time, events 
 		case <-ticks:
 			s.flushSession(sess, false)
 		case ev, ok := <-events:
-			if !ok || ev.Status.State == inst.StateIdle || ev.Status.State == inst.StateCrashed {
+			if !ok {
+				return
+			}
+			if ev.Status.State == inst.StateIdle || ev.Status.State == inst.StateCrashed {
 				s.finishSession(sess)
 				return
 			}
@@ -114,66 +123,38 @@ func (s *Server) watchSession(sess *acctSession, ticks <-chan time.Time, events 
 	}
 }
 
-// endAccounting завершает идущую сессию: итоговый сброс и время конца.
-// Повторный вызов и вызов без сессии ничего не делают.
-func (s *Server) endAccounting() {
-	a := &s.acct
-	a.mu.Lock()
-	sess := a.cur
-	a.mu.Unlock()
-	if sess != nil {
-		s.finishSession(sess)
-	}
-}
-
-// flushAccounting сбрасывает счётчики идущей сессии сейчас: чтение итогов не
-// должно отставать от живого трафика на период таймера.
-func (s *Server) flushAccounting() {
-	a := &s.acct
-	a.mu.Lock()
-	sess := a.cur
-	a.mu.Unlock()
-	if sess != nil {
-		s.flushSession(sess, false)
-	}
-}
-
-// finishSession — итоговый сброс; сессия перестаёт быть текущей. Вызывается из
-// нескольких мест (Disconnect, событие остановки, перезапуск): выигрывает первый.
-func (s *Server) finishSession(sess *acctSession) {
-	a := &s.acct
-	a.mu.Lock()
-	if a.cur != sess {
-		a.mu.Unlock()
-		return
-	}
-	a.cur = nil
-	a.mu.Unlock()
-	s.flushSession(sess, true)
-	close(sess.stop)
-}
-
-// flushSession пишет в базу то, что накопилось с прошлого сброса. Профиль
-// получает прибавку, сессия — абсолютные итоги. Ошибка записи не продвигает
-// отметку «сброшено»: следующий сброс повторит. Тексты ошибок базы адресов
-// назначения не содержат.
+// flushSession пишет в базу то, что накопилось с прошлого сброса.
 func (s *Server) flushSession(sess *acctSession, end bool) {
 	a := &s.acct
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	s.flushLocked(sess, end)
+}
+
+// flushLocked — flushSession под a.mu. Профиль получает прибавку, сессия —
+// абсолютные итоги. Ошибка записи профиля не продвигает отметку «сброшено»:
+// периодический сброс повторит её следующим, итоговый — сразу, один раз.
+// Тексты ошибок базы адресов назначения не содержат.
+func (s *Server) flushLocked(sess *acctSession, end bool) {
 	var up, down int64
 	if sess.src != nil {
 		up, down = sess.src.Total()
 	}
 	if sess.profileID != 0 && (up > sess.up || down > sess.down) {
-		err := s.st.AddTraffic(sess.profileID, max(up-sess.up, 0), max(down-sess.down, 0))
+		add := func() error {
+			return s.st.AddTraffic(sess.profileID, max(up-sess.up, 0), max(down-sess.down, 0))
+		}
+		err := add()
+		if err != nil && end {
+			err = add()
+		}
 		if err != nil {
 			s.logs.Logf(logs.LevelWarn, logs.SourceCore, "учёт трафика: счётчики профиля: %v", err)
 		} else {
 			sess.up, sess.down = max(up, sess.up), max(down, sess.down)
 		}
 	}
-	now := a.clock.Now().UnixMilli()
+	now := s.acct.clock.Now().UnixMilli()
 	write := s.st.UpdateSession
 	if end {
 		write = s.st.EndSession

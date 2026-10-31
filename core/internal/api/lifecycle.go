@@ -13,9 +13,12 @@ import (
 // менеджер: Connect после этого невозможен. Тот же путь, что у RPC Shutdown
 // (AUDIT §7.1.2: Close до выхода), для вызывающего вне RPC — выход по EOF
 // stdin, по сигналу и после самого RPC. Ограничен inst.StopTimeout;
-// повторный вызов — no-op.
+// повторный вызов — no-op. Сессия учёта трафика (T-79) завершается после
+// остановки: итог и время конца попадают в базу до выхода процесса.
 func (s *Server) StopInstance(ctx context.Context) error {
 	stopCtx, cancel := context.WithTimeout(ctx, inst.StopTimeout)
 	defer cancel()
-	return s.inst.Shutdown(stopCtx)
+	err := s.inst.Shutdown(stopCtx)
+	s.endAccounting()
+	return err
 }

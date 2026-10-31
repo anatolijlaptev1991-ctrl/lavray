@@ -34,9 +34,22 @@ func (s *Server) ExportPreset(ctx context.Context, req *connect.Request[lavrayv1
 	}
 	name := p.ID
 	if !p.Builtin {
-		name = presets.Slugify(presetDisplayName(p))
+		name = safeFileStem(presets.Slugify(presetDisplayName(p)))
 	}
 	return connect.NewResponse(&lavrayv1.ExportPresetResponse{Json: string(data), SuggestedName: name}), nil
+}
+
+// safeFileStem — имя файла без расширения, пригодное для Windows: зарезервированные
+// имена устройств (con, nul, com1…) получают приставку, иначе «Сохранить как» их отвергнет.
+func safeFileStem(stem string) string {
+	reserved := stem == "con" || stem == "prn" || stem == "aux" || stem == "nul"
+	if len(stem) == 4 && (stem[:3] == "com" || stem[:3] == "lpt") && stem[3] >= '1' && stem[3] <= '9' {
+		reserved = true
+	}
+	if reserved {
+		return "preset-" + stem
+	}
+	return stem
 }
 
 // ImportPreset создаёт пользовательский набор из файла (набор LAVRay или маршрут NekoRay).

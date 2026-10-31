@@ -98,6 +98,20 @@ func TestExportImportRoundTrip(t *testing.T) {
 	wantCode(t, err, connect.CodeNotFound, "Export несуществующего")
 }
 
+// Имя файла для «Сохранить как» не совпадает с именами устройств Windows.
+func TestExportSuggestedNameAvoidsDeviceNames(t *testing.T) {
+	cs := newE2E(t)
+	for name, want := range map[string]string{"CON": "preset-con", "com1": "preset-com1", "Lpt9": "preset-lpt9", "console": "console", "com0": "com0"} {
+		made, err := fromValues(t, cs, &lavrayv1.RoutingPreset{DisplayName: name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := exportPreset(t, cs, made.Id).SuggestedName; got != want {
+			t.Errorf("%s: имя файла %q, want %q", name, got, want)
+		}
+	}
+}
+
 // TestImportNeverTakesBuiltinID (S): файл с id и флагом встроенного, с чужим
 // источником — набор всё равно пользовательский с новым id; ни встроенный, ни
 // существующий набор не затронуты.

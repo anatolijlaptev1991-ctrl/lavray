@@ -69,16 +69,16 @@ func presetToProto(p *presets.Preset) *lavrayv1.RoutingPreset {
 		DefaultOutbound:        outboundToProto(p.Routing.DefOutbound),
 		OutboundDomainStrategy: strategyToModel[p.Routing.OutboundDomainStrategy],
 		CustomRulesJson:        strpIf(p.Routing.CustomRules),
+		BuiltinSourceId:        p.SourceID,
+		BuiltinSourceRevision:  int32(p.SourceRevision),
 	}
 	if p.Routing.SniffingMode == 1 {
 		r.SniffingMode = lavrayv1.SniffingMode_SNIFFING_FOR_ROUTING
 	}
 	if p.Builtin {
 		r.DisplayName = "preset." + p.ID
-	} else if name, ok := p.Name["en"]; ok && name != "" {
-		r.DisplayName = name
 	} else {
-		r.DisplayName = p.ID
+		r.DisplayName = presetDisplayName(p)
 	}
 	r.ProcessRules = make([]*lavrayv1.ProcessRule, 0, len(p.Routing.ProcessRules))
 	for _, pr := range p.Routing.ProcessRules {
@@ -92,16 +92,16 @@ func presetToProto(p *presets.Preset) *lavrayv1.RoutingPreset {
 	return r
 }
 
-// presetFromProto — контракт → формат LAVRay (проверки — отдельно, presets.Validate).
+// presetFromProto — контракт → формат LAVRay (проверки — отдельно, PrepareUser).
+// Источник копии (builtin_source_*) из контракта не читается: его ведёт ядро.
 func presetFromProto(r *lavrayv1.RoutingPreset) *presets.Preset {
 	p := &presets.Preset{
+		Schema:   presets.SchemaRef,
+		Version:  presets.SchemaVersion,
 		ID:       r.GetId(),
 		Builtin:  false, // пользовательские пресеты из контракта никогда не builtin
 		Revision: int(r.GetRevision()),
 		Name:     presets.Localized{"en": r.GetDisplayName()},
-	}
-	if r.GetDisplayName() == "" {
-		p.Name = presets.Localized{"en": r.GetId()}
 	}
 	routing := &p.Routing
 	routing.DefOutbound = outboundFromProto(r.GetDefaultOutbound())

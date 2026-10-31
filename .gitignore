@@ -18,6 +18,10 @@ src-tauri/target/
 # --- Node / React (ui) ---
 node_modules/
 dist/
+# Встраиваемая копия ui/dist (тег with_webui): в репозитории только .gitkeep.
+!/core/internal/web/dist/
+/core/internal/web/dist/*
+!/core/internal/web/dist/.gitkeep
 dist-ssr/
 .vite/
 *.tsbuildinfo

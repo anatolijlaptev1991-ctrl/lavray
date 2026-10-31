@@ -125,7 +125,7 @@ jobs:
       - name: "Страж: clash_api в ядре запрещён, пока форк не пропатчен (T-47)"
         run: go test ./internal/buildtags/ -run TestClashAPITagIsForbiddenUntilForkIsPatched -count=1
       - name: "go test: sing-box check golden (тег singbox_check)"
-        # Полная проверка golden-эталонов реальным sing-box (форк 628a9ed):
+        # Полная проверка golden-эталонов реальным sing-box (форк 35f3fd0):
         # box.New + Close. Локально без сети к прокси — выключена тегом;
         # CI-сеть качает форк через proxy.golang.org (публичное зеркало).
         # D-01: теги ядра (with_quic/with_gvisor/with_utls) — из core/BUILD_TAGS,
@@ -163,7 +163,7 @@ jobs:
           GOPRIVATE: github.com/anatolijlaptev1991-ctrl/*
           GOFLAGS: -mod=mod
         run: |
-          go get github.com/anatolijlaptev1991-ctrl/sing-box@v1.14.2-0.20260916133904-628a9ed70b12 || true
+          go get github.com/anatolijlaptev1991-ctrl/sing-box@v1.14.2-0.20261031133806-35f3fd09bcf9 || true
           go mod tidy
       - name: Сборка с реальным раннером (теги из core/BUILD_TAGS)
         env:

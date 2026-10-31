@@ -7,7 +7,7 @@ ConfigBuilder (оригинал — `db/ConfigBuilder.cpp` в nekoray, порт 
 
 | Компонент | Источник | Пин |
 |---|---|---|
-| sing-box (форк с neko-слоем) | `https://github.com/anatolijlaptev1991-ctrl/sing-box` | **`628a9ed`** (= sing-box 1.14.1-neko.1) |
+| sing-box (форк с neko-слоем) | `https://github.com/anatolijlaptev1991-ctrl/sing-box` | **`35f3fd0`** (= sing-box 1.14.1-neko.1 `628a9ed` + патч P1 из `NEKO_PATCHES.md`) |
 
 Форк подключается в `go.mod` через `replace` на зафиксированный коммит. Изменение пина —
 только через гейт обновления из `docs/UPDATE-SYSTEM.md` (аудит changelog, лицензия upstream,

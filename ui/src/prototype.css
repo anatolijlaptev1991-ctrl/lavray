@@ -1279,6 +1279,12 @@ html[data-shell="native"][data-os="mac"] #app { height: 100vh; }
 .conns-table td{padding:8px 10px;border-bottom:1px solid var(--b-subtle);max-width:280px;
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .conns-table tr:last-child td{border-bottom:0}
+.conns .log-wrap{overflow-x:auto}
+.conns-table tr.muted td{color:var(--t3)}
+.conns-table td:last-child{width:1%;padding-block:4px}
+.conn-proc{font-size:.6875rem}
+.conn-st{display:inline-flex;align-items:center;justify-content:center;color:var(--t3)}
+.conn-st-blocked{color:var(--err-text)}
 /* активный раздел: подложка вместо отсутствующей полоски .sb-ind */
 .sb-item.on{background:var(--accent-soft);color:var(--accent)}
 .subtab[aria-selected="true"]{box-shadow:inset 0 -2px 0 var(--accent)}

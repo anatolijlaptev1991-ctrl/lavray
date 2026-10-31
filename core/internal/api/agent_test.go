@@ -67,6 +67,7 @@ type apiClients struct {
 	settings lavrayv1connect.SettingsServiceClient
 	logs     lavrayv1connect.LogServiceClient
 	stats    lavrayv1connect.StatsServiceClient
+	conns    lavrayv1connect.ConnectionServiceClient
 	diag     lavrayv1connect.DiagnosticsServiceClient
 	routing  lavrayv1connect.RoutingServiceClient
 	dns      lavrayv1connect.DnsServiceClient
@@ -81,6 +82,7 @@ func newAPIClients(url, token string) *apiClients {
 		settings: lavrayv1connect.NewSettingsServiceClient(hc, url),
 		logs:     lavrayv1connect.NewLogServiceClient(hc, url),
 		stats:    lavrayv1connect.NewStatsServiceClient(hc, url),
+		conns:    lavrayv1connect.NewConnectionServiceClient(hc, url),
 		diag:     lavrayv1connect.NewDiagnosticsServiceClient(hc, url),
 		routing:  lavrayv1connect.NewRoutingServiceClient(hc, url),
 		dns:      lavrayv1connect.NewDnsServiceClient(hc, url),
@@ -178,8 +180,13 @@ func readCalls(profileID int64) []agentCall {
 		{"GetTrafficTotals", func(c *apiClients) error {
 			return unary(c.stats.GetTrafficTotals, &lavrayv1.GetTrafficTotalsRequest{ProfileIds: []int64{profileID}})
 		}},
+		{"GetTrafficSummary", func(c *apiClients) error {
+			return unary(c.stats.GetTrafficSummary, &lavrayv1.GetTrafficSummaryRequest{})
+		}},
 		{"StatsSubscribe", func(c *apiClients) error {
-			ctx, cancel := context.WithTimeout(context.Background(), 2e9)
+			// Без инстанса поток ждёт (T-79), поэтому отказ политики виден сразу, а
+			// разрешённый вызов заканчивается по таймауту.
+			ctx, cancel := context.WithTimeout(context.Background(), 3e8)
 			defer cancel()
 			stream, err := c.stats.Subscribe(ctx, connect.NewRequest(&lavrayv1.SubscribeStatsRequest{}))
 			return drain(stream, err)
@@ -232,6 +239,17 @@ func neverCalls(profileID int64) []agentCall {
 			ctx, cancel := context.WithTimeout(context.Background(), 2e9)
 			defer cancel()
 			return drain(c.core.SubscribeEvents(ctx, connect.NewRequest(&lavrayv1.SubscribeEventsRequest{})))
+		}},
+		{"ListConnections", func(c *apiClients) error {
+			return unary(c.conns.ListConnections, &lavrayv1.ListConnectionsRequest{})
+		}},
+		{"WatchConnections", func(c *apiClients) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 3e8)
+			defer cancel()
+			return drain(c.conns.WatchConnections(ctx, connect.NewRequest(&lavrayv1.WatchConnectionsRequest{})))
+		}},
+		{"CloseConnection", func(c *apiClients) error {
+			return unary(c.conns.CloseConnection, &lavrayv1.CloseConnectionRequest{Id: "00000000-0000-0000-0000-000000000000"})
 		}},
 		{"GetSettings", func(c *apiClients) error { return unary(c.settings.GetSettings, &lavrayv1.GetSettingsRequest{}) }},
 		{"SetSettings", func(c *apiClients) error {

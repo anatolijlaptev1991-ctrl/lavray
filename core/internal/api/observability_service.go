@@ -10,7 +10,6 @@ package api
 import (
 	"context"
 	"strings"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/cfgbuild"
@@ -143,47 +142,8 @@ func lastMatching(lines []logs.Line, n int, keep func(logs.Line) bool) []logs.Li
 
 // ---- StatsService -----------------------------------------------------------------
 
-// TrafficSource — источник мгновенной статистики инстанса (W8: clash-api;
-// тесты — детерминированный источник).
-type TrafficSource interface {
-	Snapshot() (up, down int64, ok bool)
-}
-
-// statsSvc — отдельный receiver для StatsService.Subscribe (коллизия имён
-// с LogService.Subscribe на одном Server).
-type statsSvc struct{ *Server }
-
-func (s statsSvc) Subscribe(ctx context.Context, req *connect.Request[lavrayv1.SubscribeStatsRequest], stream *connect.ServerStream[lavrayv1.StatsSnapshot]) error {
-	if s.traffic == nil {
-		return failedPrecondition("статистика трафика пока недоступна в этой версии LAVRay")
-	}
-	tick := time.NewTicker(time.Second)
-	defer tick.Stop()
-	// Финальный кадр: при остановке инстанса шлём Final и закрываем.
-	events, cancelEvents := s.inst.Subscribe()
-	defer cancelEvents()
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case ev := <-events:
-			if ev.Status.State == inst.StateIdle || ev.Status.State == inst.StateCrashed {
-				return stream.Send(&lavrayv1.StatsSnapshot{TsMs: time.Now().UnixMilli(), Final: true})
-			}
-		case <-tick.C:
-			up, down, ok := s.traffic.Snapshot()
-			if !ok {
-				continue
-			}
-			sess := &lavrayv1.SessionStat{UplinkTotal: up, DownlinkTotal: down}
-			if err := stream.Send(&lavrayv1.StatsSnapshot{TsMs: time.Now().UnixMilli(), Session: sess}); err != nil {
-				return err
-			}
-		}
-	}
-}
-
 func (s *Server) GetTrafficTotals(ctx context.Context, req *connect.Request[lavrayv1.GetTrafficTotalsRequest]) (*connect.Response[lavrayv1.GetTrafficTotalsResponse], error) {
+	s.flushAccounting() // T-79: идущая сессия видна сразу, а не после таймера
 	profiles, err := s.st.ListProfiles(-1)
 	if err != nil {
 		return nil, mapErr(err)
@@ -196,10 +156,6 @@ func (s *Server) GetTrafficTotals(ctx context.Context, req *connect.Request[lavr
 		}
 	}
 	return connect.NewResponse(&lavrayv1.GetTrafficTotalsResponse{Totals: totals}), nil
-}
-
-func (s *Server) GetTrafficSummary(ctx context.Context, req *connect.Request[lavrayv1.GetTrafficSummaryRequest]) (*connect.Response[lavrayv1.GetTrafficSummaryResponse], error) {
-	return nil, errNotYetW6 // группировка по группам/подпискам — W8 (запрос к store с GROUP BY)
 }
 
 // ---- DiagnosticsService --------------------------------------------------------------

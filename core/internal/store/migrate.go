@@ -117,6 +117,11 @@ var migrations = []migration{
 			`UPDATE profiles SET custom_confirmed = 0`,
 		},
 	},
+	{
+		// T-79: сессии подключения для сводки трафика (sessions_schema.go).
+		version: sessionsSchemaVersion,
+		stmts:   sessionsSchema,
+	},
 }
 
 // schemaVersion читает текущую версию схемы (0 — свежая база).

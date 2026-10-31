@@ -11,4 +11,5 @@
 #   ui/src/lib/newmodule.ts: 90
 #
 # Подмножество YAML: раздел thresholds, вложенные «префикс: число», комментарии «#».
-thresholds: {}
+thresholds:
+  core/internal/traffic/: 90 # T-79: модель, счётчик скоростей и подставной источник

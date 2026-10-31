@@ -192,4 +192,4 @@ require (
 	zombiezen.com/go/capnproto2 v2.18.2+incompatible // indirect
 )
 
-replace github.com/sagernet/sing-box => github.com/anatolijlaptev1991-ctrl/sing-box v1.14.2-0.20260916133904-628a9ed70b12
+replace github.com/sagernet/sing-box => github.com/anatolijlaptev1991-ctrl/sing-box v1.14.2-0.20261031133806-35f3fd09bcf9

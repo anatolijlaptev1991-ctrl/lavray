@@ -2,13 +2,16 @@
 
 // presetSession.ts — состояние экрана наборов маршрутов (T-80): список и
 // активный набор, заметка об итоге, баннер «нужен перезапуск», единый разбор
-// ошибок операций. Сами операции — usePresets.ts.
+// ошибок операций. Операции идут по одной (serialQueue): вторая правка не
+// стартует со старой ревизией, пока первая не вернула новую. Сами операции —
+// usePresets.ts.
 import { Code, ConnectError } from '@connectrpc/connect';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { MutableRefObject } from 'react';
 import type { RoutingPreset } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import type { CoreClients } from '../lib/core';
+import { serialQueue } from '../lib/serialQueue';
 import { useCore } from './useCore';
 import { useI18n } from './useI18n';
 
@@ -43,23 +46,34 @@ export interface PresetSession {
 export function usePresetSession(): PresetSession {
   const core = useCore();
   const { t } = useI18n();
-  const [presets, setPresets] = useState<readonly RoutingPreset[]>([]);
-  const [activeId, setActiveId] = useState('');
+  const [presets, setPresetsState] = useState<readonly RoutingPreset[]>([]);
+  const [activeId, setActiveIdState] = useState('');
   const [note, setNote] = useState<PresetNote | null>(null);
   const [needsRestart, setNeedsRestart] = useState(false);
   const [restarting, setRestarting] = useState(false);
-  const latest = useRef({ presets, activeId });
-  latest.current = { presets, activeId };
+  // Источник истины для операций: обновляется сразу, а не после перерисовки.
+  const latest = useRef<{ presets: readonly RoutingPreset[]; activeId: string }>({ presets: [], activeId: '' });
+  const queue = useRef(serialQueue());
+
+  const setPresets = useCallback((update: (prev: readonly RoutingPreset[]) => readonly RoutingPreset[]): void => {
+    latest.current = { ...latest.current, presets: update(latest.current.presets) };
+    setPresetsState(latest.current.presets);
+  }, []);
+
+  const setActiveId = useCallback((id: string): void => {
+    latest.current = { ...latest.current, activeId: id };
+    setActiveIdState(id);
+  }, []);
 
   const reload = useCallback(async (): Promise<void> => {
     try {
       const res = await core.routing.listPresets({});
-      setPresets(res.presets);
+      setPresets(() => res.presets);
       setActiveId(res.activePresetId);
     } catch (e) {
       setNote({ kind: 'err', text: showCoreError(e, t) });
     }
-  }, [core, t]);
+  }, [core, t, setPresets, setActiveId]);
 
   useEffect(() => {
     void reload();
@@ -67,17 +81,18 @@ export function usePresetSession(): PresetSession {
 
   // ABORTED — набор изменили в другом месте: перечитываем и просим повторить правку.
   const run = useCallback(
-    async (op: () => Promise<PresetNote | undefined>): Promise<void> => {
-      setNote(null);
-      try {
-        const done = await op();
-        if (done !== undefined) setNote(done);
-      } catch (e) {
-        await reload();
-        const aborted = ConnectError.from(e).code === Code.Aborted;
-        setNote({ kind: 'err', text: aborted ? t('toast.presetConflict') : showCoreError(e, t) });
-      }
-    },
+    (op: () => Promise<PresetNote | undefined>): Promise<void> =>
+      queue.current(async () => {
+        setNote(null);
+        try {
+          const done = await op();
+          if (done !== undefined) setNote(done);
+        } catch (e) {
+          await reload();
+          const aborted = ConnectError.from(e).code === Code.Aborted;
+          setNote({ kind: 'err', text: aborted ? t('toast.presetConflict') : showCoreError(e, t) });
+        }
+      }),
     [reload, t],
   );
 
@@ -87,7 +102,7 @@ export function usePresetSession(): PresetSession {
       setActiveId(id);
       if (res.needsProfileRestart) setNeedsRestart(true);
     },
-    [core],
+    [core, setActiveId],
   );
 
   const restart = useCallback(async (): Promise<void> => {

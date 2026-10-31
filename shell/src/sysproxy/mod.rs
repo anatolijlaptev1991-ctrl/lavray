@@ -14,6 +14,9 @@
 //! каждая запись RAS/VPN, T-82). Linux: gsettings (GNOME). macOS: `networksetup`.
 
 mod backend;
+mod command;
+#[cfg(test)]
+mod command_tests;
 #[cfg(any(windows, test))]
 mod conn;
 #[cfg(test)]
@@ -55,7 +58,8 @@ mod wpad;
 mod wpad_tests;
 
 pub use backend::{apply, capture, clear, restore, Backend, System};
-pub use outcome::Applied;
+pub use command::set_blocking;
+pub use outcome::{Applied, SetOutcome};
 pub use snapshot::ProxySnapshot;
 pub use validate::{validate_host, validate_port};
 

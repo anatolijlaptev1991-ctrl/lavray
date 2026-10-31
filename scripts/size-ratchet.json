@@ -61,7 +61,7 @@
   "shell/src/elevation.rs": 391,
   "shell/src/endpoint.rs": 513,
   "shell/src/launch.rs": 303,
-  "shell/src/main.rs": 737,
+  "shell/src/main.rs": 731,
   "shell/src/token.rs": 228,
   "shell/src/tray.rs": 609,
   "shell/src/ui_state.rs": 204,

@@ -26,7 +26,7 @@ use lavray_shell::launch::{wait_for_exit, LaunchArgs, WAIT_PID_TIMEOUT};
 use lavray_shell::msgbox;
 use lavray_shell::profile;
 use lavray_shell::single_instance::{self, Verdict};
-use lavray_shell::sysproxy::{validate_port, SysProxy};
+use lavray_shell::sysproxy::{set_blocking, validate_port, SetOutcome, SysProxy};
 use lavray_shell::token;
 use lavray_shell::tray::TrayUpdate;
 use lavray_shell::ui_state;
@@ -246,13 +246,14 @@ fn restart_core(supervisor: tauri::State<'_, Arc<SupervisorHandle>>) {
 /// Порт приходит от окна и проверяется в оболочке (A2-18): 1..=65535, ядро
 /// должно быть живо. Хост не параметр — всегда loopback. При выключении порт
 /// не нужен и не проверяется: неверное значение не должно оставить прокси
-/// включённым.
+/// включённым. `reg.exe`/WinINET/RAS работают в пуле блокирующих потоков, а не
+/// в потоке команд (T-82); предупреждения (RAS, WPAD) — в `warnings` ответа.
 #[tauri::command]
-fn set_system_proxy(
+async fn set_system_proxy(
     shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>,
     enabled: bool,
     port: i64,
-) -> Result<String, String> {
+) -> Result<SetOutcome, String> {
     let port = if enabled { validate_port(port)? } else { 0 };
     let data = {
         let s = shared.lock().map_err(|_| "state poisoned".to_string())?;
@@ -261,14 +262,7 @@ fn set_system_proxy(
         }
         data_dir()
     };
-    let sp = SysProxy::new(&data);
-    if enabled {
-        let applied = sp.enable("127.0.0.1", port)?;
-        Ok(format!("{}:{}", applied.host, applied.port))
-    } else {
-        sp.disable()?;
-        Ok(String::new())
-    }
+    set_blocking(data, enabled, port).await
 }
 
 /// request_quit — попросить надзирателя остановить ядро перед выходом (D2).

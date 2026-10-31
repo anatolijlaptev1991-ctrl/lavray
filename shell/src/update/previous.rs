@@ -7,6 +7,7 @@
 //! `applied ← pending`. Описание прошлого — `previous/previous.json`
 //! `{"version","sha256","file"}`: его читает Go-ядро (`rollback_available`).
 
+use super::hash::parse_sha256_hex;
 use super::layout::Layout;
 use super::paths::parse_staged_name;
 use crate::files::io::write_atomic;
@@ -47,14 +48,15 @@ pub struct PreviousStore {
     layout: Layout,
 }
 
-/// Описание из `dir/file_name`, если оно целое: сумма — hex, имя — `<сумма>-…`
-/// без разделителей, файл установщика на месте.
+/// Описание из `dir/file_name`, если оно целое: сумма — 64 hex, имя файла —
+/// `<сумма>-…` без разделителей, файл установщика на месте. Сама сумма
+/// сверяется с содержимым при запуске (`verify_locked`), не здесь.
 fn read_info(dir: &Path, file_name: &str) -> Option<PreviousInfo> {
     let raw = std::fs::read(dir.join(file_name)).ok()?;
     let info: PreviousInfo = serde_json::from_slice(&raw).ok()?;
-    let (sum, _) = parse_staged_name(&info.file)?;
-    let same_sum = sum.eq_ignore_ascii_case(&info.sha256);
-    (same_sum && dir.join(&info.file).is_file()).then_some(info)
+    parse_sha256_hex(&info.sha256)?;
+    parse_staged_name(&info.file)?;
+    dir.join(&info.file).is_file().then_some(info)
 }
 
 fn write_info(dir: &Path, file_name: &str, info: &PreviousInfo) -> io::Result<()> {

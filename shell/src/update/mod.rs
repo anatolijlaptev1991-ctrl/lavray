@@ -25,6 +25,7 @@
 //! - [`prepare`] — порядок «проверить → остановить ядро → снять прокси → запустить»;
 //! - [`rollback`] — запуск прошлого установщика;
 //! - [`stage`] — копия выбранного пользователем установщика в staging;
+//! - [`pick`] — диалог «Из файла» и копия выбранного установщика (путь не от страницы);
 //! - [`wiring`] — Tauri-команды и общее состояние; [`watchdog_entry`] — вход режима watchdog.
 
 pub mod clock;
@@ -35,6 +36,7 @@ pub mod heartbeat;
 pub mod install;
 pub mod layout;
 pub mod paths;
+pub mod pick;
 pub mod ports;
 pub mod prepare;
 pub mod previous;

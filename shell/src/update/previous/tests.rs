@@ -79,7 +79,6 @@ fn a_damaged_previous_is_not_offered() {
     for (sha256, file) in [
         ("a".repeat(64), "..\\evil.exe".to_string()),
         ("zz".repeat(32), "zz-setup.exe".to_string()),
-        ("a".repeat(64), format!("{}-setup.exe", "b".repeat(64))),
     ] {
         let bad = PreviousInfo {
             version: info.version.clone(),

@@ -29,8 +29,11 @@
 pub mod clock;
 pub mod error;
 pub mod hash;
+pub mod heartbeat;
 pub mod layout;
 pub mod paths;
+pub mod previous;
+pub mod verify;
 
 #[cfg(test)]
 mod testkit;

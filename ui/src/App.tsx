@@ -24,7 +24,7 @@ import type { TrayAction } from './lib/tray';
 import { onTablistKeyDown } from './lib/tabs';
 import { getPlatformAdapter } from './platform/adapter';
 import { ConnectionScreen } from './screens/screen_connection';
-import { ConnsScreen } from './screens/screen_conns';
+import { ConnsScreen } from './screens/conns/ConnsScreen';
 import { DiagScreen } from './screens/screen_diag';
 import { DnsScreen } from './screens/screen_dns';
 import { LogScreen } from './screens/screen_log';
@@ -503,7 +503,7 @@ function AppInner(): JSX.Element {
             {sectionId === 'servers' &&
               (tab?.id === 'subscriptions' ? <SubscriptionsScreen /> : <ServersScreen />)}
             {sectionId === 'rules' && (tab?.id === 'dns' ? <DnsScreen /> : <RulesScreen />)}
-            {sectionId === 'diag' && tab?.id === 'conns' && <ConnsScreen />}
+            {sectionId === 'diag' && tab?.id === 'conns' && <ConnsScreen active={connOn} />}
             {sectionId === 'diag' && tab?.id === 'log' && <LogScreen />}
             {sectionId === 'diag' && tab?.id !== 'conns' && tab?.id !== 'log' && <DiagScreen />}
             {sectionId === 'settings' &&

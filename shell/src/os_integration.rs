@@ -26,6 +26,7 @@ pub fn attach<R: Runtime>(builder: tauri::Builder<R>, data_dir: PathBuf) -> taur
         .manage(DataDir(data_dir))
         .manage(NotifyGate::default())
         .manage(HotkeySlot::default())
+        .manage(crate::update::wiring::new_gate()) // T-75: замок «установка идёт»
 }
 
 /// После создания окна: зарегистрировать сохранённое сочетание.

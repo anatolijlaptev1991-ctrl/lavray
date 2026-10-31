@@ -26,6 +26,8 @@ pub enum ApplyError {
     LaunchFailed,
     /// Ожидаемая сумма — не 64 hex-символа.
     InvalidSha256,
+    /// Версия пустая, слишком длинная или с пробелами (watchdog её не разберёт).
+    InvalidVersion,
     /// Прошлого установщика нет.
     RollbackUnavailable,
 }
@@ -43,6 +45,7 @@ impl ApplyError {
             Self::PrepareFailed => "prepare_failed",
             Self::LaunchFailed => "launch_failed",
             Self::InvalidSha256 => "invalid_sha256",
+            Self::InvalidVersion => "invalid_version",
             Self::RollbackUnavailable => "rollback_unavailable",
         }
     }
@@ -72,6 +75,9 @@ mod tests {
             (ApplyError::CoreStopFailed, "core_stop_failed"),
             (ApplyError::LaunchFailed, "launch_failed"),
             (ApplyError::InvalidSha256, "invalid_sha256"),
+            (ApplyError::InvalidVersion, "invalid_version"),
+            (ApplyError::ProxyReleaseFailed, "proxy_release_failed"),
+            (ApplyError::PrepareFailed, "prepare_failed"),
             (ApplyError::RollbackUnavailable, "rollback_unavailable"),
         ];
         for (error, code) in all {

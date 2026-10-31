@@ -572,6 +572,7 @@ fn create_main_window(app: &tauri::App, elevated: bool) -> Result<(), String> {
 }
 
 fn main() {
+    lavray_shell::update::watchdog_entry::run_if_requested(); // T-75: --update-watchdog
     let launch = LaunchArgs::from_env();
     // T-81: перезапуск от администратора запускает этот экземпляр, пока прежний
     // ещё выходит. Ждём его до плагинов: single-instance иначе отдал бы

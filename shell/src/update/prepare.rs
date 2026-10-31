@@ -4,6 +4,7 @@
 //! `apply_order_stop_core_release_proxy_then_launch`:
 //! 1) `verify_locked` — пока ничего не остановлено; 2) остановить ядро;
 //! 3) снять системный прокси; 4) запустить установщик с повышением.
+//!
 //! Копии для watchdog и отката делаются ДО остановки ядра: тяжёлый ввод-вывод не
 //! должен идти, пока VPN выключен.
 //!
@@ -12,41 +13,15 @@
 //! Не компенсируется только сам сбой остановки: состояние ядра неизвестно.
 
 use super::error::{ApplyError, ApplyOutcome};
+pub use super::gate::{ApplyGate, GateGuard};
 use super::install::{launch_installer, ElevateError, ElevatedHandle, Elevator};
 use super::layout::Layout;
 use super::paths::FsProbe;
+pub use super::ports::{CoreController, ProxyReleaser, WatchdogCopy, WatchdogLauncher};
 use super::previous::{PreviousInfo, RollbackArchive};
-use super::verify::{open_verified, LockedFile, LockedOpener};
-use std::io;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-
-/// Остановка и повторный запуск ядра.
-pub trait CoreController {
-    /// Остановить ядро и дождаться выхода.
-    fn stop(&self) -> Result<(), String>;
-    /// Вернуть ядро после неудачной установки.
-    fn restart(&self);
-}
-
-/// Снятие системного прокси (возврат снимка настроек).
-pub trait ProxyReleaser {
-    fn release(&self) -> Result<(), String>;
-}
-
-/// Копия exe для режима watchdog; дескриптор держит её от подмены до запуска.
-pub struct WatchdogCopy {
-    pub path: PathBuf,
-    pub hold: Box<dyn LockedFile>,
-}
-
-/// Подготовка и запуск watchdog.
-pub trait WatchdogLauncher {
-    /// Скопировать собственный exe в безопасное место.
-    fn stage_copy(&self) -> io::Result<WatchdogCopy>;
-    /// Запустить копию: ждать установщик `installer_pid`, ожидать heartbeat `version`.
-    fn spawn(&self, copy: &WatchdogCopy, installer_pid: u32, version: &str) -> io::Result<()>;
-}
+use super::verify::{open_verified, LockedOpener};
+use super::watchdog_args::version_ok;
+use std::path::Path;
 
 /// Что ставим.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,32 +52,6 @@ pub struct ApplyRequest<'a> {
     pub version: &'a str,
 }
 
-/// Замок «установка уже идёт».
-#[derive(Default)]
-pub struct ApplyGate(AtomicBool);
-
-/// Замок удерживается, пока жив этот объект.
-pub struct GateGuard<'a>(&'a AtomicBool);
-
-impl ApplyGate {
-    /// Занять замок или вернуть [`ApplyError::Busy`].
-    pub fn try_enter(&self) -> Result<GateGuard<'_>, ApplyError> {
-        match self
-            .0
-            .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
-        {
-            Ok(_) => Ok(GateGuard(&self.0)),
-            Err(_) => Err(ApplyError::Busy),
-        }
-    }
-}
-
-impl Drop for GateGuard<'_> {
-    fn drop(&mut self) {
-        self.0.store(false, Ordering::SeqCst);
-    }
-}
-
 /// Установка под замком: вторая параллельная получает `busy`.
 pub fn apply_guarded(
     gate: &ApplyGate,
@@ -120,6 +69,9 @@ enum Launched {
 }
 
 fn apply(deps: &ApplyDeps<'_>, req: &ApplyRequest<'_>) -> Result<ApplyOutcome, ApplyError> {
+    if !version_ok(req.version) {
+        return Err(ApplyError::InvalidVersion);
+    }
     let dir = match req.mode {
         Mode::Update => req.layout.staging(),
         Mode::Rollback => req.layout.previous_dir(),
@@ -204,7 +156,9 @@ fn after_launch(
     meta: &PreviousInfo,
     handle: ElevatedHandle,
 ) {
-    if let Err(e) = deps.watchdog.spawn(copy, handle.pid, req.version) {
+    if handle.pid == 0 {
+        eprintln!("LAVRay: pid установщика неизвестен, watchdog обновления не запущен");
+    } else if let Err(e) = deps.watchdog.spawn(copy, handle.pid, req.version) {
         eprintln!("LAVRay: watchdog обновления не запущен: {e}");
     }
     let committed = match req.mode {

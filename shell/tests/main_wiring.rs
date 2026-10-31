@@ -428,3 +428,46 @@ fn close_button_follows_the_close_to_tray_setting() {
         .expect("window_hide");
     assert!(hide.contains("close_window(&window)"));
 }
+
+/// T-75: команды обновления зарегистрированы для UI, замок «установка идёт»
+/// лежит в общем состоянии, а режим `--update-watchdog` разбирается первой
+/// строкой `main()` — до single-instance, плагинов, окна и ядра.
+#[test]
+fn update_commands_are_registered_and_the_watchdog_mode_runs_first() {
+    for name in [
+        "update_apply",
+        "update_rollback",
+        "update_health_ok",
+        "update_stage_local",
+        "update_previous_info",
+    ] {
+        assert!(registered(name), "нет в generate_handler!: {name}");
+    }
+    assert!(
+        source("os_integration.rs").contains("update::wiring::new_gate()"),
+        "замок установки не в общем состоянии"
+    );
+
+    let main_rs = source("main.rs");
+    let body = main_rs.split("fn main() {").nth(1).expect("main()");
+    let first_statement = body.lines().find(|l| !l.trim().is_empty()).unwrap();
+    assert!(
+        first_statement.contains("update::watchdog_entry::run_if_requested()"),
+        "watchdog должен идти первым: {first_statement}"
+    );
+    for later in ["LaunchArgs::from_env()", "tauri::generate_context!()"] {
+        assert!(body.find(later).unwrap() > body.find("run_if_requested").unwrap());
+    }
+}
+
+/// T-75: страница не получает JS-прав на обновление — команды вызываются как
+/// обычные команды оболочки, а установку запускает только `update_apply`.
+#[test]
+fn update_commands_need_no_extra_capability() {
+    let caps = std::fs::read_to_string(format!(
+        "{}/capabilities/default.json",
+        env!("CARGO_MANIFEST_DIR")
+    ))
+    .unwrap();
+    assert!(!caps.contains("update"), "лишнее право на обновление");
+}

@@ -38,7 +38,8 @@ where
     args.into_iter().any(|a| a.as_ref() == ARG_UPDATE_WATCHDOG)
 }
 
-fn version_ok(version: &str) -> bool {
+/// Версия годится для передачи watchdog: непустая, короткая, без пробелов.
+pub fn version_ok(version: &str) -> bool {
     !version.is_empty()
         && version.len() <= MAX_VERSION
         && !version.chars().any(|c| c.is_control() || c.is_whitespace())

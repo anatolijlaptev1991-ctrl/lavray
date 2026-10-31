@@ -21,6 +21,7 @@
 //! - [`previous`] — один прошлый установщик для отката и `previous.json`;
 //! - [`heartbeat`] — `health.json` и вердикт «здоровье отмечено»;
 //! - [`watchdog`] — решение «ждать / здоров / откат» и цикл режима `--update-watchdog`;
+//! - [`gate`] — замок «установка идёт»; [`ports`] — трейты установки (ядро, прокси, watchdog);
 //! - [`prepare`] — порядок «проверить → остановить ядро → снять прокси → запустить»;
 //! - [`rollback`] — запуск прошлого установщика;
 //! - [`stage`] — копия выбранного пользователем установщика в staging;
@@ -28,17 +29,29 @@
 
 pub mod clock;
 pub mod error;
+pub mod gate;
 pub mod hash;
 pub mod heartbeat;
 pub mod install;
 pub mod layout;
 pub mod paths;
+pub mod ports;
 pub mod prepare;
 pub mod previous;
+pub mod real;
 pub mod rollback;
+pub mod stage;
 pub mod verify;
 pub mod watchdog;
 pub mod watchdog_args;
+pub mod watchdog_entry;
+pub mod wiring;
+
+mod app_adapters;
+#[cfg(windows)]
+mod proc_win;
+#[cfg(windows)]
+mod runas_win;
 
 #[cfg(test)]
 mod testkit;

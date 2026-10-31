@@ -5,6 +5,8 @@ use crate::update::hash::{sha256_reader, to_hex};
 use crate::update::install::{ElevateError, ElevatedHandle, Elevator};
 use crate::update::testkit::{staged_name, Log, MemFs, MemOpener};
 use std::cell::RefCell;
+use std::io;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 const BYTES: &[u8] = b"new installer";
@@ -268,6 +270,35 @@ fn an_invalid_sum_is_reported_before_anything_happens() {
     rig.sum = "not-a-sum".into();
     assert_eq!(rig.run(Mode::Update), Err(ApplyError::InvalidSha256));
     assert!(rig.log.events().is_empty());
+}
+
+#[test]
+fn an_unusable_version_is_refused_before_anything_happens() {
+    for bad in ["", "0.5 1", "x".repeat(65).as_str()] {
+        let rig = Rig::new(Mode::Update);
+        let deps = ApplyDeps {
+            fs: &rig.fs,
+            opener: &rig.opener,
+            core: &rig.core,
+            proxy: &rig.proxy,
+            elevator: &rig.elevator,
+            archive: &rig.archive,
+            watchdog: &rig.watchdog,
+        };
+        let request = ApplyRequest {
+            layout: &rig.layout,
+            mode: Mode::Update,
+            candidate: &rig.installer,
+            sha256: &rig.sum,
+            version: bad,
+        };
+        assert_eq!(
+            apply_guarded(&rig.gate, &deps, &request),
+            Err(ApplyError::InvalidVersion),
+            "{bad:?}"
+        );
+        assert!(rig.log.events().is_empty());
+    }
 }
 
 #[test]

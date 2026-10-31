@@ -66,7 +66,7 @@ export function retryAfterSeconds(e: unknown): number | null {
 
 /** Проверка нового пароля на клиенте (ядро проверяет ту же политику повторно). */
 export function passwordProblem(password: string, confirm?: string): WebMessage | null {
-  if ([...password].length < MIN_PASSWORD_LENGTH) {
+  if (Array.from(password).length < MIN_PASSWORD_LENGTH) {
     return { key: 'web.setup.short', params: { n: MIN_PASSWORD_LENGTH } };
   }
   if (confirm !== undefined && confirm !== password) return { key: 'web.setup.mismatch' };

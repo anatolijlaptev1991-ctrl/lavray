@@ -36,8 +36,8 @@ pub(super) fn three_way(original: &Value, applied: &Value, current: &Value) -> V
     Value::Object(merged)
 }
 
-/// Слияние записей RAS. Нет данных для сравнения — записи, которой нет в
-/// `applied`, или списка `current` (его не удалось перечислить) — запись
+/// Слияние записей RAS. Нет данных для сравнения — записи нет в `applied`,
+/// она не читается (`null`) или список `current` не перечислился — запись
 /// возвращается безусловно: оставить подключение с нашим прокси хуже. Запись,
 /// пропавшая из списка (подключение удалили), не восстанавливается.
 fn merge_ras(original: &Value, applied: Option<&Value>, current: Option<&Value>) -> Value {

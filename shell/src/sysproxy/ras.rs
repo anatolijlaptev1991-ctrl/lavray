@@ -79,7 +79,8 @@ fn entry_names(
 
 /// Записи RAS для снимка: карта «имя → настройки». Не перечислились — `None`
 /// и предупреждение (прокси встанет только на LAN). Запись, настройки которой
-/// не прочитались, в снимок не попадает и потому не трогается.
+/// не прочитались, значится как `null`: при включении она не трогается, а при
+/// откате возвращается без сравнения (сравнивать не с чем).
 pub(super) fn capture(
     conns: &impl Connections,
     ras: &impl RasEntries,
@@ -98,9 +99,10 @@ pub(super) fn capture(
             Ok(settings) => {
                 entries.insert(name, settings.to_record());
             }
-            Err(e) => warnings.push(format!(
-                "RAS «{name}»: настройки не прочитаны, пропущена: {e}"
-            )),
+            Err(e) => {
+                warnings.push(format!("RAS «{name}»: настройки не прочитаны: {e}"));
+                entries.insert(name, Value::Null);
+            }
         }
     }
     (Some(Value::Object(entries)), warnings)
@@ -124,9 +126,9 @@ pub(super) fn apply(
         bypass: Some(BYPASS.to_string()),
         pac_url: None,
     };
-    entries
-        .keys()
-        .filter_map(|name| {
+    let readable = entries.iter().filter(|(_, record)| record.is_object());
+    readable
+        .filter_map(|(name, _)| {
             let failed = conns.set(Some(name), &change).err();
             failed.map(|e| format!("RAS «{name}»: {e}"))
         })
@@ -138,8 +140,8 @@ pub(super) fn restore(conns: &impl Connections, target: &Value) -> Vec<String> {
     let Some(entries) = target.get("ras").and_then(Value::as_object) else {
         return Vec::new();
     };
-    entries
-        .iter()
+    let readable = entries.iter().filter(|(_, record)| record.is_object());
+    readable
         .filter_map(|(name, record)| {
             let failed = restore_entry(conns, name, record).err();
             failed.map(|e| format!("RAS «{name}»: {e}"))

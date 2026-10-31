@@ -55,6 +55,11 @@ fn unreadable_ras_entry_is_left_alone() {
     let applied = sp.enable("127.0.0.1", 2080).unwrap();
     assert!(applied.warnings.iter().any(|w| w.contains(HOME)));
     assert_eq!(env.conns.entry(HOME), before.3, "не читалась - не тронута");
+    let snap = sp.pending_snapshot().unwrap();
+    assert!(
+        snap.data["ras"][HOME].is_null(),
+        "в снимке - null, не пропуск"
+    );
     assert_eq!(
         env.conns.entry(OFFICE).server.as_deref(),
         Some("127.0.0.1:2080")
@@ -75,4 +80,18 @@ fn ras_entry_deleted_during_the_session_is_skipped_on_restore() {
     sp.disable().unwrap();
     assert_eq!(env.conns.entry(OFFICE), before.2);
     assert_eq!(env.conns.lan(), before.1);
+}
+
+/// Запись, которая на выходе не читается, всё равно возвращается: оставить
+/// подключение с нашим прокси хуже, чем записать его без сравнения.
+#[test]
+fn ras_entry_unreadable_at_restore_is_still_restored() {
+    let env = vpn_env();
+    let before = state(&env);
+    let sp = env.manager(&fresh_dir("ras-unreadable-at-restore"));
+    sp.enable("127.0.0.1", 2080).unwrap();
+    env.conns.broken_get.borrow_mut().insert(HOME.into());
+    sp.disable().unwrap();
+    env.conns.broken_get.borrow_mut().clear();
+    assert_eq!(state(&env), before);
 }

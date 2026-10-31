@@ -32,6 +32,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -110,6 +111,14 @@ func newE2EEnv(t *testing.T) *e2eEnv {
 // run запускает инстанс sing-box из конфига и останавливает его в конце теста.
 func (e *e2eEnv) run(name string, cfg map[string]any) {
 	e.t.Helper()
+	// С PlatformLogWriter (T-79) форк открывает cache_file в любом конфиге; два
+	// инстанса теста не должны делить один файл «cache.db» (блокировка bbolt),
+	// поэтому у каждого свой путь во временном каталоге.
+	if _, has := cfg["experimental"]; !has {
+		cfg["experimental"] = map[string]any{"cache_file": map[string]any{
+			"enabled": true, "path": filepath.ToSlash(filepath.Join(e.t.TempDir(), name+"-cache.db")),
+		}}
+	}
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		e.t.Fatal(err)
@@ -172,7 +181,7 @@ func (e *e2eEnv) connect(link string, opts clientOptions) int {
 }
 
 // clientConfig — конфиг клиента и порт его mixed-входа: Build по ссылке, без
-// cache_file (файл в каталоге пакета тесту не нужен).
+// experimental (run даёт каждому инстансу свой cache_file во временном каталоге).
 func (e *e2eEnv) clientConfig(link string, opts clientOptions) (map[string]any, int) {
 	e.t.Helper()
 	p, err := links.ParseLink(link)

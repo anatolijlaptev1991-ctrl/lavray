@@ -8,6 +8,8 @@ import (
 	"net"
 	"sync"
 	"time"
+
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/traffic"
 )
 
 // FakeRunner — детерминированный раннер для тестов (api-строят e2e-тесты
@@ -32,6 +34,8 @@ type FakeRunner struct {
 	// профиля» (проверка связи после подключения). nil — раннер не умеет
 	// (DialProxy возвращает ErrDialUnsupported).
 	ProxyDial func(ctx context.Context, network, address string) (net.Conn, error)
+	// traffic — подставной источник статистики (SetTraffic, TrafficSource).
+	traffic traffic.Source
 	// StartedCounter/StopCalls — для assertions.
 	StartedCounter int
 	StopCalls      int
@@ -115,4 +119,25 @@ func (f *FakeRunner) DialProxy(ctx context.Context, network, address string) (ne
 	return dial(ctx, network, address)
 }
 
-var _ ProxyDialer = (*FakeRunner)(nil)
+// SetTraffic задаёт источник, который FakeRunner отдаёт, пока «запущен».
+func (f *FakeRunner) SetTraffic(src traffic.Source) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.traffic = src
+}
+
+// TrafficSource отдаёт подставной источник, пока раннер запущен (как настоящий:
+// после Stop источника нет).
+func (f *FakeRunner) TrafficSource() traffic.Source {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.started {
+		return nil
+	}
+	return f.traffic
+}
+
+var (
+	_ ProxyDialer     = (*FakeRunner)(nil)
+	_ TrafficProvider = (*FakeRunner)(nil)
+)

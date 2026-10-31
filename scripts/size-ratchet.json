@@ -2,7 +2,7 @@
   "core/cmd/lavray-core/main.go": 260,
   "core/internal/api/agent.go": 401,
   "core/internal/api/connect_health.go": 290,
-  "core/internal/api/convert.go": 1020,
+  "core/internal/api/convert.go": 852,
   "core/internal/api/core_service.go": 371,
   "core/internal/api/observability_service.go": 242,
   "core/internal/api/profile_service.go": 446,

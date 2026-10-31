@@ -8,7 +8,8 @@ import (
 	"time"
 )
 
-// otherTag — тег для соединения, у которого исходящий не определён.
+// otherTag — тег для соединения, у которого исходящий не определён, и для
+// байт, которых нет в списках соединений (TickSource).
 const otherTag = "other"
 
 // Meter считает скорости по тегам из разности счётчиков соединений между
@@ -20,6 +21,9 @@ type Meter struct {
 	gen     uint64
 	seen    map[string]seenConn
 	tags    map[string]*tagAcc
+	// Итоги источника на прошлом такте (TickSource).
+	haveTotal      bool
+	totUp, totDown int64
 }
 
 // seenConn — что известно о соединении с прошлого Tick.
@@ -51,6 +55,25 @@ func NewMeter() *Meter {
 //   - Счётчик, ушедший назад (сброс), даёт 0, а не отрицательное число.
 //   - Соединения, пропавшие и из active, и из closed, забываются: карта не растёт.
 func (m *Meter) Tick(now time.Time, active, closed []ConnInfo) []TagRate {
+	return m.tick(now, active, closed, nil)
+}
+
+// totals — итоги источника на момент такта.
+type totals struct{ up, down int64 }
+
+// TickSource — Tick по источнику с поправкой на его итоги. Список закрытых
+// соединений источника неполон: sing-box очищает его при сборке мусора и
+// ограничивает по числу, поэтому короткое соединение может закрыться и пропасть
+// между двумя тактами. Итоги (Total) такие соединения помнят, так что байты,
+// которых нет в списках, но есть в приросте итогов, записываются в тег "other":
+// общая скорость остаётся верной, а разбивка по тегам — лучшей из возможных.
+func (m *Meter) TickSource(now time.Time, src Source) []TagRate {
+	active, closed := src.Active(), src.Closed()
+	up, down := src.Total() // после списков: итог не отстаёт от них
+	return m.tick(now, active, closed, &totals{up, down})
+}
+
+func (m *Meter) tick(now time.Time, active, closed []ConnInfo, tot *totals) []TagRate {
 	first := !m.started
 	dt := now.Sub(m.prevAt).Seconds()
 	m.gen++
@@ -64,8 +87,34 @@ func (m *Meter) Tick(now time.Time, active, closed []ConnInfo) []TagRate {
 			delete(m.seen, id)
 		}
 	}
+	if tot != nil {
+		if m.haveTotal && !first {
+			m.addResidual(tot)
+		}
+		m.haveTotal, m.totUp, m.totDown = true, tot.up, tot.down
+	}
 	m.started, m.prevAt = true, now
 	return m.rates(first, dt)
+}
+
+// addResidual относит к тегу "other" прирост итогов, не объяснённый списками.
+func (m *Meter) addResidual(tot *totals) {
+	var sumUp, sumDown int64
+	for _, acc := range m.tags {
+		sumUp, sumDown = addSat(sumUp, acc.dUp), addSat(sumDown, acc.dDown)
+	}
+	resUp := nonNegative(tot.up - m.totUp - sumUp)
+	resDown := nonNegative(tot.down - m.totDown - sumDown)
+	if resUp == 0 && resDown == 0 {
+		return
+	}
+	acc, ok := m.tags[otherTag]
+	if !ok {
+		acc = &tagAcc{}
+		m.tags[otherTag] = acc
+	}
+	acc.dUp, acc.dDown = addSat(acc.dUp, resUp), addSat(acc.dDown, resDown)
+	acc.upTotal, acc.downTotal = addSat(acc.upTotal, resUp), addSat(acc.downTotal, resDown)
 }
 
 // observe применяет разность по каждому соединению списка.

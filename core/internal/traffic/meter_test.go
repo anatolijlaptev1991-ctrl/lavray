@@ -178,6 +178,58 @@ func TestMeterTagsSortedAndOtherTag(t *testing.T) {
 	}
 }
 
+// Короткое соединение закрылось и пропало из списков между тактами (sing-box
+// очищает список закрытых при сборке мусора): прирост итогов источника попадает
+// в тег "other", общая скорость остаётся верной.
+func TestMeterResidualFromTotals(t *testing.T) {
+	src := NewFakeSource()
+	src.Open(ConnInfo{ID: "a", Outbound: "proxy"})
+	src.AddBytes("a", 100, 200)
+	m := NewMeter()
+	m.TickSource(t0, src)
+
+	// Соединение "b" открылось, передало данные и исчезло без следа в списках.
+	src.Open(ConnInfo{ID: "b", Outbound: "proxy"})
+	src.AddBytes("b", 3000, 6000)
+	src.Finish("b", 0)
+	src.ClearClosed()         // список закрытых очищен, байты остались в итогах
+	src.AddBytes("a", 50, 70) // а "a" продолжает работать и видна
+	rates := byTag(m.TickSource(t0.Add(time.Second), src))
+	if r := rates["proxy"]; !near(r.UpBps, 50) || !near(r.DownBps, 70) {
+		t.Fatalf("видимое соединение: %+v", r)
+	}
+	if r := rates["other"]; !near(r.UpBps, 3000) || !near(r.DownBps, 6000) || r.UpTotal != 3000 {
+		t.Fatalf("невидимые байты должны попасть в other: %+v", r)
+	}
+	var up, down float64
+	for _, r := range rates {
+		up += r.UpBps
+		down += r.DownBps
+	}
+	if !near(up, 3050) || !near(down, 6070) {
+		t.Fatalf("общая скорость ↑%v ↓%v, ожидалось 3050/6070", up, down)
+	}
+
+	// Всё видно: поправки нет и тега other не появляется.
+	clean := NewMeter()
+	s2 := NewFakeSource()
+	s2.Open(ConnInfo{ID: "x", Outbound: "direct"})
+	clean.TickSource(t0, s2)
+	s2.AddBytes("x", 10, 20)
+	if _, has := byTag(clean.TickSource(t0.Add(time.Second), s2))["other"]; has {
+		t.Fatal("тег other появился без причины")
+	}
+	// Итоги ушли назад (источник заменили): отрицательной поправки нет.
+	back := NewMeter()
+	back.TickSource(t0, s2)
+	empty := NewFakeSource()
+	for _, r := range back.TickSource(t0.Add(time.Second), empty) {
+		if r.UpBps < 0 || r.DownBps < 0 || r.UpTotal < 0 {
+			t.Fatalf("отрицательное значение: %+v", r)
+		}
+	}
+}
+
 // FuzzMeterNeverNegative: какие бы счётчики ни прислал источник, скорости и
 // объёмы не отрицательны и не NaN.
 func FuzzMeterNeverNegative(f *testing.F) {

@@ -16,10 +16,12 @@ type FakeSource struct {
 	mu     sync.Mutex
 	active []ConnInfo
 	closed []ConnInfo
-	subs   map[int]chan Event
-	nextID int
-	calls  []string
-	now    func() time.Time
+	// foldedUp/Down — байты очищенных закрытых соединений: остаются в итогах.
+	foldedUp, foldedDown int64
+	subs                 map[int]chan Event
+	nextID               int
+	calls                []string
+	now                  func() time.Time
 }
 
 // NewFakeSource создаёт пустой источник.
@@ -97,10 +99,23 @@ func (f *FakeSource) Closed() []ConnInfo {
 	return slices.Clone(f.closed)
 }
 
-// Total суммирует байты всех соединений, активных и закрытых.
+// ClearClosed очищает список закрытых соединений, как sing-box при сборке
+// мусора: самих соединений уже не видно, а их байты остаются в итогах.
+func (f *FakeSource) ClearClosed() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, c := range f.closed {
+		f.foldedUp += c.Up
+		f.foldedDown += c.Down
+	}
+	f.closed = nil
+}
+
+// Total суммирует байты всех соединений: активных, закрытых и очищенных.
 func (f *FakeSource) Total() (up, down int64) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	up, down = f.foldedUp, f.foldedDown
 	for _, list := range [][]ConnInfo{f.active, f.closed} {
 		for _, c := range list {
 			up += c.Up

@@ -126,6 +126,7 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 	// только факт запуска; полный конфиг — GetRuntimeConfig (redacted).
 	s.logs.Logf(logs.LevelInfo, logs.SourceCore, "инстанс запущен: профиль %d (%s), режим %s", profile.ID, profile.Type, modeStr)
 	s.startHealthCheck() // 0.2.1: «Подключено» ещё не значит «трафик идёт»
+	s.beginAccounting()  // T-79: сессия и учёт трафика (traffic_accountant.go)
 	return s.coreStatus(), warnings, nil
 }
 
@@ -206,19 +207,6 @@ func (s *Server) dryRunBuild(profile *model.Profile, mode lavrayv1.ConnectMode) 
 	return cfgbuild.Build(cfgbuild.BuildRequest{
 		Profile: profile, Group: group, Settings: st, Lookup: s.st.GetProfile, Preset: preset,
 	})
-}
-
-// Disconnect — FR-UI-033. Финальная статистика (final_stats) заполняет W7
-// (clash-api/tracker); здесь — остановка с таймаутом LNB-06.
-func (s *Server) Disconnect(ctx context.Context, req *connect.Request[lavrayv1.DisconnectRequest]) (*connect.Response[lavrayv1.DisconnectResponse], error) {
-	s.resetHealth()
-	stopCtx, cancel := context.WithTimeout(ctx, inst.StopTimeout)
-	defer cancel()
-	if err := s.inst.Stop(stopCtx); err != nil {
-		return nil, err
-	}
-	s.logs.Logf(logs.LevelInfo, logs.SourceCore, "инстанс остановлен")
-	return connect.NewResponse(&lavrayv1.DisconnectResponse{}), nil
 }
 
 // RestartProfile — FR-UI-020: тот же профиль и режим, конфиг пересобирается.
@@ -370,7 +358,9 @@ func (s *Server) Shutdown(ctx context.Context, req *connect.Request[lavrayv1.Shu
 	s.resetHealth()
 	stopCtx, cancel := context.WithTimeout(ctx, inst.StopTimeout)
 	defer cancel()
-	if err := s.inst.Shutdown(stopCtx); err != nil {
+	err := s.inst.Shutdown(stopCtx)
+	s.endAccounting() // T-79: счётчики и конец сессии записываются до выхода из процесса
+	if err != nil {
 		s.logs.Logf(logs.LevelError, logs.SourceCore, "Shutdown: остановка инстанса: %v", err)
 		return nil, err
 	}

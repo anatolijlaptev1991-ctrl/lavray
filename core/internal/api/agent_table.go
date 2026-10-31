@@ -102,7 +102,7 @@ var agentTable = map[string]agentDecision{
 	// StatsService.
 	lavrayv1connect.StatsServiceSubscribeProcedure:         agentRead,
 	lavrayv1connect.StatsServiceGetTrafficTotalsProcedure:  agentRead,
-	lavrayv1connect.StatsServiceGetTrafficSummaryProcedure: agentDeny,
+	lavrayv1connect.StatsServiceGetTrafficSummaryProcedure: agentRead, // T-79: сводка по группам — числа без адресов
 
 	// ConnectionService.
 	lavrayv1connect.ConnectionServiceListConnectionsProcedure:  agentDeny,

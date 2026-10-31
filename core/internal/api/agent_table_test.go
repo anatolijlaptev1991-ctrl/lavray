@@ -71,6 +71,7 @@ func TestAgentTableKeepsPreviousAllowlists(t *testing.T) {
 		lavrayv1connect.SubscriptionServiceListSubscriptionsProcedure: true,
 		lavrayv1connect.StatsServiceSubscribeProcedure:                true,
 		lavrayv1connect.StatsServiceGetTrafficTotalsProcedure:         true,
+		lavrayv1connect.StatsServiceGetTrafficSummaryProcedure:        true, // T-79: сводка трафика группы — read
 		lavrayv1connect.DiagnosticsServiceGetPublicIpProcedure:        true,
 		lavrayv1connect.LogServiceGetTailProcedure:                    true,
 	}

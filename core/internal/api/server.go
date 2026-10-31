@@ -61,13 +61,11 @@ type Server struct {
 	OnShutdown func(ctx context.Context)
 
 	// appVersion — версия приложения (оболочка сообщает при старте);
-	// updater — TUF-lite клиент (nil до конфигурации обвязкой W8-релиза);
-	// traffic — источник мгновенной статистики (clash-api — W8-релиз);
-	// conns — трекер соединений (clash-api — W8-релиз).
+	// updater — TUF-lite клиент (nil до конфигурации обвязкой W8-релиза).
 	appVersion string
 	updater    *updates.Client
-	traffic    TrafficSource
-	conns      ConnectionTracker
+	// acct — учёт трафика сессии (traffic_accountant.go, T-79).
+	acct trafficAccountant
 
 	// ---- подписки: прогресс-мультиплексирование по group_id ----
 	subsMu      sync.Mutex

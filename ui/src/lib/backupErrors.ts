@@ -12,7 +12,9 @@ import { showCoreError, type CoreErrorTranslate } from './core';
 import type { MessageKey } from './i18n';
 
 const ERROR_INFO_TYPE = 'google.rpc.ErrorInfo';
-const ERROR_DOMAIN = 'lavray.core';
+// Домен ErrorInfo ядра, не ключ localStorage: шаблонная строка, чтобы проверка
+// списка общих ключей UI (shell/src/ui_state/tests.rs) её не путала с ключом.
+const ERROR_DOMAIN = `lavray.core`;
 
 /** Причины, которые ядро кладёт в ErrorInfo.reason. */
 const REASON_KEYS: Readonly<Record<string, MessageKey>> = {

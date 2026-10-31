@@ -242,6 +242,20 @@ func TestCloseConnectionClosesRealSocket(t *testing.T) {
 	if err := src.Close("00000000-0000-0000-0000-000000000000"); err != traffic.ErrNotFound {
 		t.Fatalf("неизвестный id: %v", err)
 	}
+
+	// UUID сравнивается без учёта регистра: клиент может прислать его заглавным.
+	second := openTunnel(t, port, webTarget(t))
+	defer second.Close()
+	var id2 string
+	waitFor(t, "второе активное соединение", func() bool {
+		if a := src.Active(); len(a) == 1 {
+			id2 = a[0].ID
+		}
+		return id2 != ""
+	})
+	if err := src.Close(strings.ToUpper(id2)); err != nil {
+		t.Fatalf("Close заглавным UUID: %v", err)
+	}
 }
 
 // Источник читают и подписываются на него, пока соединения открываются,

@@ -11,6 +11,7 @@ package inst
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/sagernet/sing-box/common/trafficcontrol"
@@ -78,7 +79,7 @@ func (s managerSource) Total() (up, down int64) { return s.m.Total() }
 // импортируем (модуль у нас косвенный): тип id берём у самих метаданных.
 func (s managerSource) Close(id string) error {
 	for _, meta := range s.m.Connections() {
-		if meta.ID.String() != id {
+		if !strings.EqualFold(meta.ID.String(), id) { // UUID без учёта регистра
 			continue
 		}
 		tracker := s.m.Connection(meta.ID)

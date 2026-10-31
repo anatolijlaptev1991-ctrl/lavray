@@ -44,14 +44,20 @@
 
 pub mod agent;
 pub mod autostart;
+pub mod capture;
 pub mod coreproc;
 pub mod elevation;
 pub mod endpoint;
+pub mod files;
+pub mod hotkey;
 pub mod integrity;
 pub mod launch;
 pub mod msgbox;
+pub mod notify;
 #[cfg(windows)]
 mod oemtext;
+pub mod os_integration;
+pub mod prefs;
 mod private_file;
 pub mod profile;
 pub mod single_instance;
@@ -61,3 +67,5 @@ pub mod tray;
 pub mod ui_state;
 pub mod uiprotocol;
 pub mod updater;
+pub mod window_geometry;
+pub mod window_policy;

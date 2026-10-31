@@ -59,7 +59,8 @@ fn opener_plugin_is_registered_and_limited_to_http_and_https() {
 }
 
 /// T-82/Э-2: окно создаётся скрытым, а показывает его `setup()` (кроме запуска
-/// с `--tray`): иначе автозапуск мигал бы окном перед тем, как его спрятать.
+/// с `--tray` и «Запускать свёрнутым»): иначе автозапуск мигал бы окном перед
+/// тем, как его спрятать.
 /// T-81 (ревью): само окно создаёт код (`create: false` в конфигурации), чтобы
 /// у повышенного экземпляра был свой каталог данных WebView.
 #[test]
@@ -70,7 +71,7 @@ fn main_window_is_created_by_code_hidden_and_shown_unless_tray() {
     assert_eq!(window["create"], Value::Bool(false));
 
     let main_rs = read("src/main.rs");
-    assert!(main_rs.contains("let start_hidden = launch.tray;"));
+    assert!(main_rs.contains("window_policy::start_hidden(launch.tray, launch.elevated_relaunch"));
     assert!(main_rs.contains("fn create_main_window"));
     assert!(main_rs.contains("WebviewWindowBuilder::from_config"));
     assert!(main_rs.contains("profile::webview_data_dir("));

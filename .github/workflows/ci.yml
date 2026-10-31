@@ -266,6 +266,47 @@ jobs:
         run: cargo build
 
   # --------------------------------------------------------------------------
+  # rust-windows: код оболочки под #[cfg(windows)] (WinINET и RAS системного
+  # прокси, снимок экрана GDI, Job Object, реестр) на ubuntu не компилируется
+  # вовсе (T-82). Раннер одноразовый: настоящий WinINET на выдуманной записи
+  # RAS разрешён (LAVRAY_CI_REAL_WININET), на ПК разработчика — никогда.
+  # --------------------------------------------------------------------------
+  rust-windows:
+    runs-on: windows-2025 # ПИН ОС раннера: обновлять сознательно
+    defaults:
+      run:
+        working-directory: shell
+        shell: bash
+    steps:
+      # Репозиторий хранит LF (hygiene); без этого git на Windows выкачал бы CRLF.
+      - name: git без замены переводов строк
+        working-directory: .
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shell
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: "UI: сборка (нужна для frontendDist)"
+        working-directory: ui
+        run: |
+          npm ci
+          npm run build
+      - name: cargo clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: cargo test
+        env:
+          LAVRAY_CI_REAL_WININET: "1"
+        run: cargo test
+
+  # --------------------------------------------------------------------------
   # node: UI (ui/, единый React для приложения и веб-панели)
   # --------------------------------------------------------------------------
   node:

@@ -8,6 +8,7 @@ import { create } from '@bufbuild/protobuf';
 import type { CoreClients } from './core';
 import { ConnectMode, SettingValueSchema } from '../gen/lavray_pb';
 import { tunNeedsElevation } from './elevation';
+import { serialQueue } from './serialQueue';
 import { requestTunDialog } from './tunRequest';
 import type { Profile } from '../gen/lavray_pb';
 
@@ -163,6 +164,7 @@ export function coreModeFor(modes: ModePreferences): ConnectMode {
 // ОС не ставился (веб-режим, сбой команды).
 let sysProxyApplied = false;
 const sysProxyListeners = new Set<() => void>();
+const proxyQueue = serialQueue();
 
 function markSystemProxy(on: boolean): void {
   if (sysProxyApplied === on) return;
@@ -210,10 +212,8 @@ export async function applySystemProxy(on: boolean, port: number): Promise<void>
     return;
   }
   const { invoke } = await import('@tauri-apps/api/core');
-  // Порт валидируется: u16 в Rust отвергает >65535 сырой ошибкой
-  // десериализации, которую пользователю показывать бессмысленно.
-  const safePort = Math.min(65535, Math.max(1, Math.trunc(port)));
-  await invoke('set_system_proxy', { enabled: on, port: safePort });
+  const safePort = Math.min(65535, Math.max(1, Math.trunc(port))); // u16 в Rust: >65535 — сырая ошибка serde
+  await proxyQueue(() => invoke('set_system_proxy', { enabled: on, port: safePort }));
   markSystemProxy(on);
 }
 

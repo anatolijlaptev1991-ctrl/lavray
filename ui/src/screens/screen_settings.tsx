@@ -12,9 +12,10 @@ import type { SettingDescriptor, SettingValue } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
-import { useKbdLabel } from '../hooks/useKbdLabel';
 import { AgentsSettings } from '../components/AgentsSettings';
 import { AutostartRow } from '../components/AutostartRow';
+import { HOTKEYS, HotkeysCard } from '../components/settings/HotkeysCard';
+import { ShellPrefRows } from '../components/settings/ShellPrefRows';
 import { ConfirmDialog } from '../components/dialogs';
 import { Icon, type IconName } from '../components/Icon';
 import { AGENT_MODE_KEY, parseAgentMode, type AgentMode } from '../lib/agents';
@@ -94,14 +95,6 @@ const CORE_ROWS: readonly Row[] = [
   { key: 'connect.health_check', type: SettingType.BOOL, labelKey: 'set.healthCheck', descKey: 'set.healthCheck.d' },
 ];
 
-/** Список горячих клавиш раздела: [ключ подписи, клавиша]. */
-const HOTKEYS = [
-  ['hk.search', 'K'],
-  ['hk.toggle', 'D'],
-  ['hk.close', 'Esc'],
-  ['hk.settings', ','],
-] as const;
-
 interface SearchRow {
   readonly labelKey: MessageKey;
   readonly descKey?: MessageKey;
@@ -117,10 +110,17 @@ const SECTION_SEARCH: Readonly<Record<string, readonly SearchRow[]>> = {
   general: [
     { labelKey: 'set.lang', descKey: 'set.langD' },
     { labelKey: 'set.autostart', descKey: 'set.autostartD' },
+    { labelKey: 'set.tray', descKey: 'set.trayD' },
+    { labelKey: 'set.startMin', descKey: 'set.startMinD' },
+    { labelKey: 'set.notify', descKey: 'set.notifyD' },
   ],
   network: [{ labelKey: 'set.local' }, ...NETWORK_ROWS],
   tun: TUN_ROWS,
-  hotkeys: [{ labelKey: 'set.hotkeysD' }, ...HOTKEYS.map(([labelKey]) => ({ labelKey }))],
+  hotkeys: [
+    { labelKey: 'set.hotkeysD' },
+    { labelKey: 'hk.global', descKey: 'hk.globalD' },
+    ...HOTKEYS.map(([labelKey]) => ({ labelKey })),
+  ],
   appearance: [
     { labelKey: 'set.theme' },
     ...THEMES.map((th) => ({ labelKey: `theme.${th}` as MessageKey })),
@@ -209,7 +209,6 @@ function toSettingValue(kind: SettingType, raw: string | boolean | number): Sett
 
 export function SettingsScreen(): JSX.Element {
   const { t, tf, lang, setLanguage } = useI18n();
-  const kbd = useKbdLabel();
   const core = useCore();
   const [theme, setTheme] = useState<ThemePreference>(() => loadPreferences(window.localStorage).theme);
   const [accent, setAccent] = useState<AccentPreference>(() => loadPreferences(window.localStorage).accent);
@@ -565,6 +564,7 @@ export function SettingsScreen(): JSX.Element {
                 </div>
               </div>
               <AutostartRow />
+              <ShellPrefRows />
             </div>
           )}
 
@@ -711,29 +711,11 @@ export function SettingsScreen(): JSX.Element {
           )}
 
           {visibleSections.some((s) => s.id === 'hotkeys') && (
-            <div
-              className="card set-card"
-              data-sec="hotkeys"
-              ref={(el) => {
+            <HotkeysCard
+              cardRef={(el) => {
                 cardRefs.current.hotkeys = el;
               }}
-            >
-              <h2>
-                <span className="ic">
-                  <Icon name="keyboard" />
-                </span>
-                <span>{t('sec.hotkeys')}</span>
-              </h2>
-              <p className="hint">{t('set.hotkeysD')}</p>
-              {HOTKEYS.map(([key, keycap]) => (
-                <div className="hk-row" key={key}>
-                  <div className="set-txt">
-                    <div className="set-l">{t(key)}</div>
-                  </div>
-                  <kbd className="kbd">{kbd(keycap)}</kbd>
-                </div>
-              ))}
-            </div>
+            />
           )}
 
           {visibleSections.some((s) => s.id === 'appearance') && (

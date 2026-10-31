@@ -179,22 +179,23 @@ describe('T-39: меню строки и режима теста с клавиа
     expect(menu(t.c)?.getAttribute('aria-label')).toBe('Menu');
     expect(trigger?.getAttribute('aria-expanded')).toBe('true');
     const list = items(t.c);
-    expect(list.map((i) => (i.textContent ?? '').trim())).toEqual(['Copy link', 'Latency test', 'Delete']);
+    expect(list.map((i) => (i.textContent ?? '').trim())).toEqual(['Copy link', 'Show QR code', 'Latency test', 'Delete']);
     expect(document.activeElement).toBe(list[0]);
 
     press('ArrowDown');
     expect(document.activeElement).toBe(list[1]);
     press('ArrowDown');
+    press('ArrowDown');
     press('ArrowDown'); // по кругу
     expect(document.activeElement).toBe(list[0]);
     press('ArrowUp');
-    expect(document.activeElement).toBe(list[2]);
+    expect(document.activeElement).toBe(list[3]);
     press('Home');
     expect(document.activeElement).toBe(list[0]);
     press('End');
-    expect(document.activeElement).toBe(list[2]);
+    expect(document.activeElement).toBe(list[3]);
     press('l'); // type-ahead: «Latency test»
-    expect(document.activeElement).toBe(list[1]);
+    expect(document.activeElement).toBe(list[2]);
 
     press('Escape');
     expect(menu(t.c)).toBeNull();
@@ -229,7 +230,7 @@ describe('T-39: меню строки и режима теста с клавиа
   it('пункт возвращает фокус на кнопку и запускает действие; Tab и клик вне закрывают меню', async () => {
     const t = await mountMenus();
     await click(t.more[1]);
-    await click(items(t.c)[1]); // «Latency test» строки S2
+    await click(items(t.c)[2]); // «Latency test» строки S2
     expect(menu(t.c)).toBeNull();
     expect(document.activeElement).toBe(t.more[1]);
     expect(t.testLatency.mock.calls[0]?.[0]).toMatchObject({ profileIds: [2n] });

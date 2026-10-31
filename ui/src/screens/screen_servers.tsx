@@ -11,6 +11,7 @@ import type { Profile } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useKbdLabel } from '../hooks/useKbdLabel';
+import { useQrHotkey } from '../hooks/useQrHotkey';
 import { showCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
 import { MANUAL_FILTER, groupDisplayName, importGroupId, newServerGroupId } from '../lib/groups';
@@ -22,6 +23,8 @@ import { ProfileEditor } from '../components/ProfileEditor';
 import { CustomBadge } from '../components/servers/CustomBadge';
 import { typeBadge } from '../components/servers/typeBadge';
 import { ImportDialog } from '../components/ImportDialog';
+import { QrDialog } from '../components/QrDialog';
+import { RowMenu } from '../components/servers/RowMenu';
 import { FullTestDialog } from '../components/FullTestDialog';
 import { ContextMenu } from '../components/ContextMenu';
 import type { MenuAnchor } from '../components/ContextMenu';
@@ -93,6 +96,8 @@ export function ServersScreen(): JSX.Element {
   } | null>(null);
   const [editing, setEditing] = useState<Profile | null | undefined>(undefined);
   const [importOpen, setImportOpen] = useState(false);
+  // Профиль, чей QR-код показан (пункт меню строки или Ctrl+Q).
+  const [qrFor, setQrFor] = useState<Profile | null>(null);
   const [groupsOpen, setGroupsOpen] = useState(false);
   const testAbort = useRef<AbortController | null>(null);
 
@@ -185,6 +190,13 @@ export function ServersScreen(): JSX.Element {
       return next;
     });
   }, []);
+
+  // Ctrl/⌘+Q: QR-код единственного отмеченного сервера; иначе подсказка.
+  useQrHotkey(() => {
+    const only = selected.size === 1 ? allProfiles.find((p) => selected.has(String(p.id))) : undefined;
+    if (only === undefined) setErr(t('qr.pickOne'));
+    else setQrFor(only);
+  });
 
   const testLatency = useCallback(
     async (ids: bigint[], run: TestRun = { kind: 'tcp' }): Promise<void> => {
@@ -727,6 +739,15 @@ export function ServersScreen(): JSX.Element {
         />
       )}
 
+      {qrFor !== null && (
+        <QrDialog
+          profile={qrFor}
+          onClose={() => {
+            setQrFor(null);
+          }}
+        />
+      )}
+
       {editing !== undefined && editorGroupId !== null && (
         <ProfileEditor
           profile={editing}
@@ -831,50 +852,20 @@ export function ServersScreen(): JSX.Element {
 
       {/* Меню строки профиля (прототип profileMenu). */}
       {rowMenu !== null && (
-        <ContextMenu
+        <RowMenu
           anchor={rowMenu}
           onClose={() => {
             setRowMenu(null);
           }}
-        >
-          <button
-            className="menu-item"
-            role="menuitem"
-            onClick={() => {
-              const id = rowMenu.profile.id;
-              setRowMenu(null);
-              void copyOneLink(id);
-            }}
-          >
-            <Icon name="copy" size={16} />
-            <span>{t('common.copyLink')}</span>
-          </button>
-          <button
-            className="menu-item"
-            role="menuitem"
-            onClick={() => {
-              const id = rowMenu.profile.id;
-              setRowMenu(null);
-              void testLatency([id]);
-            }}
-          >
-            <Icon name="gauge" size={16} />
-            <span>{t('common.testLatency')}</span>
-          </button>
-          <div className="menu-sep" role="separator" />
-          <button
-            className="menu-item danger"
-            role="menuitem"
-            onClick={() => {
-              const id = rowMenu.profile.id;
-              setRowMenu(null);
-              setConfirmDelete({ ids: [id], count: 1 });
-            }}
-          >
-            <Icon name="trash" size={16} />
-            <span>{t('common.delete')}</span>
-          </button>
-        </ContextMenu>
+          onCopyLink={() => void copyOneLink(rowMenu.profile.id)}
+          onShowQr={() => {
+            setQrFor(rowMenu.profile);
+          }}
+          onTestLatency={() => void testLatency([rowMenu.profile.id])}
+          onDelete={() => {
+            setConfirmDelete({ ids: [rowMenu.profile.id], count: 1 });
+          }}
+        />
       )}
 
       {confirmDelete !== null && (

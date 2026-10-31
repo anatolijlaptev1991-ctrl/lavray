@@ -61,3 +61,21 @@ export function focusWhenReady(selector: string, select = false, attempts = 40, 
   };
   attempt(attempts);
 }
+
+/** Типы <input>, в которые текст не печатают: сочетания с них не снимаются (галочка строки, кнопка). */
+const NON_TEXT_INPUT: ReadonlySet<string> = new Set(['checkbox', 'radio', 'button', 'submit', 'reset', 'file', 'range', 'color', 'image']);
+
+/** contenteditable включён: пустой атрибут, true и plaintext-only. */
+const EDITABLE = '[contenteditable=""],[contenteditable="true"],[contenteditable="plaintext-only"]';
+
+/**
+ * Идёт ли набор текста: поле ввода, текстовая область или contenteditable.
+ * Хоткеи без особой нужды в этот момент не срабатывают. Галочка и кнопка —
+ * не набор: после клика по галочке строки сочетание должно работать.
+ */
+export function isTypingTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target.tagName === 'INPUT') return !NON_TEXT_INPUT.has((target as HTMLInputElement).type);
+  // isContentEditable в jsdom не реализован, поэтому ищем атрибут (он наследуется от предков).
+  return target.tagName === 'TEXTAREA' || target.closest(EDITABLE) !== null;
+}

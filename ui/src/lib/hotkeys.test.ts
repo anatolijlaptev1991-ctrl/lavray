@@ -3,7 +3,7 @@
 // hotkeys.test.ts — T-63: клавиша сочетания определяется в любой раскладке,
 // подписи сочетаний содержат модификатор ОС.
 import { describe, expect, it } from 'vitest';
-import { hotkeyOf, kbdLabel, modLabel } from './hotkeys';
+import { hotkeyOf, isTypingTarget, kbdLabel, modLabel } from './hotkeys';
 
 describe('hotkeyOf', () => {
   it('русская раскладка (ЙЦУКЕН): клавиша определяется по физическому положению', () => {
@@ -57,5 +57,36 @@ describe('подписи сочетаний (прототип kbdLabel)', () => 
   it('modLabel', () => {
     expect(modLabel('mac', 'ru')).toBe('⌘');
     expect(modLabel('win', 'ru')).toBe('Ctrl');
+  });
+});
+
+describe('isTypingTarget', () => {
+  const make = (html: string): HTMLElement => {
+    const host = document.createElement('div');
+    host.innerHTML = html;
+    document.body.append(host);
+    return host.firstElementChild as HTMLElement;
+  };
+
+  it('текстовые поля, textarea и contenteditable — это набор текста', () => {
+    expect(isTypingTarget(make('<input>'))).toBe(true);
+    expect(isTypingTarget(make('<input type="search">'))).toBe(true);
+    expect(isTypingTarget(make('<textarea></textarea>'))).toBe(true);
+    expect(isTypingTarget(make('<div contenteditable="true"><b id="in">x</b></div>'))).toBe(true);
+    expect(isTypingTarget(document.getElementById('in'))).toBe(true); // вложенный в редактируемый
+  });
+
+  it('галочка, радио, кнопка и файл — не набор: сочетания с них работают', () => {
+    expect(isTypingTarget(make('<input type="checkbox">'))).toBe(false);
+    expect(isTypingTarget(make('<input type="radio">'))).toBe(false);
+    expect(isTypingTarget(make('<input type="file">'))).toBe(false);
+    expect(isTypingTarget(make('<button>b</button>'))).toBe(false);
+    expect(isTypingTarget(make('<div contenteditable="false"></div>'))).toBe(false);
+  });
+
+  it('окно, документ и null — не набор', () => {
+    expect(isTypingTarget(window)).toBe(false);
+    expect(isTypingTarget(document)).toBe(false);
+    expect(isTypingTarget(null)).toBe(false);
   });
 });

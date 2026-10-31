@@ -18,7 +18,7 @@ import { useTrafficStats } from './hooks/useTraffic';
 import { useShellBridge } from './hooks/useShellBridge';
 import { applyDocumentLanguage, formatSpeed } from './lib/i18n';
 import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
-import { focusWhenReady, hotkeyOf } from './lib/hotkeys';
+import { focusWhenReady, hotkeyOf, isTypingTarget } from './lib/hotkeys';
 import { loadModes, toggleConnection } from './lib/connection';
 import type { TrayAction } from './lib/tray';
 import { onTablistKeyDown } from './lib/tabs';
@@ -220,10 +220,7 @@ function AppInner(): JSX.Element {
   // «,» — настройки, «?» — список хоткеев. Игнорируем ввод в полях.
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
-      const el = e.target as HTMLElement | null;
-      const typing =
-        el !== null &&
-        (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+      const typing = isTypingTarget(e.target);
       const mod = adapter.os === 'macos' ? e.metaKey : e.ctrlKey;
       const key = hotkeyOf(e);
       if (mod && key === 'd' && !typing) {

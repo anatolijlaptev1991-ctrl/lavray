@@ -95,3 +95,29 @@ fn ras_entry_unreadable_at_restore_is_still_restored() {
     env.conns.broken_get.borrow_mut().clear();
     assert_eq!(state(&env), before);
 }
+
+/// Ревью Ф2: запись RAS, которую на выходе не удалось вернуть, не должна
+/// остаться с прокси на мёртвый порт навсегда: снимок сохраняется, и следующий
+/// откат (отключение или запуск) её возвращает.
+#[test]
+fn failed_ras_restore_keeps_the_snapshot_and_is_retried() {
+    let env = vpn_env();
+    let before = state(&env);
+    let sp = env.manager(&fresh_dir("ras-restore-retry"));
+    sp.enable("127.0.0.1", 2080).unwrap();
+    env.conns.broken_set.borrow_mut().insert(HOME.into());
+    let warnings = sp.disable_report().unwrap();
+    assert!(warnings.iter().any(|w| w.contains(HOME)), "{warnings:?}");
+    assert_eq!(env.conns.lan(), before.1, "LAN уже вернулся");
+    assert!(
+        sp.pending_snapshot().is_some(),
+        "снимок остался для повтора"
+    );
+    env.conns.broken_set.borrow_mut().clear();
+    assert!(sp.recover_if_needed().unwrap(), "повтор при запуске");
+    assert_eq!(state(&env), before);
+    assert!(
+        sp.pending_snapshot().is_none(),
+        "после удачного отката снимка нет"
+    );
+}

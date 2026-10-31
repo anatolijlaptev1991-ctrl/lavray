@@ -14,8 +14,9 @@ use windows_sys::Win32::Foundation::{GetLastError, GlobalFree};
 use windows_sys::Win32::Networking::WinInet::{
     InternetQueryOptionW, InternetSetOptionW, INTERNET_OPTION_PER_CONNECTION_OPTION,
     INTERNET_OPTION_REFRESH, INTERNET_OPTION_SETTINGS_CHANGED, INTERNET_PER_CONN_AUTOCONFIG_URL,
-    INTERNET_PER_CONN_FLAGS, INTERNET_PER_CONN_OPTIONW, INTERNET_PER_CONN_OPTIONW_0,
-    INTERNET_PER_CONN_OPTION_LISTW, INTERNET_PER_CONN_PROXY_BYPASS, INTERNET_PER_CONN_PROXY_SERVER,
+    INTERNET_PER_CONN_FLAGS, INTERNET_PER_CONN_FLAGS_UI, INTERNET_PER_CONN_OPTIONW,
+    INTERNET_PER_CONN_OPTIONW_0, INTERNET_PER_CONN_OPTION_LISTW, INTERNET_PER_CONN_PROXY_BYPASS,
+    INTERNET_PER_CONN_PROXY_SERVER,
 };
 
 /// Настоящий WinINET.
@@ -81,10 +82,18 @@ unsafe fn take_text(ptr: *mut u16) -> Option<String> {
     Some(text).filter(|t| !t.is_empty())
 }
 
+/// Настройки подключения. Флаги — `INTERNET_PER_CONN_FLAGS_UI` (то, что стоит в
+/// окне «Свойства браузера»; простой FLAGS может вернуть итог автоопределения),
+/// а если система его не знает — `INTERNET_PER_CONN_FLAGS` (как велит MSDN).
 fn query(conn: Option<&str>) -> Result<ConnSettings, String> {
+    query_with(conn, INTERNET_PER_CONN_FLAGS_UI)
+        .or_else(|_| query_with(conn, INTERNET_PER_CONN_FLAGS))
+}
+
+fn query_with(conn: Option<&str>, flags_option: u32) -> Result<ConnSettings, String> {
     let name = conn.map(wide);
     let mut options = [
-        INTERNET_PER_CONN_FLAGS,
+        flags_option,
         INTERNET_PER_CONN_PROXY_SERVER,
         INTERNET_PER_CONN_PROXY_BYPASS,
         INTERNET_PER_CONN_AUTOCONFIG_URL,

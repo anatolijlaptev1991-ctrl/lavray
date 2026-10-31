@@ -25,11 +25,12 @@ pub fn on_close(prefs: &ShellPrefs) -> CloseAction {
 
 /// Оставить ли окно скрытым на старте: `--tray` (автозапуск) или «Запускать свёрнутым».
 ///
-/// Повторный запуск после перезапуска от администратора (`elevated_relaunch`)
-/// всегда показывает окно: пользователь только что нажал кнопку и ждёт его.
+/// После перезапуска от администратора (`elevated_relaunch`) «Запускать
+/// свёрнутым» не действует: пользователь только что нажал кнопку и ждёт окно.
+/// `--tray` при этом передаётся, только если окно было скрыто, — его слушаем.
 pub fn start_hidden(tray_flag: bool, elevated_relaunch: bool, prefs: &ShellPrefs) -> bool {
     if elevated_relaunch {
-        return false;
+        return tray_flag;
     }
     tray_flag || prefs.start_minimized
 }
@@ -74,8 +75,14 @@ mod tests {
     }
 
     #[test]
-    fn elevated_relaunch_always_shows_window() {
-        assert!(!start_hidden(true, true, &prefs(true, true)));
-        assert!(!start_hidden(false, true, &prefs(true, true)));
+    fn elevated_relaunch_ignores_start_minimized_but_keeps_tray() {
+        assert!(
+            !start_hidden(false, true, &prefs(true, true)),
+            "окно было видно — показать"
+        );
+        assert!(
+            start_hidden(true, true, &prefs(true, false)),
+            "окно было скрыто (--tray) — остаётся скрытым"
+        );
     }
 }

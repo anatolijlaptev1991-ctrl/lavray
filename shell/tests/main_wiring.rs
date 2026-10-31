@@ -10,6 +10,15 @@ fn source(name: &str) -> String {
     std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("не прочитать {path}: {e}"))
 }
 
+/// Команда есть в списке `generate_handler!` (`src/commands.rs`, T-82).
+/// Принимает имя с отступом и запятой — как раньше искали в `main.rs`.
+fn registered(entry: &str) -> bool {
+    let name = entry.trim().trim_end_matches(',');
+    source("commands.rs")
+        .lines()
+        .any(|line| line.trim().trim_end_matches(',').rsplit("::").next() == Some(name))
+}
+
 /// F-041: меню трея строится по `TrayMenuSpec`, тексты приходят из UI (словари),
 /// а не зашиты в оболочку по-русски.
 #[test]
@@ -44,10 +53,7 @@ fn quit_does_not_block_and_the_window_is_restored() {
 fn elevation_command_is_registered_for_the_ui() {
     let main_rs = source("main.rs");
     assert!(main_rs.contains("fn is_elevated"));
-    assert!(
-        main_rs.contains("            is_elevated,"),
-        "нет в generate_handler!"
-    );
+    assert!(registered("is_elevated"), "нет в generate_handler!");
 }
 
 /// F-082/F-083 (A2-11, A2-21): ядро ведёт цикл из библиотеки (`coreproc::runner`
@@ -64,10 +70,7 @@ fn main_uses_the_library_supervisor_and_exposes_diagnostics() {
         );
     }
     for needed in ["            core_log_tail,", "            restart_core,"] {
-        assert!(
-            main_rs.contains(needed),
-            "нет в generate_handler!: {needed}"
-        );
+        assert!(registered(needed), "нет в generate_handler!: {needed}");
     }
 }
 
@@ -116,10 +119,7 @@ fn reg_output_is_decoded_with_the_oem_codepage() {
 #[test]
 fn relaunch_is_wired_and_waits_for_the_old_instance_before_plugins() {
     let main_rs = source("main.rs");
-    assert!(
-        main_rs.contains("            relaunch_elevated,"),
-        "нет в generate_handler!"
-    );
+    assert!(registered("relaunch_elevated"), "нет в generate_handler!");
     let command = main_rs
         .split("async fn relaunch_elevated")
         .nth(1)
@@ -145,10 +145,7 @@ fn relaunch_is_wired_and_waits_for_the_old_instance_before_plugins() {
 fn autostart_commands_are_registered_and_run_off_the_main_thread() {
     let main_rs = source("main.rs");
     for needed in ["            autostart_state,", "            set_autostart"] {
-        assert!(
-            main_rs.contains(needed),
-            "нет в generate_handler!: {needed}"
-        );
+        assert!(registered(needed), "нет в generate_handler!: {needed}");
     }
     for name in ["async fn autostart_state", "async fn set_autostart"] {
         let body = main_rs
@@ -202,10 +199,7 @@ fn window_failure_is_reported_and_the_ui_state_commands_are_registered() {
         "            ui_state_set,",
         "            window_show,",
     ] {
-        assert!(
-            main_rs.contains(needed),
-            "нет в generate_handler!: {needed}"
-        );
+        assert!(registered(needed), "нет в generate_handler!: {needed}");
     }
     // обычному пользователю UAC потребовал бы пароль чужой учётной записи
     assert!(main_rs.contains("can_elevate: token::can_self_elevate("));
@@ -265,10 +259,7 @@ fn agent_access_is_wired_to_the_core_lifecycle() {
         "            agent_access_set,",
         "            agent_core_path",
     ] {
-        assert!(
-            main_rs.contains(needed),
-            "нет в generate_handler!: {needed}"
-        );
+        assert!(registered(needed), "нет в generate_handler!: {needed}");
     }
     let config = main_rs
         .split("fn core_spawn_config")
@@ -307,4 +298,119 @@ fn agent_access_is_wired_to_the_core_lifecycle() {
             "токен в журнале: {line}"
         );
     }
+}
+
+/// Все `.rs` из `shell/src` (рекурсивно), кроме тестов.
+fn all_sources(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            all_sources(&path, out);
+        } else if path.extension().is_some_and(|e| e == "rs") {
+            out.push(path);
+        }
+    }
+}
+
+/// Имя функции из строки объявления: `pub async fn name(` → `name`.
+fn fn_name(line: &str) -> Option<String> {
+    let rest = line.split("fn ").nth(1)?;
+    let name: String = rest
+        .chars()
+        .take_while(|c| c.is_alphanumeric() || *c == '_')
+        .collect();
+    (!name.is_empty()).then_some(name)
+}
+
+/// T-82: команда, объявленная `#[tauri::command]` в любом файле `src/`, но не
+/// попавшая в `commands.rs`, в окне отвечает «command not found». Список — одно
+/// место регистрации, и `main.rs` ничего мимо него не регистрирует.
+#[test]
+fn every_declared_command_is_registered_once() {
+    let mut files = Vec::new();
+    all_sources(
+        &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut files,
+    );
+    let mut declared = Vec::new();
+    for file in files {
+        let code = std::fs::read_to_string(&file).unwrap();
+        let mut lines = code.lines();
+        while let Some(line) = lines.next() {
+            if line.trim_start().starts_with("#[tauri::command") {
+                let decl = lines
+                    .find(|l| l.contains("fn "))
+                    .expect("fn после атрибута");
+                declared.push(fn_name(decl).expect("имя команды"));
+            }
+        }
+    }
+    assert!(declared.len() >= 25, "{declared:?}");
+    for name in &declared {
+        assert!(
+            registered(name),
+            "команда {name} не зарегистрирована в commands.rs"
+        );
+    }
+    let list = source("commands.rs");
+    let entries = list
+        .lines()
+        .map(str::trim)
+        .filter(|l| l.starts_with("super::") || l.starts_with("lavray_shell::"))
+        .count();
+    assert_eq!(
+        entries,
+        declared.len(),
+        "в commands.rs лишняя или повторная запись"
+    );
+    let main_rs = source("main.rs");
+    assert!(main_rs.contains(".invoke_handler(commands::handler())"));
+    assert!(
+        !main_rs.contains("generate_handler!"),
+        "второй список команд в main.rs"
+    );
+}
+
+/// T-82: крестик окна (системный и в шапке) решает настройка «Закрывать в трей»;
+/// выход — тем же `begin_quit`, что «Выход» в трее (ядро, прокси, файл агентов).
+#[test]
+fn close_button_follows_the_close_to_tray_setting() {
+    let main_rs = source("main.rs");
+    let close = main_rs
+        .split("fn close_window")
+        .nth(1)
+        .and_then(|rest| {
+            rest.split(
+                "
+}
+",
+            )
+            .next()
+        })
+        .expect("close_window");
+    assert!(close.contains("window_policy::on_close(&ShellPrefs::load(&data_dir()))"));
+    assert!(close.contains(
+        "CloseAction::Quit => {
+            begin_quit("
+    ));
+    let event = main_rs
+        .split("WindowEvent::CloseRequested")
+        .nth(1)
+        .and_then(|rest| rest.split("WindowEvent::ThemeChanged").next())
+        .expect("CloseRequested");
+    assert!(event.contains("api.prevent_close();"));
+    assert!(event.contains("close_window(&main)"));
+    let hide = main_rs
+        .split("fn window_hide")
+        .nth(1)
+        .and_then(|rest| {
+            rest.split(
+                "
+}
+",
+            )
+            .next()
+        })
+        .expect("window_hide");
+    assert!(hide.contains("close_window(&window)"));
 }

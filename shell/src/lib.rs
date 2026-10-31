@@ -52,6 +52,7 @@ pub mod launch;
 pub mod msgbox;
 #[cfg(windows)]
 mod oemtext;
+pub mod prefs;
 mod private_file;
 pub mod profile;
 pub mod single_instance;
@@ -61,3 +62,5 @@ pub mod tray;
 pub mod ui_state;
 pub mod uiprotocol;
 pub mod updater;
+pub mod window_geometry;
+pub mod window_policy;

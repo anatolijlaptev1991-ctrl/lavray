@@ -18,6 +18,11 @@ export const UI_STATE_KEYS: readonly string[] = [
   'lavray.modes',
   'lavray.server',
   'lavray.onboarded',
+  // T-82: настройки оболочки (lib/shellPrefs.ts) — оболочка читает их до создания окна.
+  'lavray.closeToTray',
+  'lavray.startMinimized',
+  'lavray.notify',
+  'lavray.hotkeyConnect',
 ];
 
 function inShell(): boolean {

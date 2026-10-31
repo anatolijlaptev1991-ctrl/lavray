@@ -24,6 +24,7 @@ use lavray_shell::endpoint::{
 use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
 use lavray_shell::launch::{wait_for_exit, LaunchArgs, WAIT_PID_TIMEOUT};
 use lavray_shell::msgbox;
+use lavray_shell::prefs::ShellPrefs;
 use lavray_shell::profile;
 use lavray_shell::single_instance::{self, Verdict};
 use lavray_shell::sysproxy::{validate_port, SysProxy};
@@ -31,10 +32,13 @@ use lavray_shell::token;
 use lavray_shell::tray::TrayUpdate;
 use lavray_shell::ui_state;
 use lavray_shell::uiprotocol::IPC_PROTOCOL_VERSION;
+use lavray_shell::window_geometry;
+use lavray_shell::window_policy::{self, CloseAction};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 
+mod commands;
 mod tray_ui;
 
 /// Версия протокола UI ↔ shell (`uiprotocol.rs`).
@@ -354,10 +358,21 @@ fn window_is_maximized(window: tauri::WebviewWindow) -> Result<bool, String> {
     window.is_maximized().map_err(|e| e.to_string())
 }
 
-/// Закрытие окна = скрыть в трей (спека §8.1), как системный крестик.
+/// Крестик в шапке окна — то же, что системный крестик (T-82).
 #[tauri::command]
 fn window_hide(window: tauri::WebviewWindow) -> Result<(), String> {
-    window.hide().map_err(|e| e.to_string())
+    close_window(&window).map_err(|e| e.to_string())
+}
+
+/// Крестик: спрятать в трей (спека §8.1) или выйти полностью — по настройке.
+fn close_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
+    match window_policy::on_close(&ShellPrefs::load(&data_dir())) {
+        CloseAction::Hide => window.hide(),
+        CloseAction::Quit => {
+            begin_quit(window.app_handle());
+            Ok(())
+        }
+    }
 }
 
 /// Начать перетаскивание окна за шапку (безрамочные окна требуют вызова).
@@ -554,7 +569,11 @@ fn create_main_window(app: &tauri::App, elevated: bool) -> Result<(), String> {
             builder = builder.data_directory(dir);
         }
     }
-    builder.build().map(|_| ()).map_err(|e| e.to_string())
+    // Размер и место ставит плагин; заголовок за краем экрана — окно в центр.
+    builder
+        .build()
+        .map(|window| window_geometry::ensure_reachable(&window))
+        .map_err(|e| e.to_string())
 }
 
 fn main() {
@@ -583,8 +602,9 @@ fn main() {
         msgbox::show(msgbox::ALREADY_RUNNING_ELEVATED);
         std::process::exit(0);
     }
-    // T-82: `--tray` (автозапуск) — окно остаётся скрытым, только значок.
-    let start_hidden = launch.tray;
+    // T-82: `--tray` (автозапуск) или «Запускать свёрнутым» — только значок.
+    let prefs = ShellPrefs::load(&data_dir());
+    let start_hidden = window_policy::start_hidden(launch.tray, launch.elevated_relaunch, &prefs);
     let elevated = process_is_elevated();
     let runtime = Arc::new(Mutex::new(RuntimeState::default()));
     let rt_for_setup = Arc::clone(&runtime);
@@ -598,6 +618,8 @@ fn main() {
         // Внешние ссылки (target=_blank) — в системный браузер, только http/https
         // (scope в capabilities/default.json).
         .plugin(tauri_plugin_opener::init())
+        // T-82: размер, место и развёрнутость окна между запусками.
+        .plugin(window_geometry::plugin())
         .manage(Arc::clone(&runtime))
         .manage(hub)
         .manage(LaunchState {
@@ -650,44 +672,20 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
-            // D1 (аудит round 2): клик по X прячет окно в трей, а не убивает
-            // приложение — иначе трей оставался без окна, а ядро гасилось
-            // без graceful-teardown.
+            // D1 (аудит round 2): окно не закрывается само — иначе трей
+            // оставался без окна, а ядро гасилось без graceful-teardown.
+            // T-82: прятать в трей или выходить полностью, решает настройка.
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 api.prevent_close();
-                let _ = window.hide();
+                if let Some(main) = window.app_handle().get_webview_window(window.label()) {
+                    let _ = close_window(&main);
+                }
             }
             // Тема окна сменилась — значок трея под другую панель задач.
             tauri::WindowEvent::ThemeChanged(_) => tray_ui::refresh(window.app_handle()),
             _ => {}
         })
-        .invoke_handler(tauri::generate_handler![
-            protocol_version,
-            is_elevated,
-            core_state,
-            core_endpoint,
-            shell_error,
-            request_quit,
-            quit_app,
-            tray_update,
-            core_log_tail,
-            restart_core,
-            window_minimize,
-            window_toggle_maximize,
-            window_is_maximized,
-            window_hide,
-            window_start_drag,
-            set_system_proxy,
-            relaunch_elevated,
-            launch_info,
-            ui_state_load,
-            ui_state_set,
-            window_show,
-            autostart_state,
-            set_autostart,
-            agent_access_set,
-            agent_core_path
-        ])
+        .invoke_handler(commands::handler())
         .build(context)
         .unwrap_or_else(|e| {
             msgbox::show(&msgbox::window_failed(&e.to_string()));

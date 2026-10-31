@@ -29,16 +29,8 @@ use std::sync::Mutex;
 
 /// Имя файла в каталоге данных приложения.
 pub const FILE_NAME: &str = "ui-state.json";
-/// Ключи `localStorage`, которые общие для двух профилей WebView. Список
-/// повторяет `ui/src/lib/uiState.ts` (сверяется тестом).
-pub const ALLOWED_KEYS: [&str; 6] = [
-    "lavray.lang",
-    "lavray.theme",
-    "lavray.accent",
-    "lavray.modes",
-    "lavray.server",
-    "lavray.onboarded",
-];
+mod keys;
+pub use keys::ALLOWED_KEYS;
 /// Наибольший размер значения, байт.
 pub const MAX_VALUE_BYTES: usize = 16 * 1024;
 /// Файл больше этого размера не читается.

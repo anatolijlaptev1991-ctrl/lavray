@@ -2161,6 +2161,75 @@ message RevokeSessionRequest {
 }
 
 // ============================================================================
+// Сервис 14: BackupService — зашифрованная резервная копия всех данных (T-83)
+// ============================================================================
+
+// Формат LAVBK1: заголовок (он же AAD) + XChaCha20-Poly1305 над снимком БД;
+// ключ — Argon2id от пароля. В копию входят настройки, группы, профили (с
+// секретами), подписки (с их адресами) и пользовательские наборы; состояние
+// обновлений (update.*), кэши, гео-файлы и журнал не входят. Забытый пароль =
+// копию не открыть никак. Восстановление полностью ЗАМЕНЯЕТ данные, атомарно.
+//
+// Пароль приходит как UTF-8 (UI нормализует его в NFC), длина — от 8 символов
+// до 1024 байт, ядро его не хранит и не пишет в журнал. Размер копии — до
+// 64 МиБ (лимит тела этого сервиса выше общего, JSON считает base64).
+//
+// Ошибки: код ConnectRPC + деталь ErrorInfo { domain: "lavray.core", reason }.
+//   INVALID_ARGUMENT    — password_too_short | password_too_long | backup_not_recognized
+//   PERMISSION_DENIED   — backup_wrong_password
+//   DATA_LOSS           — backup_tampered (файл изменён или повреждён)
+//   FAILED_PRECONDITION — backup_from_newer_version | confirm_replace_required |
+//                         connection_active
+//   RESOURCE_EXHAUSTED  — backup_too_large
+//   ABORTED             — backup_busy (идёт другая операция с копией)
+service BackupService {
+  // Собрать и зашифровать копию. Файл сохраняет клиент (диалог «Сохранить как»).
+  rpc ExportBackup(ExportBackupRequest) returns (ExportBackupResponse);
+  // Расшифровать и показать сводку. Данные не меняются.
+  rpc PreviewBackup(PreviewBackupRequest) returns (BackupSummary);
+  // Заменить все данные содержимым копии. Требует confirm_replace и
+  // отсутствия активного подключения.
+  rpc ImportBackup(ImportBackupRequest) returns (ImportBackupResponse);
+}
+
+message ExportBackupRequest {
+  string password = 1;
+}
+
+message ExportBackupResponse {
+  bytes data = 1;
+  string suggested_name = 2; // lavray-backup-YYYYMMDD-HHMMSS.lavbk
+  BackupSummary summary = 3;
+}
+
+message PreviewBackupRequest {
+  bytes data = 1;
+  string password = 2;
+}
+
+message ImportBackupRequest {
+  bytes data = 1;
+  string password = 2;
+  bool confirm_replace = 3; // без true — FAILED_PRECONDITION
+}
+
+message ImportBackupResponse {
+  BackupSummary restored = 1;
+  bool needs_app_restart = 2;
+}
+
+message BackupSummary {
+  int32 groups = 1; // все группы, включая подписки
+  int32 profiles = 2;
+  int32 subscriptions = 3; // из groups: группы-подписки (kind=2)
+  int32 presets = 4; // пользовательские наборы маршрутов
+  int32 settings = 5; // без update.*
+  string app_version = 6;
+  int64 schema_version = 7;
+  int64 created_at_ms = 8;
+}
+
+// ============================================================================
 // Reserved (эволюция). Удалённые/переименованные поля фиксируются здесь;
 // номера НЕ переиспользуются. История ведётся в proto/README.md §7.
 // ============================================================================
@@ -2186,3 +2255,7 @@ message RevokeSessionRequest {
 //   custom-полей привязано к хэшу содержимого.
 //   ImportContentRequest: reserved 6 (allow_custom_fields).
 //   Profile.custom_fields_confirmed — только чтение, вычисляется ядром.
+//
+// ревизия 4 (0.7.0, T-83):
+//   + BackupService (ExportBackup, PreviewBackup, ImportBackup) и сообщения
+//   BackupSummary и др.: зашифрованная резервная копия, формат LAVBK1.

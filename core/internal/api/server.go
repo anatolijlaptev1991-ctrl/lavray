@@ -90,6 +90,9 @@ type Server struct {
 	// ---- обновления: доступ к общему клиенту сериализуется ----
 	updMu sync.Mutex
 
+	backup *backupService // зашифрованная копия (backup_service.go)
+	sched  schedCtl       // жизненный цикл планировщика подписок (sched_ctl.go)
+
 	// ---- агентский доступ (MCP): токен этого запуска, режим — agent.mode ----
 	agentMu    sync.RWMutex
 	agentToken string
@@ -125,7 +128,7 @@ func NewServer(d Deps) *Server {
 			lg.Logf(level, logs.SourceSingBox, "%s", message)
 		})
 	}
-	return &Server{
+	s := &Server{
 		st:               d.Store,
 		presetRepo:       newPresetRepo(d.Store),
 		logs:             lg,
@@ -142,6 +145,8 @@ func NewServer(d Deps) *Server {
 		subsSnap:         map[int64]*subs.Snapshot{},
 		setSubs:          map[chan *lavrayv1.SettingsChanged]struct{}{},
 	}
+	s.backup = newBackupService(s)
+	return s
 }
 
 // HandlerOptions — опции всех хендлеров (интерсептор recover+map).
@@ -152,9 +157,8 @@ func (s *Server) HandlerOptions() []connect.HandlerOption {
 	}
 }
 
-// Register монтирует все 13 сервисов на mux: 6 реализованы (W6), 7 —
-// заглушки unimplemented (W7/W8: Log/Stats/Connections/Diagnostics/Gateway/
-// Updates/WebSession), чтобы сервер поднимался целиком.
+// Register монтирует все сервисы на mux; нереализованные (Gateway, WebSession)
+// отвечают UNIMPLEMENTED, чтобы сервер поднимался целиком.
 func (s *Server) Register(mux *http.ServeMux) {
 	opts := s.HandlerOptions()
 	mount := func(path string, h http.Handler) {
@@ -186,6 +190,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	path, h = lavrayv1connect.NewUpdateServiceHandler(s, opts...)
 	mount(path, h)
 	path, h = lavrayv1connect.NewWebSessionServiceHandler(lavrayv1connect.UnimplementedWebSessionServiceHandler{}, opts...)
+	mount(path, h)
+	path, h = lavrayv1connect.NewBackupServiceHandler(s.backup, s.backup.handlerOptions(opts)...)
 	mount(path, h)
 }
 
@@ -373,32 +379,6 @@ func (s *Server) activePreset() (*presets.Preset, error) {
 // CoreStatus
 // ============================================================================
 
-func coreStateOf(st inst.State) lavrayv1.CoreState {
-	switch st {
-	case inst.StateStarting:
-		return lavrayv1.CoreState_CORE_STATE_CONNECTING
-	case inst.StateReady:
-		return lavrayv1.CoreState_CORE_STATE_CONNECTED
-	case inst.StateStopping:
-		return lavrayv1.CoreState_CORE_STATE_DISCONNECTING
-	case inst.StateCrashed:
-		return lavrayv1.CoreState_CORE_STATE_ERROR
-	}
-	return lavrayv1.CoreState_CORE_STATE_IDLE
-}
-
-func connectModeOf(mode string) lavrayv1.ConnectMode {
-	switch mode {
-	case "tun":
-		return lavrayv1.ConnectMode_CONNECT_MODE_TUN
-	case "gateway_tproxy":
-		return lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TPROXY
-	case "gateway_tun":
-		return lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TUN
-	}
-	return lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY
-}
-
 // coreStatus — снимок CoreStatus (менеджер + настройки inbound/tun/пресет).
 func (s *Server) coreStatus() *lavrayv1.CoreStatus {
 	st := s.inst.Status()
@@ -442,9 +422,6 @@ func (s *Server) coreStatus() *lavrayv1.CoreStatus {
 	}
 	return cs
 }
-
-// nowMs — время для стримов (выделено для будущих тест-инъекций).
-func nowMs() int64 { return time.Now().UnixMilli() }
 
 // corsWrap — CORS для Tauri-окна: webview отдаёт страницу с origin
 // tauri://localhost (или http://tauri.localhost на Windows), а ядро живёт на

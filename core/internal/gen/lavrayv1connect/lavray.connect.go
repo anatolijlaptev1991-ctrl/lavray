@@ -82,6 +82,8 @@ const (
 	UpdateServiceName = "lavray.v1.UpdateService"
 	// WebSessionServiceName is the fully-qualified name of the WebSessionService service.
 	WebSessionServiceName = "lavray.v1.WebSessionService"
+	// BackupServiceName is the fully-qualified name of the BackupService service.
+	BackupServiceName = "lavray.v1.BackupService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -348,6 +350,15 @@ const (
 	// WebSessionServiceRevokeSessionProcedure is the fully-qualified name of the WebSessionService's
 	// RevokeSession RPC.
 	WebSessionServiceRevokeSessionProcedure = "/lavray.v1.WebSessionService/RevokeSession"
+	// BackupServiceExportBackupProcedure is the fully-qualified name of the BackupService's
+	// ExportBackup RPC.
+	BackupServiceExportBackupProcedure = "/lavray.v1.BackupService/ExportBackup"
+	// BackupServicePreviewBackupProcedure is the fully-qualified name of the BackupService's
+	// PreviewBackup RPC.
+	BackupServicePreviewBackupProcedure = "/lavray.v1.BackupService/PreviewBackup"
+	// BackupServiceImportBackupProcedure is the fully-qualified name of the BackupService's
+	// ImportBackup RPC.
+	BackupServiceImportBackupProcedure = "/lavray.v1.BackupService/ImportBackup"
 )
 
 // CoreServiceClient is a client for the lavray.v1.CoreService service.
@@ -3690,4 +3701,134 @@ func (UnimplementedWebSessionServiceHandler) ListSessions(context.Context, *conn
 
 func (UnimplementedWebSessionServiceHandler) RevokeSession(context.Context, *connect.Request[lavrayv1.RevokeSessionRequest]) (*connect.Response[lavrayv1.Empty], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.WebSessionService.RevokeSession is not implemented"))
+}
+
+// BackupServiceClient is a client for the lavray.v1.BackupService service.
+type BackupServiceClient interface {
+	// Собрать и зашифровать копию. Файл сохраняет клиент (диалог «Сохранить как»).
+	ExportBackup(context.Context, *connect.Request[lavrayv1.ExportBackupRequest]) (*connect.Response[lavrayv1.ExportBackupResponse], error)
+	// Расшифровать и показать сводку. Данные не меняются.
+	PreviewBackup(context.Context, *connect.Request[lavrayv1.PreviewBackupRequest]) (*connect.Response[lavrayv1.BackupSummary], error)
+	// Заменить все данные содержимым копии. Требует confirm_replace и
+	// отсутствия активного подключения.
+	ImportBackup(context.Context, *connect.Request[lavrayv1.ImportBackupRequest]) (*connect.Response[lavrayv1.ImportBackupResponse], error)
+}
+
+// NewBackupServiceClient constructs a client for the lavray.v1.BackupService service. By default,
+// it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses, and
+// sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the connect.WithGRPC()
+// or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewBackupServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) BackupServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	backupServiceMethods := lavrayv1.File_lavray_proto.Services().ByName("BackupService").Methods()
+	return &backupServiceClient{
+		exportBackup: connect.NewClient[lavrayv1.ExportBackupRequest, lavrayv1.ExportBackupResponse](
+			httpClient,
+			baseURL+BackupServiceExportBackupProcedure,
+			connect.WithSchema(backupServiceMethods.ByName("ExportBackup")),
+			connect.WithClientOptions(opts...),
+		),
+		previewBackup: connect.NewClient[lavrayv1.PreviewBackupRequest, lavrayv1.BackupSummary](
+			httpClient,
+			baseURL+BackupServicePreviewBackupProcedure,
+			connect.WithSchema(backupServiceMethods.ByName("PreviewBackup")),
+			connect.WithClientOptions(opts...),
+		),
+		importBackup: connect.NewClient[lavrayv1.ImportBackupRequest, lavrayv1.ImportBackupResponse](
+			httpClient,
+			baseURL+BackupServiceImportBackupProcedure,
+			connect.WithSchema(backupServiceMethods.ByName("ImportBackup")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// backupServiceClient implements BackupServiceClient.
+type backupServiceClient struct {
+	exportBackup  *connect.Client[lavrayv1.ExportBackupRequest, lavrayv1.ExportBackupResponse]
+	previewBackup *connect.Client[lavrayv1.PreviewBackupRequest, lavrayv1.BackupSummary]
+	importBackup  *connect.Client[lavrayv1.ImportBackupRequest, lavrayv1.ImportBackupResponse]
+}
+
+// ExportBackup calls lavray.v1.BackupService.ExportBackup.
+func (c *backupServiceClient) ExportBackup(ctx context.Context, req *connect.Request[lavrayv1.ExportBackupRequest]) (*connect.Response[lavrayv1.ExportBackupResponse], error) {
+	return c.exportBackup.CallUnary(ctx, req)
+}
+
+// PreviewBackup calls lavray.v1.BackupService.PreviewBackup.
+func (c *backupServiceClient) PreviewBackup(ctx context.Context, req *connect.Request[lavrayv1.PreviewBackupRequest]) (*connect.Response[lavrayv1.BackupSummary], error) {
+	return c.previewBackup.CallUnary(ctx, req)
+}
+
+// ImportBackup calls lavray.v1.BackupService.ImportBackup.
+func (c *backupServiceClient) ImportBackup(ctx context.Context, req *connect.Request[lavrayv1.ImportBackupRequest]) (*connect.Response[lavrayv1.ImportBackupResponse], error) {
+	return c.importBackup.CallUnary(ctx, req)
+}
+
+// BackupServiceHandler is an implementation of the lavray.v1.BackupService service.
+type BackupServiceHandler interface {
+	// Собрать и зашифровать копию. Файл сохраняет клиент (диалог «Сохранить как»).
+	ExportBackup(context.Context, *connect.Request[lavrayv1.ExportBackupRequest]) (*connect.Response[lavrayv1.ExportBackupResponse], error)
+	// Расшифровать и показать сводку. Данные не меняются.
+	PreviewBackup(context.Context, *connect.Request[lavrayv1.PreviewBackupRequest]) (*connect.Response[lavrayv1.BackupSummary], error)
+	// Заменить все данные содержимым копии. Требует confirm_replace и
+	// отсутствия активного подключения.
+	ImportBackup(context.Context, *connect.Request[lavrayv1.ImportBackupRequest]) (*connect.Response[lavrayv1.ImportBackupResponse], error)
+}
+
+// NewBackupServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewBackupServiceHandler(svc BackupServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	backupServiceMethods := lavrayv1.File_lavray_proto.Services().ByName("BackupService").Methods()
+	backupServiceExportBackupHandler := connect.NewUnaryHandler(
+		BackupServiceExportBackupProcedure,
+		svc.ExportBackup,
+		connect.WithSchema(backupServiceMethods.ByName("ExportBackup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	backupServicePreviewBackupHandler := connect.NewUnaryHandler(
+		BackupServicePreviewBackupProcedure,
+		svc.PreviewBackup,
+		connect.WithSchema(backupServiceMethods.ByName("PreviewBackup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	backupServiceImportBackupHandler := connect.NewUnaryHandler(
+		BackupServiceImportBackupProcedure,
+		svc.ImportBackup,
+		connect.WithSchema(backupServiceMethods.ByName("ImportBackup")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/lavray.v1.BackupService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case BackupServiceExportBackupProcedure:
+			backupServiceExportBackupHandler.ServeHTTP(w, r)
+		case BackupServicePreviewBackupProcedure:
+			backupServicePreviewBackupHandler.ServeHTTP(w, r)
+		case BackupServiceImportBackupProcedure:
+			backupServiceImportBackupHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedBackupServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedBackupServiceHandler struct{}
+
+func (UnimplementedBackupServiceHandler) ExportBackup(context.Context, *connect.Request[lavrayv1.ExportBackupRequest]) (*connect.Response[lavrayv1.ExportBackupResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.BackupService.ExportBackup is not implemented"))
+}
+
+func (UnimplementedBackupServiceHandler) PreviewBackup(context.Context, *connect.Request[lavrayv1.PreviewBackupRequest]) (*connect.Response[lavrayv1.BackupSummary], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.BackupService.PreviewBackup is not implemented"))
+}
+
+func (UnimplementedBackupServiceHandler) ImportBackup(context.Context, *connect.Request[lavrayv1.ImportBackupRequest]) (*connect.Response[lavrayv1.ImportBackupResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.BackupService.ImportBackup is not implemented"))
 }

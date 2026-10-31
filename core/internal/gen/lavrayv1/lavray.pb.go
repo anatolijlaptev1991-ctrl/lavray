@@ -14183,6 +14183,374 @@ func (x *RevokeSessionRequest) GetSessionId() string {
 	return ""
 }
 
+type ExportBackupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Password      string                 `protobuf:"bytes,1,opt,name=password,proto3" json:"password,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportBackupRequest) Reset() {
+	*x = ExportBackupRequest{}
+	mi := &file_lavray_proto_msgTypes[191]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportBackupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportBackupRequest) ProtoMessage() {}
+
+func (x *ExportBackupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_lavray_proto_msgTypes[191]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportBackupRequest.ProtoReflect.Descriptor instead.
+func (*ExportBackupRequest) Descriptor() ([]byte, []int) {
+	return file_lavray_proto_rawDescGZIP(), []int{191}
+}
+
+func (x *ExportBackupRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+type ExportBackupResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	SuggestedName string                 `protobuf:"bytes,2,opt,name=suggested_name,json=suggestedName,proto3" json:"suggested_name,omitempty"` // lavray-backup-YYYYMMDD-HHMMSS.lavbk
+	Summary       *BackupSummary         `protobuf:"bytes,3,opt,name=summary,proto3" json:"summary,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExportBackupResponse) Reset() {
+	*x = ExportBackupResponse{}
+	mi := &file_lavray_proto_msgTypes[192]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExportBackupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExportBackupResponse) ProtoMessage() {}
+
+func (x *ExportBackupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_lavray_proto_msgTypes[192]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExportBackupResponse.ProtoReflect.Descriptor instead.
+func (*ExportBackupResponse) Descriptor() ([]byte, []int) {
+	return file_lavray_proto_rawDescGZIP(), []int{192}
+}
+
+func (x *ExportBackupResponse) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *ExportBackupResponse) GetSuggestedName() string {
+	if x != nil {
+		return x.SuggestedName
+	}
+	return ""
+}
+
+func (x *ExportBackupResponse) GetSummary() *BackupSummary {
+	if x != nil {
+		return x.Summary
+	}
+	return nil
+}
+
+type PreviewBackupRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreviewBackupRequest) Reset() {
+	*x = PreviewBackupRequest{}
+	mi := &file_lavray_proto_msgTypes[193]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreviewBackupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreviewBackupRequest) ProtoMessage() {}
+
+func (x *PreviewBackupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_lavray_proto_msgTypes[193]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreviewBackupRequest.ProtoReflect.Descriptor instead.
+func (*PreviewBackupRequest) Descriptor() ([]byte, []int) {
+	return file_lavray_proto_rawDescGZIP(), []int{193}
+}
+
+func (x *PreviewBackupRequest) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *PreviewBackupRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+type ImportBackupRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Data           []byte                 `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Password       string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`
+	ConfirmReplace bool                   `protobuf:"varint,3,opt,name=confirm_replace,json=confirmReplace,proto3" json:"confirm_replace,omitempty"` // без true — FAILED_PRECONDITION
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *ImportBackupRequest) Reset() {
+	*x = ImportBackupRequest{}
+	mi := &file_lavray_proto_msgTypes[194]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportBackupRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportBackupRequest) ProtoMessage() {}
+
+func (x *ImportBackupRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_lavray_proto_msgTypes[194]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportBackupRequest.ProtoReflect.Descriptor instead.
+func (*ImportBackupRequest) Descriptor() ([]byte, []int) {
+	return file_lavray_proto_rawDescGZIP(), []int{194}
+}
+
+func (x *ImportBackupRequest) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *ImportBackupRequest) GetPassword() string {
+	if x != nil {
+		return x.Password
+	}
+	return ""
+}
+
+func (x *ImportBackupRequest) GetConfirmReplace() bool {
+	if x != nil {
+		return x.ConfirmReplace
+	}
+	return false
+}
+
+type ImportBackupResponse struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Restored        *BackupSummary         `protobuf:"bytes,1,opt,name=restored,proto3" json:"restored,omitempty"`
+	NeedsAppRestart bool                   `protobuf:"varint,2,opt,name=needs_app_restart,json=needsAppRestart,proto3" json:"needs_app_restart,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ImportBackupResponse) Reset() {
+	*x = ImportBackupResponse{}
+	mi := &file_lavray_proto_msgTypes[195]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ImportBackupResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ImportBackupResponse) ProtoMessage() {}
+
+func (x *ImportBackupResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_lavray_proto_msgTypes[195]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ImportBackupResponse.ProtoReflect.Descriptor instead.
+func (*ImportBackupResponse) Descriptor() ([]byte, []int) {
+	return file_lavray_proto_rawDescGZIP(), []int{195}
+}
+
+func (x *ImportBackupResponse) GetRestored() *BackupSummary {
+	if x != nil {
+		return x.Restored
+	}
+	return nil
+}
+
+func (x *ImportBackupResponse) GetNeedsAppRestart() bool {
+	if x != nil {
+		return x.NeedsAppRestart
+	}
+	return false
+}
+
+type BackupSummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Groups        int32                  `protobuf:"varint,1,opt,name=groups,proto3" json:"groups,omitempty"` // все группы, включая подписки
+	Profiles      int32                  `protobuf:"varint,2,opt,name=profiles,proto3" json:"profiles,omitempty"`
+	Subscriptions int32                  `protobuf:"varint,3,opt,name=subscriptions,proto3" json:"subscriptions,omitempty"` // из groups: группы-подписки (kind=2)
+	Presets       int32                  `protobuf:"varint,4,opt,name=presets,proto3" json:"presets,omitempty"`             // пользовательские наборы маршрутов
+	Settings      int32                  `protobuf:"varint,5,opt,name=settings,proto3" json:"settings,omitempty"`           // без update.*
+	AppVersion    string                 `protobuf:"bytes,6,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
+	SchemaVersion int64                  `protobuf:"varint,7,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
+	CreatedAtMs   int64                  `protobuf:"varint,8,opt,name=created_at_ms,json=createdAtMs,proto3" json:"created_at_ms,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BackupSummary) Reset() {
+	*x = BackupSummary{}
+	mi := &file_lavray_proto_msgTypes[196]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BackupSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BackupSummary) ProtoMessage() {}
+
+func (x *BackupSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_lavray_proto_msgTypes[196]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BackupSummary.ProtoReflect.Descriptor instead.
+func (*BackupSummary) Descriptor() ([]byte, []int) {
+	return file_lavray_proto_rawDescGZIP(), []int{196}
+}
+
+func (x *BackupSummary) GetGroups() int32 {
+	if x != nil {
+		return x.Groups
+	}
+	return 0
+}
+
+func (x *BackupSummary) GetProfiles() int32 {
+	if x != nil {
+		return x.Profiles
+	}
+	return 0
+}
+
+func (x *BackupSummary) GetSubscriptions() int32 {
+	if x != nil {
+		return x.Subscriptions
+	}
+	return 0
+}
+
+func (x *BackupSummary) GetPresets() int32 {
+	if x != nil {
+		return x.Presets
+	}
+	return 0
+}
+
+func (x *BackupSummary) GetSettings() int32 {
+	if x != nil {
+		return x.Settings
+	}
+	return 0
+}
+
+func (x *BackupSummary) GetAppVersion() string {
+	if x != nil {
+		return x.AppVersion
+	}
+	return ""
+}
+
+func (x *BackupSummary) GetSchemaVersion() int64 {
+	if x != nil {
+		return x.SchemaVersion
+	}
+	return 0
+}
+
+func (x *BackupSummary) GetCreatedAtMs() int64 {
+	if x != nil {
+		return x.CreatedAtMs
+	}
+	return 0
+}
+
 var File_lavray_proto protoreflect.FileDescriptor
 
 const file_lavray_proto_rawDesc = "" +
@@ -15487,7 +15855,33 @@ const file_lavray_proto_rawDesc = "" +
 	"\r_client_label\"5\n" +
 	"\x14RevokeSessionRequest\x12\x1d\n" +
 	"\n" +
-	"session_id\x18\x01 \x01(\tR\tsessionId*a\n" +
+	"session_id\x18\x01 \x01(\tR\tsessionId\"1\n" +
+	"\x13ExportBackupRequest\x12\x1a\n" +
+	"\bpassword\x18\x01 \x01(\tR\bpassword\"\x85\x01\n" +
+	"\x14ExportBackupResponse\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12%\n" +
+	"\x0esuggested_name\x18\x02 \x01(\tR\rsuggestedName\x122\n" +
+	"\asummary\x18\x03 \x01(\v2\x18.lavray.v1.BackupSummaryR\asummary\"F\n" +
+	"\x14PreviewBackupRequest\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1a\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\"n\n" +
+	"\x13ImportBackupRequest\x12\x12\n" +
+	"\x04data\x18\x01 \x01(\fR\x04data\x12\x1a\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\x12'\n" +
+	"\x0fconfirm_replace\x18\x03 \x01(\bR\x0econfirmReplace\"x\n" +
+	"\x14ImportBackupResponse\x124\n" +
+	"\brestored\x18\x01 \x01(\v2\x18.lavray.v1.BackupSummaryR\brestored\x12*\n" +
+	"\x11needs_app_restart\x18\x02 \x01(\bR\x0fneedsAppRestart\"\x8b\x02\n" +
+	"\rBackupSummary\x12\x16\n" +
+	"\x06groups\x18\x01 \x01(\x05R\x06groups\x12\x1a\n" +
+	"\bprofiles\x18\x02 \x01(\x05R\bprofiles\x12$\n" +
+	"\rsubscriptions\x18\x03 \x01(\x05R\rsubscriptions\x12\x18\n" +
+	"\apresets\x18\x04 \x01(\x05R\apresets\x12\x1a\n" +
+	"\bsettings\x18\x05 \x01(\x05R\bsettings\x12\x1f\n" +
+	"\vapp_version\x18\x06 \x01(\tR\n" +
+	"appVersion\x12%\n" +
+	"\x0eschema_version\x18\a \x01(\x03R\rschemaVersion\x12\"\n" +
+	"\rcreated_at_ms\x18\b \x01(\x03R\vcreatedAtMs*a\n" +
 	"\bOutbound\x12\x18\n" +
 	"\x14OUTBOUND_UNSPECIFIED\x10\x00\x12\x12\n" +
 	"\x0eOUTBOUND_PROXY\x10\x01\x12\x13\n" +
@@ -15665,7 +16059,11 @@ const file_lavray_proto_rawDesc = "" +
 	"\x06WhoAmI\x12\x18.lavray.v1.WhoAmIRequest\x1a\x15.lavray.v1.WebSession\x12U\n" +
 	"\x0eChangePassword\x12 .lavray.v1.ChangePasswordRequest\x1a!.lavray.v1.ChangePasswordResponse\x12A\n" +
 	"\fListSessions\x12\x10.lavray.v1.Empty\x1a\x1f.lavray.v1.ListSessionsResponse\x12B\n" +
-	"\rRevokeSession\x12\x1f.lavray.v1.RevokeSessionRequest\x1a\x10.lavray.v1.EmptyBOZMgithub.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1;lavrayv1b\x06proto3"
+	"\rRevokeSession\x12\x1f.lavray.v1.RevokeSessionRequest\x1a\x10.lavray.v1.Empty2\xfd\x01\n" +
+	"\rBackupService\x12O\n" +
+	"\fExportBackup\x12\x1e.lavray.v1.ExportBackupRequest\x1a\x1f.lavray.v1.ExportBackupResponse\x12J\n" +
+	"\rPreviewBackup\x12\x1f.lavray.v1.PreviewBackupRequest\x1a\x18.lavray.v1.BackupSummary\x12O\n" +
+	"\fImportBackup\x12\x1e.lavray.v1.ImportBackupRequest\x1a\x1f.lavray.v1.ImportBackupResponseBOZMgithub.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1;lavrayv1b\x06proto3"
 
 var (
 	file_lavray_proto_rawDescOnce sync.Once
@@ -15680,7 +16078,7 @@ func file_lavray_proto_rawDescGZIP() []byte {
 }
 
 var file_lavray_proto_enumTypes = make([]protoimpl.EnumInfo, 37)
-var file_lavray_proto_msgTypes = make([]protoimpl.MessageInfo, 201)
+var file_lavray_proto_msgTypes = make([]protoimpl.MessageInfo, 207)
 var file_lavray_proto_goTypes = []any{
 	(Outbound)(0),                             // 0: lavray.v1.Outbound
 	(SniffingMode)(0),                         // 1: lavray.v1.SniffingMode
@@ -15910,16 +16308,22 @@ var file_lavray_proto_goTypes = []any{
 	(*ListSessionsResponse)(nil),              // 225: lavray.v1.ListSessionsResponse
 	(*SessionInfo)(nil),                       // 226: lavray.v1.SessionInfo
 	(*RevokeSessionRequest)(nil),              // 227: lavray.v1.RevokeSessionRequest
-	nil,                                       // 228: lavray.v1.Group.HttpHeadersEntry
-	nil,                                       // 229: lavray.v1.GetSettingsResponse.ValuesEntry
-	nil,                                       // 230: lavray.v1.SetSettingsRequest.ValuesEntry
-	nil,                                       // 231: lavray.v1.SettingsChanged.ChangedEntry
-	nil,                                       // 232: lavray.v1.GetTrafficTotalsResponse.TotalsEntry
-	nil,                                       // 233: lavray.v1.ComponentUpdate.NotesEntry
-	nil,                                       // 234: lavray.v1.UpdateManifest.AssetsEntry
-	nil,                                       // 235: lavray.v1.UpdateManifest.PresetsEntry
-	nil,                                       // 236: lavray.v1.UpdateManifest.NotesEntry
-	nil,                                       // 237: lavray.v1.ChainStateInfo.MaxSerialEntry
+	(*ExportBackupRequest)(nil),               // 228: lavray.v1.ExportBackupRequest
+	(*ExportBackupResponse)(nil),              // 229: lavray.v1.ExportBackupResponse
+	(*PreviewBackupRequest)(nil),              // 230: lavray.v1.PreviewBackupRequest
+	(*ImportBackupRequest)(nil),               // 231: lavray.v1.ImportBackupRequest
+	(*ImportBackupResponse)(nil),              // 232: lavray.v1.ImportBackupResponse
+	(*BackupSummary)(nil),                     // 233: lavray.v1.BackupSummary
+	nil,                                       // 234: lavray.v1.Group.HttpHeadersEntry
+	nil,                                       // 235: lavray.v1.GetSettingsResponse.ValuesEntry
+	nil,                                       // 236: lavray.v1.SetSettingsRequest.ValuesEntry
+	nil,                                       // 237: lavray.v1.SettingsChanged.ChangedEntry
+	nil,                                       // 238: lavray.v1.GetTrafficTotalsResponse.TotalsEntry
+	nil,                                       // 239: lavray.v1.ComponentUpdate.NotesEntry
+	nil,                                       // 240: lavray.v1.UpdateManifest.AssetsEntry
+	nil,                                       // 241: lavray.v1.UpdateManifest.PresetsEntry
+	nil,                                       // 242: lavray.v1.UpdateManifest.NotesEntry
+	nil,                                       // 243: lavray.v1.ChainStateInfo.MaxSerialEntry
 }
 var file_lavray_proto_depIdxs = []int32{
 	58,  // 0: lavray.v1.ConnectRequest.inline_profile:type_name -> lavray.v1.Profile
@@ -15960,7 +16364,7 @@ var file_lavray_proto_depIdxs = []int32{
 	20,  // 35: lavray.v1.CustomDetail.core:type_name -> lavray.v1.CustomDetail.Core
 	21,  // 36: lavray.v1.Group.kind:type_name -> lavray.v1.Group.Kind
 	70,  // 37: lavray.v1.Group.subscription_info:type_name -> lavray.v1.SubscriptionInfo
-	228, // 38: lavray.v1.Group.http_headers:type_name -> lavray.v1.Group.HttpHeadersEntry
+	234, // 38: lavray.v1.Group.http_headers:type_name -> lavray.v1.Group.HttpHeadersEntry
 	38,  // 39: lavray.v1.ListProfilesRequest.page:type_name -> lavray.v1.Page
 	58,  // 40: lavray.v1.ListProfilesResponse.profiles:type_name -> lavray.v1.Profile
 	58,  // 41: lavray.v1.CreateProfileRequest.profile:type_name -> lavray.v1.Profile
@@ -16000,16 +16404,16 @@ var file_lavray_proto_depIdxs = []int32{
 	7,   // 75: lavray.v1.SettingDescriptor.type:type_name -> lavray.v1.SettingType
 	146, // 76: lavray.v1.DescribeSettingsResponse.descriptors:type_name -> lavray.v1.SettingDescriptor
 	149, // 77: lavray.v1.DescribeSettingsResponse.groups:type_name -> lavray.v1.SettingGroup
-	229, // 78: lavray.v1.GetSettingsResponse.values:type_name -> lavray.v1.GetSettingsResponse.ValuesEntry
-	230, // 79: lavray.v1.SetSettingsRequest.values:type_name -> lavray.v1.SetSettingsRequest.ValuesEntry
-	231, // 80: lavray.v1.SettingsChanged.changed:type_name -> lavray.v1.SettingsChanged.ChangedEntry
+	235, // 78: lavray.v1.GetSettingsResponse.values:type_name -> lavray.v1.GetSettingsResponse.ValuesEntry
+	236, // 79: lavray.v1.SetSettingsRequest.values:type_name -> lavray.v1.SetSettingsRequest.ValuesEntry
+	237, // 80: lavray.v1.SettingsChanged.changed:type_name -> lavray.v1.SettingsChanged.ChangedEntry
 	158, // 81: lavray.v1.SettingValue.string_list_value:type_name -> lavray.v1.StringList
 	3,   // 82: lavray.v1.SubscribeLogsRequest.min_level:type_name -> lavray.v1.LogLevel
 	3,   // 83: lavray.v1.LogLine.level:type_name -> lavray.v1.LogLevel
 	160, // 84: lavray.v1.GetTailResponse.lines:type_name -> lavray.v1.LogLine
 	165, // 85: lavray.v1.StatsSnapshot.tags:type_name -> lavray.v1.TagStat
 	166, // 86: lavray.v1.StatsSnapshot.session:type_name -> lavray.v1.SessionStat
-	232, // 87: lavray.v1.GetTrafficTotalsResponse.totals:type_name -> lavray.v1.GetTrafficTotalsResponse.TotalsEntry
+	238, // 87: lavray.v1.GetTrafficTotalsResponse.totals:type_name -> lavray.v1.GetTrafficTotalsResponse.TotalsEntry
 	171, // 88: lavray.v1.GetTrafficSummaryResponse.groups:type_name -> lavray.v1.GroupTrafficSummary
 	38,  // 89: lavray.v1.ListConnectionsRequest.page:type_name -> lavray.v1.Page
 	176, // 90: lavray.v1.ListConnectionsResponse.connections:type_name -> lavray.v1.Connection
@@ -16029,22 +16433,22 @@ var file_lavray_proto_depIdxs = []int32{
 	8,   // 104: lavray.v1.CheckUpdatesRequest.components:type_name -> lavray.v1.UpdateComponent
 	192, // 105: lavray.v1.CheckUpdatesResponse.available:type_name -> lavray.v1.ComponentUpdate
 	8,   // 106: lavray.v1.ComponentUpdate.component:type_name -> lavray.v1.UpdateComponent
-	233, // 107: lavray.v1.ComponentUpdate.notes:type_name -> lavray.v1.ComponentUpdate.NotesEntry
+	239, // 107: lavray.v1.ComponentUpdate.notes:type_name -> lavray.v1.ComponentUpdate.NotesEntry
 	195, // 108: lavray.v1.ComponentUpdate.manifest:type_name -> lavray.v1.UpdateManifest
 	35,  // 109: lavray.v1.UpdateMetadata.type:type_name -> lavray.v1.UpdateMetadata.Type
 	194, // 110: lavray.v1.UpdateMetadata.signatures:type_name -> lavray.v1.MetadataSignature
 	9,   // 111: lavray.v1.UpdateManifest.channel:type_name -> lavray.v1.UpdateChannel
 	196, // 112: lavray.v1.UpdateManifest.core:type_name -> lavray.v1.CoreRef
-	234, // 113: lavray.v1.UpdateManifest.assets:type_name -> lavray.v1.UpdateManifest.AssetsEntry
-	235, // 114: lavray.v1.UpdateManifest.presets:type_name -> lavray.v1.UpdateManifest.PresetsEntry
+	240, // 113: lavray.v1.UpdateManifest.assets:type_name -> lavray.v1.UpdateManifest.AssetsEntry
+	241, // 114: lavray.v1.UpdateManifest.presets:type_name -> lavray.v1.UpdateManifest.PresetsEntry
 	199, // 115: lavray.v1.UpdateManifest.geo:type_name -> lavray.v1.GeoRef
-	236, // 116: lavray.v1.UpdateManifest.notes:type_name -> lavray.v1.UpdateManifest.NotesEntry
+	242, // 116: lavray.v1.UpdateManifest.notes:type_name -> lavray.v1.UpdateManifest.NotesEntry
 	8,   // 117: lavray.v1.DownloadUpdatesRequest.components:type_name -> lavray.v1.UpdateComponent
 	8,   // 118: lavray.v1.ApplyUpdatesRequest.components:type_name -> lavray.v1.UpdateComponent
 	8,   // 119: lavray.v1.RollbackRequest.component:type_name -> lavray.v1.UpdateComponent
 	207, // 120: lavray.v1.UpdateStateResponse.components:type_name -> lavray.v1.ComponentState
 	206, // 121: lavray.v1.UpdateStateResponse.chain_state:type_name -> lavray.v1.ChainStateInfo
-	237, // 122: lavray.v1.ChainStateInfo.max_serial:type_name -> lavray.v1.ChainStateInfo.MaxSerialEntry
+	243, // 122: lavray.v1.ChainStateInfo.max_serial:type_name -> lavray.v1.ChainStateInfo.MaxSerialEntry
 	8,   // 123: lavray.v1.ComponentState.component:type_name -> lavray.v1.UpdateComponent
 	36,  // 124: lavray.v1.ComponentState.phase:type_name -> lavray.v1.ComponentState.Phase
 	195, // 125: lavray.v1.VerifyLocalUpdateResponse.manifest:type_name -> lavray.v1.UpdateManifest
@@ -16057,195 +16461,203 @@ var file_lavray_proto_depIdxs = []int32{
 	8,   // 132: lavray.v1.VerificationFailed.component:type_name -> lavray.v1.UpdateComponent
 	8,   // 133: lavray.v1.UpdateFailed.component:type_name -> lavray.v1.UpdateComponent
 	226, // 134: lavray.v1.ListSessionsResponse.sessions:type_name -> lavray.v1.SessionInfo
-	157, // 135: lavray.v1.GetSettingsResponse.ValuesEntry.value:type_name -> lavray.v1.SettingValue
-	157, // 136: lavray.v1.SetSettingsRequest.ValuesEntry.value:type_name -> lavray.v1.SettingValue
-	157, // 137: lavray.v1.SettingsChanged.ChangedEntry.value:type_name -> lavray.v1.SettingValue
-	57,  // 138: lavray.v1.GetTrafficTotalsResponse.TotalsEntry.value:type_name -> lavray.v1.TrafficCounters
-	197, // 139: lavray.v1.UpdateManifest.AssetsEntry.value:type_name -> lavray.v1.UpdateAsset
-	198, // 140: lavray.v1.UpdateManifest.PresetsEntry.value:type_name -> lavray.v1.PresetRef
-	39,  // 141: lavray.v1.CoreService.Connect:input_type -> lavray.v1.ConnectRequest
-	41,  // 142: lavray.v1.CoreService.Disconnect:input_type -> lavray.v1.DisconnectRequest
-	43,  // 143: lavray.v1.CoreService.RestartProfile:input_type -> lavray.v1.RestartProfileRequest
-	44,  // 144: lavray.v1.CoreService.GetStatus:input_type -> lavray.v1.GetStatusRequest
-	45,  // 145: lavray.v1.CoreService.SubscribeEvents:input_type -> lavray.v1.SubscribeEventsRequest
-	46,  // 146: lavray.v1.CoreService.GetRuntimeConfig:input_type -> lavray.v1.GetRuntimeConfigRequest
-	48,  // 147: lavray.v1.CoreService.Shutdown:input_type -> lavray.v1.ShutdownRequest
-	71,  // 148: lavray.v1.ProfileService.ListProfiles:input_type -> lavray.v1.ListProfilesRequest
-	73,  // 149: lavray.v1.ProfileService.GetProfile:input_type -> lavray.v1.GetProfileRequest
-	74,  // 150: lavray.v1.ProfileService.CreateProfile:input_type -> lavray.v1.CreateProfileRequest
-	75,  // 151: lavray.v1.ProfileService.UpdateProfile:input_type -> lavray.v1.UpdateProfileRequest
-	77,  // 152: lavray.v1.ProfileService.DeleteProfile:input_type -> lavray.v1.DeleteProfileRequest
-	78,  // 153: lavray.v1.ProfileService.MoveProfiles:input_type -> lavray.v1.MoveProfilesRequest
-	79,  // 154: lavray.v1.ProfileService.CloneProfiles:input_type -> lavray.v1.CloneProfilesRequest
-	81,  // 155: lavray.v1.ProfileService.ResetTraffic:input_type -> lavray.v1.ResetTrafficRequest
-	82,  // 156: lavray.v1.ProfileService.ReorderProfiles:input_type -> lavray.v1.ReorderProfilesRequest
-	83,  // 157: lavray.v1.ProfileService.RemoveUnavailableProfiles:input_type -> lavray.v1.RemoveUnavailableProfilesRequest
-	85,  // 158: lavray.v1.ProfileService.DeduplicateProfiles:input_type -> lavray.v1.DeduplicateProfilesRequest
-	87,  // 159: lavray.v1.ProfileService.SetProfileMeta:input_type -> lavray.v1.SetProfileMetaRequest
-	88,  // 160: lavray.v1.ProfileService.PreviewCustomFields:input_type -> lavray.v1.PreviewCustomFieldsRequest
-	90,  // 161: lavray.v1.ProfileService.ConfirmCustomFields:input_type -> lavray.v1.ConfirmCustomFieldsRequest
-	91,  // 162: lavray.v1.ProfileService.ImportContent:input_type -> lavray.v1.ImportContentRequest
-	94,  // 163: lavray.v1.ProfileService.ExportLinks:input_type -> lavray.v1.ExportLinksRequest
-	96,  // 164: lavray.v1.ProfileService.ExportConfig:input_type -> lavray.v1.ExportConfigRequest
-	98,  // 165: lavray.v1.ProfileService.TestLatency:input_type -> lavray.v1.TestLatencyRequest
-	100, // 166: lavray.v1.ProfileService.StopTests:input_type -> lavray.v1.StopTestsRequest
-	101, // 167: lavray.v1.ProfileService.ClearTestResults:input_type -> lavray.v1.ClearTestResultsRequest
-	102, // 168: lavray.v1.ProfileService.ResolveDomains:input_type -> lavray.v1.ResolveDomainsRequest
-	104, // 169: lavray.v1.ProfileService.ListGroups:input_type -> lavray.v1.ListGroupsRequest
-	106, // 170: lavray.v1.ProfileService.CreateGroup:input_type -> lavray.v1.CreateGroupRequest
-	107, // 171: lavray.v1.ProfileService.UpdateGroup:input_type -> lavray.v1.UpdateGroupRequest
-	108, // 172: lavray.v1.ProfileService.DeleteGroup:input_type -> lavray.v1.DeleteGroupRequest
-	109, // 173: lavray.v1.ProfileService.ReorderGroups:input_type -> lavray.v1.ReorderGroupsRequest
-	110, // 174: lavray.v1.SubscriptionService.ListSubscriptions:input_type -> lavray.v1.ListSubscriptionsRequest
-	112, // 175: lavray.v1.SubscriptionService.CreateSubscription:input_type -> lavray.v1.CreateSubscriptionRequest
-	113, // 176: lavray.v1.SubscriptionService.UpdateSubscriptionSettings:input_type -> lavray.v1.UpdateSubscriptionSettingsRequest
-	114, // 177: lavray.v1.SubscriptionService.DeleteSubscription:input_type -> lavray.v1.DeleteSubscriptionRequest
-	115, // 178: lavray.v1.SubscriptionService.UpdateSubscription:input_type -> lavray.v1.UpdateSubscriptionRequest
-	116, // 179: lavray.v1.SubscriptionService.UpdateAllSubscriptions:input_type -> lavray.v1.UpdateAllSubscriptionsRequest
-	117, // 180: lavray.v1.SubscriptionService.RollbackSubscription:input_type -> lavray.v1.RollbackSubscriptionRequest
-	122, // 181: lavray.v1.RoutingService.ListPresets:input_type -> lavray.v1.ListPresetsRequest
-	124, // 182: lavray.v1.RoutingService.GetPreset:input_type -> lavray.v1.GetPresetRequest
-	125, // 183: lavray.v1.RoutingService.CreatePreset:input_type -> lavray.v1.CreatePresetRequest
-	126, // 184: lavray.v1.RoutingService.UpdatePreset:input_type -> lavray.v1.UpdatePresetRequest
-	128, // 185: lavray.v1.RoutingService.DeletePreset:input_type -> lavray.v1.DeletePresetRequest
-	130, // 186: lavray.v1.RoutingService.ActivatePreset:input_type -> lavray.v1.ActivatePresetRequest
-	132, // 187: lavray.v1.RoutingService.GetActivePreset:input_type -> lavray.v1.GetActivePresetRequest
-	133, // 188: lavray.v1.RoutingService.ResetBuiltinPreset:input_type -> lavray.v1.ResetBuiltinPresetRequest
-	134, // 189: lavray.v1.RoutingService.ImportNekoRayRoute:input_type -> lavray.v1.ImportNekoRayRouteRequest
-	136, // 190: lavray.v1.RoutingService.ExportPreset:input_type -> lavray.v1.ExportPresetRequest
-	138, // 191: lavray.v1.RoutingService.ImportPreset:input_type -> lavray.v1.ImportPresetRequest
-	141, // 192: lavray.v1.DnsService.GetDns:input_type -> lavray.v1.GetDnsRequest
-	142, // 193: lavray.v1.DnsService.SetDns:input_type -> lavray.v1.SetDnsRequest
-	144, // 194: lavray.v1.DnsService.ValidateDnsJson:input_type -> lavray.v1.ValidateDnsJsonRequest
-	147, // 195: lavray.v1.SettingsService.DescribeSettings:input_type -> lavray.v1.DescribeSettingsRequest
-	150, // 196: lavray.v1.SettingsService.GetSettings:input_type -> lavray.v1.GetSettingsRequest
-	152, // 197: lavray.v1.SettingsService.SetSettings:input_type -> lavray.v1.SetSettingsRequest
-	154, // 198: lavray.v1.SettingsService.ResetSettings:input_type -> lavray.v1.ResetSettingsRequest
-	155, // 199: lavray.v1.SettingsService.SubscribeSettings:input_type -> lavray.v1.SubscribeSettingsRequest
-	159, // 200: lavray.v1.LogService.Subscribe:input_type -> lavray.v1.SubscribeLogsRequest
-	161, // 201: lavray.v1.LogService.GetTail:input_type -> lavray.v1.GetTailRequest
-	163, // 202: lavray.v1.StatsService.Subscribe:input_type -> lavray.v1.SubscribeStatsRequest
-	167, // 203: lavray.v1.StatsService.GetTrafficTotals:input_type -> lavray.v1.GetTrafficTotalsRequest
-	169, // 204: lavray.v1.StatsService.GetTrafficSummary:input_type -> lavray.v1.GetTrafficSummaryRequest
-	172, // 205: lavray.v1.ConnectionService.ListConnections:input_type -> lavray.v1.ListConnectionsRequest
-	174, // 206: lavray.v1.ConnectionService.WatchConnections:input_type -> lavray.v1.WatchConnectionsRequest
-	177, // 207: lavray.v1.ConnectionService.CloseConnection:input_type -> lavray.v1.CloseConnectionRequest
-	178, // 208: lavray.v1.DiagnosticsService.CheckRoute:input_type -> lavray.v1.CheckRouteRequest
-	180, // 209: lavray.v1.DiagnosticsService.RunSelfCheck:input_type -> lavray.v1.RunSelfCheckRequest
-	183, // 210: lavray.v1.DiagnosticsService.GetPublicIp:input_type -> lavray.v1.GetPublicIpRequest
-	37,  // 211: lavray.v1.DiagnosticsService.CheckLeaks:input_type -> lavray.v1.Empty
-	37,  // 212: lavray.v1.GatewayService.GetGatewayStatus:input_type -> lavray.v1.Empty
-	37,  // 213: lavray.v1.GatewayService.ListDevicePolicies:input_type -> lavray.v1.Empty
-	188, // 214: lavray.v1.GatewayService.SetDevicePolicy:input_type -> lavray.v1.SetDevicePolicyRequest
-	190, // 215: lavray.v1.UpdateService.CheckUpdates:input_type -> lavray.v1.CheckUpdatesRequest
-	200, // 216: lavray.v1.UpdateService.DownloadUpdates:input_type -> lavray.v1.DownloadUpdatesRequest
-	201, // 217: lavray.v1.UpdateService.ApplyUpdates:input_type -> lavray.v1.ApplyUpdatesRequest
-	202, // 218: lavray.v1.UpdateService.Rollback:input_type -> lavray.v1.RollbackRequest
-	204, // 219: lavray.v1.UpdateService.GetUpdateState:input_type -> lavray.v1.GetUpdateStateRequest
-	208, // 220: lavray.v1.UpdateService.VerifyLocalUpdate:input_type -> lavray.v1.VerifyLocalUpdateRequest
-	215, // 221: lavray.v1.WebSessionService.GetWebModeStatus:input_type -> lavray.v1.GetWebModeStatusRequest
-	217, // 222: lavray.v1.WebSessionService.SetupFirstAdmin:input_type -> lavray.v1.SetupFirstAdminRequest
-	218, // 223: lavray.v1.WebSessionService.Login:input_type -> lavray.v1.LoginRequest
-	220, // 224: lavray.v1.WebSessionService.Logout:input_type -> lavray.v1.LogoutRequest
-	221, // 225: lavray.v1.WebSessionService.RenewSession:input_type -> lavray.v1.RenewSessionRequest
-	222, // 226: lavray.v1.WebSessionService.WhoAmI:input_type -> lavray.v1.WhoAmIRequest
-	223, // 227: lavray.v1.WebSessionService.ChangePassword:input_type -> lavray.v1.ChangePasswordRequest
-	37,  // 228: lavray.v1.WebSessionService.ListSessions:input_type -> lavray.v1.Empty
-	227, // 229: lavray.v1.WebSessionService.RevokeSession:input_type -> lavray.v1.RevokeSessionRequest
-	40,  // 230: lavray.v1.CoreService.Connect:output_type -> lavray.v1.ConnectResponse
-	42,  // 231: lavray.v1.CoreService.Disconnect:output_type -> lavray.v1.DisconnectResponse
-	40,  // 232: lavray.v1.CoreService.RestartProfile:output_type -> lavray.v1.ConnectResponse
-	49,  // 233: lavray.v1.CoreService.GetStatus:output_type -> lavray.v1.CoreStatus
-	52,  // 234: lavray.v1.CoreService.SubscribeEvents:output_type -> lavray.v1.CoreEvent
-	47,  // 235: lavray.v1.CoreService.GetRuntimeConfig:output_type -> lavray.v1.GetRuntimeConfigResponse
-	37,  // 236: lavray.v1.CoreService.Shutdown:output_type -> lavray.v1.Empty
-	72,  // 237: lavray.v1.ProfileService.ListProfiles:output_type -> lavray.v1.ListProfilesResponse
-	58,  // 238: lavray.v1.ProfileService.GetProfile:output_type -> lavray.v1.Profile
-	58,  // 239: lavray.v1.ProfileService.CreateProfile:output_type -> lavray.v1.Profile
-	76,  // 240: lavray.v1.ProfileService.UpdateProfile:output_type -> lavray.v1.UpdateProfileResponse
-	37,  // 241: lavray.v1.ProfileService.DeleteProfile:output_type -> lavray.v1.Empty
-	37,  // 242: lavray.v1.ProfileService.MoveProfiles:output_type -> lavray.v1.Empty
-	80,  // 243: lavray.v1.ProfileService.CloneProfiles:output_type -> lavray.v1.CloneProfilesResponse
-	37,  // 244: lavray.v1.ProfileService.ResetTraffic:output_type -> lavray.v1.Empty
-	37,  // 245: lavray.v1.ProfileService.ReorderProfiles:output_type -> lavray.v1.Empty
-	84,  // 246: lavray.v1.ProfileService.RemoveUnavailableProfiles:output_type -> lavray.v1.RemoveUnavailableResponse
-	86,  // 247: lavray.v1.ProfileService.DeduplicateProfiles:output_type -> lavray.v1.DeduplicateResponse
-	58,  // 248: lavray.v1.ProfileService.SetProfileMeta:output_type -> lavray.v1.Profile
-	89,  // 249: lavray.v1.ProfileService.PreviewCustomFields:output_type -> lavray.v1.PreviewCustomFieldsResponse
-	58,  // 250: lavray.v1.ProfileService.ConfirmCustomFields:output_type -> lavray.v1.Profile
-	92,  // 251: lavray.v1.ProfileService.ImportContent:output_type -> lavray.v1.ImportContentResponse
-	95,  // 252: lavray.v1.ProfileService.ExportLinks:output_type -> lavray.v1.ExportLinksResponse
-	97,  // 253: lavray.v1.ProfileService.ExportConfig:output_type -> lavray.v1.ExportConfigResponse
-	99,  // 254: lavray.v1.ProfileService.TestLatency:output_type -> lavray.v1.LatencyResult
-	37,  // 255: lavray.v1.ProfileService.StopTests:output_type -> lavray.v1.Empty
-	37,  // 256: lavray.v1.ProfileService.ClearTestResults:output_type -> lavray.v1.Empty
-	103, // 257: lavray.v1.ProfileService.ResolveDomains:output_type -> lavray.v1.ResolveDomainsResponse
-	105, // 258: lavray.v1.ProfileService.ListGroups:output_type -> lavray.v1.ListGroupsResponse
-	69,  // 259: lavray.v1.ProfileService.CreateGroup:output_type -> lavray.v1.Group
-	69,  // 260: lavray.v1.ProfileService.UpdateGroup:output_type -> lavray.v1.Group
-	37,  // 261: lavray.v1.ProfileService.DeleteGroup:output_type -> lavray.v1.Empty
-	37,  // 262: lavray.v1.ProfileService.ReorderGroups:output_type -> lavray.v1.Empty
-	111, // 263: lavray.v1.SubscriptionService.ListSubscriptions:output_type -> lavray.v1.ListSubscriptionsResponse
-	69,  // 264: lavray.v1.SubscriptionService.CreateSubscription:output_type -> lavray.v1.Group
-	69,  // 265: lavray.v1.SubscriptionService.UpdateSubscriptionSettings:output_type -> lavray.v1.Group
-	37,  // 266: lavray.v1.SubscriptionService.DeleteSubscription:output_type -> lavray.v1.Empty
-	119, // 267: lavray.v1.SubscriptionService.UpdateSubscription:output_type -> lavray.v1.SubscriptionProgress
-	119, // 268: lavray.v1.SubscriptionService.UpdateAllSubscriptions:output_type -> lavray.v1.SubscriptionProgress
-	118, // 269: lavray.v1.SubscriptionService.RollbackSubscription:output_type -> lavray.v1.RollbackSubscriptionResponse
-	123, // 270: lavray.v1.RoutingService.ListPresets:output_type -> lavray.v1.ListPresetsResponse
-	120, // 271: lavray.v1.RoutingService.GetPreset:output_type -> lavray.v1.RoutingPreset
-	120, // 272: lavray.v1.RoutingService.CreatePreset:output_type -> lavray.v1.RoutingPreset
-	127, // 273: lavray.v1.RoutingService.UpdatePreset:output_type -> lavray.v1.UpdatePresetResponse
-	129, // 274: lavray.v1.RoutingService.DeletePreset:output_type -> lavray.v1.DeletePresetResponse
-	131, // 275: lavray.v1.RoutingService.ActivatePreset:output_type -> lavray.v1.ActivatePresetResponse
-	120, // 276: lavray.v1.RoutingService.GetActivePreset:output_type -> lavray.v1.RoutingPreset
-	120, // 277: lavray.v1.RoutingService.ResetBuiltinPreset:output_type -> lavray.v1.RoutingPreset
-	135, // 278: lavray.v1.RoutingService.ImportNekoRayRoute:output_type -> lavray.v1.ImportNekoRayRouteResponse
-	137, // 279: lavray.v1.RoutingService.ExportPreset:output_type -> lavray.v1.ExportPresetResponse
-	139, // 280: lavray.v1.RoutingService.ImportPreset:output_type -> lavray.v1.ImportPresetResponse
-	140, // 281: lavray.v1.DnsService.GetDns:output_type -> lavray.v1.DnsSettings
-	143, // 282: lavray.v1.DnsService.SetDns:output_type -> lavray.v1.SetDnsResponse
-	145, // 283: lavray.v1.DnsService.ValidateDnsJson:output_type -> lavray.v1.ValidateDnsJsonResponse
-	148, // 284: lavray.v1.SettingsService.DescribeSettings:output_type -> lavray.v1.DescribeSettingsResponse
-	151, // 285: lavray.v1.SettingsService.GetSettings:output_type -> lavray.v1.GetSettingsResponse
-	153, // 286: lavray.v1.SettingsService.SetSettings:output_type -> lavray.v1.SetSettingsResponse
-	153, // 287: lavray.v1.SettingsService.ResetSettings:output_type -> lavray.v1.SetSettingsResponse
-	156, // 288: lavray.v1.SettingsService.SubscribeSettings:output_type -> lavray.v1.SettingsChanged
-	160, // 289: lavray.v1.LogService.Subscribe:output_type -> lavray.v1.LogLine
-	162, // 290: lavray.v1.LogService.GetTail:output_type -> lavray.v1.GetTailResponse
-	164, // 291: lavray.v1.StatsService.Subscribe:output_type -> lavray.v1.StatsSnapshot
-	168, // 292: lavray.v1.StatsService.GetTrafficTotals:output_type -> lavray.v1.GetTrafficTotalsResponse
-	170, // 293: lavray.v1.StatsService.GetTrafficSummary:output_type -> lavray.v1.GetTrafficSummaryResponse
-	173, // 294: lavray.v1.ConnectionService.ListConnections:output_type -> lavray.v1.ListConnectionsResponse
-	175, // 295: lavray.v1.ConnectionService.WatchConnections:output_type -> lavray.v1.ConnectionSnapshot
-	37,  // 296: lavray.v1.ConnectionService.CloseConnection:output_type -> lavray.v1.Empty
-	179, // 297: lavray.v1.DiagnosticsService.CheckRoute:output_type -> lavray.v1.CheckRouteResponse
-	181, // 298: lavray.v1.DiagnosticsService.RunSelfCheck:output_type -> lavray.v1.RunSelfCheckResponse
-	184, // 299: lavray.v1.DiagnosticsService.GetPublicIp:output_type -> lavray.v1.GetPublicIpResponse
-	185, // 300: lavray.v1.DiagnosticsService.CheckLeaks:output_type -> lavray.v1.LeakReport
-	186, // 301: lavray.v1.GatewayService.GetGatewayStatus:output_type -> lavray.v1.GatewayStatus
-	187, // 302: lavray.v1.GatewayService.ListDevicePolicies:output_type -> lavray.v1.ListDevicePoliciesResponse
-	189, // 303: lavray.v1.GatewayService.SetDevicePolicy:output_type -> lavray.v1.DevicePolicy
-	191, // 304: lavray.v1.UpdateService.CheckUpdates:output_type -> lavray.v1.CheckUpdatesResponse
-	210, // 305: lavray.v1.UpdateService.DownloadUpdates:output_type -> lavray.v1.UpdateEvent
-	210, // 306: lavray.v1.UpdateService.ApplyUpdates:output_type -> lavray.v1.UpdateEvent
-	203, // 307: lavray.v1.UpdateService.Rollback:output_type -> lavray.v1.RollbackResponse
-	205, // 308: lavray.v1.UpdateService.GetUpdateState:output_type -> lavray.v1.UpdateStateResponse
-	209, // 309: lavray.v1.UpdateService.VerifyLocalUpdate:output_type -> lavray.v1.VerifyLocalUpdateResponse
-	216, // 310: lavray.v1.WebSessionService.GetWebModeStatus:output_type -> lavray.v1.WebModeStatus
-	219, // 311: lavray.v1.WebSessionService.SetupFirstAdmin:output_type -> lavray.v1.WebSession
-	219, // 312: lavray.v1.WebSessionService.Login:output_type -> lavray.v1.WebSession
-	37,  // 313: lavray.v1.WebSessionService.Logout:output_type -> lavray.v1.Empty
-	219, // 314: lavray.v1.WebSessionService.RenewSession:output_type -> lavray.v1.WebSession
-	219, // 315: lavray.v1.WebSessionService.WhoAmI:output_type -> lavray.v1.WebSession
-	224, // 316: lavray.v1.WebSessionService.ChangePassword:output_type -> lavray.v1.ChangePasswordResponse
-	225, // 317: lavray.v1.WebSessionService.ListSessions:output_type -> lavray.v1.ListSessionsResponse
-	37,  // 318: lavray.v1.WebSessionService.RevokeSession:output_type -> lavray.v1.Empty
-	230, // [230:319] is the sub-list for method output_type
-	141, // [141:230] is the sub-list for method input_type
-	141, // [141:141] is the sub-list for extension type_name
-	141, // [141:141] is the sub-list for extension extendee
-	0,   // [0:141] is the sub-list for field type_name
+	233, // 135: lavray.v1.ExportBackupResponse.summary:type_name -> lavray.v1.BackupSummary
+	233, // 136: lavray.v1.ImportBackupResponse.restored:type_name -> lavray.v1.BackupSummary
+	157, // 137: lavray.v1.GetSettingsResponse.ValuesEntry.value:type_name -> lavray.v1.SettingValue
+	157, // 138: lavray.v1.SetSettingsRequest.ValuesEntry.value:type_name -> lavray.v1.SettingValue
+	157, // 139: lavray.v1.SettingsChanged.ChangedEntry.value:type_name -> lavray.v1.SettingValue
+	57,  // 140: lavray.v1.GetTrafficTotalsResponse.TotalsEntry.value:type_name -> lavray.v1.TrafficCounters
+	197, // 141: lavray.v1.UpdateManifest.AssetsEntry.value:type_name -> lavray.v1.UpdateAsset
+	198, // 142: lavray.v1.UpdateManifest.PresetsEntry.value:type_name -> lavray.v1.PresetRef
+	39,  // 143: lavray.v1.CoreService.Connect:input_type -> lavray.v1.ConnectRequest
+	41,  // 144: lavray.v1.CoreService.Disconnect:input_type -> lavray.v1.DisconnectRequest
+	43,  // 145: lavray.v1.CoreService.RestartProfile:input_type -> lavray.v1.RestartProfileRequest
+	44,  // 146: lavray.v1.CoreService.GetStatus:input_type -> lavray.v1.GetStatusRequest
+	45,  // 147: lavray.v1.CoreService.SubscribeEvents:input_type -> lavray.v1.SubscribeEventsRequest
+	46,  // 148: lavray.v1.CoreService.GetRuntimeConfig:input_type -> lavray.v1.GetRuntimeConfigRequest
+	48,  // 149: lavray.v1.CoreService.Shutdown:input_type -> lavray.v1.ShutdownRequest
+	71,  // 150: lavray.v1.ProfileService.ListProfiles:input_type -> lavray.v1.ListProfilesRequest
+	73,  // 151: lavray.v1.ProfileService.GetProfile:input_type -> lavray.v1.GetProfileRequest
+	74,  // 152: lavray.v1.ProfileService.CreateProfile:input_type -> lavray.v1.CreateProfileRequest
+	75,  // 153: lavray.v1.ProfileService.UpdateProfile:input_type -> lavray.v1.UpdateProfileRequest
+	77,  // 154: lavray.v1.ProfileService.DeleteProfile:input_type -> lavray.v1.DeleteProfileRequest
+	78,  // 155: lavray.v1.ProfileService.MoveProfiles:input_type -> lavray.v1.MoveProfilesRequest
+	79,  // 156: lavray.v1.ProfileService.CloneProfiles:input_type -> lavray.v1.CloneProfilesRequest
+	81,  // 157: lavray.v1.ProfileService.ResetTraffic:input_type -> lavray.v1.ResetTrafficRequest
+	82,  // 158: lavray.v1.ProfileService.ReorderProfiles:input_type -> lavray.v1.ReorderProfilesRequest
+	83,  // 159: lavray.v1.ProfileService.RemoveUnavailableProfiles:input_type -> lavray.v1.RemoveUnavailableProfilesRequest
+	85,  // 160: lavray.v1.ProfileService.DeduplicateProfiles:input_type -> lavray.v1.DeduplicateProfilesRequest
+	87,  // 161: lavray.v1.ProfileService.SetProfileMeta:input_type -> lavray.v1.SetProfileMetaRequest
+	88,  // 162: lavray.v1.ProfileService.PreviewCustomFields:input_type -> lavray.v1.PreviewCustomFieldsRequest
+	90,  // 163: lavray.v1.ProfileService.ConfirmCustomFields:input_type -> lavray.v1.ConfirmCustomFieldsRequest
+	91,  // 164: lavray.v1.ProfileService.ImportContent:input_type -> lavray.v1.ImportContentRequest
+	94,  // 165: lavray.v1.ProfileService.ExportLinks:input_type -> lavray.v1.ExportLinksRequest
+	96,  // 166: lavray.v1.ProfileService.ExportConfig:input_type -> lavray.v1.ExportConfigRequest
+	98,  // 167: lavray.v1.ProfileService.TestLatency:input_type -> lavray.v1.TestLatencyRequest
+	100, // 168: lavray.v1.ProfileService.StopTests:input_type -> lavray.v1.StopTestsRequest
+	101, // 169: lavray.v1.ProfileService.ClearTestResults:input_type -> lavray.v1.ClearTestResultsRequest
+	102, // 170: lavray.v1.ProfileService.ResolveDomains:input_type -> lavray.v1.ResolveDomainsRequest
+	104, // 171: lavray.v1.ProfileService.ListGroups:input_type -> lavray.v1.ListGroupsRequest
+	106, // 172: lavray.v1.ProfileService.CreateGroup:input_type -> lavray.v1.CreateGroupRequest
+	107, // 173: lavray.v1.ProfileService.UpdateGroup:input_type -> lavray.v1.UpdateGroupRequest
+	108, // 174: lavray.v1.ProfileService.DeleteGroup:input_type -> lavray.v1.DeleteGroupRequest
+	109, // 175: lavray.v1.ProfileService.ReorderGroups:input_type -> lavray.v1.ReorderGroupsRequest
+	110, // 176: lavray.v1.SubscriptionService.ListSubscriptions:input_type -> lavray.v1.ListSubscriptionsRequest
+	112, // 177: lavray.v1.SubscriptionService.CreateSubscription:input_type -> lavray.v1.CreateSubscriptionRequest
+	113, // 178: lavray.v1.SubscriptionService.UpdateSubscriptionSettings:input_type -> lavray.v1.UpdateSubscriptionSettingsRequest
+	114, // 179: lavray.v1.SubscriptionService.DeleteSubscription:input_type -> lavray.v1.DeleteSubscriptionRequest
+	115, // 180: lavray.v1.SubscriptionService.UpdateSubscription:input_type -> lavray.v1.UpdateSubscriptionRequest
+	116, // 181: lavray.v1.SubscriptionService.UpdateAllSubscriptions:input_type -> lavray.v1.UpdateAllSubscriptionsRequest
+	117, // 182: lavray.v1.SubscriptionService.RollbackSubscription:input_type -> lavray.v1.RollbackSubscriptionRequest
+	122, // 183: lavray.v1.RoutingService.ListPresets:input_type -> lavray.v1.ListPresetsRequest
+	124, // 184: lavray.v1.RoutingService.GetPreset:input_type -> lavray.v1.GetPresetRequest
+	125, // 185: lavray.v1.RoutingService.CreatePreset:input_type -> lavray.v1.CreatePresetRequest
+	126, // 186: lavray.v1.RoutingService.UpdatePreset:input_type -> lavray.v1.UpdatePresetRequest
+	128, // 187: lavray.v1.RoutingService.DeletePreset:input_type -> lavray.v1.DeletePresetRequest
+	130, // 188: lavray.v1.RoutingService.ActivatePreset:input_type -> lavray.v1.ActivatePresetRequest
+	132, // 189: lavray.v1.RoutingService.GetActivePreset:input_type -> lavray.v1.GetActivePresetRequest
+	133, // 190: lavray.v1.RoutingService.ResetBuiltinPreset:input_type -> lavray.v1.ResetBuiltinPresetRequest
+	134, // 191: lavray.v1.RoutingService.ImportNekoRayRoute:input_type -> lavray.v1.ImportNekoRayRouteRequest
+	136, // 192: lavray.v1.RoutingService.ExportPreset:input_type -> lavray.v1.ExportPresetRequest
+	138, // 193: lavray.v1.RoutingService.ImportPreset:input_type -> lavray.v1.ImportPresetRequest
+	141, // 194: lavray.v1.DnsService.GetDns:input_type -> lavray.v1.GetDnsRequest
+	142, // 195: lavray.v1.DnsService.SetDns:input_type -> lavray.v1.SetDnsRequest
+	144, // 196: lavray.v1.DnsService.ValidateDnsJson:input_type -> lavray.v1.ValidateDnsJsonRequest
+	147, // 197: lavray.v1.SettingsService.DescribeSettings:input_type -> lavray.v1.DescribeSettingsRequest
+	150, // 198: lavray.v1.SettingsService.GetSettings:input_type -> lavray.v1.GetSettingsRequest
+	152, // 199: lavray.v1.SettingsService.SetSettings:input_type -> lavray.v1.SetSettingsRequest
+	154, // 200: lavray.v1.SettingsService.ResetSettings:input_type -> lavray.v1.ResetSettingsRequest
+	155, // 201: lavray.v1.SettingsService.SubscribeSettings:input_type -> lavray.v1.SubscribeSettingsRequest
+	159, // 202: lavray.v1.LogService.Subscribe:input_type -> lavray.v1.SubscribeLogsRequest
+	161, // 203: lavray.v1.LogService.GetTail:input_type -> lavray.v1.GetTailRequest
+	163, // 204: lavray.v1.StatsService.Subscribe:input_type -> lavray.v1.SubscribeStatsRequest
+	167, // 205: lavray.v1.StatsService.GetTrafficTotals:input_type -> lavray.v1.GetTrafficTotalsRequest
+	169, // 206: lavray.v1.StatsService.GetTrafficSummary:input_type -> lavray.v1.GetTrafficSummaryRequest
+	172, // 207: lavray.v1.ConnectionService.ListConnections:input_type -> lavray.v1.ListConnectionsRequest
+	174, // 208: lavray.v1.ConnectionService.WatchConnections:input_type -> lavray.v1.WatchConnectionsRequest
+	177, // 209: lavray.v1.ConnectionService.CloseConnection:input_type -> lavray.v1.CloseConnectionRequest
+	178, // 210: lavray.v1.DiagnosticsService.CheckRoute:input_type -> lavray.v1.CheckRouteRequest
+	180, // 211: lavray.v1.DiagnosticsService.RunSelfCheck:input_type -> lavray.v1.RunSelfCheckRequest
+	183, // 212: lavray.v1.DiagnosticsService.GetPublicIp:input_type -> lavray.v1.GetPublicIpRequest
+	37,  // 213: lavray.v1.DiagnosticsService.CheckLeaks:input_type -> lavray.v1.Empty
+	37,  // 214: lavray.v1.GatewayService.GetGatewayStatus:input_type -> lavray.v1.Empty
+	37,  // 215: lavray.v1.GatewayService.ListDevicePolicies:input_type -> lavray.v1.Empty
+	188, // 216: lavray.v1.GatewayService.SetDevicePolicy:input_type -> lavray.v1.SetDevicePolicyRequest
+	190, // 217: lavray.v1.UpdateService.CheckUpdates:input_type -> lavray.v1.CheckUpdatesRequest
+	200, // 218: lavray.v1.UpdateService.DownloadUpdates:input_type -> lavray.v1.DownloadUpdatesRequest
+	201, // 219: lavray.v1.UpdateService.ApplyUpdates:input_type -> lavray.v1.ApplyUpdatesRequest
+	202, // 220: lavray.v1.UpdateService.Rollback:input_type -> lavray.v1.RollbackRequest
+	204, // 221: lavray.v1.UpdateService.GetUpdateState:input_type -> lavray.v1.GetUpdateStateRequest
+	208, // 222: lavray.v1.UpdateService.VerifyLocalUpdate:input_type -> lavray.v1.VerifyLocalUpdateRequest
+	215, // 223: lavray.v1.WebSessionService.GetWebModeStatus:input_type -> lavray.v1.GetWebModeStatusRequest
+	217, // 224: lavray.v1.WebSessionService.SetupFirstAdmin:input_type -> lavray.v1.SetupFirstAdminRequest
+	218, // 225: lavray.v1.WebSessionService.Login:input_type -> lavray.v1.LoginRequest
+	220, // 226: lavray.v1.WebSessionService.Logout:input_type -> lavray.v1.LogoutRequest
+	221, // 227: lavray.v1.WebSessionService.RenewSession:input_type -> lavray.v1.RenewSessionRequest
+	222, // 228: lavray.v1.WebSessionService.WhoAmI:input_type -> lavray.v1.WhoAmIRequest
+	223, // 229: lavray.v1.WebSessionService.ChangePassword:input_type -> lavray.v1.ChangePasswordRequest
+	37,  // 230: lavray.v1.WebSessionService.ListSessions:input_type -> lavray.v1.Empty
+	227, // 231: lavray.v1.WebSessionService.RevokeSession:input_type -> lavray.v1.RevokeSessionRequest
+	228, // 232: lavray.v1.BackupService.ExportBackup:input_type -> lavray.v1.ExportBackupRequest
+	230, // 233: lavray.v1.BackupService.PreviewBackup:input_type -> lavray.v1.PreviewBackupRequest
+	231, // 234: lavray.v1.BackupService.ImportBackup:input_type -> lavray.v1.ImportBackupRequest
+	40,  // 235: lavray.v1.CoreService.Connect:output_type -> lavray.v1.ConnectResponse
+	42,  // 236: lavray.v1.CoreService.Disconnect:output_type -> lavray.v1.DisconnectResponse
+	40,  // 237: lavray.v1.CoreService.RestartProfile:output_type -> lavray.v1.ConnectResponse
+	49,  // 238: lavray.v1.CoreService.GetStatus:output_type -> lavray.v1.CoreStatus
+	52,  // 239: lavray.v1.CoreService.SubscribeEvents:output_type -> lavray.v1.CoreEvent
+	47,  // 240: lavray.v1.CoreService.GetRuntimeConfig:output_type -> lavray.v1.GetRuntimeConfigResponse
+	37,  // 241: lavray.v1.CoreService.Shutdown:output_type -> lavray.v1.Empty
+	72,  // 242: lavray.v1.ProfileService.ListProfiles:output_type -> lavray.v1.ListProfilesResponse
+	58,  // 243: lavray.v1.ProfileService.GetProfile:output_type -> lavray.v1.Profile
+	58,  // 244: lavray.v1.ProfileService.CreateProfile:output_type -> lavray.v1.Profile
+	76,  // 245: lavray.v1.ProfileService.UpdateProfile:output_type -> lavray.v1.UpdateProfileResponse
+	37,  // 246: lavray.v1.ProfileService.DeleteProfile:output_type -> lavray.v1.Empty
+	37,  // 247: lavray.v1.ProfileService.MoveProfiles:output_type -> lavray.v1.Empty
+	80,  // 248: lavray.v1.ProfileService.CloneProfiles:output_type -> lavray.v1.CloneProfilesResponse
+	37,  // 249: lavray.v1.ProfileService.ResetTraffic:output_type -> lavray.v1.Empty
+	37,  // 250: lavray.v1.ProfileService.ReorderProfiles:output_type -> lavray.v1.Empty
+	84,  // 251: lavray.v1.ProfileService.RemoveUnavailableProfiles:output_type -> lavray.v1.RemoveUnavailableResponse
+	86,  // 252: lavray.v1.ProfileService.DeduplicateProfiles:output_type -> lavray.v1.DeduplicateResponse
+	58,  // 253: lavray.v1.ProfileService.SetProfileMeta:output_type -> lavray.v1.Profile
+	89,  // 254: lavray.v1.ProfileService.PreviewCustomFields:output_type -> lavray.v1.PreviewCustomFieldsResponse
+	58,  // 255: lavray.v1.ProfileService.ConfirmCustomFields:output_type -> lavray.v1.Profile
+	92,  // 256: lavray.v1.ProfileService.ImportContent:output_type -> lavray.v1.ImportContentResponse
+	95,  // 257: lavray.v1.ProfileService.ExportLinks:output_type -> lavray.v1.ExportLinksResponse
+	97,  // 258: lavray.v1.ProfileService.ExportConfig:output_type -> lavray.v1.ExportConfigResponse
+	99,  // 259: lavray.v1.ProfileService.TestLatency:output_type -> lavray.v1.LatencyResult
+	37,  // 260: lavray.v1.ProfileService.StopTests:output_type -> lavray.v1.Empty
+	37,  // 261: lavray.v1.ProfileService.ClearTestResults:output_type -> lavray.v1.Empty
+	103, // 262: lavray.v1.ProfileService.ResolveDomains:output_type -> lavray.v1.ResolveDomainsResponse
+	105, // 263: lavray.v1.ProfileService.ListGroups:output_type -> lavray.v1.ListGroupsResponse
+	69,  // 264: lavray.v1.ProfileService.CreateGroup:output_type -> lavray.v1.Group
+	69,  // 265: lavray.v1.ProfileService.UpdateGroup:output_type -> lavray.v1.Group
+	37,  // 266: lavray.v1.ProfileService.DeleteGroup:output_type -> lavray.v1.Empty
+	37,  // 267: lavray.v1.ProfileService.ReorderGroups:output_type -> lavray.v1.Empty
+	111, // 268: lavray.v1.SubscriptionService.ListSubscriptions:output_type -> lavray.v1.ListSubscriptionsResponse
+	69,  // 269: lavray.v1.SubscriptionService.CreateSubscription:output_type -> lavray.v1.Group
+	69,  // 270: lavray.v1.SubscriptionService.UpdateSubscriptionSettings:output_type -> lavray.v1.Group
+	37,  // 271: lavray.v1.SubscriptionService.DeleteSubscription:output_type -> lavray.v1.Empty
+	119, // 272: lavray.v1.SubscriptionService.UpdateSubscription:output_type -> lavray.v1.SubscriptionProgress
+	119, // 273: lavray.v1.SubscriptionService.UpdateAllSubscriptions:output_type -> lavray.v1.SubscriptionProgress
+	118, // 274: lavray.v1.SubscriptionService.RollbackSubscription:output_type -> lavray.v1.RollbackSubscriptionResponse
+	123, // 275: lavray.v1.RoutingService.ListPresets:output_type -> lavray.v1.ListPresetsResponse
+	120, // 276: lavray.v1.RoutingService.GetPreset:output_type -> lavray.v1.RoutingPreset
+	120, // 277: lavray.v1.RoutingService.CreatePreset:output_type -> lavray.v1.RoutingPreset
+	127, // 278: lavray.v1.RoutingService.UpdatePreset:output_type -> lavray.v1.UpdatePresetResponse
+	129, // 279: lavray.v1.RoutingService.DeletePreset:output_type -> lavray.v1.DeletePresetResponse
+	131, // 280: lavray.v1.RoutingService.ActivatePreset:output_type -> lavray.v1.ActivatePresetResponse
+	120, // 281: lavray.v1.RoutingService.GetActivePreset:output_type -> lavray.v1.RoutingPreset
+	120, // 282: lavray.v1.RoutingService.ResetBuiltinPreset:output_type -> lavray.v1.RoutingPreset
+	135, // 283: lavray.v1.RoutingService.ImportNekoRayRoute:output_type -> lavray.v1.ImportNekoRayRouteResponse
+	137, // 284: lavray.v1.RoutingService.ExportPreset:output_type -> lavray.v1.ExportPresetResponse
+	139, // 285: lavray.v1.RoutingService.ImportPreset:output_type -> lavray.v1.ImportPresetResponse
+	140, // 286: lavray.v1.DnsService.GetDns:output_type -> lavray.v1.DnsSettings
+	143, // 287: lavray.v1.DnsService.SetDns:output_type -> lavray.v1.SetDnsResponse
+	145, // 288: lavray.v1.DnsService.ValidateDnsJson:output_type -> lavray.v1.ValidateDnsJsonResponse
+	148, // 289: lavray.v1.SettingsService.DescribeSettings:output_type -> lavray.v1.DescribeSettingsResponse
+	151, // 290: lavray.v1.SettingsService.GetSettings:output_type -> lavray.v1.GetSettingsResponse
+	153, // 291: lavray.v1.SettingsService.SetSettings:output_type -> lavray.v1.SetSettingsResponse
+	153, // 292: lavray.v1.SettingsService.ResetSettings:output_type -> lavray.v1.SetSettingsResponse
+	156, // 293: lavray.v1.SettingsService.SubscribeSettings:output_type -> lavray.v1.SettingsChanged
+	160, // 294: lavray.v1.LogService.Subscribe:output_type -> lavray.v1.LogLine
+	162, // 295: lavray.v1.LogService.GetTail:output_type -> lavray.v1.GetTailResponse
+	164, // 296: lavray.v1.StatsService.Subscribe:output_type -> lavray.v1.StatsSnapshot
+	168, // 297: lavray.v1.StatsService.GetTrafficTotals:output_type -> lavray.v1.GetTrafficTotalsResponse
+	170, // 298: lavray.v1.StatsService.GetTrafficSummary:output_type -> lavray.v1.GetTrafficSummaryResponse
+	173, // 299: lavray.v1.ConnectionService.ListConnections:output_type -> lavray.v1.ListConnectionsResponse
+	175, // 300: lavray.v1.ConnectionService.WatchConnections:output_type -> lavray.v1.ConnectionSnapshot
+	37,  // 301: lavray.v1.ConnectionService.CloseConnection:output_type -> lavray.v1.Empty
+	179, // 302: lavray.v1.DiagnosticsService.CheckRoute:output_type -> lavray.v1.CheckRouteResponse
+	181, // 303: lavray.v1.DiagnosticsService.RunSelfCheck:output_type -> lavray.v1.RunSelfCheckResponse
+	184, // 304: lavray.v1.DiagnosticsService.GetPublicIp:output_type -> lavray.v1.GetPublicIpResponse
+	185, // 305: lavray.v1.DiagnosticsService.CheckLeaks:output_type -> lavray.v1.LeakReport
+	186, // 306: lavray.v1.GatewayService.GetGatewayStatus:output_type -> lavray.v1.GatewayStatus
+	187, // 307: lavray.v1.GatewayService.ListDevicePolicies:output_type -> lavray.v1.ListDevicePoliciesResponse
+	189, // 308: lavray.v1.GatewayService.SetDevicePolicy:output_type -> lavray.v1.DevicePolicy
+	191, // 309: lavray.v1.UpdateService.CheckUpdates:output_type -> lavray.v1.CheckUpdatesResponse
+	210, // 310: lavray.v1.UpdateService.DownloadUpdates:output_type -> lavray.v1.UpdateEvent
+	210, // 311: lavray.v1.UpdateService.ApplyUpdates:output_type -> lavray.v1.UpdateEvent
+	203, // 312: lavray.v1.UpdateService.Rollback:output_type -> lavray.v1.RollbackResponse
+	205, // 313: lavray.v1.UpdateService.GetUpdateState:output_type -> lavray.v1.UpdateStateResponse
+	209, // 314: lavray.v1.UpdateService.VerifyLocalUpdate:output_type -> lavray.v1.VerifyLocalUpdateResponse
+	216, // 315: lavray.v1.WebSessionService.GetWebModeStatus:output_type -> lavray.v1.WebModeStatus
+	219, // 316: lavray.v1.WebSessionService.SetupFirstAdmin:output_type -> lavray.v1.WebSession
+	219, // 317: lavray.v1.WebSessionService.Login:output_type -> lavray.v1.WebSession
+	37,  // 318: lavray.v1.WebSessionService.Logout:output_type -> lavray.v1.Empty
+	219, // 319: lavray.v1.WebSessionService.RenewSession:output_type -> lavray.v1.WebSession
+	219, // 320: lavray.v1.WebSessionService.WhoAmI:output_type -> lavray.v1.WebSession
+	224, // 321: lavray.v1.WebSessionService.ChangePassword:output_type -> lavray.v1.ChangePasswordResponse
+	225, // 322: lavray.v1.WebSessionService.ListSessions:output_type -> lavray.v1.ListSessionsResponse
+	37,  // 323: lavray.v1.WebSessionService.RevokeSession:output_type -> lavray.v1.Empty
+	229, // 324: lavray.v1.BackupService.ExportBackup:output_type -> lavray.v1.ExportBackupResponse
+	233, // 325: lavray.v1.BackupService.PreviewBackup:output_type -> lavray.v1.BackupSummary
+	232, // 326: lavray.v1.BackupService.ImportBackup:output_type -> lavray.v1.ImportBackupResponse
+	235, // [235:327] is the sub-list for method output_type
+	143, // [143:235] is the sub-list for method input_type
+	143, // [143:143] is the sub-list for extension type_name
+	143, // [143:143] is the sub-list for extension extendee
+	0,   // [0:143] is the sub-list for field type_name
 }
 
 func init() { file_lavray_proto_init() }
@@ -16357,9 +16769,9 @@ func file_lavray_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_lavray_proto_rawDesc), len(file_lavray_proto_rawDesc)),
 			NumEnums:      37,
-			NumMessages:   201,
+			NumMessages:   207,
 			NumExtensions: 0,
-			NumServices:   13,
+			NumServices:   14,
 		},
 		GoTypes:           file_lavray_proto_goTypes,
 		DependencyIndexes: file_lavray_proto_depIdxs,

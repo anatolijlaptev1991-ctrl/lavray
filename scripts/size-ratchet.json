@@ -8,7 +8,7 @@
   "core/internal/api/profile_service.go": 446,
   "core/internal/api/routing_settings_service.go": 405,
   "core/internal/api/selfcheck.go": 309,
-  "core/internal/api/server.go": 479,
+  "core/internal/api/server.go": 456,
   "core/internal/api/subscription_service.go": 350,
   "core/internal/api/test_instance.go": 410,
   "core/internal/api/test_probes.go": 239,
@@ -83,7 +83,7 @@
   "ui/src/screens/screen_dns.tsx": 289,
   "ui/src/screens/screen_log.tsx": 224,
   "ui/src/screens/screen_servers.tsx": 1041,
-  "ui/src/screens/screen_settings.tsx": 1075,
+  "ui/src/screens/screen_settings.tsx": 949,
   "ui/src/screens/screen_subscriptions.tsx": 597,
   "ui/src/screens/screen_updates.tsx": 313,
   "ui/src/test-utils/coreStub.ts": 210

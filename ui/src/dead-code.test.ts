@@ -19,6 +19,7 @@ const ENTRY = new Set([
   './test-setup.ts',
   './test-harness.ts',
   './test-utils/coreStub.ts',
+  './test-utils/coreError.ts',
   './test-utils/connsKit.ts',
   './test-utils/presetKit.ts',
   './test-utils/settingsKit.tsx',

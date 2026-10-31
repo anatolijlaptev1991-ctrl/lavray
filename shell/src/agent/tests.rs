@@ -238,7 +238,9 @@ mod windows_acl {
         assert!(status.status.success(), "icacls /save не удался");
         let bytes = std::fs::read(&out).unwrap();
         let units: Vec<u16> = bytes
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|p| u16::from_le_bytes([p[0], p[1]]))
             .collect();
         let _ = std::fs::remove_file(&out);
@@ -248,6 +250,18 @@ mod windows_acl {
     fn clean(text: &str) -> String {
         text.trim_end_matches(|c: char| c.is_control() || c == ')')
             .to_owned()
+    }
+
+    /// Как SDDL называет учётную запись: встроенные администратор и гость
+    /// записываются сокращениями `LA`/`LG`, остальные — SID.
+    fn sddl_alias_of(sid: &str) -> &str {
+        if sid.ends_with("-500") {
+            "LA"
+        } else if sid.ends_with("-501") {
+            "LG"
+        } else {
+            sid
+        }
     }
 
     /// Записи DACL: (флаги, права, субъект).
@@ -290,6 +304,9 @@ mod windows_acl {
             .map(|(_, _, who)| {
                 if who == "S-1-5-18" {
                     "SY".to_owned()
+                } else if sddl_alias_of(&sid) == who {
+                    // встроенный администратор (RID 500, раннер CI) в SDDL — «LA»
+                    sid.clone()
                 } else {
                     who.clone()
                 }

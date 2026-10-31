@@ -773,6 +773,9 @@ message RemoveUnavailableProfilesRequest { // FR-UI-042 (Ctrl+Alt+R)
 message RemoveUnavailableResponse {
   repeated int64 would_remove_ids = 1;
   repeated int64 removed_ids = 2;
+  // Недоступные, которые не тронуты: активный профиль и звенья цепочек
+  // (в том числе front proxy группы).
+  repeated int64 skipped_ids = 3;
 }
 
 message DeduplicateProfilesRequest { // FR-UI-042 (Ctrl+Alt+D); ключ — FR-UI-249
@@ -938,6 +941,15 @@ message ResolveDomainsRequest {
 message ResolveDomainsResponse {
   repeated int64 resolved_ids = 1;
   repeated int64 skipped_ids = 2; // chain/custom/уже-IP
+  repeated ResolveFailure failed = 3; // не удалось: остальные профили разрешены
+}
+
+// Причина отказа ResolveDomains: id профиля и стабильный код причины
+// ("not_found" | "timeout" | "no_address" | "lookup_failed" | "canceled"),
+// без имени сервера и текста системной ошибки.
+message ResolveFailure {
+  int64 id = 1;
+  string reason = 2;
 }
 
 message ListGroupsRequest {}

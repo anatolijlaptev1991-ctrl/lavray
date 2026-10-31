@@ -1588,7 +1588,7 @@ func (x SubscriptionProgress_Phase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SubscriptionProgress_Phase.Descriptor instead.
 func (SubscriptionProgress_Phase) EnumDescriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{82, 0}
+	return file_lavray_proto_rawDescGZIP(), []int{83, 0}
 }
 
 type DnsSettings_Mode int32
@@ -1637,7 +1637,7 @@ func (x DnsSettings_Mode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DnsSettings_Mode.Descriptor instead.
 func (DnsSettings_Mode) EnumDescriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{97, 0}
+	return file_lavray_proto_rawDescGZIP(), []int{98, 0}
 }
 
 type Connection_Status int32
@@ -1689,7 +1689,7 @@ func (x Connection_Status) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use Connection_Status.Descriptor instead.
 func (Connection_Status) EnumDescriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{133, 0}
+	return file_lavray_proto_rawDescGZIP(), []int{134, 0}
 }
 
 type RunSelfCheckRequest_CheckKind int32
@@ -1756,7 +1756,7 @@ func (x RunSelfCheckRequest_CheckKind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use RunSelfCheckRequest_CheckKind.Descriptor instead.
 func (RunSelfCheckRequest_CheckKind) EnumDescriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{137, 0}
+	return file_lavray_proto_rawDescGZIP(), []int{138, 0}
 }
 
 type SelfCheckResult_Status int32
@@ -1808,7 +1808,7 @@ func (x SelfCheckResult_Status) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SelfCheckResult_Status.Descriptor instead.
 func (SelfCheckResult_Status) EnumDescriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{139, 0}
+	return file_lavray_proto_rawDescGZIP(), []int{140, 0}
 }
 
 type GetPublicIpRequest_Via int32
@@ -1857,7 +1857,7 @@ func (x GetPublicIpRequest_Via) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use GetPublicIpRequest_Via.Descriptor instead.
 func (GetPublicIpRequest_Via) EnumDescriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{140, 0}
+	return file_lavray_proto_rawDescGZIP(), []int{141, 0}
 }
 
 type GatewayStatus_Mode int32
@@ -1909,7 +1909,7 @@ func (x GatewayStatus_Mode) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use GatewayStatus_Mode.Descriptor instead.
 func (GatewayStatus_Mode) EnumDescriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{143, 0}
+	return file_lavray_proto_rawDescGZIP(), []int{144, 0}
 }
 
 type DevicePolicy_Action int32
@@ -1961,7 +1961,7 @@ func (x DevicePolicy_Action) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use DevicePolicy_Action.Descriptor instead.
 func (DevicePolicy_Action) EnumDescriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{146, 0}
+	return file_lavray_proto_rawDescGZIP(), []int{147, 0}
 }
 
 type UpdateMetadata_Type int32
@@ -2016,7 +2016,7 @@ func (x UpdateMetadata_Type) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use UpdateMetadata_Type.Descriptor instead.
 func (UpdateMetadata_Type) EnumDescriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{150, 0}
+	return file_lavray_proto_rawDescGZIP(), []int{151, 0}
 }
 
 type ComponentState_Phase int32
@@ -2080,7 +2080,7 @@ func (x ComponentState_Phase) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use ComponentState_Phase.Descriptor instead.
 func (ComponentState_Phase) EnumDescriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{164, 0}
+	return file_lavray_proto_rawDescGZIP(), []int{165, 0}
 }
 
 // Пустой запрос/ответ. Для ошибок используется модель Connect, а не поле.
@@ -5580,8 +5580,11 @@ type RemoveUnavailableResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	WouldRemoveIds []int64                `protobuf:"varint,1,rep,packed,name=would_remove_ids,json=wouldRemoveIds,proto3" json:"would_remove_ids,omitempty"`
 	RemovedIds     []int64                `protobuf:"varint,2,rep,packed,name=removed_ids,json=removedIds,proto3" json:"removed_ids,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Недоступные, которые не тронуты: активный профиль и звенья цепочек
+	// (в том числе front proxy группы).
+	SkippedIds    []int64 `protobuf:"varint,3,rep,packed,name=skipped_ids,json=skippedIds,proto3" json:"skipped_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RemoveUnavailableResponse) Reset() {
@@ -5624,6 +5627,13 @@ func (x *RemoveUnavailableResponse) GetWouldRemoveIds() []int64 {
 func (x *RemoveUnavailableResponse) GetRemovedIds() []int64 {
 	if x != nil {
 		return x.RemovedIds
+	}
+	return nil
+}
+
+func (x *RemoveUnavailableResponse) GetSkippedIds() []int64 {
+	if x != nil {
+		return x.SkippedIds
 	}
 	return nil
 }
@@ -6753,6 +6763,7 @@ type ResolveDomainsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ResolvedIds   []int64                `protobuf:"varint,1,rep,packed,name=resolved_ids,json=resolvedIds,proto3" json:"resolved_ids,omitempty"`
 	SkippedIds    []int64                `protobuf:"varint,2,rep,packed,name=skipped_ids,json=skippedIds,proto3" json:"skipped_ids,omitempty"` // chain/custom/уже-IP
+	Failed        []*ResolveFailure      `protobuf:"bytes,3,rep,name=failed,proto3" json:"failed,omitempty"`                                   // не удалось: остальные профили разрешены
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -6801,6 +6812,68 @@ func (x *ResolveDomainsResponse) GetSkippedIds() []int64 {
 	return nil
 }
 
+func (x *ResolveDomainsResponse) GetFailed() []*ResolveFailure {
+	if x != nil {
+		return x.Failed
+	}
+	return nil
+}
+
+// Причина отказа ResolveDomains: id профиля и стабильный код причины
+// ("not_found" | "timeout" | "no_address" | "lookup_failed" | "canceled"),
+// без имени сервера и текста системной ошибки.
+type ResolveFailure struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            int64                  `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveFailure) Reset() {
+	*x = ResolveFailure{}
+	mi := &file_lavray_proto_msgTypes[67]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveFailure) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveFailure) ProtoMessage() {}
+
+func (x *ResolveFailure) ProtoReflect() protoreflect.Message {
+	mi := &file_lavray_proto_msgTypes[67]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveFailure.ProtoReflect.Descriptor instead.
+func (*ResolveFailure) Descriptor() ([]byte, []int) {
+	return file_lavray_proto_rawDescGZIP(), []int{67}
+}
+
+func (x *ResolveFailure) GetId() int64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *ResolveFailure) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 type ListGroupsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -6809,7 +6882,7 @@ type ListGroupsRequest struct {
 
 func (x *ListGroupsRequest) Reset() {
 	*x = ListGroupsRequest{}
-	mi := &file_lavray_proto_msgTypes[67]
+	mi := &file_lavray_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6821,7 +6894,7 @@ func (x *ListGroupsRequest) String() string {
 func (*ListGroupsRequest) ProtoMessage() {}
 
 func (x *ListGroupsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[67]
+	mi := &file_lavray_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6834,7 +6907,7 @@ func (x *ListGroupsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGroupsRequest.ProtoReflect.Descriptor instead.
 func (*ListGroupsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{67}
+	return file_lavray_proto_rawDescGZIP(), []int{68}
 }
 
 type ListGroupsResponse struct {
@@ -6846,7 +6919,7 @@ type ListGroupsResponse struct {
 
 func (x *ListGroupsResponse) Reset() {
 	*x = ListGroupsResponse{}
-	mi := &file_lavray_proto_msgTypes[68]
+	mi := &file_lavray_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6858,7 +6931,7 @@ func (x *ListGroupsResponse) String() string {
 func (*ListGroupsResponse) ProtoMessage() {}
 
 func (x *ListGroupsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[68]
+	mi := &file_lavray_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6871,7 +6944,7 @@ func (x *ListGroupsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGroupsResponse.ProtoReflect.Descriptor instead.
 func (*ListGroupsResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{68}
+	return file_lavray_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *ListGroupsResponse) GetGroups() []*Group {
@@ -6890,7 +6963,7 @@ type CreateGroupRequest struct {
 
 func (x *CreateGroupRequest) Reset() {
 	*x = CreateGroupRequest{}
-	mi := &file_lavray_proto_msgTypes[69]
+	mi := &file_lavray_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6902,7 +6975,7 @@ func (x *CreateGroupRequest) String() string {
 func (*CreateGroupRequest) ProtoMessage() {}
 
 func (x *CreateGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[69]
+	mi := &file_lavray_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6915,7 +6988,7 @@ func (x *CreateGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateGroupRequest.ProtoReflect.Descriptor instead.
 func (*CreateGroupRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{69}
+	return file_lavray_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *CreateGroupRequest) GetGroup() *Group {
@@ -6934,7 +7007,7 @@ type UpdateGroupRequest struct {
 
 func (x *UpdateGroupRequest) Reset() {
 	*x = UpdateGroupRequest{}
-	mi := &file_lavray_proto_msgTypes[70]
+	mi := &file_lavray_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6946,7 +7019,7 @@ func (x *UpdateGroupRequest) String() string {
 func (*UpdateGroupRequest) ProtoMessage() {}
 
 func (x *UpdateGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[70]
+	mi := &file_lavray_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6959,7 +7032,7 @@ func (x *UpdateGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateGroupRequest.ProtoReflect.Descriptor instead.
 func (*UpdateGroupRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{70}
+	return file_lavray_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *UpdateGroupRequest) GetGroup() *Group {
@@ -6978,7 +7051,7 @@ type DeleteGroupRequest struct {
 
 func (x *DeleteGroupRequest) Reset() {
 	*x = DeleteGroupRequest{}
-	mi := &file_lavray_proto_msgTypes[71]
+	mi := &file_lavray_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6990,7 +7063,7 @@ func (x *DeleteGroupRequest) String() string {
 func (*DeleteGroupRequest) ProtoMessage() {}
 
 func (x *DeleteGroupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[71]
+	mi := &file_lavray_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7003,7 +7076,7 @@ func (x *DeleteGroupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteGroupRequest.ProtoReflect.Descriptor instead.
 func (*DeleteGroupRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{71}
+	return file_lavray_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *DeleteGroupRequest) GetId() int64 {
@@ -7022,7 +7095,7 @@ type ReorderGroupsRequest struct {
 
 func (x *ReorderGroupsRequest) Reset() {
 	*x = ReorderGroupsRequest{}
-	mi := &file_lavray_proto_msgTypes[72]
+	mi := &file_lavray_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7034,7 +7107,7 @@ func (x *ReorderGroupsRequest) String() string {
 func (*ReorderGroupsRequest) ProtoMessage() {}
 
 func (x *ReorderGroupsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[72]
+	mi := &file_lavray_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7047,7 +7120,7 @@ func (x *ReorderGroupsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReorderGroupsRequest.ProtoReflect.Descriptor instead.
 func (*ReorderGroupsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{72}
+	return file_lavray_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *ReorderGroupsRequest) GetOrderedIds() []int64 {
@@ -7065,7 +7138,7 @@ type ListSubscriptionsRequest struct {
 
 func (x *ListSubscriptionsRequest) Reset() {
 	*x = ListSubscriptionsRequest{}
-	mi := &file_lavray_proto_msgTypes[73]
+	mi := &file_lavray_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7077,7 +7150,7 @@ func (x *ListSubscriptionsRequest) String() string {
 func (*ListSubscriptionsRequest) ProtoMessage() {}
 
 func (x *ListSubscriptionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[73]
+	mi := &file_lavray_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7090,7 +7163,7 @@ func (x *ListSubscriptionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSubscriptionsRequest.ProtoReflect.Descriptor instead.
 func (*ListSubscriptionsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{73}
+	return file_lavray_proto_rawDescGZIP(), []int{74}
 }
 
 type ListSubscriptionsResponse struct {
@@ -7102,7 +7175,7 @@ type ListSubscriptionsResponse struct {
 
 func (x *ListSubscriptionsResponse) Reset() {
 	*x = ListSubscriptionsResponse{}
-	mi := &file_lavray_proto_msgTypes[74]
+	mi := &file_lavray_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7114,7 +7187,7 @@ func (x *ListSubscriptionsResponse) String() string {
 func (*ListSubscriptionsResponse) ProtoMessage() {}
 
 func (x *ListSubscriptionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[74]
+	mi := &file_lavray_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7127,7 +7200,7 @@ func (x *ListSubscriptionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSubscriptionsResponse.ProtoReflect.Descriptor instead.
 func (*ListSubscriptionsResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{74}
+	return file_lavray_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *ListSubscriptionsResponse) GetGroups() []*Group {
@@ -7147,7 +7220,7 @@ type CreateSubscriptionRequest struct {
 
 func (x *CreateSubscriptionRequest) Reset() {
 	*x = CreateSubscriptionRequest{}
-	mi := &file_lavray_proto_msgTypes[75]
+	mi := &file_lavray_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7159,7 +7232,7 @@ func (x *CreateSubscriptionRequest) String() string {
 func (*CreateSubscriptionRequest) ProtoMessage() {}
 
 func (x *CreateSubscriptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[75]
+	mi := &file_lavray_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7172,7 +7245,7 @@ func (x *CreateSubscriptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateSubscriptionRequest.ProtoReflect.Descriptor instead.
 func (*CreateSubscriptionRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{75}
+	return file_lavray_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *CreateSubscriptionRequest) GetName() string {
@@ -7199,7 +7272,7 @@ type UpdateSubscriptionSettingsRequest struct {
 
 func (x *UpdateSubscriptionSettingsRequest) Reset() {
 	*x = UpdateSubscriptionSettingsRequest{}
-	mi := &file_lavray_proto_msgTypes[76]
+	mi := &file_lavray_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7211,7 +7284,7 @@ func (x *UpdateSubscriptionSettingsRequest) String() string {
 func (*UpdateSubscriptionSettingsRequest) ProtoMessage() {}
 
 func (x *UpdateSubscriptionSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[76]
+	mi := &file_lavray_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7224,7 +7297,7 @@ func (x *UpdateSubscriptionSettingsRequest) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use UpdateSubscriptionSettingsRequest.ProtoReflect.Descriptor instead.
 func (*UpdateSubscriptionSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{76}
+	return file_lavray_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *UpdateSubscriptionSettingsRequest) GetGroupId() int64 {
@@ -7250,7 +7323,7 @@ type DeleteSubscriptionRequest struct {
 
 func (x *DeleteSubscriptionRequest) Reset() {
 	*x = DeleteSubscriptionRequest{}
-	mi := &file_lavray_proto_msgTypes[77]
+	mi := &file_lavray_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7262,7 +7335,7 @@ func (x *DeleteSubscriptionRequest) String() string {
 func (*DeleteSubscriptionRequest) ProtoMessage() {}
 
 func (x *DeleteSubscriptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[77]
+	mi := &file_lavray_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7275,7 +7348,7 @@ func (x *DeleteSubscriptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSubscriptionRequest.ProtoReflect.Descriptor instead.
 func (*DeleteSubscriptionRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{77}
+	return file_lavray_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *DeleteSubscriptionRequest) GetGroupId() int64 {
@@ -7307,7 +7380,7 @@ type UpdateSubscriptionRequest struct {
 
 func (x *UpdateSubscriptionRequest) Reset() {
 	*x = UpdateSubscriptionRequest{}
-	mi := &file_lavray_proto_msgTypes[78]
+	mi := &file_lavray_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7319,7 +7392,7 @@ func (x *UpdateSubscriptionRequest) String() string {
 func (*UpdateSubscriptionRequest) ProtoMessage() {}
 
 func (x *UpdateSubscriptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[78]
+	mi := &file_lavray_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7332,7 +7405,7 @@ func (x *UpdateSubscriptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateSubscriptionRequest.ProtoReflect.Descriptor instead.
 func (*UpdateSubscriptionRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{78}
+	return file_lavray_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *UpdateSubscriptionRequest) GetGroupId() int64 {
@@ -7406,7 +7479,7 @@ type UpdateAllSubscriptionsRequest struct {
 
 func (x *UpdateAllSubscriptionsRequest) Reset() {
 	*x = UpdateAllSubscriptionsRequest{}
-	mi := &file_lavray_proto_msgTypes[79]
+	mi := &file_lavray_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7418,7 +7491,7 @@ func (x *UpdateAllSubscriptionsRequest) String() string {
 func (*UpdateAllSubscriptionsRequest) ProtoMessage() {}
 
 func (x *UpdateAllSubscriptionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[79]
+	mi := &file_lavray_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7431,7 +7504,7 @@ func (x *UpdateAllSubscriptionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAllSubscriptionsRequest.ProtoReflect.Descriptor instead.
 func (*UpdateAllSubscriptionsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{79}
+	return file_lavray_proto_rawDescGZIP(), []int{80}
 }
 
 type RollbackSubscriptionRequest struct {
@@ -7443,7 +7516,7 @@ type RollbackSubscriptionRequest struct {
 
 func (x *RollbackSubscriptionRequest) Reset() {
 	*x = RollbackSubscriptionRequest{}
-	mi := &file_lavray_proto_msgTypes[80]
+	mi := &file_lavray_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7455,7 +7528,7 @@ func (x *RollbackSubscriptionRequest) String() string {
 func (*RollbackSubscriptionRequest) ProtoMessage() {}
 
 func (x *RollbackSubscriptionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[80]
+	mi := &file_lavray_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7468,7 +7541,7 @@ func (x *RollbackSubscriptionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackSubscriptionRequest.ProtoReflect.Descriptor instead.
 func (*RollbackSubscriptionRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{80}
+	return file_lavray_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *RollbackSubscriptionRequest) GetGroupId() int64 {
@@ -7489,7 +7562,7 @@ type RollbackSubscriptionResponse struct {
 
 func (x *RollbackSubscriptionResponse) Reset() {
 	*x = RollbackSubscriptionResponse{}
-	mi := &file_lavray_proto_msgTypes[81]
+	mi := &file_lavray_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7501,7 +7574,7 @@ func (x *RollbackSubscriptionResponse) String() string {
 func (*RollbackSubscriptionResponse) ProtoMessage() {}
 
 func (x *RollbackSubscriptionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[81]
+	mi := &file_lavray_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7514,7 +7587,7 @@ func (x *RollbackSubscriptionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackSubscriptionResponse.ProtoReflect.Descriptor instead.
 func (*RollbackSubscriptionResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{81}
+	return file_lavray_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *RollbackSubscriptionResponse) GetSuccess() bool {
@@ -7558,7 +7631,7 @@ type SubscriptionProgress struct {
 
 func (x *SubscriptionProgress) Reset() {
 	*x = SubscriptionProgress{}
-	mi := &file_lavray_proto_msgTypes[82]
+	mi := &file_lavray_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7570,7 +7643,7 @@ func (x *SubscriptionProgress) String() string {
 func (*SubscriptionProgress) ProtoMessage() {}
 
 func (x *SubscriptionProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[82]
+	mi := &file_lavray_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7583,7 +7656,7 @@ func (x *SubscriptionProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscriptionProgress.ProtoReflect.Descriptor instead.
 func (*SubscriptionProgress) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{82}
+	return file_lavray_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *SubscriptionProgress) GetGroupId() int64 {
@@ -7692,7 +7765,7 @@ type RoutingPreset struct {
 
 func (x *RoutingPreset) Reset() {
 	*x = RoutingPreset{}
-	mi := &file_lavray_proto_msgTypes[83]
+	mi := &file_lavray_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7704,7 +7777,7 @@ func (x *RoutingPreset) String() string {
 func (*RoutingPreset) ProtoMessage() {}
 
 func (x *RoutingPreset) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[83]
+	mi := &file_lavray_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7717,7 +7790,7 @@ func (x *RoutingPreset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RoutingPreset.ProtoReflect.Descriptor instead.
 func (*RoutingPreset) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{83}
+	return file_lavray_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *RoutingPreset) GetId() string {
@@ -7845,7 +7918,7 @@ type ProcessRule struct {
 
 func (x *ProcessRule) Reset() {
 	*x = ProcessRule{}
-	mi := &file_lavray_proto_msgTypes[84]
+	mi := &file_lavray_proto_msgTypes[85]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7857,7 +7930,7 @@ func (x *ProcessRule) String() string {
 func (*ProcessRule) ProtoMessage() {}
 
 func (x *ProcessRule) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[84]
+	mi := &file_lavray_proto_msgTypes[85]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7870,7 +7943,7 @@ func (x *ProcessRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProcessRule.ProtoReflect.Descriptor instead.
 func (*ProcessRule) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{84}
+	return file_lavray_proto_rawDescGZIP(), []int{85}
 }
 
 func (x *ProcessRule) GetProcessNames() []string {
@@ -7902,7 +7975,7 @@ type ListPresetsRequest struct {
 
 func (x *ListPresetsRequest) Reset() {
 	*x = ListPresetsRequest{}
-	mi := &file_lavray_proto_msgTypes[85]
+	mi := &file_lavray_proto_msgTypes[86]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7914,7 +7987,7 @@ func (x *ListPresetsRequest) String() string {
 func (*ListPresetsRequest) ProtoMessage() {}
 
 func (x *ListPresetsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[85]
+	mi := &file_lavray_proto_msgTypes[86]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7927,7 +8000,7 @@ func (x *ListPresetsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPresetsRequest.ProtoReflect.Descriptor instead.
 func (*ListPresetsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{85}
+	return file_lavray_proto_rawDescGZIP(), []int{86}
 }
 
 type ListPresetsResponse struct {
@@ -7940,7 +8013,7 @@ type ListPresetsResponse struct {
 
 func (x *ListPresetsResponse) Reset() {
 	*x = ListPresetsResponse{}
-	mi := &file_lavray_proto_msgTypes[86]
+	mi := &file_lavray_proto_msgTypes[87]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7952,7 +8025,7 @@ func (x *ListPresetsResponse) String() string {
 func (*ListPresetsResponse) ProtoMessage() {}
 
 func (x *ListPresetsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[86]
+	mi := &file_lavray_proto_msgTypes[87]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7965,7 +8038,7 @@ func (x *ListPresetsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListPresetsResponse.ProtoReflect.Descriptor instead.
 func (*ListPresetsResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{86}
+	return file_lavray_proto_rawDescGZIP(), []int{87}
 }
 
 func (x *ListPresetsResponse) GetPresets() []*RoutingPreset {
@@ -7991,7 +8064,7 @@ type GetPresetRequest struct {
 
 func (x *GetPresetRequest) Reset() {
 	*x = GetPresetRequest{}
-	mi := &file_lavray_proto_msgTypes[87]
+	mi := &file_lavray_proto_msgTypes[88]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8003,7 +8076,7 @@ func (x *GetPresetRequest) String() string {
 func (*GetPresetRequest) ProtoMessage() {}
 
 func (x *GetPresetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[87]
+	mi := &file_lavray_proto_msgTypes[88]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8016,7 +8089,7 @@ func (x *GetPresetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPresetRequest.ProtoReflect.Descriptor instead.
 func (*GetPresetRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{87}
+	return file_lavray_proto_rawDescGZIP(), []int{88}
 }
 
 func (x *GetPresetRequest) GetId() string {
@@ -8036,7 +8109,7 @@ type CreatePresetRequest struct {
 
 func (x *CreatePresetRequest) Reset() {
 	*x = CreatePresetRequest{}
-	mi := &file_lavray_proto_msgTypes[88]
+	mi := &file_lavray_proto_msgTypes[89]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8048,7 +8121,7 @@ func (x *CreatePresetRequest) String() string {
 func (*CreatePresetRequest) ProtoMessage() {}
 
 func (x *CreatePresetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[88]
+	mi := &file_lavray_proto_msgTypes[89]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8061,7 +8134,7 @@ func (x *CreatePresetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreatePresetRequest.ProtoReflect.Descriptor instead.
 func (*CreatePresetRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{88}
+	return file_lavray_proto_rawDescGZIP(), []int{89}
 }
 
 func (x *CreatePresetRequest) GetBuiltinSourceId() string {
@@ -8090,7 +8163,7 @@ type UpdatePresetRequest struct {
 
 func (x *UpdatePresetRequest) Reset() {
 	*x = UpdatePresetRequest{}
-	mi := &file_lavray_proto_msgTypes[89]
+	mi := &file_lavray_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8102,7 +8175,7 @@ func (x *UpdatePresetRequest) String() string {
 func (*UpdatePresetRequest) ProtoMessage() {}
 
 func (x *UpdatePresetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[89]
+	mi := &file_lavray_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8115,7 +8188,7 @@ func (x *UpdatePresetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePresetRequest.ProtoReflect.Descriptor instead.
 func (*UpdatePresetRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{89}
+	return file_lavray_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *UpdatePresetRequest) GetPreset() *RoutingPreset {
@@ -8142,7 +8215,7 @@ type UpdatePresetResponse struct {
 
 func (x *UpdatePresetResponse) Reset() {
 	*x = UpdatePresetResponse{}
-	mi := &file_lavray_proto_msgTypes[90]
+	mi := &file_lavray_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8154,7 +8227,7 @@ func (x *UpdatePresetResponse) String() string {
 func (*UpdatePresetResponse) ProtoMessage() {}
 
 func (x *UpdatePresetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[90]
+	mi := &file_lavray_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8167,7 +8240,7 @@ func (x *UpdatePresetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdatePresetResponse.ProtoReflect.Descriptor instead.
 func (*UpdatePresetResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{90}
+	return file_lavray_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *UpdatePresetResponse) GetPreset() *RoutingPreset {
@@ -8193,7 +8266,7 @@ type DeletePresetRequest struct {
 
 func (x *DeletePresetRequest) Reset() {
 	*x = DeletePresetRequest{}
-	mi := &file_lavray_proto_msgTypes[91]
+	mi := &file_lavray_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8205,7 +8278,7 @@ func (x *DeletePresetRequest) String() string {
 func (*DeletePresetRequest) ProtoMessage() {}
 
 func (x *DeletePresetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[91]
+	mi := &file_lavray_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8218,7 +8291,7 @@ func (x *DeletePresetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeletePresetRequest.ProtoReflect.Descriptor instead.
 func (*DeletePresetRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{91}
+	return file_lavray_proto_rawDescGZIP(), []int{92}
 }
 
 func (x *DeletePresetRequest) GetId() string {
@@ -8237,7 +8310,7 @@ type ActivatePresetRequest struct {
 
 func (x *ActivatePresetRequest) Reset() {
 	*x = ActivatePresetRequest{}
-	mi := &file_lavray_proto_msgTypes[92]
+	mi := &file_lavray_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8249,7 +8322,7 @@ func (x *ActivatePresetRequest) String() string {
 func (*ActivatePresetRequest) ProtoMessage() {}
 
 func (x *ActivatePresetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[92]
+	mi := &file_lavray_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8262,7 +8335,7 @@ func (x *ActivatePresetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivatePresetRequest.ProtoReflect.Descriptor instead.
 func (*ActivatePresetRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{92}
+	return file_lavray_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *ActivatePresetRequest) GetId() string {
@@ -8284,7 +8357,7 @@ type ActivatePresetResponse struct {
 
 func (x *ActivatePresetResponse) Reset() {
 	*x = ActivatePresetResponse{}
-	mi := &file_lavray_proto_msgTypes[93]
+	mi := &file_lavray_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8296,7 +8369,7 @@ func (x *ActivatePresetResponse) String() string {
 func (*ActivatePresetResponse) ProtoMessage() {}
 
 func (x *ActivatePresetResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[93]
+	mi := &file_lavray_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8309,7 +8382,7 @@ func (x *ActivatePresetResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActivatePresetResponse.ProtoReflect.Descriptor instead.
 func (*ActivatePresetResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{93}
+	return file_lavray_proto_rawDescGZIP(), []int{94}
 }
 
 func (x *ActivatePresetResponse) GetNeedsProfileRestart() bool {
@@ -8334,7 +8407,7 @@ type GetActivePresetRequest struct {
 
 func (x *GetActivePresetRequest) Reset() {
 	*x = GetActivePresetRequest{}
-	mi := &file_lavray_proto_msgTypes[94]
+	mi := &file_lavray_proto_msgTypes[95]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8346,7 +8419,7 @@ func (x *GetActivePresetRequest) String() string {
 func (*GetActivePresetRequest) ProtoMessage() {}
 
 func (x *GetActivePresetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[94]
+	mi := &file_lavray_proto_msgTypes[95]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8359,7 +8432,7 @@ func (x *GetActivePresetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetActivePresetRequest.ProtoReflect.Descriptor instead.
 func (*GetActivePresetRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{94}
+	return file_lavray_proto_rawDescGZIP(), []int{95}
 }
 
 type ResetBuiltinPresetRequest struct {
@@ -8371,7 +8444,7 @@ type ResetBuiltinPresetRequest struct {
 
 func (x *ResetBuiltinPresetRequest) Reset() {
 	*x = ResetBuiltinPresetRequest{}
-	mi := &file_lavray_proto_msgTypes[95]
+	mi := &file_lavray_proto_msgTypes[96]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8383,7 +8456,7 @@ func (x *ResetBuiltinPresetRequest) String() string {
 func (*ResetBuiltinPresetRequest) ProtoMessage() {}
 
 func (x *ResetBuiltinPresetRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[95]
+	mi := &file_lavray_proto_msgTypes[96]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8396,7 +8469,7 @@ func (x *ResetBuiltinPresetRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetBuiltinPresetRequest.ProtoReflect.Descriptor instead.
 func (*ResetBuiltinPresetRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{95}
+	return file_lavray_proto_rawDescGZIP(), []int{96}
 }
 
 func (x *ResetBuiltinPresetRequest) GetId() string {
@@ -8416,7 +8489,7 @@ type ImportNekoRayRouteRequest struct {
 
 func (x *ImportNekoRayRouteRequest) Reset() {
 	*x = ImportNekoRayRouteRequest{}
-	mi := &file_lavray_proto_msgTypes[96]
+	mi := &file_lavray_proto_msgTypes[97]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8428,7 +8501,7 @@ func (x *ImportNekoRayRouteRequest) String() string {
 func (*ImportNekoRayRouteRequest) ProtoMessage() {}
 
 func (x *ImportNekoRayRouteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[96]
+	mi := &file_lavray_proto_msgTypes[97]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8441,7 +8514,7 @@ func (x *ImportNekoRayRouteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportNekoRayRouteRequest.ProtoReflect.Descriptor instead.
 func (*ImportNekoRayRouteRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{96}
+	return file_lavray_proto_rawDescGZIP(), []int{97}
 }
 
 func (x *ImportNekoRayRouteRequest) GetNekoboxJson() string {
@@ -8488,7 +8561,7 @@ type DnsSettings struct {
 
 func (x *DnsSettings) Reset() {
 	*x = DnsSettings{}
-	mi := &file_lavray_proto_msgTypes[97]
+	mi := &file_lavray_proto_msgTypes[98]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8500,7 +8573,7 @@ func (x *DnsSettings) String() string {
 func (*DnsSettings) ProtoMessage() {}
 
 func (x *DnsSettings) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[97]
+	mi := &file_lavray_proto_msgTypes[98]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8513,7 +8586,7 @@ func (x *DnsSettings) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DnsSettings.ProtoReflect.Descriptor instead.
 func (*DnsSettings) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{97}
+	return file_lavray_proto_rawDescGZIP(), []int{98}
 }
 
 func (x *DnsSettings) GetMode() DnsSettings_Mode {
@@ -8587,7 +8660,7 @@ type GetDnsRequest struct {
 
 func (x *GetDnsRequest) Reset() {
 	*x = GetDnsRequest{}
-	mi := &file_lavray_proto_msgTypes[98]
+	mi := &file_lavray_proto_msgTypes[99]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8599,7 +8672,7 @@ func (x *GetDnsRequest) String() string {
 func (*GetDnsRequest) ProtoMessage() {}
 
 func (x *GetDnsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[98]
+	mi := &file_lavray_proto_msgTypes[99]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8612,7 +8685,7 @@ func (x *GetDnsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDnsRequest.ProtoReflect.Descriptor instead.
 func (*GetDnsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{98}
+	return file_lavray_proto_rawDescGZIP(), []int{99}
 }
 
 type SetDnsRequest struct {
@@ -8625,7 +8698,7 @@ type SetDnsRequest struct {
 
 func (x *SetDnsRequest) Reset() {
 	*x = SetDnsRequest{}
-	mi := &file_lavray_proto_msgTypes[99]
+	mi := &file_lavray_proto_msgTypes[100]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8637,7 +8710,7 @@ func (x *SetDnsRequest) String() string {
 func (*SetDnsRequest) ProtoMessage() {}
 
 func (x *SetDnsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[99]
+	mi := &file_lavray_proto_msgTypes[100]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8650,7 +8723,7 @@ func (x *SetDnsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDnsRequest.ProtoReflect.Descriptor instead.
 func (*SetDnsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{99}
+	return file_lavray_proto_rawDescGZIP(), []int{100}
 }
 
 func (x *SetDnsRequest) GetDns() *DnsSettings {
@@ -8678,7 +8751,7 @@ type SetDnsResponse struct {
 
 func (x *SetDnsResponse) Reset() {
 	*x = SetDnsResponse{}
-	mi := &file_lavray_proto_msgTypes[100]
+	mi := &file_lavray_proto_msgTypes[101]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8690,7 +8763,7 @@ func (x *SetDnsResponse) String() string {
 func (*SetDnsResponse) ProtoMessage() {}
 
 func (x *SetDnsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[100]
+	mi := &file_lavray_proto_msgTypes[101]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8703,7 +8776,7 @@ func (x *SetDnsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDnsResponse.ProtoReflect.Descriptor instead.
 func (*SetDnsResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{100}
+	return file_lavray_proto_rawDescGZIP(), []int{101}
 }
 
 func (x *SetDnsResponse) GetNeedsProfileRestart() bool {
@@ -8736,7 +8809,7 @@ type ValidateDnsJsonRequest struct {
 
 func (x *ValidateDnsJsonRequest) Reset() {
 	*x = ValidateDnsJsonRequest{}
-	mi := &file_lavray_proto_msgTypes[101]
+	mi := &file_lavray_proto_msgTypes[102]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8748,7 +8821,7 @@ func (x *ValidateDnsJsonRequest) String() string {
 func (*ValidateDnsJsonRequest) ProtoMessage() {}
 
 func (x *ValidateDnsJsonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[101]
+	mi := &file_lavray_proto_msgTypes[102]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8761,7 +8834,7 @@ func (x *ValidateDnsJsonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateDnsJsonRequest.ProtoReflect.Descriptor instead.
 func (*ValidateDnsJsonRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{101}
+	return file_lavray_proto_rawDescGZIP(), []int{102}
 }
 
 func (x *ValidateDnsJsonRequest) GetJson() string {
@@ -8782,7 +8855,7 @@ type ValidateDnsJsonResponse struct {
 
 func (x *ValidateDnsJsonResponse) Reset() {
 	*x = ValidateDnsJsonResponse{}
-	mi := &file_lavray_proto_msgTypes[102]
+	mi := &file_lavray_proto_msgTypes[103]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8794,7 +8867,7 @@ func (x *ValidateDnsJsonResponse) String() string {
 func (*ValidateDnsJsonResponse) ProtoMessage() {}
 
 func (x *ValidateDnsJsonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[102]
+	mi := &file_lavray_proto_msgTypes[103]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8807,7 +8880,7 @@ func (x *ValidateDnsJsonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ValidateDnsJsonResponse.ProtoReflect.Descriptor instead.
 func (*ValidateDnsJsonResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{102}
+	return file_lavray_proto_rawDescGZIP(), []int{103}
 }
 
 func (x *ValidateDnsJsonResponse) GetValid() bool {
@@ -8847,7 +8920,7 @@ type SettingDescriptor struct {
 
 func (x *SettingDescriptor) Reset() {
 	*x = SettingDescriptor{}
-	mi := &file_lavray_proto_msgTypes[103]
+	mi := &file_lavray_proto_msgTypes[104]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8859,7 +8932,7 @@ func (x *SettingDescriptor) String() string {
 func (*SettingDescriptor) ProtoMessage() {}
 
 func (x *SettingDescriptor) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[103]
+	mi := &file_lavray_proto_msgTypes[104]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8872,7 +8945,7 @@ func (x *SettingDescriptor) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettingDescriptor.ProtoReflect.Descriptor instead.
 func (*SettingDescriptor) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{103}
+	return file_lavray_proto_rawDescGZIP(), []int{104}
 }
 
 func (x *SettingDescriptor) GetKey() string {
@@ -8939,7 +9012,7 @@ type DescribeSettingsRequest struct {
 
 func (x *DescribeSettingsRequest) Reset() {
 	*x = DescribeSettingsRequest{}
-	mi := &file_lavray_proto_msgTypes[104]
+	mi := &file_lavray_proto_msgTypes[105]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8951,7 +9024,7 @@ func (x *DescribeSettingsRequest) String() string {
 func (*DescribeSettingsRequest) ProtoMessage() {}
 
 func (x *DescribeSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[104]
+	mi := &file_lavray_proto_msgTypes[105]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -8964,7 +9037,7 @@ func (x *DescribeSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeSettingsRequest.ProtoReflect.Descriptor instead.
 func (*DescribeSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{104}
+	return file_lavray_proto_rawDescGZIP(), []int{105}
 }
 
 type DescribeSettingsResponse struct {
@@ -8977,7 +9050,7 @@ type DescribeSettingsResponse struct {
 
 func (x *DescribeSettingsResponse) Reset() {
 	*x = DescribeSettingsResponse{}
-	mi := &file_lavray_proto_msgTypes[105]
+	mi := &file_lavray_proto_msgTypes[106]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -8989,7 +9062,7 @@ func (x *DescribeSettingsResponse) String() string {
 func (*DescribeSettingsResponse) ProtoMessage() {}
 
 func (x *DescribeSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[105]
+	mi := &file_lavray_proto_msgTypes[106]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9002,7 +9075,7 @@ func (x *DescribeSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DescribeSettingsResponse.ProtoReflect.Descriptor instead.
 func (*DescribeSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{105}
+	return file_lavray_proto_rawDescGZIP(), []int{106}
 }
 
 func (x *DescribeSettingsResponse) GetDescriptors() []*SettingDescriptor {
@@ -9029,7 +9102,7 @@ type SettingGroup struct {
 
 func (x *SettingGroup) Reset() {
 	*x = SettingGroup{}
-	mi := &file_lavray_proto_msgTypes[106]
+	mi := &file_lavray_proto_msgTypes[107]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9041,7 +9114,7 @@ func (x *SettingGroup) String() string {
 func (*SettingGroup) ProtoMessage() {}
 
 func (x *SettingGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[106]
+	mi := &file_lavray_proto_msgTypes[107]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9054,7 +9127,7 @@ func (x *SettingGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettingGroup.ProtoReflect.Descriptor instead.
 func (*SettingGroup) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{106}
+	return file_lavray_proto_rawDescGZIP(), []int{107}
 }
 
 func (x *SettingGroup) GetId() string {
@@ -9080,7 +9153,7 @@ type GetSettingsRequest struct {
 
 func (x *GetSettingsRequest) Reset() {
 	*x = GetSettingsRequest{}
-	mi := &file_lavray_proto_msgTypes[107]
+	mi := &file_lavray_proto_msgTypes[108]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9092,7 +9165,7 @@ func (x *GetSettingsRequest) String() string {
 func (*GetSettingsRequest) ProtoMessage() {}
 
 func (x *GetSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[107]
+	mi := &file_lavray_proto_msgTypes[108]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9105,7 +9178,7 @@ func (x *GetSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSettingsRequest.ProtoReflect.Descriptor instead.
 func (*GetSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{107}
+	return file_lavray_proto_rawDescGZIP(), []int{108}
 }
 
 func (x *GetSettingsRequest) GetKeys() []string {
@@ -9124,7 +9197,7 @@ type GetSettingsResponse struct {
 
 func (x *GetSettingsResponse) Reset() {
 	*x = GetSettingsResponse{}
-	mi := &file_lavray_proto_msgTypes[108]
+	mi := &file_lavray_proto_msgTypes[109]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9136,7 +9209,7 @@ func (x *GetSettingsResponse) String() string {
 func (*GetSettingsResponse) ProtoMessage() {}
 
 func (x *GetSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[108]
+	mi := &file_lavray_proto_msgTypes[109]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9149,7 +9222,7 @@ func (x *GetSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSettingsResponse.ProtoReflect.Descriptor instead.
 func (*GetSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{108}
+	return file_lavray_proto_rawDescGZIP(), []int{109}
 }
 
 func (x *GetSettingsResponse) GetValues() map[string]*SettingValue {
@@ -9168,7 +9241,7 @@ type SetSettingsRequest struct {
 
 func (x *SetSettingsRequest) Reset() {
 	*x = SetSettingsRequest{}
-	mi := &file_lavray_proto_msgTypes[109]
+	mi := &file_lavray_proto_msgTypes[110]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9180,7 +9253,7 @@ func (x *SetSettingsRequest) String() string {
 func (*SetSettingsRequest) ProtoMessage() {}
 
 func (x *SetSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[109]
+	mi := &file_lavray_proto_msgTypes[110]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9193,7 +9266,7 @@ func (x *SetSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSettingsRequest.ProtoReflect.Descriptor instead.
 func (*SetSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{109}
+	return file_lavray_proto_rawDescGZIP(), []int{110}
 }
 
 func (x *SetSettingsRequest) GetValues() map[string]*SettingValue {
@@ -9214,7 +9287,7 @@ type SetSettingsResponse struct {
 
 func (x *SetSettingsResponse) Reset() {
 	*x = SetSettingsResponse{}
-	mi := &file_lavray_proto_msgTypes[110]
+	mi := &file_lavray_proto_msgTypes[111]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9226,7 +9299,7 @@ func (x *SetSettingsResponse) String() string {
 func (*SetSettingsResponse) ProtoMessage() {}
 
 func (x *SetSettingsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[110]
+	mi := &file_lavray_proto_msgTypes[111]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9239,7 +9312,7 @@ func (x *SetSettingsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSettingsResponse.ProtoReflect.Descriptor instead.
 func (*SetSettingsResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{110}
+	return file_lavray_proto_rawDescGZIP(), []int{111}
 }
 
 func (x *SetSettingsResponse) GetAcceptedKeys() []string {
@@ -9272,7 +9345,7 @@ type ResetSettingsRequest struct {
 
 func (x *ResetSettingsRequest) Reset() {
 	*x = ResetSettingsRequest{}
-	mi := &file_lavray_proto_msgTypes[111]
+	mi := &file_lavray_proto_msgTypes[112]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9284,7 +9357,7 @@ func (x *ResetSettingsRequest) String() string {
 func (*ResetSettingsRequest) ProtoMessage() {}
 
 func (x *ResetSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[111]
+	mi := &file_lavray_proto_msgTypes[112]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9297,7 +9370,7 @@ func (x *ResetSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResetSettingsRequest.ProtoReflect.Descriptor instead.
 func (*ResetSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{111}
+	return file_lavray_proto_rawDescGZIP(), []int{112}
 }
 
 func (x *ResetSettingsRequest) GetKeys() []string {
@@ -9315,7 +9388,7 @@ type SubscribeSettingsRequest struct {
 
 func (x *SubscribeSettingsRequest) Reset() {
 	*x = SubscribeSettingsRequest{}
-	mi := &file_lavray_proto_msgTypes[112]
+	mi := &file_lavray_proto_msgTypes[113]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9327,7 +9400,7 @@ func (x *SubscribeSettingsRequest) String() string {
 func (*SubscribeSettingsRequest) ProtoMessage() {}
 
 func (x *SubscribeSettingsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[112]
+	mi := &file_lavray_proto_msgTypes[113]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9340,7 +9413,7 @@ func (x *SubscribeSettingsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeSettingsRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeSettingsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{112}
+	return file_lavray_proto_rawDescGZIP(), []int{113}
 }
 
 type SettingsChanged struct {
@@ -9353,7 +9426,7 @@ type SettingsChanged struct {
 
 func (x *SettingsChanged) Reset() {
 	*x = SettingsChanged{}
-	mi := &file_lavray_proto_msgTypes[113]
+	mi := &file_lavray_proto_msgTypes[114]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9365,7 +9438,7 @@ func (x *SettingsChanged) String() string {
 func (*SettingsChanged) ProtoMessage() {}
 
 func (x *SettingsChanged) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[113]
+	mi := &file_lavray_proto_msgTypes[114]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9378,7 +9451,7 @@ func (x *SettingsChanged) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettingsChanged.ProtoReflect.Descriptor instead.
 func (*SettingsChanged) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{113}
+	return file_lavray_proto_rawDescGZIP(), []int{114}
 }
 
 func (x *SettingsChanged) GetChanged() map[string]*SettingValue {
@@ -9412,7 +9485,7 @@ type SettingValue struct {
 
 func (x *SettingValue) Reset() {
 	*x = SettingValue{}
-	mi := &file_lavray_proto_msgTypes[114]
+	mi := &file_lavray_proto_msgTypes[115]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9424,7 +9497,7 @@ func (x *SettingValue) String() string {
 func (*SettingValue) ProtoMessage() {}
 
 func (x *SettingValue) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[114]
+	mi := &file_lavray_proto_msgTypes[115]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9437,7 +9510,7 @@ func (x *SettingValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SettingValue.ProtoReflect.Descriptor instead.
 func (*SettingValue) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{114}
+	return file_lavray_proto_rawDescGZIP(), []int{115}
 }
 
 func (x *SettingValue) GetValue() isSettingValue_Value {
@@ -9550,7 +9623,7 @@ type StringList struct {
 
 func (x *StringList) Reset() {
 	*x = StringList{}
-	mi := &file_lavray_proto_msgTypes[115]
+	mi := &file_lavray_proto_msgTypes[116]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9562,7 +9635,7 @@ func (x *StringList) String() string {
 func (*StringList) ProtoMessage() {}
 
 func (x *StringList) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[115]
+	mi := &file_lavray_proto_msgTypes[116]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9575,7 +9648,7 @@ func (x *StringList) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StringList.ProtoReflect.Descriptor instead.
 func (*StringList) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{115}
+	return file_lavray_proto_rawDescGZIP(), []int{116}
 }
 
 func (x *StringList) GetItems() []string {
@@ -9599,7 +9672,7 @@ type SubscribeLogsRequest struct {
 
 func (x *SubscribeLogsRequest) Reset() {
 	*x = SubscribeLogsRequest{}
-	mi := &file_lavray_proto_msgTypes[116]
+	mi := &file_lavray_proto_msgTypes[117]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9611,7 +9684,7 @@ func (x *SubscribeLogsRequest) String() string {
 func (*SubscribeLogsRequest) ProtoMessage() {}
 
 func (x *SubscribeLogsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[116]
+	mi := &file_lavray_proto_msgTypes[117]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9624,7 +9697,7 @@ func (x *SubscribeLogsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeLogsRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeLogsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{116}
+	return file_lavray_proto_rawDescGZIP(), []int{117}
 }
 
 func (x *SubscribeLogsRequest) GetMinLevel() LogLevel {
@@ -9681,7 +9754,7 @@ type LogLine struct {
 
 func (x *LogLine) Reset() {
 	*x = LogLine{}
-	mi := &file_lavray_proto_msgTypes[117]
+	mi := &file_lavray_proto_msgTypes[118]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9693,7 +9766,7 @@ func (x *LogLine) String() string {
 func (*LogLine) ProtoMessage() {}
 
 func (x *LogLine) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[117]
+	mi := &file_lavray_proto_msgTypes[118]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9706,7 +9779,7 @@ func (x *LogLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogLine.ProtoReflect.Descriptor instead.
 func (*LogLine) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{117}
+	return file_lavray_proto_rawDescGZIP(), []int{118}
 }
 
 func (x *LogLine) GetTsMs() int64 {
@@ -9746,7 +9819,7 @@ type GetTailRequest struct {
 
 func (x *GetTailRequest) Reset() {
 	*x = GetTailRequest{}
-	mi := &file_lavray_proto_msgTypes[118]
+	mi := &file_lavray_proto_msgTypes[119]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9758,7 +9831,7 @@ func (x *GetTailRequest) String() string {
 func (*GetTailRequest) ProtoMessage() {}
 
 func (x *GetTailRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[118]
+	mi := &file_lavray_proto_msgTypes[119]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9771,7 +9844,7 @@ func (x *GetTailRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTailRequest.ProtoReflect.Descriptor instead.
 func (*GetTailRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{118}
+	return file_lavray_proto_rawDescGZIP(), []int{119}
 }
 
 func (x *GetTailRequest) GetLines() int32 {
@@ -9790,7 +9863,7 @@ type GetTailResponse struct {
 
 func (x *GetTailResponse) Reset() {
 	*x = GetTailResponse{}
-	mi := &file_lavray_proto_msgTypes[119]
+	mi := &file_lavray_proto_msgTypes[120]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9802,7 +9875,7 @@ func (x *GetTailResponse) String() string {
 func (*GetTailResponse) ProtoMessage() {}
 
 func (x *GetTailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[119]
+	mi := &file_lavray_proto_msgTypes[120]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9815,7 +9888,7 @@ func (x *GetTailResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTailResponse.ProtoReflect.Descriptor instead.
 func (*GetTailResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{119}
+	return file_lavray_proto_rawDescGZIP(), []int{120}
 }
 
 func (x *GetTailResponse) GetLines() []*LogLine {
@@ -9835,7 +9908,7 @@ type SubscribeStatsRequest struct {
 
 func (x *SubscribeStatsRequest) Reset() {
 	*x = SubscribeStatsRequest{}
-	mi := &file_lavray_proto_msgTypes[120]
+	mi := &file_lavray_proto_msgTypes[121]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9847,7 +9920,7 @@ func (x *SubscribeStatsRequest) String() string {
 func (*SubscribeStatsRequest) ProtoMessage() {}
 
 func (x *SubscribeStatsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[120]
+	mi := &file_lavray_proto_msgTypes[121]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9860,7 +9933,7 @@ func (x *SubscribeStatsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubscribeStatsRequest.ProtoReflect.Descriptor instead.
 func (*SubscribeStatsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{120}
+	return file_lavray_proto_rawDescGZIP(), []int{121}
 }
 
 func (x *SubscribeStatsRequest) GetIntervalMs() int32 {
@@ -9889,7 +9962,7 @@ type StatsSnapshot struct {
 
 func (x *StatsSnapshot) Reset() {
 	*x = StatsSnapshot{}
-	mi := &file_lavray_proto_msgTypes[121]
+	mi := &file_lavray_proto_msgTypes[122]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9901,7 +9974,7 @@ func (x *StatsSnapshot) String() string {
 func (*StatsSnapshot) ProtoMessage() {}
 
 func (x *StatsSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[121]
+	mi := &file_lavray_proto_msgTypes[122]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9914,7 +9987,7 @@ func (x *StatsSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StatsSnapshot.ProtoReflect.Descriptor instead.
 func (*StatsSnapshot) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{121}
+	return file_lavray_proto_rawDescGZIP(), []int{122}
 }
 
 func (x *StatsSnapshot) GetTsMs() int64 {
@@ -9958,7 +10031,7 @@ type TagStat struct {
 
 func (x *TagStat) Reset() {
 	*x = TagStat{}
-	mi := &file_lavray_proto_msgTypes[122]
+	mi := &file_lavray_proto_msgTypes[123]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -9970,7 +10043,7 @@ func (x *TagStat) String() string {
 func (*TagStat) ProtoMessage() {}
 
 func (x *TagStat) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[122]
+	mi := &file_lavray_proto_msgTypes[123]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -9983,7 +10056,7 @@ func (x *TagStat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TagStat.ProtoReflect.Descriptor instead.
 func (*TagStat) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{122}
+	return file_lavray_proto_rawDescGZIP(), []int{123}
 }
 
 func (x *TagStat) GetTag() string {
@@ -10033,7 +10106,7 @@ type SessionStat struct {
 
 func (x *SessionStat) Reset() {
 	*x = SessionStat{}
-	mi := &file_lavray_proto_msgTypes[123]
+	mi := &file_lavray_proto_msgTypes[124]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10045,7 +10118,7 @@ func (x *SessionStat) String() string {
 func (*SessionStat) ProtoMessage() {}
 
 func (x *SessionStat) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[123]
+	mi := &file_lavray_proto_msgTypes[124]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10058,7 +10131,7 @@ func (x *SessionStat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionStat.ProtoReflect.Descriptor instead.
 func (*SessionStat) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{123}
+	return file_lavray_proto_rawDescGZIP(), []int{124}
 }
 
 func (x *SessionStat) GetProfileId() int64 {
@@ -10098,7 +10171,7 @@ type GetTrafficTotalsRequest struct {
 
 func (x *GetTrafficTotalsRequest) Reset() {
 	*x = GetTrafficTotalsRequest{}
-	mi := &file_lavray_proto_msgTypes[124]
+	mi := &file_lavray_proto_msgTypes[125]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10110,7 +10183,7 @@ func (x *GetTrafficTotalsRequest) String() string {
 func (*GetTrafficTotalsRequest) ProtoMessage() {}
 
 func (x *GetTrafficTotalsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[124]
+	mi := &file_lavray_proto_msgTypes[125]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10123,7 +10196,7 @@ func (x *GetTrafficTotalsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTrafficTotalsRequest.ProtoReflect.Descriptor instead.
 func (*GetTrafficTotalsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{124}
+	return file_lavray_proto_rawDescGZIP(), []int{125}
 }
 
 func (x *GetTrafficTotalsRequest) GetProfileIds() []int64 {
@@ -10142,7 +10215,7 @@ type GetTrafficTotalsResponse struct {
 
 func (x *GetTrafficTotalsResponse) Reset() {
 	*x = GetTrafficTotalsResponse{}
-	mi := &file_lavray_proto_msgTypes[125]
+	mi := &file_lavray_proto_msgTypes[126]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10154,7 +10227,7 @@ func (x *GetTrafficTotalsResponse) String() string {
 func (*GetTrafficTotalsResponse) ProtoMessage() {}
 
 func (x *GetTrafficTotalsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[125]
+	mi := &file_lavray_proto_msgTypes[126]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10167,7 +10240,7 @@ func (x *GetTrafficTotalsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTrafficTotalsResponse.ProtoReflect.Descriptor instead.
 func (*GetTrafficTotalsResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{125}
+	return file_lavray_proto_rawDescGZIP(), []int{126}
 }
 
 func (x *GetTrafficTotalsResponse) GetTotals() map[int64]*TrafficCounters {
@@ -10187,7 +10260,7 @@ type GetTrafficSummaryRequest struct {
 
 func (x *GetTrafficSummaryRequest) Reset() {
 	*x = GetTrafficSummaryRequest{}
-	mi := &file_lavray_proto_msgTypes[126]
+	mi := &file_lavray_proto_msgTypes[127]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10199,7 +10272,7 @@ func (x *GetTrafficSummaryRequest) String() string {
 func (*GetTrafficSummaryRequest) ProtoMessage() {}
 
 func (x *GetTrafficSummaryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[126]
+	mi := &file_lavray_proto_msgTypes[127]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10212,7 +10285,7 @@ func (x *GetTrafficSummaryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTrafficSummaryRequest.ProtoReflect.Descriptor instead.
 func (*GetTrafficSummaryRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{126}
+	return file_lavray_proto_rawDescGZIP(), []int{127}
 }
 
 func (x *GetTrafficSummaryRequest) GetGroupId() int64 {
@@ -10238,7 +10311,7 @@ type GetTrafficSummaryResponse struct {
 
 func (x *GetTrafficSummaryResponse) Reset() {
 	*x = GetTrafficSummaryResponse{}
-	mi := &file_lavray_proto_msgTypes[127]
+	mi := &file_lavray_proto_msgTypes[128]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10250,7 +10323,7 @@ func (x *GetTrafficSummaryResponse) String() string {
 func (*GetTrafficSummaryResponse) ProtoMessage() {}
 
 func (x *GetTrafficSummaryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[127]
+	mi := &file_lavray_proto_msgTypes[128]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10263,7 +10336,7 @@ func (x *GetTrafficSummaryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTrafficSummaryResponse.ProtoReflect.Descriptor instead.
 func (*GetTrafficSummaryResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{127}
+	return file_lavray_proto_rawDescGZIP(), []int{128}
 }
 
 func (x *GetTrafficSummaryResponse) GetGroups() []*GroupTrafficSummary {
@@ -10287,7 +10360,7 @@ type GroupTrafficSummary struct {
 
 func (x *GroupTrafficSummary) Reset() {
 	*x = GroupTrafficSummary{}
-	mi := &file_lavray_proto_msgTypes[128]
+	mi := &file_lavray_proto_msgTypes[129]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10299,7 +10372,7 @@ func (x *GroupTrafficSummary) String() string {
 func (*GroupTrafficSummary) ProtoMessage() {}
 
 func (x *GroupTrafficSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[128]
+	mi := &file_lavray_proto_msgTypes[129]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10312,7 +10385,7 @@ func (x *GroupTrafficSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GroupTrafficSummary.ProtoReflect.Descriptor instead.
 func (*GroupTrafficSummary) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{128}
+	return file_lavray_proto_rawDescGZIP(), []int{129}
 }
 
 func (x *GroupTrafficSummary) GetGroupId() int64 {
@@ -10368,7 +10441,7 @@ type ListConnectionsRequest struct {
 
 func (x *ListConnectionsRequest) Reset() {
 	*x = ListConnectionsRequest{}
-	mi := &file_lavray_proto_msgTypes[129]
+	mi := &file_lavray_proto_msgTypes[130]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10380,7 +10453,7 @@ func (x *ListConnectionsRequest) String() string {
 func (*ListConnectionsRequest) ProtoMessage() {}
 
 func (x *ListConnectionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[129]
+	mi := &file_lavray_proto_msgTypes[130]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10393,7 +10466,7 @@ func (x *ListConnectionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConnectionsRequest.ProtoReflect.Descriptor instead.
 func (*ListConnectionsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{129}
+	return file_lavray_proto_rawDescGZIP(), []int{130}
 }
 
 func (x *ListConnectionsRequest) GetOutboundFilter() string {
@@ -10426,7 +10499,7 @@ type ListConnectionsResponse struct {
 
 func (x *ListConnectionsResponse) Reset() {
 	*x = ListConnectionsResponse{}
-	mi := &file_lavray_proto_msgTypes[130]
+	mi := &file_lavray_proto_msgTypes[131]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10438,7 +10511,7 @@ func (x *ListConnectionsResponse) String() string {
 func (*ListConnectionsResponse) ProtoMessage() {}
 
 func (x *ListConnectionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[130]
+	mi := &file_lavray_proto_msgTypes[131]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10451,7 +10524,7 @@ func (x *ListConnectionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListConnectionsResponse.ProtoReflect.Descriptor instead.
 func (*ListConnectionsResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{130}
+	return file_lavray_proto_rawDescGZIP(), []int{131}
 }
 
 func (x *ListConnectionsResponse) GetConnections() []*Connection {
@@ -10473,7 +10546,7 @@ type WatchConnectionsRequest struct {
 
 func (x *WatchConnectionsRequest) Reset() {
 	*x = WatchConnectionsRequest{}
-	mi := &file_lavray_proto_msgTypes[131]
+	mi := &file_lavray_proto_msgTypes[132]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10485,7 +10558,7 @@ func (x *WatchConnectionsRequest) String() string {
 func (*WatchConnectionsRequest) ProtoMessage() {}
 
 func (x *WatchConnectionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[131]
+	mi := &file_lavray_proto_msgTypes[132]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10498,7 +10571,7 @@ func (x *WatchConnectionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WatchConnectionsRequest.ProtoReflect.Descriptor instead.
 func (*WatchConnectionsRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{131}
+	return file_lavray_proto_rawDescGZIP(), []int{132}
 }
 
 func (x *WatchConnectionsRequest) GetIntervalMs() int32 {
@@ -10540,7 +10613,7 @@ type ConnectionSnapshot struct {
 
 func (x *ConnectionSnapshot) Reset() {
 	*x = ConnectionSnapshot{}
-	mi := &file_lavray_proto_msgTypes[132]
+	mi := &file_lavray_proto_msgTypes[133]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10552,7 +10625,7 @@ func (x *ConnectionSnapshot) String() string {
 func (*ConnectionSnapshot) ProtoMessage() {}
 
 func (x *ConnectionSnapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[132]
+	mi := &file_lavray_proto_msgTypes[133]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10565,7 +10638,7 @@ func (x *ConnectionSnapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectionSnapshot.ProtoReflect.Descriptor instead.
 func (*ConnectionSnapshot) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{132}
+	return file_lavray_proto_rawDescGZIP(), []int{133}
 }
 
 func (x *ConnectionSnapshot) GetActive() []*Connection {
@@ -10611,7 +10684,7 @@ type Connection struct {
 
 func (x *Connection) Reset() {
 	*x = Connection{}
-	mi := &file_lavray_proto_msgTypes[133]
+	mi := &file_lavray_proto_msgTypes[134]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10623,7 +10696,7 @@ func (x *Connection) String() string {
 func (*Connection) ProtoMessage() {}
 
 func (x *Connection) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[133]
+	mi := &file_lavray_proto_msgTypes[134]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10636,7 +10709,7 @@ func (x *Connection) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Connection.ProtoReflect.Descriptor instead.
 func (*Connection) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{133}
+	return file_lavray_proto_rawDescGZIP(), []int{134}
 }
 
 func (x *Connection) GetId() string {
@@ -10746,7 +10819,7 @@ type CloseConnectionRequest struct {
 
 func (x *CloseConnectionRequest) Reset() {
 	*x = CloseConnectionRequest{}
-	mi := &file_lavray_proto_msgTypes[134]
+	mi := &file_lavray_proto_msgTypes[135]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10758,7 +10831,7 @@ func (x *CloseConnectionRequest) String() string {
 func (*CloseConnectionRequest) ProtoMessage() {}
 
 func (x *CloseConnectionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[134]
+	mi := &file_lavray_proto_msgTypes[135]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10771,7 +10844,7 @@ func (x *CloseConnectionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CloseConnectionRequest.ProtoReflect.Descriptor instead.
 func (*CloseConnectionRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{134}
+	return file_lavray_proto_rawDescGZIP(), []int{135}
 }
 
 func (x *CloseConnectionRequest) GetId() string {
@@ -10791,7 +10864,7 @@ type CheckRouteRequest struct {
 
 func (x *CheckRouteRequest) Reset() {
 	*x = CheckRouteRequest{}
-	mi := &file_lavray_proto_msgTypes[135]
+	mi := &file_lavray_proto_msgTypes[136]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10803,7 +10876,7 @@ func (x *CheckRouteRequest) String() string {
 func (*CheckRouteRequest) ProtoMessage() {}
 
 func (x *CheckRouteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[135]
+	mi := &file_lavray_proto_msgTypes[136]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10816,7 +10889,7 @@ func (x *CheckRouteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckRouteRequest.ProtoReflect.Descriptor instead.
 func (*CheckRouteRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{135}
+	return file_lavray_proto_rawDescGZIP(), []int{136}
 }
 
 func (x *CheckRouteRequest) GetAddress() string {
@@ -10846,7 +10919,7 @@ type CheckRouteResponse struct {
 
 func (x *CheckRouteResponse) Reset() {
 	*x = CheckRouteResponse{}
-	mi := &file_lavray_proto_msgTypes[136]
+	mi := &file_lavray_proto_msgTypes[137]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10858,7 +10931,7 @@ func (x *CheckRouteResponse) String() string {
 func (*CheckRouteResponse) ProtoMessage() {}
 
 func (x *CheckRouteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[136]
+	mi := &file_lavray_proto_msgTypes[137]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10871,7 +10944,7 @@ func (x *CheckRouteResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckRouteResponse.ProtoReflect.Descriptor instead.
 func (*CheckRouteResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{136}
+	return file_lavray_proto_rawDescGZIP(), []int{137}
 }
 
 func (x *CheckRouteResponse) GetMatchedRule() string {
@@ -10911,7 +10984,7 @@ type RunSelfCheckRequest struct {
 
 func (x *RunSelfCheckRequest) Reset() {
 	*x = RunSelfCheckRequest{}
-	mi := &file_lavray_proto_msgTypes[137]
+	mi := &file_lavray_proto_msgTypes[138]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10923,7 +10996,7 @@ func (x *RunSelfCheckRequest) String() string {
 func (*RunSelfCheckRequest) ProtoMessage() {}
 
 func (x *RunSelfCheckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[137]
+	mi := &file_lavray_proto_msgTypes[138]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10936,7 +11009,7 @@ func (x *RunSelfCheckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunSelfCheckRequest.ProtoReflect.Descriptor instead.
 func (*RunSelfCheckRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{137}
+	return file_lavray_proto_rawDescGZIP(), []int{138}
 }
 
 func (x *RunSelfCheckRequest) GetKinds() []RunSelfCheckRequest_CheckKind {
@@ -10955,7 +11028,7 @@ type RunSelfCheckResponse struct {
 
 func (x *RunSelfCheckResponse) Reset() {
 	*x = RunSelfCheckResponse{}
-	mi := &file_lavray_proto_msgTypes[138]
+	mi := &file_lavray_proto_msgTypes[139]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -10967,7 +11040,7 @@ func (x *RunSelfCheckResponse) String() string {
 func (*RunSelfCheckResponse) ProtoMessage() {}
 
 func (x *RunSelfCheckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[138]
+	mi := &file_lavray_proto_msgTypes[139]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -10980,7 +11053,7 @@ func (x *RunSelfCheckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunSelfCheckResponse.ProtoReflect.Descriptor instead.
 func (*RunSelfCheckResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{138}
+	return file_lavray_proto_rawDescGZIP(), []int{139}
 }
 
 func (x *RunSelfCheckResponse) GetResults() []*SelfCheckResult {
@@ -11002,7 +11075,7 @@ type SelfCheckResult struct {
 
 func (x *SelfCheckResult) Reset() {
 	*x = SelfCheckResult{}
-	mi := &file_lavray_proto_msgTypes[139]
+	mi := &file_lavray_proto_msgTypes[140]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11014,7 +11087,7 @@ func (x *SelfCheckResult) String() string {
 func (*SelfCheckResult) ProtoMessage() {}
 
 func (x *SelfCheckResult) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[139]
+	mi := &file_lavray_proto_msgTypes[140]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11027,7 +11100,7 @@ func (x *SelfCheckResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SelfCheckResult.ProtoReflect.Descriptor instead.
 func (*SelfCheckResult) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{139}
+	return file_lavray_proto_rawDescGZIP(), []int{140}
 }
 
 func (x *SelfCheckResult) GetKind() RunSelfCheckRequest_CheckKind {
@@ -11067,7 +11140,7 @@ type GetPublicIpRequest struct {
 
 func (x *GetPublicIpRequest) Reset() {
 	*x = GetPublicIpRequest{}
-	mi := &file_lavray_proto_msgTypes[140]
+	mi := &file_lavray_proto_msgTypes[141]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11079,7 +11152,7 @@ func (x *GetPublicIpRequest) String() string {
 func (*GetPublicIpRequest) ProtoMessage() {}
 
 func (x *GetPublicIpRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[140]
+	mi := &file_lavray_proto_msgTypes[141]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11092,7 +11165,7 @@ func (x *GetPublicIpRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPublicIpRequest.ProtoReflect.Descriptor instead.
 func (*GetPublicIpRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{140}
+	return file_lavray_proto_rawDescGZIP(), []int{141}
 }
 
 func (x *GetPublicIpRequest) GetVia() GetPublicIpRequest_Via {
@@ -11112,7 +11185,7 @@ type GetPublicIpResponse struct {
 
 func (x *GetPublicIpResponse) Reset() {
 	*x = GetPublicIpResponse{}
-	mi := &file_lavray_proto_msgTypes[141]
+	mi := &file_lavray_proto_msgTypes[142]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11124,7 +11197,7 @@ func (x *GetPublicIpResponse) String() string {
 func (*GetPublicIpResponse) ProtoMessage() {}
 
 func (x *GetPublicIpResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[141]
+	mi := &file_lavray_proto_msgTypes[142]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11137,7 +11210,7 @@ func (x *GetPublicIpResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetPublicIpResponse.ProtoReflect.Descriptor instead.
 func (*GetPublicIpResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{141}
+	return file_lavray_proto_rawDescGZIP(), []int{142}
 }
 
 func (x *GetPublicIpResponse) GetIp() string {
@@ -11170,7 +11243,7 @@ type LeakReport struct {
 
 func (x *LeakReport) Reset() {
 	*x = LeakReport{}
-	mi := &file_lavray_proto_msgTypes[142]
+	mi := &file_lavray_proto_msgTypes[143]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11182,7 +11255,7 @@ func (x *LeakReport) String() string {
 func (*LeakReport) ProtoMessage() {}
 
 func (x *LeakReport) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[142]
+	mi := &file_lavray_proto_msgTypes[143]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11195,7 +11268,7 @@ func (x *LeakReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LeakReport.ProtoReflect.Descriptor instead.
 func (*LeakReport) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{142}
+	return file_lavray_proto_rawDescGZIP(), []int{143}
 }
 
 func (x *LeakReport) GetTunnelIp() string {
@@ -11254,7 +11327,7 @@ type GatewayStatus struct {
 
 func (x *GatewayStatus) Reset() {
 	*x = GatewayStatus{}
-	mi := &file_lavray_proto_msgTypes[143]
+	mi := &file_lavray_proto_msgTypes[144]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11266,7 +11339,7 @@ func (x *GatewayStatus) String() string {
 func (*GatewayStatus) ProtoMessage() {}
 
 func (x *GatewayStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[143]
+	mi := &file_lavray_proto_msgTypes[144]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11279,7 +11352,7 @@ func (x *GatewayStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GatewayStatus.ProtoReflect.Descriptor instead.
 func (*GatewayStatus) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{143}
+	return file_lavray_proto_rawDescGZIP(), []int{144}
 }
 
 func (x *GatewayStatus) GetMode() GatewayStatus_Mode {
@@ -11333,7 +11406,7 @@ type ListDevicePoliciesResponse struct {
 
 func (x *ListDevicePoliciesResponse) Reset() {
 	*x = ListDevicePoliciesResponse{}
-	mi := &file_lavray_proto_msgTypes[144]
+	mi := &file_lavray_proto_msgTypes[145]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11345,7 +11418,7 @@ func (x *ListDevicePoliciesResponse) String() string {
 func (*ListDevicePoliciesResponse) ProtoMessage() {}
 
 func (x *ListDevicePoliciesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[144]
+	mi := &file_lavray_proto_msgTypes[145]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11358,7 +11431,7 @@ func (x *ListDevicePoliciesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDevicePoliciesResponse.ProtoReflect.Descriptor instead.
 func (*ListDevicePoliciesResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{144}
+	return file_lavray_proto_rawDescGZIP(), []int{145}
 }
 
 func (x *ListDevicePoliciesResponse) GetPolicies() []*DevicePolicy {
@@ -11377,7 +11450,7 @@ type SetDevicePolicyRequest struct {
 
 func (x *SetDevicePolicyRequest) Reset() {
 	*x = SetDevicePolicyRequest{}
-	mi := &file_lavray_proto_msgTypes[145]
+	mi := &file_lavray_proto_msgTypes[146]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11389,7 +11462,7 @@ func (x *SetDevicePolicyRequest) String() string {
 func (*SetDevicePolicyRequest) ProtoMessage() {}
 
 func (x *SetDevicePolicyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[145]
+	mi := &file_lavray_proto_msgTypes[146]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11402,7 +11475,7 @@ func (x *SetDevicePolicyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetDevicePolicyRequest.ProtoReflect.Descriptor instead.
 func (*SetDevicePolicyRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{145}
+	return file_lavray_proto_rawDescGZIP(), []int{146}
 }
 
 func (x *SetDevicePolicyRequest) GetPolicy() *DevicePolicy {
@@ -11424,7 +11497,7 @@ type DevicePolicy struct {
 
 func (x *DevicePolicy) Reset() {
 	*x = DevicePolicy{}
-	mi := &file_lavray_proto_msgTypes[146]
+	mi := &file_lavray_proto_msgTypes[147]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11436,7 +11509,7 @@ func (x *DevicePolicy) String() string {
 func (*DevicePolicy) ProtoMessage() {}
 
 func (x *DevicePolicy) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[146]
+	mi := &file_lavray_proto_msgTypes[147]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11449,7 +11522,7 @@ func (x *DevicePolicy) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DevicePolicy.ProtoReflect.Descriptor instead.
 func (*DevicePolicy) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{146}
+	return file_lavray_proto_rawDescGZIP(), []int{147}
 }
 
 func (x *DevicePolicy) GetMac() string {
@@ -11490,7 +11563,7 @@ type CheckUpdatesRequest struct {
 
 func (x *CheckUpdatesRequest) Reset() {
 	*x = CheckUpdatesRequest{}
-	mi := &file_lavray_proto_msgTypes[147]
+	mi := &file_lavray_proto_msgTypes[148]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11502,7 +11575,7 @@ func (x *CheckUpdatesRequest) String() string {
 func (*CheckUpdatesRequest) ProtoMessage() {}
 
 func (x *CheckUpdatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[147]
+	mi := &file_lavray_proto_msgTypes[148]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11515,7 +11588,7 @@ func (x *CheckUpdatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckUpdatesRequest.ProtoReflect.Descriptor instead.
 func (*CheckUpdatesRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{147}
+	return file_lavray_proto_rawDescGZIP(), []int{148}
 }
 
 func (x *CheckUpdatesRequest) GetChannel() UpdateChannel {
@@ -11545,7 +11618,7 @@ type CheckUpdatesResponse struct {
 
 func (x *CheckUpdatesResponse) Reset() {
 	*x = CheckUpdatesResponse{}
-	mi := &file_lavray_proto_msgTypes[148]
+	mi := &file_lavray_proto_msgTypes[149]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11557,7 +11630,7 @@ func (x *CheckUpdatesResponse) String() string {
 func (*CheckUpdatesResponse) ProtoMessage() {}
 
 func (x *CheckUpdatesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[148]
+	mi := &file_lavray_proto_msgTypes[149]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11570,7 +11643,7 @@ func (x *CheckUpdatesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CheckUpdatesResponse.ProtoReflect.Descriptor instead.
 func (*CheckUpdatesResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{148}
+	return file_lavray_proto_rawDescGZIP(), []int{149}
 }
 
 func (x *CheckUpdatesResponse) GetAvailable() []*ComponentUpdate {
@@ -11622,7 +11695,7 @@ type ComponentUpdate struct {
 
 func (x *ComponentUpdate) Reset() {
 	*x = ComponentUpdate{}
-	mi := &file_lavray_proto_msgTypes[149]
+	mi := &file_lavray_proto_msgTypes[150]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11634,7 +11707,7 @@ func (x *ComponentUpdate) String() string {
 func (*ComponentUpdate) ProtoMessage() {}
 
 func (x *ComponentUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[149]
+	mi := &file_lavray_proto_msgTypes[150]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11647,7 +11720,7 @@ func (x *ComponentUpdate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentUpdate.ProtoReflect.Descriptor instead.
 func (*ComponentUpdate) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{149}
+	return file_lavray_proto_rawDescGZIP(), []int{150}
 }
 
 func (x *ComponentUpdate) GetComponent() UpdateComponent {
@@ -11705,7 +11778,7 @@ type UpdateMetadata struct {
 
 func (x *UpdateMetadata) Reset() {
 	*x = UpdateMetadata{}
-	mi := &file_lavray_proto_msgTypes[150]
+	mi := &file_lavray_proto_msgTypes[151]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11717,7 +11790,7 @@ func (x *UpdateMetadata) String() string {
 func (*UpdateMetadata) ProtoMessage() {}
 
 func (x *UpdateMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[150]
+	mi := &file_lavray_proto_msgTypes[151]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11730,7 +11803,7 @@ func (x *UpdateMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateMetadata.ProtoReflect.Descriptor instead.
 func (*UpdateMetadata) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{150}
+	return file_lavray_proto_rawDescGZIP(), []int{151}
 }
 
 func (x *UpdateMetadata) GetType() UpdateMetadata_Type {
@@ -11764,7 +11837,7 @@ type MetadataSignature struct {
 
 func (x *MetadataSignature) Reset() {
 	*x = MetadataSignature{}
-	mi := &file_lavray_proto_msgTypes[151]
+	mi := &file_lavray_proto_msgTypes[152]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11776,7 +11849,7 @@ func (x *MetadataSignature) String() string {
 func (*MetadataSignature) ProtoMessage() {}
 
 func (x *MetadataSignature) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[151]
+	mi := &file_lavray_proto_msgTypes[152]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11789,7 +11862,7 @@ func (x *MetadataSignature) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MetadataSignature.ProtoReflect.Descriptor instead.
 func (*MetadataSignature) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{151}
+	return file_lavray_proto_rawDescGZIP(), []int{152}
 }
 
 func (x *MetadataSignature) GetKeyid() string {
@@ -11832,7 +11905,7 @@ type UpdateManifest struct {
 
 func (x *UpdateManifest) Reset() {
 	*x = UpdateManifest{}
-	mi := &file_lavray_proto_msgTypes[152]
+	mi := &file_lavray_proto_msgTypes[153]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11844,7 +11917,7 @@ func (x *UpdateManifest) String() string {
 func (*UpdateManifest) ProtoMessage() {}
 
 func (x *UpdateManifest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[152]
+	mi := &file_lavray_proto_msgTypes[153]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11857,7 +11930,7 @@ func (x *UpdateManifest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateManifest.ProtoReflect.Descriptor instead.
 func (*UpdateManifest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{152}
+	return file_lavray_proto_rawDescGZIP(), []int{153}
 }
 
 func (x *UpdateManifest) GetProduct() string {
@@ -11954,7 +12027,7 @@ type CoreRef struct {
 
 func (x *CoreRef) Reset() {
 	*x = CoreRef{}
-	mi := &file_lavray_proto_msgTypes[153]
+	mi := &file_lavray_proto_msgTypes[154]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -11966,7 +12039,7 @@ func (x *CoreRef) String() string {
 func (*CoreRef) ProtoMessage() {}
 
 func (x *CoreRef) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[153]
+	mi := &file_lavray_proto_msgTypes[154]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -11979,7 +12052,7 @@ func (x *CoreRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CoreRef.ProtoReflect.Descriptor instead.
 func (*CoreRef) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{153}
+	return file_lavray_proto_rawDescGZIP(), []int{154}
 }
 
 func (x *CoreRef) GetVersion() string {
@@ -12008,7 +12081,7 @@ type UpdateAsset struct {
 
 func (x *UpdateAsset) Reset() {
 	*x = UpdateAsset{}
-	mi := &file_lavray_proto_msgTypes[154]
+	mi := &file_lavray_proto_msgTypes[155]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12020,7 +12093,7 @@ func (x *UpdateAsset) String() string {
 func (*UpdateAsset) ProtoMessage() {}
 
 func (x *UpdateAsset) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[154]
+	mi := &file_lavray_proto_msgTypes[155]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12033,7 +12106,7 @@ func (x *UpdateAsset) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateAsset.ProtoReflect.Descriptor instead.
 func (*UpdateAsset) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{154}
+	return file_lavray_proto_rawDescGZIP(), []int{155}
 }
 
 func (x *UpdateAsset) GetPath() string {
@@ -12075,7 +12148,7 @@ type PresetRef struct {
 
 func (x *PresetRef) Reset() {
 	*x = PresetRef{}
-	mi := &file_lavray_proto_msgTypes[155]
+	mi := &file_lavray_proto_msgTypes[156]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12087,7 +12160,7 @@ func (x *PresetRef) String() string {
 func (*PresetRef) ProtoMessage() {}
 
 func (x *PresetRef) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[155]
+	mi := &file_lavray_proto_msgTypes[156]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12100,7 +12173,7 @@ func (x *PresetRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PresetRef.ProtoReflect.Descriptor instead.
 func (*PresetRef) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{155}
+	return file_lavray_proto_rawDescGZIP(), []int{156}
 }
 
 func (x *PresetRef) GetRev() int32 {
@@ -12136,7 +12209,7 @@ type GeoRef struct {
 
 func (x *GeoRef) Reset() {
 	*x = GeoRef{}
-	mi := &file_lavray_proto_msgTypes[156]
+	mi := &file_lavray_proto_msgTypes[157]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12148,7 +12221,7 @@ func (x *GeoRef) String() string {
 func (*GeoRef) ProtoMessage() {}
 
 func (x *GeoRef) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[156]
+	mi := &file_lavray_proto_msgTypes[157]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12161,7 +12234,7 @@ func (x *GeoRef) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GeoRef.ProtoReflect.Descriptor instead.
 func (*GeoRef) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{156}
+	return file_lavray_proto_rawDescGZIP(), []int{157}
 }
 
 func (x *GeoRef) GetPath() string {
@@ -12201,7 +12274,7 @@ type DownloadUpdatesRequest struct {
 
 func (x *DownloadUpdatesRequest) Reset() {
 	*x = DownloadUpdatesRequest{}
-	mi := &file_lavray_proto_msgTypes[157]
+	mi := &file_lavray_proto_msgTypes[158]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12213,7 +12286,7 @@ func (x *DownloadUpdatesRequest) String() string {
 func (*DownloadUpdatesRequest) ProtoMessage() {}
 
 func (x *DownloadUpdatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[157]
+	mi := &file_lavray_proto_msgTypes[158]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12226,7 +12299,7 @@ func (x *DownloadUpdatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DownloadUpdatesRequest.ProtoReflect.Descriptor instead.
 func (*DownloadUpdatesRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{157}
+	return file_lavray_proto_rawDescGZIP(), []int{158}
 }
 
 func (x *DownloadUpdatesRequest) GetComponents() []UpdateComponent {
@@ -12248,7 +12321,7 @@ type ApplyUpdatesRequest struct {
 
 func (x *ApplyUpdatesRequest) Reset() {
 	*x = ApplyUpdatesRequest{}
-	mi := &file_lavray_proto_msgTypes[158]
+	mi := &file_lavray_proto_msgTypes[159]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12260,7 +12333,7 @@ func (x *ApplyUpdatesRequest) String() string {
 func (*ApplyUpdatesRequest) ProtoMessage() {}
 
 func (x *ApplyUpdatesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[158]
+	mi := &file_lavray_proto_msgTypes[159]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12273,7 +12346,7 @@ func (x *ApplyUpdatesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApplyUpdatesRequest.ProtoReflect.Descriptor instead.
 func (*ApplyUpdatesRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{158}
+	return file_lavray_proto_rawDescGZIP(), []int{159}
 }
 
 func (x *ApplyUpdatesRequest) GetComponents() []UpdateComponent {
@@ -12299,7 +12372,7 @@ type RollbackRequest struct {
 
 func (x *RollbackRequest) Reset() {
 	*x = RollbackRequest{}
-	mi := &file_lavray_proto_msgTypes[159]
+	mi := &file_lavray_proto_msgTypes[160]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12311,7 +12384,7 @@ func (x *RollbackRequest) String() string {
 func (*RollbackRequest) ProtoMessage() {}
 
 func (x *RollbackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[159]
+	mi := &file_lavray_proto_msgTypes[160]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12324,7 +12397,7 @@ func (x *RollbackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackRequest.ProtoReflect.Descriptor instead.
 func (*RollbackRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{159}
+	return file_lavray_proto_rawDescGZIP(), []int{160}
 }
 
 func (x *RollbackRequest) GetComponent() UpdateComponent {
@@ -12345,7 +12418,7 @@ type RollbackResponse struct {
 
 func (x *RollbackResponse) Reset() {
 	*x = RollbackResponse{}
-	mi := &file_lavray_proto_msgTypes[160]
+	mi := &file_lavray_proto_msgTypes[161]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12357,7 +12430,7 @@ func (x *RollbackResponse) String() string {
 func (*RollbackResponse) ProtoMessage() {}
 
 func (x *RollbackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[160]
+	mi := &file_lavray_proto_msgTypes[161]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12370,7 +12443,7 @@ func (x *RollbackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RollbackResponse.ProtoReflect.Descriptor instead.
 func (*RollbackResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{160}
+	return file_lavray_proto_rawDescGZIP(), []int{161}
 }
 
 func (x *RollbackResponse) GetSuccess() bool {
@@ -12402,7 +12475,7 @@ type GetUpdateStateRequest struct {
 
 func (x *GetUpdateStateRequest) Reset() {
 	*x = GetUpdateStateRequest{}
-	mi := &file_lavray_proto_msgTypes[161]
+	mi := &file_lavray_proto_msgTypes[162]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12414,7 +12487,7 @@ func (x *GetUpdateStateRequest) String() string {
 func (*GetUpdateStateRequest) ProtoMessage() {}
 
 func (x *GetUpdateStateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[161]
+	mi := &file_lavray_proto_msgTypes[162]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12427,7 +12500,7 @@ func (x *GetUpdateStateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUpdateStateRequest.ProtoReflect.Descriptor instead.
 func (*GetUpdateStateRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{161}
+	return file_lavray_proto_rawDescGZIP(), []int{162}
 }
 
 type UpdateStateResponse struct {
@@ -12441,7 +12514,7 @@ type UpdateStateResponse struct {
 
 func (x *UpdateStateResponse) Reset() {
 	*x = UpdateStateResponse{}
-	mi := &file_lavray_proto_msgTypes[162]
+	mi := &file_lavray_proto_msgTypes[163]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12453,7 +12526,7 @@ func (x *UpdateStateResponse) String() string {
 func (*UpdateStateResponse) ProtoMessage() {}
 
 func (x *UpdateStateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[162]
+	mi := &file_lavray_proto_msgTypes[163]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12466,7 +12539,7 @@ func (x *UpdateStateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateStateResponse.ProtoReflect.Descriptor instead.
 func (*UpdateStateResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{162}
+	return file_lavray_proto_rawDescGZIP(), []int{163}
 }
 
 func (x *UpdateStateResponse) GetComponents() []*ComponentState {
@@ -12504,7 +12577,7 @@ type ChainStateInfo struct {
 
 func (x *ChainStateInfo) Reset() {
 	*x = ChainStateInfo{}
-	mi := &file_lavray_proto_msgTypes[163]
+	mi := &file_lavray_proto_msgTypes[164]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12516,7 +12589,7 @@ func (x *ChainStateInfo) String() string {
 func (*ChainStateInfo) ProtoMessage() {}
 
 func (x *ChainStateInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[163]
+	mi := &file_lavray_proto_msgTypes[164]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12529,7 +12602,7 @@ func (x *ChainStateInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChainStateInfo.ProtoReflect.Descriptor instead.
 func (*ChainStateInfo) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{163}
+	return file_lavray_proto_rawDescGZIP(), []int{164}
 }
 
 func (x *ChainStateInfo) GetRootVersion() int32 {
@@ -12572,7 +12645,7 @@ type ComponentState struct {
 
 func (x *ComponentState) Reset() {
 	*x = ComponentState{}
-	mi := &file_lavray_proto_msgTypes[164]
+	mi := &file_lavray_proto_msgTypes[165]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12584,7 +12657,7 @@ func (x *ComponentState) String() string {
 func (*ComponentState) ProtoMessage() {}
 
 func (x *ComponentState) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[164]
+	mi := &file_lavray_proto_msgTypes[165]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12597,7 +12670,7 @@ func (x *ComponentState) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ComponentState.ProtoReflect.Descriptor instead.
 func (*ComponentState) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{164}
+	return file_lavray_proto_rawDescGZIP(), []int{165}
 }
 
 func (x *ComponentState) GetComponent() UpdateComponent {
@@ -12639,7 +12712,7 @@ type VerifyLocalUpdateRequest struct {
 
 func (x *VerifyLocalUpdateRequest) Reset() {
 	*x = VerifyLocalUpdateRequest{}
-	mi := &file_lavray_proto_msgTypes[165]
+	mi := &file_lavray_proto_msgTypes[166]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12651,7 +12724,7 @@ func (x *VerifyLocalUpdateRequest) String() string {
 func (*VerifyLocalUpdateRequest) ProtoMessage() {}
 
 func (x *VerifyLocalUpdateRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[165]
+	mi := &file_lavray_proto_msgTypes[166]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12664,7 +12737,7 @@ func (x *VerifyLocalUpdateRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyLocalUpdateRequest.ProtoReflect.Descriptor instead.
 func (*VerifyLocalUpdateRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{165}
+	return file_lavray_proto_rawDescGZIP(), []int{166}
 }
 
 func (x *VerifyLocalUpdateRequest) GetInstallerPath() string {
@@ -12699,7 +12772,7 @@ type VerifyLocalUpdateResponse struct {
 
 func (x *VerifyLocalUpdateResponse) Reset() {
 	*x = VerifyLocalUpdateResponse{}
-	mi := &file_lavray_proto_msgTypes[166]
+	mi := &file_lavray_proto_msgTypes[167]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12711,7 +12784,7 @@ func (x *VerifyLocalUpdateResponse) String() string {
 func (*VerifyLocalUpdateResponse) ProtoMessage() {}
 
 func (x *VerifyLocalUpdateResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[166]
+	mi := &file_lavray_proto_msgTypes[167]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12724,7 +12797,7 @@ func (x *VerifyLocalUpdateResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyLocalUpdateResponse.ProtoReflect.Descriptor instead.
 func (*VerifyLocalUpdateResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{166}
+	return file_lavray_proto_rawDescGZIP(), []int{167}
 }
 
 func (x *VerifyLocalUpdateResponse) GetValid() bool {
@@ -12768,7 +12841,7 @@ type UpdateEvent struct {
 
 func (x *UpdateEvent) Reset() {
 	*x = UpdateEvent{}
-	mi := &file_lavray_proto_msgTypes[167]
+	mi := &file_lavray_proto_msgTypes[168]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12780,7 +12853,7 @@ func (x *UpdateEvent) String() string {
 func (*UpdateEvent) ProtoMessage() {}
 
 func (x *UpdateEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[167]
+	mi := &file_lavray_proto_msgTypes[168]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12793,7 +12866,7 @@ func (x *UpdateEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateEvent.ProtoReflect.Descriptor instead.
 func (*UpdateEvent) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{167}
+	return file_lavray_proto_rawDescGZIP(), []int{168}
 }
 
 func (x *UpdateEvent) GetTsMs() int64 {
@@ -12931,7 +13004,7 @@ type DownloadProgress struct {
 
 func (x *DownloadProgress) Reset() {
 	*x = DownloadProgress{}
-	mi := &file_lavray_proto_msgTypes[168]
+	mi := &file_lavray_proto_msgTypes[169]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -12943,7 +13016,7 @@ func (x *DownloadProgress) String() string {
 func (*DownloadProgress) ProtoMessage() {}
 
 func (x *DownloadProgress) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[168]
+	mi := &file_lavray_proto_msgTypes[169]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -12956,7 +13029,7 @@ func (x *DownloadProgress) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DownloadProgress.ProtoReflect.Descriptor instead.
 func (*DownloadProgress) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{168}
+	return file_lavray_proto_rawDescGZIP(), []int{169}
 }
 
 func (x *DownloadProgress) GetComponent() UpdateComponent {
@@ -12997,7 +13070,7 @@ type VerificationPassed struct {
 
 func (x *VerificationPassed) Reset() {
 	*x = VerificationPassed{}
-	mi := &file_lavray_proto_msgTypes[169]
+	mi := &file_lavray_proto_msgTypes[170]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13009,7 +13082,7 @@ func (x *VerificationPassed) String() string {
 func (*VerificationPassed) ProtoMessage() {}
 
 func (x *VerificationPassed) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[169]
+	mi := &file_lavray_proto_msgTypes[170]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13022,7 +13095,7 @@ func (x *VerificationPassed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerificationPassed.ProtoReflect.Descriptor instead.
 func (*VerificationPassed) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{169}
+	return file_lavray_proto_rawDescGZIP(), []int{170}
 }
 
 func (x *VerificationPassed) GetComponent() UpdateComponent {
@@ -13049,7 +13122,7 @@ type VerificationFailed struct {
 
 func (x *VerificationFailed) Reset() {
 	*x = VerificationFailed{}
-	mi := &file_lavray_proto_msgTypes[170]
+	mi := &file_lavray_proto_msgTypes[171]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13061,7 +13134,7 @@ func (x *VerificationFailed) String() string {
 func (*VerificationFailed) ProtoMessage() {}
 
 func (x *VerificationFailed) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[170]
+	mi := &file_lavray_proto_msgTypes[171]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13074,7 +13147,7 @@ func (x *VerificationFailed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerificationFailed.ProtoReflect.Descriptor instead.
 func (*VerificationFailed) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{170}
+	return file_lavray_proto_rawDescGZIP(), []int{171}
 }
 
 func (x *VerificationFailed) GetComponent() UpdateComponent {
@@ -13103,7 +13176,7 @@ type UpdateFailed struct {
 
 func (x *UpdateFailed) Reset() {
 	*x = UpdateFailed{}
-	mi := &file_lavray_proto_msgTypes[171]
+	mi := &file_lavray_proto_msgTypes[172]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13115,7 +13188,7 @@ func (x *UpdateFailed) String() string {
 func (*UpdateFailed) ProtoMessage() {}
 
 func (x *UpdateFailed) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[171]
+	mi := &file_lavray_proto_msgTypes[172]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13128,7 +13201,7 @@ func (x *UpdateFailed) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateFailed.ProtoReflect.Descriptor instead.
 func (*UpdateFailed) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{171}
+	return file_lavray_proto_rawDescGZIP(), []int{172}
 }
 
 func (x *UpdateFailed) GetComponent() UpdateComponent {
@@ -13167,7 +13240,7 @@ type GetWebModeStatusRequest struct {
 
 func (x *GetWebModeStatusRequest) Reset() {
 	*x = GetWebModeStatusRequest{}
-	mi := &file_lavray_proto_msgTypes[172]
+	mi := &file_lavray_proto_msgTypes[173]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13179,7 +13252,7 @@ func (x *GetWebModeStatusRequest) String() string {
 func (*GetWebModeStatusRequest) ProtoMessage() {}
 
 func (x *GetWebModeStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[172]
+	mi := &file_lavray_proto_msgTypes[173]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13192,7 +13265,7 @@ func (x *GetWebModeStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWebModeStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetWebModeStatusRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{172}
+	return file_lavray_proto_rawDescGZIP(), []int{173}
 }
 
 type WebModeStatus struct {
@@ -13214,7 +13287,7 @@ type WebModeStatus struct {
 
 func (x *WebModeStatus) Reset() {
 	*x = WebModeStatus{}
-	mi := &file_lavray_proto_msgTypes[173]
+	mi := &file_lavray_proto_msgTypes[174]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13226,7 +13299,7 @@ func (x *WebModeStatus) String() string {
 func (*WebModeStatus) ProtoMessage() {}
 
 func (x *WebModeStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[173]
+	mi := &file_lavray_proto_msgTypes[174]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13239,7 +13312,7 @@ func (x *WebModeStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebModeStatus.ProtoReflect.Descriptor instead.
 func (*WebModeStatus) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{173}
+	return file_lavray_proto_rawDescGZIP(), []int{174}
 }
 
 func (x *WebModeStatus) GetWebModeEnabled() bool {
@@ -13301,7 +13374,7 @@ type SetupFirstAdminRequest struct {
 
 func (x *SetupFirstAdminRequest) Reset() {
 	*x = SetupFirstAdminRequest{}
-	mi := &file_lavray_proto_msgTypes[174]
+	mi := &file_lavray_proto_msgTypes[175]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13313,7 +13386,7 @@ func (x *SetupFirstAdminRequest) String() string {
 func (*SetupFirstAdminRequest) ProtoMessage() {}
 
 func (x *SetupFirstAdminRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[174]
+	mi := &file_lavray_proto_msgTypes[175]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13326,7 +13399,7 @@ func (x *SetupFirstAdminRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetupFirstAdminRequest.ProtoReflect.Descriptor instead.
 func (*SetupFirstAdminRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{174}
+	return file_lavray_proto_rawDescGZIP(), []int{175}
 }
 
 func (x *SetupFirstAdminRequest) GetUsername() string {
@@ -13354,7 +13427,7 @@ type LoginRequest struct {
 
 func (x *LoginRequest) Reset() {
 	*x = LoginRequest{}
-	mi := &file_lavray_proto_msgTypes[175]
+	mi := &file_lavray_proto_msgTypes[176]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13366,7 +13439,7 @@ func (x *LoginRequest) String() string {
 func (*LoginRequest) ProtoMessage() {}
 
 func (x *LoginRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[175]
+	mi := &file_lavray_proto_msgTypes[176]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13379,7 +13452,7 @@ func (x *LoginRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoginRequest.ProtoReflect.Descriptor instead.
 func (*LoginRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{175}
+	return file_lavray_proto_rawDescGZIP(), []int{176}
 }
 
 func (x *LoginRequest) GetUsername() string {
@@ -13416,7 +13489,7 @@ type WebSession struct {
 
 func (x *WebSession) Reset() {
 	*x = WebSession{}
-	mi := &file_lavray_proto_msgTypes[176]
+	mi := &file_lavray_proto_msgTypes[177]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13428,7 +13501,7 @@ func (x *WebSession) String() string {
 func (*WebSession) ProtoMessage() {}
 
 func (x *WebSession) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[176]
+	mi := &file_lavray_proto_msgTypes[177]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13441,7 +13514,7 @@ func (x *WebSession) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WebSession.ProtoReflect.Descriptor instead.
 func (*WebSession) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{176}
+	return file_lavray_proto_rawDescGZIP(), []int{177}
 }
 
 func (x *WebSession) GetToken() string {
@@ -13487,7 +13560,7 @@ type LogoutRequest struct {
 
 func (x *LogoutRequest) Reset() {
 	*x = LogoutRequest{}
-	mi := &file_lavray_proto_msgTypes[177]
+	mi := &file_lavray_proto_msgTypes[178]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13499,7 +13572,7 @@ func (x *LogoutRequest) String() string {
 func (*LogoutRequest) ProtoMessage() {}
 
 func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[177]
+	mi := &file_lavray_proto_msgTypes[178]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13512,7 +13585,7 @@ func (x *LogoutRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogoutRequest.ProtoReflect.Descriptor instead.
 func (*LogoutRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{177}
+	return file_lavray_proto_rawDescGZIP(), []int{178}
 }
 
 type RenewSessionRequest struct {
@@ -13523,7 +13596,7 @@ type RenewSessionRequest struct {
 
 func (x *RenewSessionRequest) Reset() {
 	*x = RenewSessionRequest{}
-	mi := &file_lavray_proto_msgTypes[178]
+	mi := &file_lavray_proto_msgTypes[179]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13535,7 +13608,7 @@ func (x *RenewSessionRequest) String() string {
 func (*RenewSessionRequest) ProtoMessage() {}
 
 func (x *RenewSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[178]
+	mi := &file_lavray_proto_msgTypes[179]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13548,7 +13621,7 @@ func (x *RenewSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RenewSessionRequest.ProtoReflect.Descriptor instead.
 func (*RenewSessionRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{178}
+	return file_lavray_proto_rawDescGZIP(), []int{179}
 }
 
 type WhoAmIRequest struct {
@@ -13559,7 +13632,7 @@ type WhoAmIRequest struct {
 
 func (x *WhoAmIRequest) Reset() {
 	*x = WhoAmIRequest{}
-	mi := &file_lavray_proto_msgTypes[179]
+	mi := &file_lavray_proto_msgTypes[180]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13571,7 +13644,7 @@ func (x *WhoAmIRequest) String() string {
 func (*WhoAmIRequest) ProtoMessage() {}
 
 func (x *WhoAmIRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[179]
+	mi := &file_lavray_proto_msgTypes[180]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13584,7 +13657,7 @@ func (x *WhoAmIRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WhoAmIRequest.ProtoReflect.Descriptor instead.
 func (*WhoAmIRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{179}
+	return file_lavray_proto_rawDescGZIP(), []int{180}
 }
 
 type ChangePasswordRequest struct {
@@ -13597,7 +13670,7 @@ type ChangePasswordRequest struct {
 
 func (x *ChangePasswordRequest) Reset() {
 	*x = ChangePasswordRequest{}
-	mi := &file_lavray_proto_msgTypes[180]
+	mi := &file_lavray_proto_msgTypes[181]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13609,7 +13682,7 @@ func (x *ChangePasswordRequest) String() string {
 func (*ChangePasswordRequest) ProtoMessage() {}
 
 func (x *ChangePasswordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[180]
+	mi := &file_lavray_proto_msgTypes[181]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13622,7 +13695,7 @@ func (x *ChangePasswordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangePasswordRequest.ProtoReflect.Descriptor instead.
 func (*ChangePasswordRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{180}
+	return file_lavray_proto_rawDescGZIP(), []int{181}
 }
 
 func (x *ChangePasswordRequest) GetOldPassword() string {
@@ -13648,7 +13721,7 @@ type ChangePasswordResponse struct {
 
 func (x *ChangePasswordResponse) Reset() {
 	*x = ChangePasswordResponse{}
-	mi := &file_lavray_proto_msgTypes[181]
+	mi := &file_lavray_proto_msgTypes[182]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13660,7 +13733,7 @@ func (x *ChangePasswordResponse) String() string {
 func (*ChangePasswordResponse) ProtoMessage() {}
 
 func (x *ChangePasswordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[181]
+	mi := &file_lavray_proto_msgTypes[182]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13673,7 +13746,7 @@ func (x *ChangePasswordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ChangePasswordResponse.ProtoReflect.Descriptor instead.
 func (*ChangePasswordResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{181}
+	return file_lavray_proto_rawDescGZIP(), []int{182}
 }
 
 func (x *ChangePasswordResponse) GetRevokedOtherSessions() int32 {
@@ -13692,7 +13765,7 @@ type ListSessionsResponse struct {
 
 func (x *ListSessionsResponse) Reset() {
 	*x = ListSessionsResponse{}
-	mi := &file_lavray_proto_msgTypes[182]
+	mi := &file_lavray_proto_msgTypes[183]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13704,7 +13777,7 @@ func (x *ListSessionsResponse) String() string {
 func (*ListSessionsResponse) ProtoMessage() {}
 
 func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[182]
+	mi := &file_lavray_proto_msgTypes[183]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13717,7 +13790,7 @@ func (x *ListSessionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSessionsResponse.ProtoReflect.Descriptor instead.
 func (*ListSessionsResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{182}
+	return file_lavray_proto_rawDescGZIP(), []int{183}
 }
 
 func (x *ListSessionsResponse) GetSessions() []*SessionInfo {
@@ -13740,7 +13813,7 @@ type SessionInfo struct {
 
 func (x *SessionInfo) Reset() {
 	*x = SessionInfo{}
-	mi := &file_lavray_proto_msgTypes[183]
+	mi := &file_lavray_proto_msgTypes[184]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13752,7 +13825,7 @@ func (x *SessionInfo) String() string {
 func (*SessionInfo) ProtoMessage() {}
 
 func (x *SessionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[183]
+	mi := &file_lavray_proto_msgTypes[184]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13765,7 +13838,7 @@ func (x *SessionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SessionInfo.ProtoReflect.Descriptor instead.
 func (*SessionInfo) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{183}
+	return file_lavray_proto_rawDescGZIP(), []int{184}
 }
 
 func (x *SessionInfo) GetSessionId() string {
@@ -13812,7 +13885,7 @@ type RevokeSessionRequest struct {
 
 func (x *RevokeSessionRequest) Reset() {
 	*x = RevokeSessionRequest{}
-	mi := &file_lavray_proto_msgTypes[184]
+	mi := &file_lavray_proto_msgTypes[185]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13824,7 +13897,7 @@ func (x *RevokeSessionRequest) String() string {
 func (*RevokeSessionRequest) ProtoMessage() {}
 
 func (x *RevokeSessionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[184]
+	mi := &file_lavray_proto_msgTypes[185]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13837,7 +13910,7 @@ func (x *RevokeSessionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeSessionRequest.ProtoReflect.Descriptor instead.
 func (*RevokeSessionRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{184}
+	return file_lavray_proto_rawDescGZIP(), []int{185}
 }
 
 func (x *RevokeSessionRequest) GetSessionId() string {
@@ -13856,7 +13929,7 @@ type ExportBackupRequest struct {
 
 func (x *ExportBackupRequest) Reset() {
 	*x = ExportBackupRequest{}
-	mi := &file_lavray_proto_msgTypes[185]
+	mi := &file_lavray_proto_msgTypes[186]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13868,7 +13941,7 @@ func (x *ExportBackupRequest) String() string {
 func (*ExportBackupRequest) ProtoMessage() {}
 
 func (x *ExportBackupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[185]
+	mi := &file_lavray_proto_msgTypes[186]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13881,7 +13954,7 @@ func (x *ExportBackupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportBackupRequest.ProtoReflect.Descriptor instead.
 func (*ExportBackupRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{185}
+	return file_lavray_proto_rawDescGZIP(), []int{186}
 }
 
 func (x *ExportBackupRequest) GetPassword() string {
@@ -13902,7 +13975,7 @@ type ExportBackupResponse struct {
 
 func (x *ExportBackupResponse) Reset() {
 	*x = ExportBackupResponse{}
-	mi := &file_lavray_proto_msgTypes[186]
+	mi := &file_lavray_proto_msgTypes[187]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13914,7 +13987,7 @@ func (x *ExportBackupResponse) String() string {
 func (*ExportBackupResponse) ProtoMessage() {}
 
 func (x *ExportBackupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[186]
+	mi := &file_lavray_proto_msgTypes[187]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13927,7 +14000,7 @@ func (x *ExportBackupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExportBackupResponse.ProtoReflect.Descriptor instead.
 func (*ExportBackupResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{186}
+	return file_lavray_proto_rawDescGZIP(), []int{187}
 }
 
 func (x *ExportBackupResponse) GetData() []byte {
@@ -13961,7 +14034,7 @@ type PreviewBackupRequest struct {
 
 func (x *PreviewBackupRequest) Reset() {
 	*x = PreviewBackupRequest{}
-	mi := &file_lavray_proto_msgTypes[187]
+	mi := &file_lavray_proto_msgTypes[188]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -13973,7 +14046,7 @@ func (x *PreviewBackupRequest) String() string {
 func (*PreviewBackupRequest) ProtoMessage() {}
 
 func (x *PreviewBackupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[187]
+	mi := &file_lavray_proto_msgTypes[188]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -13986,7 +14059,7 @@ func (x *PreviewBackupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewBackupRequest.ProtoReflect.Descriptor instead.
 func (*PreviewBackupRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{187}
+	return file_lavray_proto_rawDescGZIP(), []int{188}
 }
 
 func (x *PreviewBackupRequest) GetData() []byte {
@@ -14014,7 +14087,7 @@ type ImportBackupRequest struct {
 
 func (x *ImportBackupRequest) Reset() {
 	*x = ImportBackupRequest{}
-	mi := &file_lavray_proto_msgTypes[188]
+	mi := &file_lavray_proto_msgTypes[189]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14026,7 +14099,7 @@ func (x *ImportBackupRequest) String() string {
 func (*ImportBackupRequest) ProtoMessage() {}
 
 func (x *ImportBackupRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[188]
+	mi := &file_lavray_proto_msgTypes[189]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14039,7 +14112,7 @@ func (x *ImportBackupRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportBackupRequest.ProtoReflect.Descriptor instead.
 func (*ImportBackupRequest) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{188}
+	return file_lavray_proto_rawDescGZIP(), []int{189}
 }
 
 func (x *ImportBackupRequest) GetData() []byte {
@@ -14073,7 +14146,7 @@ type ImportBackupResponse struct {
 
 func (x *ImportBackupResponse) Reset() {
 	*x = ImportBackupResponse{}
-	mi := &file_lavray_proto_msgTypes[189]
+	mi := &file_lavray_proto_msgTypes[190]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14085,7 +14158,7 @@ func (x *ImportBackupResponse) String() string {
 func (*ImportBackupResponse) ProtoMessage() {}
 
 func (x *ImportBackupResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[189]
+	mi := &file_lavray_proto_msgTypes[190]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14098,7 +14171,7 @@ func (x *ImportBackupResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ImportBackupResponse.ProtoReflect.Descriptor instead.
 func (*ImportBackupResponse) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{189}
+	return file_lavray_proto_rawDescGZIP(), []int{190}
 }
 
 func (x *ImportBackupResponse) GetRestored() *BackupSummary {
@@ -14131,7 +14204,7 @@ type BackupSummary struct {
 
 func (x *BackupSummary) Reset() {
 	*x = BackupSummary{}
-	mi := &file_lavray_proto_msgTypes[190]
+	mi := &file_lavray_proto_msgTypes[191]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -14143,7 +14216,7 @@ func (x *BackupSummary) String() string {
 func (*BackupSummary) ProtoMessage() {}
 
 func (x *BackupSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_lavray_proto_msgTypes[190]
+	mi := &file_lavray_proto_msgTypes[191]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -14156,7 +14229,7 @@ func (x *BackupSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BackupSummary.ProtoReflect.Descriptor instead.
 func (*BackupSummary) Descriptor() ([]byte, []int) {
-	return file_lavray_proto_rawDescGZIP(), []int{190}
+	return file_lavray_proto_rawDescGZIP(), []int{191}
 }
 
 func (x *BackupSummary) GetGroups() int32 {
@@ -14674,11 +14747,13 @@ const file_lavray_proto_rawDesc = "" +
 	"orderedIds\"S\n" +
 	" RemoveUnavailableProfilesRequest\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\x03R\agroupId\x12\x14\n" +
-	"\x05apply\x18\x02 \x01(\bR\x05apply\"f\n" +
+	"\x05apply\x18\x02 \x01(\bR\x05apply\"\x87\x01\n" +
 	"\x19RemoveUnavailableResponse\x12(\n" +
 	"\x10would_remove_ids\x18\x01 \x03(\x03R\x0ewouldRemoveIds\x12\x1f\n" +
 	"\vremoved_ids\x18\x02 \x03(\x03R\n" +
-	"removedIds\"M\n" +
+	"removedIds\x12\x1f\n" +
+	"\vskipped_ids\x18\x03 \x03(\x03R\n" +
+	"skippedIds\"M\n" +
 	"\x1aDeduplicateProfilesRequest\x12\x19\n" +
 	"\bgroup_id\x18\x01 \x01(\x03R\agroupId\x12\x14\n" +
 	"\x05apply\x18\x02 \x01(\bR\x05apply\"j\n" +
@@ -14810,11 +14885,15 @@ const file_lavray_proto_rawDesc = "" +
 	"\x17ClearTestResultsRequest\x12\x10\n" +
 	"\x03ids\x18\x01 \x03(\x03R\x03ids\")\n" +
 	"\x15ResolveDomainsRequest\x12\x10\n" +
-	"\x03ids\x18\x01 \x03(\x03R\x03ids\"\\\n" +
+	"\x03ids\x18\x01 \x03(\x03R\x03ids\"\x8f\x01\n" +
 	"\x16ResolveDomainsResponse\x12!\n" +
 	"\fresolved_ids\x18\x01 \x03(\x03R\vresolvedIds\x12\x1f\n" +
 	"\vskipped_ids\x18\x02 \x03(\x03R\n" +
-	"skippedIds\"\x13\n" +
+	"skippedIds\x121\n" +
+	"\x06failed\x18\x03 \x03(\v2\x19.lavray.v1.ResolveFailureR\x06failed\"8\n" +
+	"\x0eResolveFailure\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x13\n" +
 	"\x11ListGroupsRequest\">\n" +
 	"\x12ListGroupsResponse\x12(\n" +
 	"\x06groups\x18\x01 \x03(\v2\x10.lavray.v1.GroupR\x06groups\"<\n" +
@@ -15720,7 +15799,7 @@ func file_lavray_proto_rawDescGZIP() []byte {
 }
 
 var file_lavray_proto_enumTypes = make([]protoimpl.EnumInfo, 37)
-var file_lavray_proto_msgTypes = make([]protoimpl.MessageInfo, 201)
+var file_lavray_proto_msgTypes = make([]protoimpl.MessageInfo, 202)
 var file_lavray_proto_goTypes = []any{
 	(Outbound)(0),                             // 0: lavray.v1.Outbound
 	(SniffingMode)(0),                         // 1: lavray.v1.SniffingMode
@@ -15826,146 +15905,147 @@ var file_lavray_proto_goTypes = []any{
 	(*ClearTestResultsRequest)(nil),           // 101: lavray.v1.ClearTestResultsRequest
 	(*ResolveDomainsRequest)(nil),             // 102: lavray.v1.ResolveDomainsRequest
 	(*ResolveDomainsResponse)(nil),            // 103: lavray.v1.ResolveDomainsResponse
-	(*ListGroupsRequest)(nil),                 // 104: lavray.v1.ListGroupsRequest
-	(*ListGroupsResponse)(nil),                // 105: lavray.v1.ListGroupsResponse
-	(*CreateGroupRequest)(nil),                // 106: lavray.v1.CreateGroupRequest
-	(*UpdateGroupRequest)(nil),                // 107: lavray.v1.UpdateGroupRequest
-	(*DeleteGroupRequest)(nil),                // 108: lavray.v1.DeleteGroupRequest
-	(*ReorderGroupsRequest)(nil),              // 109: lavray.v1.ReorderGroupsRequest
-	(*ListSubscriptionsRequest)(nil),          // 110: lavray.v1.ListSubscriptionsRequest
-	(*ListSubscriptionsResponse)(nil),         // 111: lavray.v1.ListSubscriptionsResponse
-	(*CreateSubscriptionRequest)(nil),         // 112: lavray.v1.CreateSubscriptionRequest
-	(*UpdateSubscriptionSettingsRequest)(nil), // 113: lavray.v1.UpdateSubscriptionSettingsRequest
-	(*DeleteSubscriptionRequest)(nil),         // 114: lavray.v1.DeleteSubscriptionRequest
-	(*UpdateSubscriptionRequest)(nil),         // 115: lavray.v1.UpdateSubscriptionRequest
-	(*UpdateAllSubscriptionsRequest)(nil),     // 116: lavray.v1.UpdateAllSubscriptionsRequest
-	(*RollbackSubscriptionRequest)(nil),       // 117: lavray.v1.RollbackSubscriptionRequest
-	(*RollbackSubscriptionResponse)(nil),      // 118: lavray.v1.RollbackSubscriptionResponse
-	(*SubscriptionProgress)(nil),              // 119: lavray.v1.SubscriptionProgress
-	(*RoutingPreset)(nil),                     // 120: lavray.v1.RoutingPreset
-	(*ProcessRule)(nil),                       // 121: lavray.v1.ProcessRule
-	(*ListPresetsRequest)(nil),                // 122: lavray.v1.ListPresetsRequest
-	(*ListPresetsResponse)(nil),               // 123: lavray.v1.ListPresetsResponse
-	(*GetPresetRequest)(nil),                  // 124: lavray.v1.GetPresetRequest
-	(*CreatePresetRequest)(nil),               // 125: lavray.v1.CreatePresetRequest
-	(*UpdatePresetRequest)(nil),               // 126: lavray.v1.UpdatePresetRequest
-	(*UpdatePresetResponse)(nil),              // 127: lavray.v1.UpdatePresetResponse
-	(*DeletePresetRequest)(nil),               // 128: lavray.v1.DeletePresetRequest
-	(*ActivatePresetRequest)(nil),             // 129: lavray.v1.ActivatePresetRequest
-	(*ActivatePresetResponse)(nil),            // 130: lavray.v1.ActivatePresetResponse
-	(*GetActivePresetRequest)(nil),            // 131: lavray.v1.GetActivePresetRequest
-	(*ResetBuiltinPresetRequest)(nil),         // 132: lavray.v1.ResetBuiltinPresetRequest
-	(*ImportNekoRayRouteRequest)(nil),         // 133: lavray.v1.ImportNekoRayRouteRequest
-	(*DnsSettings)(nil),                       // 134: lavray.v1.DnsSettings
-	(*GetDnsRequest)(nil),                     // 135: lavray.v1.GetDnsRequest
-	(*SetDnsRequest)(nil),                     // 136: lavray.v1.SetDnsRequest
-	(*SetDnsResponse)(nil),                    // 137: lavray.v1.SetDnsResponse
-	(*ValidateDnsJsonRequest)(nil),            // 138: lavray.v1.ValidateDnsJsonRequest
-	(*ValidateDnsJsonResponse)(nil),           // 139: lavray.v1.ValidateDnsJsonResponse
-	(*SettingDescriptor)(nil),                 // 140: lavray.v1.SettingDescriptor
-	(*DescribeSettingsRequest)(nil),           // 141: lavray.v1.DescribeSettingsRequest
-	(*DescribeSettingsResponse)(nil),          // 142: lavray.v1.DescribeSettingsResponse
-	(*SettingGroup)(nil),                      // 143: lavray.v1.SettingGroup
-	(*GetSettingsRequest)(nil),                // 144: lavray.v1.GetSettingsRequest
-	(*GetSettingsResponse)(nil),               // 145: lavray.v1.GetSettingsResponse
-	(*SetSettingsRequest)(nil),                // 146: lavray.v1.SetSettingsRequest
-	(*SetSettingsResponse)(nil),               // 147: lavray.v1.SetSettingsResponse
-	(*ResetSettingsRequest)(nil),              // 148: lavray.v1.ResetSettingsRequest
-	(*SubscribeSettingsRequest)(nil),          // 149: lavray.v1.SubscribeSettingsRequest
-	(*SettingsChanged)(nil),                   // 150: lavray.v1.SettingsChanged
-	(*SettingValue)(nil),                      // 151: lavray.v1.SettingValue
-	(*StringList)(nil),                        // 152: lavray.v1.StringList
-	(*SubscribeLogsRequest)(nil),              // 153: lavray.v1.SubscribeLogsRequest
-	(*LogLine)(nil),                           // 154: lavray.v1.LogLine
-	(*GetTailRequest)(nil),                    // 155: lavray.v1.GetTailRequest
-	(*GetTailResponse)(nil),                   // 156: lavray.v1.GetTailResponse
-	(*SubscribeStatsRequest)(nil),             // 157: lavray.v1.SubscribeStatsRequest
-	(*StatsSnapshot)(nil),                     // 158: lavray.v1.StatsSnapshot
-	(*TagStat)(nil),                           // 159: lavray.v1.TagStat
-	(*SessionStat)(nil),                       // 160: lavray.v1.SessionStat
-	(*GetTrafficTotalsRequest)(nil),           // 161: lavray.v1.GetTrafficTotalsRequest
-	(*GetTrafficTotalsResponse)(nil),          // 162: lavray.v1.GetTrafficTotalsResponse
-	(*GetTrafficSummaryRequest)(nil),          // 163: lavray.v1.GetTrafficSummaryRequest
-	(*GetTrafficSummaryResponse)(nil),         // 164: lavray.v1.GetTrafficSummaryResponse
-	(*GroupTrafficSummary)(nil),               // 165: lavray.v1.GroupTrafficSummary
-	(*ListConnectionsRequest)(nil),            // 166: lavray.v1.ListConnectionsRequest
-	(*ListConnectionsResponse)(nil),           // 167: lavray.v1.ListConnectionsResponse
-	(*WatchConnectionsRequest)(nil),           // 168: lavray.v1.WatchConnectionsRequest
-	(*ConnectionSnapshot)(nil),                // 169: lavray.v1.ConnectionSnapshot
-	(*Connection)(nil),                        // 170: lavray.v1.Connection
-	(*CloseConnectionRequest)(nil),            // 171: lavray.v1.CloseConnectionRequest
-	(*CheckRouteRequest)(nil),                 // 172: lavray.v1.CheckRouteRequest
-	(*CheckRouteResponse)(nil),                // 173: lavray.v1.CheckRouteResponse
-	(*RunSelfCheckRequest)(nil),               // 174: lavray.v1.RunSelfCheckRequest
-	(*RunSelfCheckResponse)(nil),              // 175: lavray.v1.RunSelfCheckResponse
-	(*SelfCheckResult)(nil),                   // 176: lavray.v1.SelfCheckResult
-	(*GetPublicIpRequest)(nil),                // 177: lavray.v1.GetPublicIpRequest
-	(*GetPublicIpResponse)(nil),               // 178: lavray.v1.GetPublicIpResponse
-	(*LeakReport)(nil),                        // 179: lavray.v1.LeakReport
-	(*GatewayStatus)(nil),                     // 180: lavray.v1.GatewayStatus
-	(*ListDevicePoliciesResponse)(nil),        // 181: lavray.v1.ListDevicePoliciesResponse
-	(*SetDevicePolicyRequest)(nil),            // 182: lavray.v1.SetDevicePolicyRequest
-	(*DevicePolicy)(nil),                      // 183: lavray.v1.DevicePolicy
-	(*CheckUpdatesRequest)(nil),               // 184: lavray.v1.CheckUpdatesRequest
-	(*CheckUpdatesResponse)(nil),              // 185: lavray.v1.CheckUpdatesResponse
-	(*ComponentUpdate)(nil),                   // 186: lavray.v1.ComponentUpdate
-	(*UpdateMetadata)(nil),                    // 187: lavray.v1.UpdateMetadata
-	(*MetadataSignature)(nil),                 // 188: lavray.v1.MetadataSignature
-	(*UpdateManifest)(nil),                    // 189: lavray.v1.UpdateManifest
-	(*CoreRef)(nil),                           // 190: lavray.v1.CoreRef
-	(*UpdateAsset)(nil),                       // 191: lavray.v1.UpdateAsset
-	(*PresetRef)(nil),                         // 192: lavray.v1.PresetRef
-	(*GeoRef)(nil),                            // 193: lavray.v1.GeoRef
-	(*DownloadUpdatesRequest)(nil),            // 194: lavray.v1.DownloadUpdatesRequest
-	(*ApplyUpdatesRequest)(nil),               // 195: lavray.v1.ApplyUpdatesRequest
-	(*RollbackRequest)(nil),                   // 196: lavray.v1.RollbackRequest
-	(*RollbackResponse)(nil),                  // 197: lavray.v1.RollbackResponse
-	(*GetUpdateStateRequest)(nil),             // 198: lavray.v1.GetUpdateStateRequest
-	(*UpdateStateResponse)(nil),               // 199: lavray.v1.UpdateStateResponse
-	(*ChainStateInfo)(nil),                    // 200: lavray.v1.ChainStateInfo
-	(*ComponentState)(nil),                    // 201: lavray.v1.ComponentState
-	(*VerifyLocalUpdateRequest)(nil),          // 202: lavray.v1.VerifyLocalUpdateRequest
-	(*VerifyLocalUpdateResponse)(nil),         // 203: lavray.v1.VerifyLocalUpdateResponse
-	(*UpdateEvent)(nil),                       // 204: lavray.v1.UpdateEvent
-	(*DownloadProgress)(nil),                  // 205: lavray.v1.DownloadProgress
-	(*VerificationPassed)(nil),                // 206: lavray.v1.VerificationPassed
-	(*VerificationFailed)(nil),                // 207: lavray.v1.VerificationFailed
-	(*UpdateFailed)(nil),                      // 208: lavray.v1.UpdateFailed
-	(*GetWebModeStatusRequest)(nil),           // 209: lavray.v1.GetWebModeStatusRequest
-	(*WebModeStatus)(nil),                     // 210: lavray.v1.WebModeStatus
-	(*SetupFirstAdminRequest)(nil),            // 211: lavray.v1.SetupFirstAdminRequest
-	(*LoginRequest)(nil),                      // 212: lavray.v1.LoginRequest
-	(*WebSession)(nil),                        // 213: lavray.v1.WebSession
-	(*LogoutRequest)(nil),                     // 214: lavray.v1.LogoutRequest
-	(*RenewSessionRequest)(nil),               // 215: lavray.v1.RenewSessionRequest
-	(*WhoAmIRequest)(nil),                     // 216: lavray.v1.WhoAmIRequest
-	(*ChangePasswordRequest)(nil),             // 217: lavray.v1.ChangePasswordRequest
-	(*ChangePasswordResponse)(nil),            // 218: lavray.v1.ChangePasswordResponse
-	(*ListSessionsResponse)(nil),              // 219: lavray.v1.ListSessionsResponse
-	(*SessionInfo)(nil),                       // 220: lavray.v1.SessionInfo
-	(*RevokeSessionRequest)(nil),              // 221: lavray.v1.RevokeSessionRequest
-	(*ExportBackupRequest)(nil),               // 222: lavray.v1.ExportBackupRequest
-	(*ExportBackupResponse)(nil),              // 223: lavray.v1.ExportBackupResponse
-	(*PreviewBackupRequest)(nil),              // 224: lavray.v1.PreviewBackupRequest
-	(*ImportBackupRequest)(nil),               // 225: lavray.v1.ImportBackupRequest
-	(*ImportBackupResponse)(nil),              // 226: lavray.v1.ImportBackupResponse
-	(*BackupSummary)(nil),                     // 227: lavray.v1.BackupSummary
-	nil,                                       // 228: lavray.v1.Group.HttpHeadersEntry
-	nil,                                       // 229: lavray.v1.GetSettingsResponse.ValuesEntry
-	nil,                                       // 230: lavray.v1.SetSettingsRequest.ValuesEntry
-	nil,                                       // 231: lavray.v1.SettingsChanged.ChangedEntry
-	nil,                                       // 232: lavray.v1.GetTrafficTotalsResponse.TotalsEntry
-	nil,                                       // 233: lavray.v1.ComponentUpdate.NotesEntry
-	nil,                                       // 234: lavray.v1.UpdateManifest.AssetsEntry
-	nil,                                       // 235: lavray.v1.UpdateManifest.PresetsEntry
-	nil,                                       // 236: lavray.v1.UpdateManifest.NotesEntry
-	nil,                                       // 237: lavray.v1.ChainStateInfo.MaxSerialEntry
+	(*ResolveFailure)(nil),                    // 104: lavray.v1.ResolveFailure
+	(*ListGroupsRequest)(nil),                 // 105: lavray.v1.ListGroupsRequest
+	(*ListGroupsResponse)(nil),                // 106: lavray.v1.ListGroupsResponse
+	(*CreateGroupRequest)(nil),                // 107: lavray.v1.CreateGroupRequest
+	(*UpdateGroupRequest)(nil),                // 108: lavray.v1.UpdateGroupRequest
+	(*DeleteGroupRequest)(nil),                // 109: lavray.v1.DeleteGroupRequest
+	(*ReorderGroupsRequest)(nil),              // 110: lavray.v1.ReorderGroupsRequest
+	(*ListSubscriptionsRequest)(nil),          // 111: lavray.v1.ListSubscriptionsRequest
+	(*ListSubscriptionsResponse)(nil),         // 112: lavray.v1.ListSubscriptionsResponse
+	(*CreateSubscriptionRequest)(nil),         // 113: lavray.v1.CreateSubscriptionRequest
+	(*UpdateSubscriptionSettingsRequest)(nil), // 114: lavray.v1.UpdateSubscriptionSettingsRequest
+	(*DeleteSubscriptionRequest)(nil),         // 115: lavray.v1.DeleteSubscriptionRequest
+	(*UpdateSubscriptionRequest)(nil),         // 116: lavray.v1.UpdateSubscriptionRequest
+	(*UpdateAllSubscriptionsRequest)(nil),     // 117: lavray.v1.UpdateAllSubscriptionsRequest
+	(*RollbackSubscriptionRequest)(nil),       // 118: lavray.v1.RollbackSubscriptionRequest
+	(*RollbackSubscriptionResponse)(nil),      // 119: lavray.v1.RollbackSubscriptionResponse
+	(*SubscriptionProgress)(nil),              // 120: lavray.v1.SubscriptionProgress
+	(*RoutingPreset)(nil),                     // 121: lavray.v1.RoutingPreset
+	(*ProcessRule)(nil),                       // 122: lavray.v1.ProcessRule
+	(*ListPresetsRequest)(nil),                // 123: lavray.v1.ListPresetsRequest
+	(*ListPresetsResponse)(nil),               // 124: lavray.v1.ListPresetsResponse
+	(*GetPresetRequest)(nil),                  // 125: lavray.v1.GetPresetRequest
+	(*CreatePresetRequest)(nil),               // 126: lavray.v1.CreatePresetRequest
+	(*UpdatePresetRequest)(nil),               // 127: lavray.v1.UpdatePresetRequest
+	(*UpdatePresetResponse)(nil),              // 128: lavray.v1.UpdatePresetResponse
+	(*DeletePresetRequest)(nil),               // 129: lavray.v1.DeletePresetRequest
+	(*ActivatePresetRequest)(nil),             // 130: lavray.v1.ActivatePresetRequest
+	(*ActivatePresetResponse)(nil),            // 131: lavray.v1.ActivatePresetResponse
+	(*GetActivePresetRequest)(nil),            // 132: lavray.v1.GetActivePresetRequest
+	(*ResetBuiltinPresetRequest)(nil),         // 133: lavray.v1.ResetBuiltinPresetRequest
+	(*ImportNekoRayRouteRequest)(nil),         // 134: lavray.v1.ImportNekoRayRouteRequest
+	(*DnsSettings)(nil),                       // 135: lavray.v1.DnsSettings
+	(*GetDnsRequest)(nil),                     // 136: lavray.v1.GetDnsRequest
+	(*SetDnsRequest)(nil),                     // 137: lavray.v1.SetDnsRequest
+	(*SetDnsResponse)(nil),                    // 138: lavray.v1.SetDnsResponse
+	(*ValidateDnsJsonRequest)(nil),            // 139: lavray.v1.ValidateDnsJsonRequest
+	(*ValidateDnsJsonResponse)(nil),           // 140: lavray.v1.ValidateDnsJsonResponse
+	(*SettingDescriptor)(nil),                 // 141: lavray.v1.SettingDescriptor
+	(*DescribeSettingsRequest)(nil),           // 142: lavray.v1.DescribeSettingsRequest
+	(*DescribeSettingsResponse)(nil),          // 143: lavray.v1.DescribeSettingsResponse
+	(*SettingGroup)(nil),                      // 144: lavray.v1.SettingGroup
+	(*GetSettingsRequest)(nil),                // 145: lavray.v1.GetSettingsRequest
+	(*GetSettingsResponse)(nil),               // 146: lavray.v1.GetSettingsResponse
+	(*SetSettingsRequest)(nil),                // 147: lavray.v1.SetSettingsRequest
+	(*SetSettingsResponse)(nil),               // 148: lavray.v1.SetSettingsResponse
+	(*ResetSettingsRequest)(nil),              // 149: lavray.v1.ResetSettingsRequest
+	(*SubscribeSettingsRequest)(nil),          // 150: lavray.v1.SubscribeSettingsRequest
+	(*SettingsChanged)(nil),                   // 151: lavray.v1.SettingsChanged
+	(*SettingValue)(nil),                      // 152: lavray.v1.SettingValue
+	(*StringList)(nil),                        // 153: lavray.v1.StringList
+	(*SubscribeLogsRequest)(nil),              // 154: lavray.v1.SubscribeLogsRequest
+	(*LogLine)(nil),                           // 155: lavray.v1.LogLine
+	(*GetTailRequest)(nil),                    // 156: lavray.v1.GetTailRequest
+	(*GetTailResponse)(nil),                   // 157: lavray.v1.GetTailResponse
+	(*SubscribeStatsRequest)(nil),             // 158: lavray.v1.SubscribeStatsRequest
+	(*StatsSnapshot)(nil),                     // 159: lavray.v1.StatsSnapshot
+	(*TagStat)(nil),                           // 160: lavray.v1.TagStat
+	(*SessionStat)(nil),                       // 161: lavray.v1.SessionStat
+	(*GetTrafficTotalsRequest)(nil),           // 162: lavray.v1.GetTrafficTotalsRequest
+	(*GetTrafficTotalsResponse)(nil),          // 163: lavray.v1.GetTrafficTotalsResponse
+	(*GetTrafficSummaryRequest)(nil),          // 164: lavray.v1.GetTrafficSummaryRequest
+	(*GetTrafficSummaryResponse)(nil),         // 165: lavray.v1.GetTrafficSummaryResponse
+	(*GroupTrafficSummary)(nil),               // 166: lavray.v1.GroupTrafficSummary
+	(*ListConnectionsRequest)(nil),            // 167: lavray.v1.ListConnectionsRequest
+	(*ListConnectionsResponse)(nil),           // 168: lavray.v1.ListConnectionsResponse
+	(*WatchConnectionsRequest)(nil),           // 169: lavray.v1.WatchConnectionsRequest
+	(*ConnectionSnapshot)(nil),                // 170: lavray.v1.ConnectionSnapshot
+	(*Connection)(nil),                        // 171: lavray.v1.Connection
+	(*CloseConnectionRequest)(nil),            // 172: lavray.v1.CloseConnectionRequest
+	(*CheckRouteRequest)(nil),                 // 173: lavray.v1.CheckRouteRequest
+	(*CheckRouteResponse)(nil),                // 174: lavray.v1.CheckRouteResponse
+	(*RunSelfCheckRequest)(nil),               // 175: lavray.v1.RunSelfCheckRequest
+	(*RunSelfCheckResponse)(nil),              // 176: lavray.v1.RunSelfCheckResponse
+	(*SelfCheckResult)(nil),                   // 177: lavray.v1.SelfCheckResult
+	(*GetPublicIpRequest)(nil),                // 178: lavray.v1.GetPublicIpRequest
+	(*GetPublicIpResponse)(nil),               // 179: lavray.v1.GetPublicIpResponse
+	(*LeakReport)(nil),                        // 180: lavray.v1.LeakReport
+	(*GatewayStatus)(nil),                     // 181: lavray.v1.GatewayStatus
+	(*ListDevicePoliciesResponse)(nil),        // 182: lavray.v1.ListDevicePoliciesResponse
+	(*SetDevicePolicyRequest)(nil),            // 183: lavray.v1.SetDevicePolicyRequest
+	(*DevicePolicy)(nil),                      // 184: lavray.v1.DevicePolicy
+	(*CheckUpdatesRequest)(nil),               // 185: lavray.v1.CheckUpdatesRequest
+	(*CheckUpdatesResponse)(nil),              // 186: lavray.v1.CheckUpdatesResponse
+	(*ComponentUpdate)(nil),                   // 187: lavray.v1.ComponentUpdate
+	(*UpdateMetadata)(nil),                    // 188: lavray.v1.UpdateMetadata
+	(*MetadataSignature)(nil),                 // 189: lavray.v1.MetadataSignature
+	(*UpdateManifest)(nil),                    // 190: lavray.v1.UpdateManifest
+	(*CoreRef)(nil),                           // 191: lavray.v1.CoreRef
+	(*UpdateAsset)(nil),                       // 192: lavray.v1.UpdateAsset
+	(*PresetRef)(nil),                         // 193: lavray.v1.PresetRef
+	(*GeoRef)(nil),                            // 194: lavray.v1.GeoRef
+	(*DownloadUpdatesRequest)(nil),            // 195: lavray.v1.DownloadUpdatesRequest
+	(*ApplyUpdatesRequest)(nil),               // 196: lavray.v1.ApplyUpdatesRequest
+	(*RollbackRequest)(nil),                   // 197: lavray.v1.RollbackRequest
+	(*RollbackResponse)(nil),                  // 198: lavray.v1.RollbackResponse
+	(*GetUpdateStateRequest)(nil),             // 199: lavray.v1.GetUpdateStateRequest
+	(*UpdateStateResponse)(nil),               // 200: lavray.v1.UpdateStateResponse
+	(*ChainStateInfo)(nil),                    // 201: lavray.v1.ChainStateInfo
+	(*ComponentState)(nil),                    // 202: lavray.v1.ComponentState
+	(*VerifyLocalUpdateRequest)(nil),          // 203: lavray.v1.VerifyLocalUpdateRequest
+	(*VerifyLocalUpdateResponse)(nil),         // 204: lavray.v1.VerifyLocalUpdateResponse
+	(*UpdateEvent)(nil),                       // 205: lavray.v1.UpdateEvent
+	(*DownloadProgress)(nil),                  // 206: lavray.v1.DownloadProgress
+	(*VerificationPassed)(nil),                // 207: lavray.v1.VerificationPassed
+	(*VerificationFailed)(nil),                // 208: lavray.v1.VerificationFailed
+	(*UpdateFailed)(nil),                      // 209: lavray.v1.UpdateFailed
+	(*GetWebModeStatusRequest)(nil),           // 210: lavray.v1.GetWebModeStatusRequest
+	(*WebModeStatus)(nil),                     // 211: lavray.v1.WebModeStatus
+	(*SetupFirstAdminRequest)(nil),            // 212: lavray.v1.SetupFirstAdminRequest
+	(*LoginRequest)(nil),                      // 213: lavray.v1.LoginRequest
+	(*WebSession)(nil),                        // 214: lavray.v1.WebSession
+	(*LogoutRequest)(nil),                     // 215: lavray.v1.LogoutRequest
+	(*RenewSessionRequest)(nil),               // 216: lavray.v1.RenewSessionRequest
+	(*WhoAmIRequest)(nil),                     // 217: lavray.v1.WhoAmIRequest
+	(*ChangePasswordRequest)(nil),             // 218: lavray.v1.ChangePasswordRequest
+	(*ChangePasswordResponse)(nil),            // 219: lavray.v1.ChangePasswordResponse
+	(*ListSessionsResponse)(nil),              // 220: lavray.v1.ListSessionsResponse
+	(*SessionInfo)(nil),                       // 221: lavray.v1.SessionInfo
+	(*RevokeSessionRequest)(nil),              // 222: lavray.v1.RevokeSessionRequest
+	(*ExportBackupRequest)(nil),               // 223: lavray.v1.ExportBackupRequest
+	(*ExportBackupResponse)(nil),              // 224: lavray.v1.ExportBackupResponse
+	(*PreviewBackupRequest)(nil),              // 225: lavray.v1.PreviewBackupRequest
+	(*ImportBackupRequest)(nil),               // 226: lavray.v1.ImportBackupRequest
+	(*ImportBackupResponse)(nil),              // 227: lavray.v1.ImportBackupResponse
+	(*BackupSummary)(nil),                     // 228: lavray.v1.BackupSummary
+	nil,                                       // 229: lavray.v1.Group.HttpHeadersEntry
+	nil,                                       // 230: lavray.v1.GetSettingsResponse.ValuesEntry
+	nil,                                       // 231: lavray.v1.SetSettingsRequest.ValuesEntry
+	nil,                                       // 232: lavray.v1.SettingsChanged.ChangedEntry
+	nil,                                       // 233: lavray.v1.GetTrafficTotalsResponse.TotalsEntry
+	nil,                                       // 234: lavray.v1.ComponentUpdate.NotesEntry
+	nil,                                       // 235: lavray.v1.UpdateManifest.AssetsEntry
+	nil,                                       // 236: lavray.v1.UpdateManifest.PresetsEntry
+	nil,                                       // 237: lavray.v1.UpdateManifest.NotesEntry
+	nil,                                       // 238: lavray.v1.ChainStateInfo.MaxSerialEntry
 }
 var file_lavray_proto_depIdxs = []int32{
 	58,  // 0: lavray.v1.ConnectRequest.inline_profile:type_name -> lavray.v1.Profile
 	4,   // 1: lavray.v1.ConnectRequest.mode:type_name -> lavray.v1.ConnectMode
 	49,  // 2: lavray.v1.ConnectResponse.status:type_name -> lavray.v1.CoreStatus
-	158, // 3: lavray.v1.DisconnectResponse.final_stats:type_name -> lavray.v1.StatsSnapshot
+	159, // 3: lavray.v1.DisconnectResponse.final_stats:type_name -> lavray.v1.StatsSnapshot
 	10,  // 4: lavray.v1.ShutdownRequest.reason:type_name -> lavray.v1.ShutdownRequest.Reason
 	5,   // 5: lavray.v1.CoreStatus.state:type_name -> lavray.v1.CoreState
 	4,   // 6: lavray.v1.CoreStatus.mode:type_name -> lavray.v1.ConnectMode
@@ -16000,7 +16080,7 @@ var file_lavray_proto_depIdxs = []int32{
 	20,  // 35: lavray.v1.CustomDetail.core:type_name -> lavray.v1.CustomDetail.Core
 	21,  // 36: lavray.v1.Group.kind:type_name -> lavray.v1.Group.Kind
 	70,  // 37: lavray.v1.Group.subscription_info:type_name -> lavray.v1.SubscriptionInfo
-	228, // 38: lavray.v1.Group.http_headers:type_name -> lavray.v1.Group.HttpHeadersEntry
+	229, // 38: lavray.v1.Group.http_headers:type_name -> lavray.v1.Group.HttpHeadersEntry
 	38,  // 39: lavray.v1.ListProfilesRequest.page:type_name -> lavray.v1.Page
 	58,  // 40: lavray.v1.ListProfilesResponse.profiles:type_name -> lavray.v1.Profile
 	58,  // 41: lavray.v1.CreateProfileRequest.profile:type_name -> lavray.v1.Profile
@@ -16015,279 +16095,280 @@ var file_lavray_proto_depIdxs = []int32{
 	25,  // 50: lavray.v1.ExportConfigRequest.purpose:type_name -> lavray.v1.ExportConfigRequest.Purpose
 	26,  // 51: lavray.v1.TestLatencyRequest.mode:type_name -> lavray.v1.TestLatencyRequest.Mode
 	55,  // 52: lavray.v1.LatencyResult.result:type_name -> lavray.v1.TestResult
-	69,  // 53: lavray.v1.ListGroupsResponse.groups:type_name -> lavray.v1.Group
-	69,  // 54: lavray.v1.CreateGroupRequest.group:type_name -> lavray.v1.Group
-	69,  // 55: lavray.v1.UpdateGroupRequest.group:type_name -> lavray.v1.Group
-	69,  // 56: lavray.v1.ListSubscriptionsResponse.groups:type_name -> lavray.v1.Group
-	27,  // 57: lavray.v1.SubscriptionProgress.phase:type_name -> lavray.v1.SubscriptionProgress.Phase
-	70,  // 58: lavray.v1.SubscriptionProgress.user_info:type_name -> lavray.v1.SubscriptionInfo
-	121, // 59: lavray.v1.RoutingPreset.process_rules:type_name -> lavray.v1.ProcessRule
-	0,   // 60: lavray.v1.RoutingPreset.default_outbound:type_name -> lavray.v1.Outbound
-	1,   // 61: lavray.v1.RoutingPreset.sniffing_mode:type_name -> lavray.v1.SniffingMode
-	2,   // 62: lavray.v1.RoutingPreset.outbound_domain_strategy:type_name -> lavray.v1.DomainStrategy
-	134, // 63: lavray.v1.RoutingPreset.dns:type_name -> lavray.v1.DnsSettings
-	0,   // 64: lavray.v1.ProcessRule.outbound:type_name -> lavray.v1.Outbound
-	120, // 65: lavray.v1.ListPresetsResponse.presets:type_name -> lavray.v1.RoutingPreset
-	120, // 66: lavray.v1.CreatePresetRequest.preset:type_name -> lavray.v1.RoutingPreset
-	120, // 67: lavray.v1.UpdatePresetRequest.preset:type_name -> lavray.v1.RoutingPreset
-	120, // 68: lavray.v1.UpdatePresetResponse.preset:type_name -> lavray.v1.RoutingPreset
-	28,  // 69: lavray.v1.DnsSettings.mode:type_name -> lavray.v1.DnsSettings.Mode
-	2,   // 70: lavray.v1.DnsSettings.remote_query_strategy:type_name -> lavray.v1.DomainStrategy
-	134, // 71: lavray.v1.SetDnsRequest.dns:type_name -> lavray.v1.DnsSettings
-	134, // 72: lavray.v1.SetDnsResponse.applied:type_name -> lavray.v1.DnsSettings
-	7,   // 73: lavray.v1.SettingDescriptor.type:type_name -> lavray.v1.SettingType
-	140, // 74: lavray.v1.DescribeSettingsResponse.descriptors:type_name -> lavray.v1.SettingDescriptor
-	143, // 75: lavray.v1.DescribeSettingsResponse.groups:type_name -> lavray.v1.SettingGroup
-	229, // 76: lavray.v1.GetSettingsResponse.values:type_name -> lavray.v1.GetSettingsResponse.ValuesEntry
-	230, // 77: lavray.v1.SetSettingsRequest.values:type_name -> lavray.v1.SetSettingsRequest.ValuesEntry
-	231, // 78: lavray.v1.SettingsChanged.changed:type_name -> lavray.v1.SettingsChanged.ChangedEntry
-	152, // 79: lavray.v1.SettingValue.string_list_value:type_name -> lavray.v1.StringList
-	3,   // 80: lavray.v1.SubscribeLogsRequest.min_level:type_name -> lavray.v1.LogLevel
-	3,   // 81: lavray.v1.LogLine.level:type_name -> lavray.v1.LogLevel
-	154, // 82: lavray.v1.GetTailResponse.lines:type_name -> lavray.v1.LogLine
-	159, // 83: lavray.v1.StatsSnapshot.tags:type_name -> lavray.v1.TagStat
-	160, // 84: lavray.v1.StatsSnapshot.session:type_name -> lavray.v1.SessionStat
-	232, // 85: lavray.v1.GetTrafficTotalsResponse.totals:type_name -> lavray.v1.GetTrafficTotalsResponse.TotalsEntry
-	165, // 86: lavray.v1.GetTrafficSummaryResponse.groups:type_name -> lavray.v1.GroupTrafficSummary
-	38,  // 87: lavray.v1.ListConnectionsRequest.page:type_name -> lavray.v1.Page
-	170, // 88: lavray.v1.ListConnectionsResponse.connections:type_name -> lavray.v1.Connection
-	170, // 89: lavray.v1.ConnectionSnapshot.active:type_name -> lavray.v1.Connection
-	29,  // 90: lavray.v1.Connection.status:type_name -> lavray.v1.Connection.Status
-	0,   // 91: lavray.v1.CheckRouteResponse.outbound:type_name -> lavray.v1.Outbound
-	30,  // 92: lavray.v1.RunSelfCheckRequest.kinds:type_name -> lavray.v1.RunSelfCheckRequest.CheckKind
-	176, // 93: lavray.v1.RunSelfCheckResponse.results:type_name -> lavray.v1.SelfCheckResult
-	30,  // 94: lavray.v1.SelfCheckResult.kind:type_name -> lavray.v1.RunSelfCheckRequest.CheckKind
-	31,  // 95: lavray.v1.SelfCheckResult.status:type_name -> lavray.v1.SelfCheckResult.Status
-	32,  // 96: lavray.v1.GetPublicIpRequest.via:type_name -> lavray.v1.GetPublicIpRequest.Via
-	33,  // 97: lavray.v1.GatewayStatus.mode:type_name -> lavray.v1.GatewayStatus.Mode
-	183, // 98: lavray.v1.ListDevicePoliciesResponse.policies:type_name -> lavray.v1.DevicePolicy
-	183, // 99: lavray.v1.SetDevicePolicyRequest.policy:type_name -> lavray.v1.DevicePolicy
-	34,  // 100: lavray.v1.DevicePolicy.action:type_name -> lavray.v1.DevicePolicy.Action
-	9,   // 101: lavray.v1.CheckUpdatesRequest.channel:type_name -> lavray.v1.UpdateChannel
-	8,   // 102: lavray.v1.CheckUpdatesRequest.components:type_name -> lavray.v1.UpdateComponent
-	186, // 103: lavray.v1.CheckUpdatesResponse.available:type_name -> lavray.v1.ComponentUpdate
-	8,   // 104: lavray.v1.ComponentUpdate.component:type_name -> lavray.v1.UpdateComponent
-	233, // 105: lavray.v1.ComponentUpdate.notes:type_name -> lavray.v1.ComponentUpdate.NotesEntry
-	189, // 106: lavray.v1.ComponentUpdate.manifest:type_name -> lavray.v1.UpdateManifest
-	35,  // 107: lavray.v1.UpdateMetadata.type:type_name -> lavray.v1.UpdateMetadata.Type
-	188, // 108: lavray.v1.UpdateMetadata.signatures:type_name -> lavray.v1.MetadataSignature
-	9,   // 109: lavray.v1.UpdateManifest.channel:type_name -> lavray.v1.UpdateChannel
-	190, // 110: lavray.v1.UpdateManifest.core:type_name -> lavray.v1.CoreRef
-	234, // 111: lavray.v1.UpdateManifest.assets:type_name -> lavray.v1.UpdateManifest.AssetsEntry
-	235, // 112: lavray.v1.UpdateManifest.presets:type_name -> lavray.v1.UpdateManifest.PresetsEntry
-	193, // 113: lavray.v1.UpdateManifest.geo:type_name -> lavray.v1.GeoRef
-	236, // 114: lavray.v1.UpdateManifest.notes:type_name -> lavray.v1.UpdateManifest.NotesEntry
-	8,   // 115: lavray.v1.DownloadUpdatesRequest.components:type_name -> lavray.v1.UpdateComponent
-	8,   // 116: lavray.v1.ApplyUpdatesRequest.components:type_name -> lavray.v1.UpdateComponent
-	8,   // 117: lavray.v1.RollbackRequest.component:type_name -> lavray.v1.UpdateComponent
-	201, // 118: lavray.v1.UpdateStateResponse.components:type_name -> lavray.v1.ComponentState
-	200, // 119: lavray.v1.UpdateStateResponse.chain_state:type_name -> lavray.v1.ChainStateInfo
-	237, // 120: lavray.v1.ChainStateInfo.max_serial:type_name -> lavray.v1.ChainStateInfo.MaxSerialEntry
-	8,   // 121: lavray.v1.ComponentState.component:type_name -> lavray.v1.UpdateComponent
-	36,  // 122: lavray.v1.ComponentState.phase:type_name -> lavray.v1.ComponentState.Phase
-	189, // 123: lavray.v1.VerifyLocalUpdateResponse.manifest:type_name -> lavray.v1.UpdateManifest
-	205, // 124: lavray.v1.UpdateEvent.progress:type_name -> lavray.v1.DownloadProgress
-	206, // 125: lavray.v1.UpdateEvent.verified:type_name -> lavray.v1.VerificationPassed
-	207, // 126: lavray.v1.UpdateEvent.verify_failed:type_name -> lavray.v1.VerificationFailed
-	208, // 127: lavray.v1.UpdateEvent.failed:type_name -> lavray.v1.UpdateFailed
-	8,   // 128: lavray.v1.DownloadProgress.component:type_name -> lavray.v1.UpdateComponent
-	8,   // 129: lavray.v1.VerificationPassed.component:type_name -> lavray.v1.UpdateComponent
-	8,   // 130: lavray.v1.VerificationFailed.component:type_name -> lavray.v1.UpdateComponent
-	8,   // 131: lavray.v1.UpdateFailed.component:type_name -> lavray.v1.UpdateComponent
-	220, // 132: lavray.v1.ListSessionsResponse.sessions:type_name -> lavray.v1.SessionInfo
-	227, // 133: lavray.v1.ExportBackupResponse.summary:type_name -> lavray.v1.BackupSummary
-	227, // 134: lavray.v1.ImportBackupResponse.restored:type_name -> lavray.v1.BackupSummary
-	151, // 135: lavray.v1.GetSettingsResponse.ValuesEntry.value:type_name -> lavray.v1.SettingValue
-	151, // 136: lavray.v1.SetSettingsRequest.ValuesEntry.value:type_name -> lavray.v1.SettingValue
-	151, // 137: lavray.v1.SettingsChanged.ChangedEntry.value:type_name -> lavray.v1.SettingValue
-	57,  // 138: lavray.v1.GetTrafficTotalsResponse.TotalsEntry.value:type_name -> lavray.v1.TrafficCounters
-	191, // 139: lavray.v1.UpdateManifest.AssetsEntry.value:type_name -> lavray.v1.UpdateAsset
-	192, // 140: lavray.v1.UpdateManifest.PresetsEntry.value:type_name -> lavray.v1.PresetRef
-	39,  // 141: lavray.v1.CoreService.Connect:input_type -> lavray.v1.ConnectRequest
-	41,  // 142: lavray.v1.CoreService.Disconnect:input_type -> lavray.v1.DisconnectRequest
-	43,  // 143: lavray.v1.CoreService.RestartProfile:input_type -> lavray.v1.RestartProfileRequest
-	44,  // 144: lavray.v1.CoreService.GetStatus:input_type -> lavray.v1.GetStatusRequest
-	45,  // 145: lavray.v1.CoreService.SubscribeEvents:input_type -> lavray.v1.SubscribeEventsRequest
-	46,  // 146: lavray.v1.CoreService.GetRuntimeConfig:input_type -> lavray.v1.GetRuntimeConfigRequest
-	48,  // 147: lavray.v1.CoreService.Shutdown:input_type -> lavray.v1.ShutdownRequest
-	71,  // 148: lavray.v1.ProfileService.ListProfiles:input_type -> lavray.v1.ListProfilesRequest
-	73,  // 149: lavray.v1.ProfileService.GetProfile:input_type -> lavray.v1.GetProfileRequest
-	74,  // 150: lavray.v1.ProfileService.CreateProfile:input_type -> lavray.v1.CreateProfileRequest
-	75,  // 151: lavray.v1.ProfileService.UpdateProfile:input_type -> lavray.v1.UpdateProfileRequest
-	77,  // 152: lavray.v1.ProfileService.DeleteProfile:input_type -> lavray.v1.DeleteProfileRequest
-	78,  // 153: lavray.v1.ProfileService.MoveProfiles:input_type -> lavray.v1.MoveProfilesRequest
-	79,  // 154: lavray.v1.ProfileService.CloneProfiles:input_type -> lavray.v1.CloneProfilesRequest
-	81,  // 155: lavray.v1.ProfileService.ResetTraffic:input_type -> lavray.v1.ResetTrafficRequest
-	82,  // 156: lavray.v1.ProfileService.ReorderProfiles:input_type -> lavray.v1.ReorderProfilesRequest
-	83,  // 157: lavray.v1.ProfileService.RemoveUnavailableProfiles:input_type -> lavray.v1.RemoveUnavailableProfilesRequest
-	85,  // 158: lavray.v1.ProfileService.DeduplicateProfiles:input_type -> lavray.v1.DeduplicateProfilesRequest
-	87,  // 159: lavray.v1.ProfileService.SetProfileMeta:input_type -> lavray.v1.SetProfileMetaRequest
-	88,  // 160: lavray.v1.ProfileService.PreviewCustomFields:input_type -> lavray.v1.PreviewCustomFieldsRequest
-	90,  // 161: lavray.v1.ProfileService.ConfirmCustomFields:input_type -> lavray.v1.ConfirmCustomFieldsRequest
-	91,  // 162: lavray.v1.ProfileService.ImportContent:input_type -> lavray.v1.ImportContentRequest
-	94,  // 163: lavray.v1.ProfileService.ExportLinks:input_type -> lavray.v1.ExportLinksRequest
-	96,  // 164: lavray.v1.ProfileService.ExportConfig:input_type -> lavray.v1.ExportConfigRequest
-	98,  // 165: lavray.v1.ProfileService.TestLatency:input_type -> lavray.v1.TestLatencyRequest
-	100, // 166: lavray.v1.ProfileService.StopTests:input_type -> lavray.v1.StopTestsRequest
-	101, // 167: lavray.v1.ProfileService.ClearTestResults:input_type -> lavray.v1.ClearTestResultsRequest
-	102, // 168: lavray.v1.ProfileService.ResolveDomains:input_type -> lavray.v1.ResolveDomainsRequest
-	104, // 169: lavray.v1.ProfileService.ListGroups:input_type -> lavray.v1.ListGroupsRequest
-	106, // 170: lavray.v1.ProfileService.CreateGroup:input_type -> lavray.v1.CreateGroupRequest
-	107, // 171: lavray.v1.ProfileService.UpdateGroup:input_type -> lavray.v1.UpdateGroupRequest
-	108, // 172: lavray.v1.ProfileService.DeleteGroup:input_type -> lavray.v1.DeleteGroupRequest
-	109, // 173: lavray.v1.ProfileService.ReorderGroups:input_type -> lavray.v1.ReorderGroupsRequest
-	110, // 174: lavray.v1.SubscriptionService.ListSubscriptions:input_type -> lavray.v1.ListSubscriptionsRequest
-	112, // 175: lavray.v1.SubscriptionService.CreateSubscription:input_type -> lavray.v1.CreateSubscriptionRequest
-	113, // 176: lavray.v1.SubscriptionService.UpdateSubscriptionSettings:input_type -> lavray.v1.UpdateSubscriptionSettingsRequest
-	114, // 177: lavray.v1.SubscriptionService.DeleteSubscription:input_type -> lavray.v1.DeleteSubscriptionRequest
-	115, // 178: lavray.v1.SubscriptionService.UpdateSubscription:input_type -> lavray.v1.UpdateSubscriptionRequest
-	116, // 179: lavray.v1.SubscriptionService.UpdateAllSubscriptions:input_type -> lavray.v1.UpdateAllSubscriptionsRequest
-	117, // 180: lavray.v1.SubscriptionService.RollbackSubscription:input_type -> lavray.v1.RollbackSubscriptionRequest
-	122, // 181: lavray.v1.RoutingService.ListPresets:input_type -> lavray.v1.ListPresetsRequest
-	124, // 182: lavray.v1.RoutingService.GetPreset:input_type -> lavray.v1.GetPresetRequest
-	125, // 183: lavray.v1.RoutingService.CreatePreset:input_type -> lavray.v1.CreatePresetRequest
-	126, // 184: lavray.v1.RoutingService.UpdatePreset:input_type -> lavray.v1.UpdatePresetRequest
-	128, // 185: lavray.v1.RoutingService.DeletePreset:input_type -> lavray.v1.DeletePresetRequest
-	129, // 186: lavray.v1.RoutingService.ActivatePreset:input_type -> lavray.v1.ActivatePresetRequest
-	131, // 187: lavray.v1.RoutingService.GetActivePreset:input_type -> lavray.v1.GetActivePresetRequest
-	132, // 188: lavray.v1.RoutingService.ResetBuiltinPreset:input_type -> lavray.v1.ResetBuiltinPresetRequest
-	133, // 189: lavray.v1.RoutingService.ImportNekoRayRoute:input_type -> lavray.v1.ImportNekoRayRouteRequest
-	135, // 190: lavray.v1.DnsService.GetDns:input_type -> lavray.v1.GetDnsRequest
-	136, // 191: lavray.v1.DnsService.SetDns:input_type -> lavray.v1.SetDnsRequest
-	138, // 192: lavray.v1.DnsService.ValidateDnsJson:input_type -> lavray.v1.ValidateDnsJsonRequest
-	141, // 193: lavray.v1.SettingsService.DescribeSettings:input_type -> lavray.v1.DescribeSettingsRequest
-	144, // 194: lavray.v1.SettingsService.GetSettings:input_type -> lavray.v1.GetSettingsRequest
-	146, // 195: lavray.v1.SettingsService.SetSettings:input_type -> lavray.v1.SetSettingsRequest
-	148, // 196: lavray.v1.SettingsService.ResetSettings:input_type -> lavray.v1.ResetSettingsRequest
-	149, // 197: lavray.v1.SettingsService.SubscribeSettings:input_type -> lavray.v1.SubscribeSettingsRequest
-	153, // 198: lavray.v1.LogService.Subscribe:input_type -> lavray.v1.SubscribeLogsRequest
-	155, // 199: lavray.v1.LogService.GetTail:input_type -> lavray.v1.GetTailRequest
-	157, // 200: lavray.v1.StatsService.Subscribe:input_type -> lavray.v1.SubscribeStatsRequest
-	161, // 201: lavray.v1.StatsService.GetTrafficTotals:input_type -> lavray.v1.GetTrafficTotalsRequest
-	163, // 202: lavray.v1.StatsService.GetTrafficSummary:input_type -> lavray.v1.GetTrafficSummaryRequest
-	166, // 203: lavray.v1.ConnectionService.ListConnections:input_type -> lavray.v1.ListConnectionsRequest
-	168, // 204: lavray.v1.ConnectionService.WatchConnections:input_type -> lavray.v1.WatchConnectionsRequest
-	171, // 205: lavray.v1.ConnectionService.CloseConnection:input_type -> lavray.v1.CloseConnectionRequest
-	172, // 206: lavray.v1.DiagnosticsService.CheckRoute:input_type -> lavray.v1.CheckRouteRequest
-	174, // 207: lavray.v1.DiagnosticsService.RunSelfCheck:input_type -> lavray.v1.RunSelfCheckRequest
-	177, // 208: lavray.v1.DiagnosticsService.GetPublicIp:input_type -> lavray.v1.GetPublicIpRequest
-	37,  // 209: lavray.v1.DiagnosticsService.CheckLeaks:input_type -> lavray.v1.Empty
-	37,  // 210: lavray.v1.GatewayService.GetGatewayStatus:input_type -> lavray.v1.Empty
-	37,  // 211: lavray.v1.GatewayService.ListDevicePolicies:input_type -> lavray.v1.Empty
-	182, // 212: lavray.v1.GatewayService.SetDevicePolicy:input_type -> lavray.v1.SetDevicePolicyRequest
-	184, // 213: lavray.v1.UpdateService.CheckUpdates:input_type -> lavray.v1.CheckUpdatesRequest
-	194, // 214: lavray.v1.UpdateService.DownloadUpdates:input_type -> lavray.v1.DownloadUpdatesRequest
-	195, // 215: lavray.v1.UpdateService.ApplyUpdates:input_type -> lavray.v1.ApplyUpdatesRequest
-	196, // 216: lavray.v1.UpdateService.Rollback:input_type -> lavray.v1.RollbackRequest
-	198, // 217: lavray.v1.UpdateService.GetUpdateState:input_type -> lavray.v1.GetUpdateStateRequest
-	202, // 218: lavray.v1.UpdateService.VerifyLocalUpdate:input_type -> lavray.v1.VerifyLocalUpdateRequest
-	209, // 219: lavray.v1.WebSessionService.GetWebModeStatus:input_type -> lavray.v1.GetWebModeStatusRequest
-	211, // 220: lavray.v1.WebSessionService.SetupFirstAdmin:input_type -> lavray.v1.SetupFirstAdminRequest
-	212, // 221: lavray.v1.WebSessionService.Login:input_type -> lavray.v1.LoginRequest
-	214, // 222: lavray.v1.WebSessionService.Logout:input_type -> lavray.v1.LogoutRequest
-	215, // 223: lavray.v1.WebSessionService.RenewSession:input_type -> lavray.v1.RenewSessionRequest
-	216, // 224: lavray.v1.WebSessionService.WhoAmI:input_type -> lavray.v1.WhoAmIRequest
-	217, // 225: lavray.v1.WebSessionService.ChangePassword:input_type -> lavray.v1.ChangePasswordRequest
-	37,  // 226: lavray.v1.WebSessionService.ListSessions:input_type -> lavray.v1.Empty
-	221, // 227: lavray.v1.WebSessionService.RevokeSession:input_type -> lavray.v1.RevokeSessionRequest
-	222, // 228: lavray.v1.BackupService.ExportBackup:input_type -> lavray.v1.ExportBackupRequest
-	224, // 229: lavray.v1.BackupService.PreviewBackup:input_type -> lavray.v1.PreviewBackupRequest
-	225, // 230: lavray.v1.BackupService.ImportBackup:input_type -> lavray.v1.ImportBackupRequest
-	40,  // 231: lavray.v1.CoreService.Connect:output_type -> lavray.v1.ConnectResponse
-	42,  // 232: lavray.v1.CoreService.Disconnect:output_type -> lavray.v1.DisconnectResponse
-	40,  // 233: lavray.v1.CoreService.RestartProfile:output_type -> lavray.v1.ConnectResponse
-	49,  // 234: lavray.v1.CoreService.GetStatus:output_type -> lavray.v1.CoreStatus
-	52,  // 235: lavray.v1.CoreService.SubscribeEvents:output_type -> lavray.v1.CoreEvent
-	47,  // 236: lavray.v1.CoreService.GetRuntimeConfig:output_type -> lavray.v1.GetRuntimeConfigResponse
-	37,  // 237: lavray.v1.CoreService.Shutdown:output_type -> lavray.v1.Empty
-	72,  // 238: lavray.v1.ProfileService.ListProfiles:output_type -> lavray.v1.ListProfilesResponse
-	58,  // 239: lavray.v1.ProfileService.GetProfile:output_type -> lavray.v1.Profile
-	58,  // 240: lavray.v1.ProfileService.CreateProfile:output_type -> lavray.v1.Profile
-	76,  // 241: lavray.v1.ProfileService.UpdateProfile:output_type -> lavray.v1.UpdateProfileResponse
-	37,  // 242: lavray.v1.ProfileService.DeleteProfile:output_type -> lavray.v1.Empty
-	37,  // 243: lavray.v1.ProfileService.MoveProfiles:output_type -> lavray.v1.Empty
-	80,  // 244: lavray.v1.ProfileService.CloneProfiles:output_type -> lavray.v1.CloneProfilesResponse
-	37,  // 245: lavray.v1.ProfileService.ResetTraffic:output_type -> lavray.v1.Empty
-	37,  // 246: lavray.v1.ProfileService.ReorderProfiles:output_type -> lavray.v1.Empty
-	84,  // 247: lavray.v1.ProfileService.RemoveUnavailableProfiles:output_type -> lavray.v1.RemoveUnavailableResponse
-	86,  // 248: lavray.v1.ProfileService.DeduplicateProfiles:output_type -> lavray.v1.DeduplicateResponse
-	58,  // 249: lavray.v1.ProfileService.SetProfileMeta:output_type -> lavray.v1.Profile
-	89,  // 250: lavray.v1.ProfileService.PreviewCustomFields:output_type -> lavray.v1.PreviewCustomFieldsResponse
-	58,  // 251: lavray.v1.ProfileService.ConfirmCustomFields:output_type -> lavray.v1.Profile
-	92,  // 252: lavray.v1.ProfileService.ImportContent:output_type -> lavray.v1.ImportContentResponse
-	95,  // 253: lavray.v1.ProfileService.ExportLinks:output_type -> lavray.v1.ExportLinksResponse
-	97,  // 254: lavray.v1.ProfileService.ExportConfig:output_type -> lavray.v1.ExportConfigResponse
-	99,  // 255: lavray.v1.ProfileService.TestLatency:output_type -> lavray.v1.LatencyResult
-	37,  // 256: lavray.v1.ProfileService.StopTests:output_type -> lavray.v1.Empty
-	37,  // 257: lavray.v1.ProfileService.ClearTestResults:output_type -> lavray.v1.Empty
-	103, // 258: lavray.v1.ProfileService.ResolveDomains:output_type -> lavray.v1.ResolveDomainsResponse
-	105, // 259: lavray.v1.ProfileService.ListGroups:output_type -> lavray.v1.ListGroupsResponse
-	69,  // 260: lavray.v1.ProfileService.CreateGroup:output_type -> lavray.v1.Group
-	69,  // 261: lavray.v1.ProfileService.UpdateGroup:output_type -> lavray.v1.Group
-	37,  // 262: lavray.v1.ProfileService.DeleteGroup:output_type -> lavray.v1.Empty
-	37,  // 263: lavray.v1.ProfileService.ReorderGroups:output_type -> lavray.v1.Empty
-	111, // 264: lavray.v1.SubscriptionService.ListSubscriptions:output_type -> lavray.v1.ListSubscriptionsResponse
-	69,  // 265: lavray.v1.SubscriptionService.CreateSubscription:output_type -> lavray.v1.Group
-	69,  // 266: lavray.v1.SubscriptionService.UpdateSubscriptionSettings:output_type -> lavray.v1.Group
-	37,  // 267: lavray.v1.SubscriptionService.DeleteSubscription:output_type -> lavray.v1.Empty
-	119, // 268: lavray.v1.SubscriptionService.UpdateSubscription:output_type -> lavray.v1.SubscriptionProgress
-	119, // 269: lavray.v1.SubscriptionService.UpdateAllSubscriptions:output_type -> lavray.v1.SubscriptionProgress
-	118, // 270: lavray.v1.SubscriptionService.RollbackSubscription:output_type -> lavray.v1.RollbackSubscriptionResponse
-	123, // 271: lavray.v1.RoutingService.ListPresets:output_type -> lavray.v1.ListPresetsResponse
-	120, // 272: lavray.v1.RoutingService.GetPreset:output_type -> lavray.v1.RoutingPreset
-	120, // 273: lavray.v1.RoutingService.CreatePreset:output_type -> lavray.v1.RoutingPreset
-	127, // 274: lavray.v1.RoutingService.UpdatePreset:output_type -> lavray.v1.UpdatePresetResponse
-	37,  // 275: lavray.v1.RoutingService.DeletePreset:output_type -> lavray.v1.Empty
-	130, // 276: lavray.v1.RoutingService.ActivatePreset:output_type -> lavray.v1.ActivatePresetResponse
-	120, // 277: lavray.v1.RoutingService.GetActivePreset:output_type -> lavray.v1.RoutingPreset
-	120, // 278: lavray.v1.RoutingService.ResetBuiltinPreset:output_type -> lavray.v1.RoutingPreset
-	120, // 279: lavray.v1.RoutingService.ImportNekoRayRoute:output_type -> lavray.v1.RoutingPreset
-	134, // 280: lavray.v1.DnsService.GetDns:output_type -> lavray.v1.DnsSettings
-	137, // 281: lavray.v1.DnsService.SetDns:output_type -> lavray.v1.SetDnsResponse
-	139, // 282: lavray.v1.DnsService.ValidateDnsJson:output_type -> lavray.v1.ValidateDnsJsonResponse
-	142, // 283: lavray.v1.SettingsService.DescribeSettings:output_type -> lavray.v1.DescribeSettingsResponse
-	145, // 284: lavray.v1.SettingsService.GetSettings:output_type -> lavray.v1.GetSettingsResponse
-	147, // 285: lavray.v1.SettingsService.SetSettings:output_type -> lavray.v1.SetSettingsResponse
-	147, // 286: lavray.v1.SettingsService.ResetSettings:output_type -> lavray.v1.SetSettingsResponse
-	150, // 287: lavray.v1.SettingsService.SubscribeSettings:output_type -> lavray.v1.SettingsChanged
-	154, // 288: lavray.v1.LogService.Subscribe:output_type -> lavray.v1.LogLine
-	156, // 289: lavray.v1.LogService.GetTail:output_type -> lavray.v1.GetTailResponse
-	158, // 290: lavray.v1.StatsService.Subscribe:output_type -> lavray.v1.StatsSnapshot
-	162, // 291: lavray.v1.StatsService.GetTrafficTotals:output_type -> lavray.v1.GetTrafficTotalsResponse
-	164, // 292: lavray.v1.StatsService.GetTrafficSummary:output_type -> lavray.v1.GetTrafficSummaryResponse
-	167, // 293: lavray.v1.ConnectionService.ListConnections:output_type -> lavray.v1.ListConnectionsResponse
-	169, // 294: lavray.v1.ConnectionService.WatchConnections:output_type -> lavray.v1.ConnectionSnapshot
-	37,  // 295: lavray.v1.ConnectionService.CloseConnection:output_type -> lavray.v1.Empty
-	173, // 296: lavray.v1.DiagnosticsService.CheckRoute:output_type -> lavray.v1.CheckRouteResponse
-	175, // 297: lavray.v1.DiagnosticsService.RunSelfCheck:output_type -> lavray.v1.RunSelfCheckResponse
-	178, // 298: lavray.v1.DiagnosticsService.GetPublicIp:output_type -> lavray.v1.GetPublicIpResponse
-	179, // 299: lavray.v1.DiagnosticsService.CheckLeaks:output_type -> lavray.v1.LeakReport
-	180, // 300: lavray.v1.GatewayService.GetGatewayStatus:output_type -> lavray.v1.GatewayStatus
-	181, // 301: lavray.v1.GatewayService.ListDevicePolicies:output_type -> lavray.v1.ListDevicePoliciesResponse
-	183, // 302: lavray.v1.GatewayService.SetDevicePolicy:output_type -> lavray.v1.DevicePolicy
-	185, // 303: lavray.v1.UpdateService.CheckUpdates:output_type -> lavray.v1.CheckUpdatesResponse
-	204, // 304: lavray.v1.UpdateService.DownloadUpdates:output_type -> lavray.v1.UpdateEvent
-	204, // 305: lavray.v1.UpdateService.ApplyUpdates:output_type -> lavray.v1.UpdateEvent
-	197, // 306: lavray.v1.UpdateService.Rollback:output_type -> lavray.v1.RollbackResponse
-	199, // 307: lavray.v1.UpdateService.GetUpdateState:output_type -> lavray.v1.UpdateStateResponse
-	203, // 308: lavray.v1.UpdateService.VerifyLocalUpdate:output_type -> lavray.v1.VerifyLocalUpdateResponse
-	210, // 309: lavray.v1.WebSessionService.GetWebModeStatus:output_type -> lavray.v1.WebModeStatus
-	213, // 310: lavray.v1.WebSessionService.SetupFirstAdmin:output_type -> lavray.v1.WebSession
-	213, // 311: lavray.v1.WebSessionService.Login:output_type -> lavray.v1.WebSession
-	37,  // 312: lavray.v1.WebSessionService.Logout:output_type -> lavray.v1.Empty
-	213, // 313: lavray.v1.WebSessionService.RenewSession:output_type -> lavray.v1.WebSession
-	213, // 314: lavray.v1.WebSessionService.WhoAmI:output_type -> lavray.v1.WebSession
-	218, // 315: lavray.v1.WebSessionService.ChangePassword:output_type -> lavray.v1.ChangePasswordResponse
-	219, // 316: lavray.v1.WebSessionService.ListSessions:output_type -> lavray.v1.ListSessionsResponse
-	37,  // 317: lavray.v1.WebSessionService.RevokeSession:output_type -> lavray.v1.Empty
-	223, // 318: lavray.v1.BackupService.ExportBackup:output_type -> lavray.v1.ExportBackupResponse
-	227, // 319: lavray.v1.BackupService.PreviewBackup:output_type -> lavray.v1.BackupSummary
-	226, // 320: lavray.v1.BackupService.ImportBackup:output_type -> lavray.v1.ImportBackupResponse
-	231, // [231:321] is the sub-list for method output_type
-	141, // [141:231] is the sub-list for method input_type
-	141, // [141:141] is the sub-list for extension type_name
-	141, // [141:141] is the sub-list for extension extendee
-	0,   // [0:141] is the sub-list for field type_name
+	104, // 53: lavray.v1.ResolveDomainsResponse.failed:type_name -> lavray.v1.ResolveFailure
+	69,  // 54: lavray.v1.ListGroupsResponse.groups:type_name -> lavray.v1.Group
+	69,  // 55: lavray.v1.CreateGroupRequest.group:type_name -> lavray.v1.Group
+	69,  // 56: lavray.v1.UpdateGroupRequest.group:type_name -> lavray.v1.Group
+	69,  // 57: lavray.v1.ListSubscriptionsResponse.groups:type_name -> lavray.v1.Group
+	27,  // 58: lavray.v1.SubscriptionProgress.phase:type_name -> lavray.v1.SubscriptionProgress.Phase
+	70,  // 59: lavray.v1.SubscriptionProgress.user_info:type_name -> lavray.v1.SubscriptionInfo
+	122, // 60: lavray.v1.RoutingPreset.process_rules:type_name -> lavray.v1.ProcessRule
+	0,   // 61: lavray.v1.RoutingPreset.default_outbound:type_name -> lavray.v1.Outbound
+	1,   // 62: lavray.v1.RoutingPreset.sniffing_mode:type_name -> lavray.v1.SniffingMode
+	2,   // 63: lavray.v1.RoutingPreset.outbound_domain_strategy:type_name -> lavray.v1.DomainStrategy
+	135, // 64: lavray.v1.RoutingPreset.dns:type_name -> lavray.v1.DnsSettings
+	0,   // 65: lavray.v1.ProcessRule.outbound:type_name -> lavray.v1.Outbound
+	121, // 66: lavray.v1.ListPresetsResponse.presets:type_name -> lavray.v1.RoutingPreset
+	121, // 67: lavray.v1.CreatePresetRequest.preset:type_name -> lavray.v1.RoutingPreset
+	121, // 68: lavray.v1.UpdatePresetRequest.preset:type_name -> lavray.v1.RoutingPreset
+	121, // 69: lavray.v1.UpdatePresetResponse.preset:type_name -> lavray.v1.RoutingPreset
+	28,  // 70: lavray.v1.DnsSettings.mode:type_name -> lavray.v1.DnsSettings.Mode
+	2,   // 71: lavray.v1.DnsSettings.remote_query_strategy:type_name -> lavray.v1.DomainStrategy
+	135, // 72: lavray.v1.SetDnsRequest.dns:type_name -> lavray.v1.DnsSettings
+	135, // 73: lavray.v1.SetDnsResponse.applied:type_name -> lavray.v1.DnsSettings
+	7,   // 74: lavray.v1.SettingDescriptor.type:type_name -> lavray.v1.SettingType
+	141, // 75: lavray.v1.DescribeSettingsResponse.descriptors:type_name -> lavray.v1.SettingDescriptor
+	144, // 76: lavray.v1.DescribeSettingsResponse.groups:type_name -> lavray.v1.SettingGroup
+	230, // 77: lavray.v1.GetSettingsResponse.values:type_name -> lavray.v1.GetSettingsResponse.ValuesEntry
+	231, // 78: lavray.v1.SetSettingsRequest.values:type_name -> lavray.v1.SetSettingsRequest.ValuesEntry
+	232, // 79: lavray.v1.SettingsChanged.changed:type_name -> lavray.v1.SettingsChanged.ChangedEntry
+	153, // 80: lavray.v1.SettingValue.string_list_value:type_name -> lavray.v1.StringList
+	3,   // 81: lavray.v1.SubscribeLogsRequest.min_level:type_name -> lavray.v1.LogLevel
+	3,   // 82: lavray.v1.LogLine.level:type_name -> lavray.v1.LogLevel
+	155, // 83: lavray.v1.GetTailResponse.lines:type_name -> lavray.v1.LogLine
+	160, // 84: lavray.v1.StatsSnapshot.tags:type_name -> lavray.v1.TagStat
+	161, // 85: lavray.v1.StatsSnapshot.session:type_name -> lavray.v1.SessionStat
+	233, // 86: lavray.v1.GetTrafficTotalsResponse.totals:type_name -> lavray.v1.GetTrafficTotalsResponse.TotalsEntry
+	166, // 87: lavray.v1.GetTrafficSummaryResponse.groups:type_name -> lavray.v1.GroupTrafficSummary
+	38,  // 88: lavray.v1.ListConnectionsRequest.page:type_name -> lavray.v1.Page
+	171, // 89: lavray.v1.ListConnectionsResponse.connections:type_name -> lavray.v1.Connection
+	171, // 90: lavray.v1.ConnectionSnapshot.active:type_name -> lavray.v1.Connection
+	29,  // 91: lavray.v1.Connection.status:type_name -> lavray.v1.Connection.Status
+	0,   // 92: lavray.v1.CheckRouteResponse.outbound:type_name -> lavray.v1.Outbound
+	30,  // 93: lavray.v1.RunSelfCheckRequest.kinds:type_name -> lavray.v1.RunSelfCheckRequest.CheckKind
+	177, // 94: lavray.v1.RunSelfCheckResponse.results:type_name -> lavray.v1.SelfCheckResult
+	30,  // 95: lavray.v1.SelfCheckResult.kind:type_name -> lavray.v1.RunSelfCheckRequest.CheckKind
+	31,  // 96: lavray.v1.SelfCheckResult.status:type_name -> lavray.v1.SelfCheckResult.Status
+	32,  // 97: lavray.v1.GetPublicIpRequest.via:type_name -> lavray.v1.GetPublicIpRequest.Via
+	33,  // 98: lavray.v1.GatewayStatus.mode:type_name -> lavray.v1.GatewayStatus.Mode
+	184, // 99: lavray.v1.ListDevicePoliciesResponse.policies:type_name -> lavray.v1.DevicePolicy
+	184, // 100: lavray.v1.SetDevicePolicyRequest.policy:type_name -> lavray.v1.DevicePolicy
+	34,  // 101: lavray.v1.DevicePolicy.action:type_name -> lavray.v1.DevicePolicy.Action
+	9,   // 102: lavray.v1.CheckUpdatesRequest.channel:type_name -> lavray.v1.UpdateChannel
+	8,   // 103: lavray.v1.CheckUpdatesRequest.components:type_name -> lavray.v1.UpdateComponent
+	187, // 104: lavray.v1.CheckUpdatesResponse.available:type_name -> lavray.v1.ComponentUpdate
+	8,   // 105: lavray.v1.ComponentUpdate.component:type_name -> lavray.v1.UpdateComponent
+	234, // 106: lavray.v1.ComponentUpdate.notes:type_name -> lavray.v1.ComponentUpdate.NotesEntry
+	190, // 107: lavray.v1.ComponentUpdate.manifest:type_name -> lavray.v1.UpdateManifest
+	35,  // 108: lavray.v1.UpdateMetadata.type:type_name -> lavray.v1.UpdateMetadata.Type
+	189, // 109: lavray.v1.UpdateMetadata.signatures:type_name -> lavray.v1.MetadataSignature
+	9,   // 110: lavray.v1.UpdateManifest.channel:type_name -> lavray.v1.UpdateChannel
+	191, // 111: lavray.v1.UpdateManifest.core:type_name -> lavray.v1.CoreRef
+	235, // 112: lavray.v1.UpdateManifest.assets:type_name -> lavray.v1.UpdateManifest.AssetsEntry
+	236, // 113: lavray.v1.UpdateManifest.presets:type_name -> lavray.v1.UpdateManifest.PresetsEntry
+	194, // 114: lavray.v1.UpdateManifest.geo:type_name -> lavray.v1.GeoRef
+	237, // 115: lavray.v1.UpdateManifest.notes:type_name -> lavray.v1.UpdateManifest.NotesEntry
+	8,   // 116: lavray.v1.DownloadUpdatesRequest.components:type_name -> lavray.v1.UpdateComponent
+	8,   // 117: lavray.v1.ApplyUpdatesRequest.components:type_name -> lavray.v1.UpdateComponent
+	8,   // 118: lavray.v1.RollbackRequest.component:type_name -> lavray.v1.UpdateComponent
+	202, // 119: lavray.v1.UpdateStateResponse.components:type_name -> lavray.v1.ComponentState
+	201, // 120: lavray.v1.UpdateStateResponse.chain_state:type_name -> lavray.v1.ChainStateInfo
+	238, // 121: lavray.v1.ChainStateInfo.max_serial:type_name -> lavray.v1.ChainStateInfo.MaxSerialEntry
+	8,   // 122: lavray.v1.ComponentState.component:type_name -> lavray.v1.UpdateComponent
+	36,  // 123: lavray.v1.ComponentState.phase:type_name -> lavray.v1.ComponentState.Phase
+	190, // 124: lavray.v1.VerifyLocalUpdateResponse.manifest:type_name -> lavray.v1.UpdateManifest
+	206, // 125: lavray.v1.UpdateEvent.progress:type_name -> lavray.v1.DownloadProgress
+	207, // 126: lavray.v1.UpdateEvent.verified:type_name -> lavray.v1.VerificationPassed
+	208, // 127: lavray.v1.UpdateEvent.verify_failed:type_name -> lavray.v1.VerificationFailed
+	209, // 128: lavray.v1.UpdateEvent.failed:type_name -> lavray.v1.UpdateFailed
+	8,   // 129: lavray.v1.DownloadProgress.component:type_name -> lavray.v1.UpdateComponent
+	8,   // 130: lavray.v1.VerificationPassed.component:type_name -> lavray.v1.UpdateComponent
+	8,   // 131: lavray.v1.VerificationFailed.component:type_name -> lavray.v1.UpdateComponent
+	8,   // 132: lavray.v1.UpdateFailed.component:type_name -> lavray.v1.UpdateComponent
+	221, // 133: lavray.v1.ListSessionsResponse.sessions:type_name -> lavray.v1.SessionInfo
+	228, // 134: lavray.v1.ExportBackupResponse.summary:type_name -> lavray.v1.BackupSummary
+	228, // 135: lavray.v1.ImportBackupResponse.restored:type_name -> lavray.v1.BackupSummary
+	152, // 136: lavray.v1.GetSettingsResponse.ValuesEntry.value:type_name -> lavray.v1.SettingValue
+	152, // 137: lavray.v1.SetSettingsRequest.ValuesEntry.value:type_name -> lavray.v1.SettingValue
+	152, // 138: lavray.v1.SettingsChanged.ChangedEntry.value:type_name -> lavray.v1.SettingValue
+	57,  // 139: lavray.v1.GetTrafficTotalsResponse.TotalsEntry.value:type_name -> lavray.v1.TrafficCounters
+	192, // 140: lavray.v1.UpdateManifest.AssetsEntry.value:type_name -> lavray.v1.UpdateAsset
+	193, // 141: lavray.v1.UpdateManifest.PresetsEntry.value:type_name -> lavray.v1.PresetRef
+	39,  // 142: lavray.v1.CoreService.Connect:input_type -> lavray.v1.ConnectRequest
+	41,  // 143: lavray.v1.CoreService.Disconnect:input_type -> lavray.v1.DisconnectRequest
+	43,  // 144: lavray.v1.CoreService.RestartProfile:input_type -> lavray.v1.RestartProfileRequest
+	44,  // 145: lavray.v1.CoreService.GetStatus:input_type -> lavray.v1.GetStatusRequest
+	45,  // 146: lavray.v1.CoreService.SubscribeEvents:input_type -> lavray.v1.SubscribeEventsRequest
+	46,  // 147: lavray.v1.CoreService.GetRuntimeConfig:input_type -> lavray.v1.GetRuntimeConfigRequest
+	48,  // 148: lavray.v1.CoreService.Shutdown:input_type -> lavray.v1.ShutdownRequest
+	71,  // 149: lavray.v1.ProfileService.ListProfiles:input_type -> lavray.v1.ListProfilesRequest
+	73,  // 150: lavray.v1.ProfileService.GetProfile:input_type -> lavray.v1.GetProfileRequest
+	74,  // 151: lavray.v1.ProfileService.CreateProfile:input_type -> lavray.v1.CreateProfileRequest
+	75,  // 152: lavray.v1.ProfileService.UpdateProfile:input_type -> lavray.v1.UpdateProfileRequest
+	77,  // 153: lavray.v1.ProfileService.DeleteProfile:input_type -> lavray.v1.DeleteProfileRequest
+	78,  // 154: lavray.v1.ProfileService.MoveProfiles:input_type -> lavray.v1.MoveProfilesRequest
+	79,  // 155: lavray.v1.ProfileService.CloneProfiles:input_type -> lavray.v1.CloneProfilesRequest
+	81,  // 156: lavray.v1.ProfileService.ResetTraffic:input_type -> lavray.v1.ResetTrafficRequest
+	82,  // 157: lavray.v1.ProfileService.ReorderProfiles:input_type -> lavray.v1.ReorderProfilesRequest
+	83,  // 158: lavray.v1.ProfileService.RemoveUnavailableProfiles:input_type -> lavray.v1.RemoveUnavailableProfilesRequest
+	85,  // 159: lavray.v1.ProfileService.DeduplicateProfiles:input_type -> lavray.v1.DeduplicateProfilesRequest
+	87,  // 160: lavray.v1.ProfileService.SetProfileMeta:input_type -> lavray.v1.SetProfileMetaRequest
+	88,  // 161: lavray.v1.ProfileService.PreviewCustomFields:input_type -> lavray.v1.PreviewCustomFieldsRequest
+	90,  // 162: lavray.v1.ProfileService.ConfirmCustomFields:input_type -> lavray.v1.ConfirmCustomFieldsRequest
+	91,  // 163: lavray.v1.ProfileService.ImportContent:input_type -> lavray.v1.ImportContentRequest
+	94,  // 164: lavray.v1.ProfileService.ExportLinks:input_type -> lavray.v1.ExportLinksRequest
+	96,  // 165: lavray.v1.ProfileService.ExportConfig:input_type -> lavray.v1.ExportConfigRequest
+	98,  // 166: lavray.v1.ProfileService.TestLatency:input_type -> lavray.v1.TestLatencyRequest
+	100, // 167: lavray.v1.ProfileService.StopTests:input_type -> lavray.v1.StopTestsRequest
+	101, // 168: lavray.v1.ProfileService.ClearTestResults:input_type -> lavray.v1.ClearTestResultsRequest
+	102, // 169: lavray.v1.ProfileService.ResolveDomains:input_type -> lavray.v1.ResolveDomainsRequest
+	105, // 170: lavray.v1.ProfileService.ListGroups:input_type -> lavray.v1.ListGroupsRequest
+	107, // 171: lavray.v1.ProfileService.CreateGroup:input_type -> lavray.v1.CreateGroupRequest
+	108, // 172: lavray.v1.ProfileService.UpdateGroup:input_type -> lavray.v1.UpdateGroupRequest
+	109, // 173: lavray.v1.ProfileService.DeleteGroup:input_type -> lavray.v1.DeleteGroupRequest
+	110, // 174: lavray.v1.ProfileService.ReorderGroups:input_type -> lavray.v1.ReorderGroupsRequest
+	111, // 175: lavray.v1.SubscriptionService.ListSubscriptions:input_type -> lavray.v1.ListSubscriptionsRequest
+	113, // 176: lavray.v1.SubscriptionService.CreateSubscription:input_type -> lavray.v1.CreateSubscriptionRequest
+	114, // 177: lavray.v1.SubscriptionService.UpdateSubscriptionSettings:input_type -> lavray.v1.UpdateSubscriptionSettingsRequest
+	115, // 178: lavray.v1.SubscriptionService.DeleteSubscription:input_type -> lavray.v1.DeleteSubscriptionRequest
+	116, // 179: lavray.v1.SubscriptionService.UpdateSubscription:input_type -> lavray.v1.UpdateSubscriptionRequest
+	117, // 180: lavray.v1.SubscriptionService.UpdateAllSubscriptions:input_type -> lavray.v1.UpdateAllSubscriptionsRequest
+	118, // 181: lavray.v1.SubscriptionService.RollbackSubscription:input_type -> lavray.v1.RollbackSubscriptionRequest
+	123, // 182: lavray.v1.RoutingService.ListPresets:input_type -> lavray.v1.ListPresetsRequest
+	125, // 183: lavray.v1.RoutingService.GetPreset:input_type -> lavray.v1.GetPresetRequest
+	126, // 184: lavray.v1.RoutingService.CreatePreset:input_type -> lavray.v1.CreatePresetRequest
+	127, // 185: lavray.v1.RoutingService.UpdatePreset:input_type -> lavray.v1.UpdatePresetRequest
+	129, // 186: lavray.v1.RoutingService.DeletePreset:input_type -> lavray.v1.DeletePresetRequest
+	130, // 187: lavray.v1.RoutingService.ActivatePreset:input_type -> lavray.v1.ActivatePresetRequest
+	132, // 188: lavray.v1.RoutingService.GetActivePreset:input_type -> lavray.v1.GetActivePresetRequest
+	133, // 189: lavray.v1.RoutingService.ResetBuiltinPreset:input_type -> lavray.v1.ResetBuiltinPresetRequest
+	134, // 190: lavray.v1.RoutingService.ImportNekoRayRoute:input_type -> lavray.v1.ImportNekoRayRouteRequest
+	136, // 191: lavray.v1.DnsService.GetDns:input_type -> lavray.v1.GetDnsRequest
+	137, // 192: lavray.v1.DnsService.SetDns:input_type -> lavray.v1.SetDnsRequest
+	139, // 193: lavray.v1.DnsService.ValidateDnsJson:input_type -> lavray.v1.ValidateDnsJsonRequest
+	142, // 194: lavray.v1.SettingsService.DescribeSettings:input_type -> lavray.v1.DescribeSettingsRequest
+	145, // 195: lavray.v1.SettingsService.GetSettings:input_type -> lavray.v1.GetSettingsRequest
+	147, // 196: lavray.v1.SettingsService.SetSettings:input_type -> lavray.v1.SetSettingsRequest
+	149, // 197: lavray.v1.SettingsService.ResetSettings:input_type -> lavray.v1.ResetSettingsRequest
+	150, // 198: lavray.v1.SettingsService.SubscribeSettings:input_type -> lavray.v1.SubscribeSettingsRequest
+	154, // 199: lavray.v1.LogService.Subscribe:input_type -> lavray.v1.SubscribeLogsRequest
+	156, // 200: lavray.v1.LogService.GetTail:input_type -> lavray.v1.GetTailRequest
+	158, // 201: lavray.v1.StatsService.Subscribe:input_type -> lavray.v1.SubscribeStatsRequest
+	162, // 202: lavray.v1.StatsService.GetTrafficTotals:input_type -> lavray.v1.GetTrafficTotalsRequest
+	164, // 203: lavray.v1.StatsService.GetTrafficSummary:input_type -> lavray.v1.GetTrafficSummaryRequest
+	167, // 204: lavray.v1.ConnectionService.ListConnections:input_type -> lavray.v1.ListConnectionsRequest
+	169, // 205: lavray.v1.ConnectionService.WatchConnections:input_type -> lavray.v1.WatchConnectionsRequest
+	172, // 206: lavray.v1.ConnectionService.CloseConnection:input_type -> lavray.v1.CloseConnectionRequest
+	173, // 207: lavray.v1.DiagnosticsService.CheckRoute:input_type -> lavray.v1.CheckRouteRequest
+	175, // 208: lavray.v1.DiagnosticsService.RunSelfCheck:input_type -> lavray.v1.RunSelfCheckRequest
+	178, // 209: lavray.v1.DiagnosticsService.GetPublicIp:input_type -> lavray.v1.GetPublicIpRequest
+	37,  // 210: lavray.v1.DiagnosticsService.CheckLeaks:input_type -> lavray.v1.Empty
+	37,  // 211: lavray.v1.GatewayService.GetGatewayStatus:input_type -> lavray.v1.Empty
+	37,  // 212: lavray.v1.GatewayService.ListDevicePolicies:input_type -> lavray.v1.Empty
+	183, // 213: lavray.v1.GatewayService.SetDevicePolicy:input_type -> lavray.v1.SetDevicePolicyRequest
+	185, // 214: lavray.v1.UpdateService.CheckUpdates:input_type -> lavray.v1.CheckUpdatesRequest
+	195, // 215: lavray.v1.UpdateService.DownloadUpdates:input_type -> lavray.v1.DownloadUpdatesRequest
+	196, // 216: lavray.v1.UpdateService.ApplyUpdates:input_type -> lavray.v1.ApplyUpdatesRequest
+	197, // 217: lavray.v1.UpdateService.Rollback:input_type -> lavray.v1.RollbackRequest
+	199, // 218: lavray.v1.UpdateService.GetUpdateState:input_type -> lavray.v1.GetUpdateStateRequest
+	203, // 219: lavray.v1.UpdateService.VerifyLocalUpdate:input_type -> lavray.v1.VerifyLocalUpdateRequest
+	210, // 220: lavray.v1.WebSessionService.GetWebModeStatus:input_type -> lavray.v1.GetWebModeStatusRequest
+	212, // 221: lavray.v1.WebSessionService.SetupFirstAdmin:input_type -> lavray.v1.SetupFirstAdminRequest
+	213, // 222: lavray.v1.WebSessionService.Login:input_type -> lavray.v1.LoginRequest
+	215, // 223: lavray.v1.WebSessionService.Logout:input_type -> lavray.v1.LogoutRequest
+	216, // 224: lavray.v1.WebSessionService.RenewSession:input_type -> lavray.v1.RenewSessionRequest
+	217, // 225: lavray.v1.WebSessionService.WhoAmI:input_type -> lavray.v1.WhoAmIRequest
+	218, // 226: lavray.v1.WebSessionService.ChangePassword:input_type -> lavray.v1.ChangePasswordRequest
+	37,  // 227: lavray.v1.WebSessionService.ListSessions:input_type -> lavray.v1.Empty
+	222, // 228: lavray.v1.WebSessionService.RevokeSession:input_type -> lavray.v1.RevokeSessionRequest
+	223, // 229: lavray.v1.BackupService.ExportBackup:input_type -> lavray.v1.ExportBackupRequest
+	225, // 230: lavray.v1.BackupService.PreviewBackup:input_type -> lavray.v1.PreviewBackupRequest
+	226, // 231: lavray.v1.BackupService.ImportBackup:input_type -> lavray.v1.ImportBackupRequest
+	40,  // 232: lavray.v1.CoreService.Connect:output_type -> lavray.v1.ConnectResponse
+	42,  // 233: lavray.v1.CoreService.Disconnect:output_type -> lavray.v1.DisconnectResponse
+	40,  // 234: lavray.v1.CoreService.RestartProfile:output_type -> lavray.v1.ConnectResponse
+	49,  // 235: lavray.v1.CoreService.GetStatus:output_type -> lavray.v1.CoreStatus
+	52,  // 236: lavray.v1.CoreService.SubscribeEvents:output_type -> lavray.v1.CoreEvent
+	47,  // 237: lavray.v1.CoreService.GetRuntimeConfig:output_type -> lavray.v1.GetRuntimeConfigResponse
+	37,  // 238: lavray.v1.CoreService.Shutdown:output_type -> lavray.v1.Empty
+	72,  // 239: lavray.v1.ProfileService.ListProfiles:output_type -> lavray.v1.ListProfilesResponse
+	58,  // 240: lavray.v1.ProfileService.GetProfile:output_type -> lavray.v1.Profile
+	58,  // 241: lavray.v1.ProfileService.CreateProfile:output_type -> lavray.v1.Profile
+	76,  // 242: lavray.v1.ProfileService.UpdateProfile:output_type -> lavray.v1.UpdateProfileResponse
+	37,  // 243: lavray.v1.ProfileService.DeleteProfile:output_type -> lavray.v1.Empty
+	37,  // 244: lavray.v1.ProfileService.MoveProfiles:output_type -> lavray.v1.Empty
+	80,  // 245: lavray.v1.ProfileService.CloneProfiles:output_type -> lavray.v1.CloneProfilesResponse
+	37,  // 246: lavray.v1.ProfileService.ResetTraffic:output_type -> lavray.v1.Empty
+	37,  // 247: lavray.v1.ProfileService.ReorderProfiles:output_type -> lavray.v1.Empty
+	84,  // 248: lavray.v1.ProfileService.RemoveUnavailableProfiles:output_type -> lavray.v1.RemoveUnavailableResponse
+	86,  // 249: lavray.v1.ProfileService.DeduplicateProfiles:output_type -> lavray.v1.DeduplicateResponse
+	58,  // 250: lavray.v1.ProfileService.SetProfileMeta:output_type -> lavray.v1.Profile
+	89,  // 251: lavray.v1.ProfileService.PreviewCustomFields:output_type -> lavray.v1.PreviewCustomFieldsResponse
+	58,  // 252: lavray.v1.ProfileService.ConfirmCustomFields:output_type -> lavray.v1.Profile
+	92,  // 253: lavray.v1.ProfileService.ImportContent:output_type -> lavray.v1.ImportContentResponse
+	95,  // 254: lavray.v1.ProfileService.ExportLinks:output_type -> lavray.v1.ExportLinksResponse
+	97,  // 255: lavray.v1.ProfileService.ExportConfig:output_type -> lavray.v1.ExportConfigResponse
+	99,  // 256: lavray.v1.ProfileService.TestLatency:output_type -> lavray.v1.LatencyResult
+	37,  // 257: lavray.v1.ProfileService.StopTests:output_type -> lavray.v1.Empty
+	37,  // 258: lavray.v1.ProfileService.ClearTestResults:output_type -> lavray.v1.Empty
+	103, // 259: lavray.v1.ProfileService.ResolveDomains:output_type -> lavray.v1.ResolveDomainsResponse
+	106, // 260: lavray.v1.ProfileService.ListGroups:output_type -> lavray.v1.ListGroupsResponse
+	69,  // 261: lavray.v1.ProfileService.CreateGroup:output_type -> lavray.v1.Group
+	69,  // 262: lavray.v1.ProfileService.UpdateGroup:output_type -> lavray.v1.Group
+	37,  // 263: lavray.v1.ProfileService.DeleteGroup:output_type -> lavray.v1.Empty
+	37,  // 264: lavray.v1.ProfileService.ReorderGroups:output_type -> lavray.v1.Empty
+	112, // 265: lavray.v1.SubscriptionService.ListSubscriptions:output_type -> lavray.v1.ListSubscriptionsResponse
+	69,  // 266: lavray.v1.SubscriptionService.CreateSubscription:output_type -> lavray.v1.Group
+	69,  // 267: lavray.v1.SubscriptionService.UpdateSubscriptionSettings:output_type -> lavray.v1.Group
+	37,  // 268: lavray.v1.SubscriptionService.DeleteSubscription:output_type -> lavray.v1.Empty
+	120, // 269: lavray.v1.SubscriptionService.UpdateSubscription:output_type -> lavray.v1.SubscriptionProgress
+	120, // 270: lavray.v1.SubscriptionService.UpdateAllSubscriptions:output_type -> lavray.v1.SubscriptionProgress
+	119, // 271: lavray.v1.SubscriptionService.RollbackSubscription:output_type -> lavray.v1.RollbackSubscriptionResponse
+	124, // 272: lavray.v1.RoutingService.ListPresets:output_type -> lavray.v1.ListPresetsResponse
+	121, // 273: lavray.v1.RoutingService.GetPreset:output_type -> lavray.v1.RoutingPreset
+	121, // 274: lavray.v1.RoutingService.CreatePreset:output_type -> lavray.v1.RoutingPreset
+	128, // 275: lavray.v1.RoutingService.UpdatePreset:output_type -> lavray.v1.UpdatePresetResponse
+	37,  // 276: lavray.v1.RoutingService.DeletePreset:output_type -> lavray.v1.Empty
+	131, // 277: lavray.v1.RoutingService.ActivatePreset:output_type -> lavray.v1.ActivatePresetResponse
+	121, // 278: lavray.v1.RoutingService.GetActivePreset:output_type -> lavray.v1.RoutingPreset
+	121, // 279: lavray.v1.RoutingService.ResetBuiltinPreset:output_type -> lavray.v1.RoutingPreset
+	121, // 280: lavray.v1.RoutingService.ImportNekoRayRoute:output_type -> lavray.v1.RoutingPreset
+	135, // 281: lavray.v1.DnsService.GetDns:output_type -> lavray.v1.DnsSettings
+	138, // 282: lavray.v1.DnsService.SetDns:output_type -> lavray.v1.SetDnsResponse
+	140, // 283: lavray.v1.DnsService.ValidateDnsJson:output_type -> lavray.v1.ValidateDnsJsonResponse
+	143, // 284: lavray.v1.SettingsService.DescribeSettings:output_type -> lavray.v1.DescribeSettingsResponse
+	146, // 285: lavray.v1.SettingsService.GetSettings:output_type -> lavray.v1.GetSettingsResponse
+	148, // 286: lavray.v1.SettingsService.SetSettings:output_type -> lavray.v1.SetSettingsResponse
+	148, // 287: lavray.v1.SettingsService.ResetSettings:output_type -> lavray.v1.SetSettingsResponse
+	151, // 288: lavray.v1.SettingsService.SubscribeSettings:output_type -> lavray.v1.SettingsChanged
+	155, // 289: lavray.v1.LogService.Subscribe:output_type -> lavray.v1.LogLine
+	157, // 290: lavray.v1.LogService.GetTail:output_type -> lavray.v1.GetTailResponse
+	159, // 291: lavray.v1.StatsService.Subscribe:output_type -> lavray.v1.StatsSnapshot
+	163, // 292: lavray.v1.StatsService.GetTrafficTotals:output_type -> lavray.v1.GetTrafficTotalsResponse
+	165, // 293: lavray.v1.StatsService.GetTrafficSummary:output_type -> lavray.v1.GetTrafficSummaryResponse
+	168, // 294: lavray.v1.ConnectionService.ListConnections:output_type -> lavray.v1.ListConnectionsResponse
+	170, // 295: lavray.v1.ConnectionService.WatchConnections:output_type -> lavray.v1.ConnectionSnapshot
+	37,  // 296: lavray.v1.ConnectionService.CloseConnection:output_type -> lavray.v1.Empty
+	174, // 297: lavray.v1.DiagnosticsService.CheckRoute:output_type -> lavray.v1.CheckRouteResponse
+	176, // 298: lavray.v1.DiagnosticsService.RunSelfCheck:output_type -> lavray.v1.RunSelfCheckResponse
+	179, // 299: lavray.v1.DiagnosticsService.GetPublicIp:output_type -> lavray.v1.GetPublicIpResponse
+	180, // 300: lavray.v1.DiagnosticsService.CheckLeaks:output_type -> lavray.v1.LeakReport
+	181, // 301: lavray.v1.GatewayService.GetGatewayStatus:output_type -> lavray.v1.GatewayStatus
+	182, // 302: lavray.v1.GatewayService.ListDevicePolicies:output_type -> lavray.v1.ListDevicePoliciesResponse
+	184, // 303: lavray.v1.GatewayService.SetDevicePolicy:output_type -> lavray.v1.DevicePolicy
+	186, // 304: lavray.v1.UpdateService.CheckUpdates:output_type -> lavray.v1.CheckUpdatesResponse
+	205, // 305: lavray.v1.UpdateService.DownloadUpdates:output_type -> lavray.v1.UpdateEvent
+	205, // 306: lavray.v1.UpdateService.ApplyUpdates:output_type -> lavray.v1.UpdateEvent
+	198, // 307: lavray.v1.UpdateService.Rollback:output_type -> lavray.v1.RollbackResponse
+	200, // 308: lavray.v1.UpdateService.GetUpdateState:output_type -> lavray.v1.UpdateStateResponse
+	204, // 309: lavray.v1.UpdateService.VerifyLocalUpdate:output_type -> lavray.v1.VerifyLocalUpdateResponse
+	211, // 310: lavray.v1.WebSessionService.GetWebModeStatus:output_type -> lavray.v1.WebModeStatus
+	214, // 311: lavray.v1.WebSessionService.SetupFirstAdmin:output_type -> lavray.v1.WebSession
+	214, // 312: lavray.v1.WebSessionService.Login:output_type -> lavray.v1.WebSession
+	37,  // 313: lavray.v1.WebSessionService.Logout:output_type -> lavray.v1.Empty
+	214, // 314: lavray.v1.WebSessionService.RenewSession:output_type -> lavray.v1.WebSession
+	214, // 315: lavray.v1.WebSessionService.WhoAmI:output_type -> lavray.v1.WebSession
+	219, // 316: lavray.v1.WebSessionService.ChangePassword:output_type -> lavray.v1.ChangePasswordResponse
+	220, // 317: lavray.v1.WebSessionService.ListSessions:output_type -> lavray.v1.ListSessionsResponse
+	37,  // 318: lavray.v1.WebSessionService.RevokeSession:output_type -> lavray.v1.Empty
+	224, // 319: lavray.v1.BackupService.ExportBackup:output_type -> lavray.v1.ExportBackupResponse
+	228, // 320: lavray.v1.BackupService.PreviewBackup:output_type -> lavray.v1.BackupSummary
+	227, // 321: lavray.v1.BackupService.ImportBackup:output_type -> lavray.v1.ImportBackupResponse
+	232, // [232:322] is the sub-list for method output_type
+	142, // [142:232] is the sub-list for method input_type
+	142, // [142:142] is the sub-list for extension type_name
+	142, // [142:142] is the sub-list for extension extendee
+	0,   // [0:142] is the sub-list for field type_name
 }
 
 func init() { file_lavray_proto_init() }
@@ -16338,17 +16419,17 @@ func file_lavray_proto_init() {
 	file_lavray_proto_msgTypes[56].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[57].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[61].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[76].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[78].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[81].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[77].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[79].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[82].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[83].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[88].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[96].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[84].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[89].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[97].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[102].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[98].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[103].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[114].OneofWrappers = []any{
+	file_lavray_proto_msgTypes[104].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[115].OneofWrappers = []any{
 		(*SettingValue_StringValue)(nil),
 		(*SettingValue_BoolValue)(nil),
 		(*SettingValue_IntValue)(nil),
@@ -16356,31 +16437,31 @@ func file_lavray_proto_init() {
 		(*SettingValue_StringListValue)(nil),
 		(*SettingValue_JsonValue)(nil),
 	}
-	file_lavray_proto_msgTypes[116].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[120].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[117].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[121].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[123].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[126].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[128].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[122].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[124].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[127].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[129].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[131].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[133].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[135].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[130].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[132].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[134].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[136].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[139].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[141].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[137].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[140].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[142].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[143].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[146].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[149].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[152].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[156].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[160].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[162].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[144].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[147].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[150].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[153].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[157].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[161].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[163].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[164].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[166].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[167].OneofWrappers = []any{
+	file_lavray_proto_msgTypes[165].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[167].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[168].OneofWrappers = []any{
 		(*UpdateEvent_Progress)(nil),
 		(*UpdateEvent_Verified)(nil),
 		(*UpdateEvent_VerifyFailed)(nil),
@@ -16389,17 +16470,17 @@ func file_lavray_proto_init() {
 		(*UpdateEvent_Failed)(nil),
 		(*UpdateEvent_RolledBack)(nil),
 	}
-	file_lavray_proto_msgTypes[173].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[175].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[174].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[176].OneofWrappers = []any{}
-	file_lavray_proto_msgTypes[183].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[177].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[184].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_lavray_proto_rawDesc), len(file_lavray_proto_rawDesc)),
 			NumEnums:      37,
-			NumMessages:   201,
+			NumMessages:   202,
 			NumExtensions: 0,
 			NumServices:   14,
 		},

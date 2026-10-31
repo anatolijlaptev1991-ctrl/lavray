@@ -151,18 +151,34 @@ pub(super) fn apply_with(reg: &impl Registry, host: &str, port: u16) -> Result<(
     reg.write("ProxyEnable", &RegValue::dword(1))
 }
 
+/// Значение из данных снимка: новый формат (группа `proxy`) или плоский
+/// старый.
+fn field<'a>(data: &'a Value, name: &str) -> &'a Value {
+    data.get("proxy")
+        .and_then(|group| group.get(name))
+        .or_else(|| data.get(name))
+        .unwrap_or(&Value::Null)
+}
+
+/// Включён ли ручной прокси в данных снимка (`ProxyEnable` = 1).
+pub(super) fn proxy_enabled(data: &Value) -> bool {
+    match RegValue::from_json("ProxyEnable", field(data, "ProxyEnable")) {
+        Ok(Some(value)) => parse_dword(&value.data) == Some(1),
+        _ => false,
+    }
+}
+
+/// Есть ли в данных снимка PAC-скрипт (`AutoConfigURL`).
+pub(super) fn pac_present(data: &Value) -> bool {
+    !field(data, "AutoConfigURL").is_null()
+}
+
 /// Записать настройки из снимка (новый формат или плоский старый).
 /// ProxyEnable идёт первым: если запись оборвётся посередине, прокси
 /// останется выключенным, а не включённым с чужим адресом.
 pub(super) fn restore_with(reg: &impl Registry, snap: &ProxySnapshot) -> Result<(), String> {
     for name in NAMES {
-        let value = snap
-            .data
-            .get("proxy")
-            .and_then(|group| group.get(name))
-            .or_else(|| snap.data.get(name))
-            .unwrap_or(&Value::Null);
-        match RegValue::from_json(name, value)? {
+        match RegValue::from_json(name, field(&snap.data, name))? {
             Some(v) => reg.write(name, &v)?,
             None => reg.remove(name)?,
         }

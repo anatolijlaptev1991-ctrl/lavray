@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Windows: чтение и запись значений Internet Settings через системный
-//! `reg.exe` и уведомление WinINET об изменениях.
+//! `reg.exe`.
 
-use super::values::{self, parse_dword, parse_query, RegValue, Registry, NAMES};
-use super::ProxySnapshot;
+use super::values::{parse_dword, parse_query, RegValue, Registry, NAMES};
 use crate::oemtext::decode_console_output;
 use std::collections::BTreeMap;
 use std::os::windows::process::CommandExt;
@@ -44,7 +43,8 @@ fn run(args: &[&str]) -> Result<String, String> {
     Ok(decode_console_output(&out.stdout))
 }
 
-struct RegExe;
+/// Реестр через `reg.exe`.
+pub(super) struct RegExe;
 
 impl Registry for RegExe {
     /// Один `reg query` по ключу вместо четырёх: пока он успешен,
@@ -86,49 +86,4 @@ impl Registry for RegExe {
             Err(_) => Ok(()),
         }
     }
-}
-
-/// Уведомить WinINET об изменении (без этого Chrome видит старый прокси).
-fn notify() {
-    use windows_sys::Win32::Networking::WinInet::{
-        InternetSetOptionW, INTERNET_OPTION_REFRESH, INTERNET_OPTION_SETTINGS_CHANGED,
-    };
-    // SAFETY: вызов без параметров (hInternet = null), документирован
-    // WinINet: уведомляет систему о смене настроек прокси в реестре.
-    unsafe {
-        InternetSetOptionW(
-            std::ptr::null_mut(),
-            INTERNET_OPTION_SETTINGS_CHANGED,
-            std::ptr::null_mut(),
-            0,
-        );
-        InternetSetOptionW(
-            std::ptr::null_mut(),
-            INTERNET_OPTION_REFRESH,
-            std::ptr::null_mut(),
-            0,
-        );
-    }
-}
-
-pub fn capture() -> Result<ProxySnapshot, String> {
-    values::capture_with(&RegExe)
-}
-
-pub fn apply(host: &str, port: u16) -> Result<(), String> {
-    values::apply_with(&RegExe, host, port)?;
-    notify();
-    Ok(())
-}
-
-pub fn restore(snap: &ProxySnapshot) -> Result<(), String> {
-    values::restore_with(&RegExe, snap)?;
-    notify();
-    Ok(())
-}
-
-pub fn clear() -> Result<(), String> {
-    RegExe.write("ProxyEnable", &RegValue::dword(0))?;
-    notify();
-    Ok(())
 }

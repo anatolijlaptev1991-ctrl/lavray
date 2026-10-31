@@ -1,65 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-use super::values::{
-    apply_with, capture_with, parse_query, restore_with, RegValue, Registry, BYPASS,
-};
+use super::fakes::{fresh_dir, MemRegistry};
+use super::values::{apply_with, capture_with, parse_query, restore_with, RegValue, BYPASS};
 use super::*;
-use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
-
-/// Реестр в памяти: настоящий реестр и `reg.exe` тесты не трогают.
-#[derive(Default)]
-struct MemRegistry {
-    values: RefCell<BTreeMap<String, RegValue>>,
-    /// Сколько ближайших записей завершатся ошибкой «Access is denied».
-    fail_writes: Cell<u32>,
-}
-
-impl MemRegistry {
-    fn with(rows: &[(&str, &str, &str)]) -> Self {
-        let mem = Self::default();
-        for (name, kind, data) in rows {
-            let value = RegValue {
-                kind: (*kind).into(),
-                data: (*data).into(),
-            };
-            mem.values.borrow_mut().insert((*name).into(), value);
-        }
-        mem
-    }
-
-    fn dump(&self) -> BTreeMap<String, RegValue> {
-        self.values.borrow().clone()
-    }
-
-    fn set(&self, name: &str, kind: &str, data: &str) {
-        let value = RegValue {
-            kind: kind.into(),
-            data: data.into(),
-        };
-        self.values.borrow_mut().insert(name.into(), value);
-    }
-}
-
-impl Registry for MemRegistry {
-    fn read(&self) -> Result<BTreeMap<String, RegValue>, String> {
-        Ok(self.dump())
-    }
-
-    fn write(&self, name: &str, value: &RegValue) -> Result<(), String> {
-        if self.fail_writes.get() > 0 {
-            self.fail_writes.set(self.fail_writes.get() - 1);
-            return Err("reg add: Access is denied".into());
-        }
-        self.values.borrow_mut().insert(name.into(), value.clone());
-        Ok(())
-    }
-
-    fn remove(&self, name: &str) -> Result<(), String> {
-        self.values.borrow_mut().remove(name);
-        Ok(())
-    }
-}
 
 /// Бэкенд поверх реестра в памяти: та же логика, что у настоящего.
 struct Mem<'a>(&'a MemRegistry);
@@ -69,20 +12,13 @@ impl Backend for Mem<'_> {
         capture_with(self.0)
     }
 
-    fn apply(&self, host: &str, port: u16) -> Result<(), String> {
-        apply_with(self.0, host, port)
+    fn apply(&self, host: &str, port: u16, _: &ProxySnapshot) -> Result<Vec<String>, String> {
+        apply_with(self.0, host, port).map(|()| Vec::new())
     }
 
-    fn restore(&self, snap: &ProxySnapshot) -> Result<(), String> {
-        restore_with(self.0, snap)
+    fn restore(&self, snap: &ProxySnapshot) -> Result<Vec<String>, String> {
+        restore_with(self.0, snap).map(|()| Vec::new())
     }
-}
-
-fn fresh_dir(tag: &str) -> PathBuf {
-    let dir = std::env::temp_dir().join(format!("lavray-sysproxy-{tag}-{}", std::process::id()));
-    let _ = std::fs::remove_dir_all(&dir);
-    std::fs::create_dir_all(&dir).unwrap();
-    dir
 }
 
 fn proxy<'a>(tag: &str, mem: &'a MemRegistry) -> SysProxy<Mem<'a>> {

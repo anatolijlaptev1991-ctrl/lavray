@@ -39,8 +39,12 @@ windows-sys = { version = "0.61", features = [
   "Win32_Security",
   "Win32_System_JobObjects",
   "Win32_System_Threading",
-  # F5: WinINET-уведомление об изменении прокси (InternetSetOption)
+  # F5: WinINET-уведомление об изменении прокси (InternetSetOption);
+  # T-82: прокси отдельного подключения (INTERNET_PER_CONN_OPTION_LISTW)
   "Win32_Networking_WinInet",
+  # T-82: записи телефонной книги RAS/VPN (RasEnumEntriesW) для прокси
+  # каждого подключения
+  "Win32_NetworkManagement_Rras",
   # S-02: OEM-кодовая страница (GetOEMCP) и перекодировка вывода reg.exe
   # (MultiByteToWideChar)
   "Win32_Globalization",

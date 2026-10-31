@@ -2,61 +2,68 @@
 
 //! sysproxy — системный прокси ОС (FR-UI-221/222/259).
 //!
-//! Принцип: перед изменением — снимок текущих настроек в файл рядом с
-//! данными; при отключении/падении — откат (не «выключить прокси», а «вернуть
-//! как было»). Если приложение упало, следующий старт находит незакрытый снимок
-//! и возвращает настройки (teardown-verify).
+//! Принцип: перед изменением — снимок настроек в файл рядом с данными; при
+//! отключении/падении — откат (не «выключить прокси», а «вернуть как было»).
+//! Незакрытый снимок после падения находит следующий старт.
 //!
-//! Откат трёхсторонний (T-42): рядом с исходными настройками в снимок
-//! записывается то, что стояло сразу после нашего включения. Значение
-//! возвращается к исходному, только если сейчас оно такое, какое поставили мы;
-//! если за время сессии его изменили пользователь или другая программа, оно
-//! остаётся как есть.
+//! Откат трёхсторонний (T-42): в снимок пишется и то, что стояло сразу после
+//! нашего включения; значение возвращается к исходному, только если сейчас оно
+//! наше, иначе его сменил пользователь или другая программа, и оно остаётся.
 //!
-//! Windows: WinINET через реестр (Internet Settings) + InternetSetOption
-//! (WM_SETTINGCHANGE) — то, что видят Chrome/Edge/системные приложения.
-//! Linux: gsettings (GNOME); KDE — kioslaverc (через `kwriteconfig5/6`).
-//! macOS: `networksetup -setwebproxy/-setsecurewebproxy`.
+//! Windows: реестр Internet Settings (LAN) + WinINET по подключениям (WPAD и
+//! каждая запись RAS/VPN, T-82). Linux: gsettings (GNOME). macOS: `networksetup`.
 
 mod backend;
+#[cfg(any(windows, test))]
+mod conn;
+#[cfg(test)]
+mod fakes;
 #[cfg(all(unix, not(target_os = "macos")))]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(test)]
+mod memconns;
 mod merge;
+mod outcome;
+#[cfg(any(windows, test))]
+mod ras;
+#[cfg(test)]
+mod ras_failure_tests;
+#[cfg(test)]
+mod ras_tests;
 #[cfg(windows)]
 mod registry;
+mod serial;
+#[cfg(test)]
+mod serial_tests;
 mod snapshot;
 #[cfg(test)]
 mod tests;
 mod validate;
 #[cfg(any(windows, test))]
 mod values;
+#[cfg(any(windows, test))]
+mod windows;
+#[cfg(windows)]
+mod wininet;
+#[cfg(all(test, windows))]
+mod wininet_tests;
+#[cfg(any(windows, test))]
+mod wpad;
+#[cfg(test)]
+mod wpad_tests;
 
 pub use backend::{apply, capture, clear, restore, Backend, System};
+pub use outcome::Applied;
 pub use snapshot::ProxySnapshot;
 pub use validate::{validate_host, validate_port};
 
 use merge::three_way;
+use outcome::log_warnings;
+use serial::exclusive;
 use snapshot::StoredSnapshot;
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, MutexGuard};
-
-/// Итог применения.
-#[derive(Debug, Clone)]
-pub struct Applied {
-    /// Точка выхода прокси, которую увидит система.
-    pub host: String,
-    pub port: u16,
-}
-
-/// Операции с прокси идут по одной: ими пользуются и команды UI, и поток
-/// надзирателя (снятие прокси при смерти ядра, T-03).
-static OPERATIONS: Mutex<()> = Mutex::new(());
-
-fn exclusive() -> MutexGuard<'static, ()> {
-    OPERATIONS.lock().unwrap_or_else(|e| e.into_inner())
-}
 
 /// Менеджер системного прокси: снимок + применение + откат.
 pub struct SysProxy<B: Backend = System> {
@@ -90,15 +97,12 @@ impl<B: Backend> SysProxy<B> {
         StoredSnapshot::load(&self.snapshot_path)
     }
 
-    fn store(&self, stored: &StoredSnapshot) -> Result<(), String> {
-        stored.save(&self.snapshot_path)
-    }
-
-    /// Вернуть настройки из снимка и удалить его. `Ok(false)` — снимка нет.
-    /// При ошибке снимок остаётся: следующая попытка доделает откат.
-    fn rollback(&self) -> Result<bool, String> {
+    /// Вернуть настройки из снимка и удалить его. `Ok(None)` — снимка нет,
+    /// иначе предупреждения (необязательные части, T-82). При ошибке снимок
+    /// остаётся: следующая попытка доделает откат.
+    fn rollback(&self) -> Result<Option<Vec<String>>, String> {
         let Some(stored) = self.pending() else {
-            return Ok(false);
+            return Ok(None);
         };
         let target = match &stored.applied {
             Some(applied) => ProxySnapshot {
@@ -111,21 +115,24 @@ impl<B: Backend> SysProxy<B> {
             },
             None => stored.original.clone(),
         };
-        self.backend.restore(&target)?;
+        let warnings = self.backend.restore(&target)?;
         let _ = std::fs::remove_file(&self.snapshot_path);
-        Ok(true)
+        Ok(Some(warnings))
     }
 
     /// Восстановить настройки из незакрытого снимка (idempotent).
     pub fn recover_if_needed(&self) -> Result<bool, String> {
         let _guard = exclusive();
-        self.rollback()
+        let warnings = self.rollback()?;
+        log_warnings(warnings.as_deref().unwrap_or_default());
+        Ok(warnings.is_some())
     }
 
     /// Включить системный прокси `host:port`, сохранив предыдущее состояние.
     ///
     /// Адрес проверяется раньше всего прочего (A2-18): отказ не трогает ни
-    /// реестр, ни снимок, ни уже идущую сессию.
+    /// реестр, ни снимок, ни уже идущую сессию. Сбой необязательной части
+    /// (RAS, WPAD) не срывает включение: он в [`Applied::warnings`].
     pub fn enable(&self, host: &str, port: u16) -> Result<Applied, String> {
         validate_host(host)?;
         validate_port(i64::from(port))?;
@@ -133,27 +140,34 @@ impl<B: Backend> SysProxy<B> {
         // Повторное включение при живом снимке: сначала откатываем прошлое.
         // Не вышло — выходим, не трогая файл: в нём настоящие настройки
         // пользователя, а снять новый снимок значило бы стереть их нашими.
-        self.rollback()
-            .map_err(|e| format!("не удалось вернуть прежние настройки прокси: {e}"))?;
+        let mut warnings = self
+            .rollback()
+            .map_err(|e| format!("не удалось вернуть прежние настройки прокси: {e}"))?
+            .unwrap_or_default();
         let original = self.backend.capture()?;
-        self.store(&StoredSnapshot {
+        let first = StoredSnapshot {
             original: original.clone(),
             applied: None,
-        })?;
-        if let Err(e) = self.backend.apply(host, port) {
-            return Err(match self.rollback() {
-                Ok(_) => e,
-                Err(rollback_error) => format!("{e}; откат не удался: {rollback_error}"),
-            });
+        };
+        first.save(&self.snapshot_path)?;
+        match self.backend.apply(host, port, &original) {
+            Ok(more) => warnings.extend(more),
+            Err(e) => {
+                return Err(match self.rollback() {
+                    Ok(_) => e,
+                    Err(rollback_error) => format!("{e}; откат не удался: {rollback_error}"),
+                })
+            }
         }
         // То, что стоит сейчас, поставили мы: по этому откат отличит свои
         // значения от чужих. Не записалось — снимок остаётся без `applied`,
         // откат будет безусловным.
         let applied = self.backend.capture().ok();
-        let _ = self.store(&StoredSnapshot { original, applied });
+        let _ = StoredSnapshot { original, applied }.save(&self.snapshot_path);
         Ok(Applied {
             host: host.to_string(),
             port,
+            warnings,
         })
     }
 
@@ -164,12 +178,18 @@ impl<B: Backend> SysProxy<B> {
     /// стоял `clear()`, из-за чего «Отключить» в приложении выключал
     /// собственный прокси пользователя, выставленный вручную.
     pub fn disable(&self) -> Result<(), String> {
-        let _guard = exclusive();
-        self.rollback().map(|_| ())
+        self.disable_report()
+            .map(|warnings| log_warnings(&warnings))
     }
 
-    /// Снять прокси при выходе приложения: восстановить снимок, если он есть.
-    /// Отдельный метод, чтобы вызывать его и из команды выхода, и из трея.
+    /// То же, что [`disable`](Self::disable), но предупреждения (подключение
+    /// RAS не вернулось и т. п.) отдаются вызывающему, а не в журнал.
+    pub fn disable_report(&self) -> Result<Vec<String>, String> {
+        let _guard = exclusive();
+        self.rollback().map(Option::unwrap_or_default)
+    }
+
+    /// Снять прокси при выходе: вернуть снимок, если он есть (команда выхода и трей).
     pub fn release_on_quit(&self) -> Result<(), String> {
         self.disable()
     }

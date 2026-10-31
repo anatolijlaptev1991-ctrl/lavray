@@ -22,7 +22,6 @@
 package cfgbuild
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -349,20 +348,15 @@ func buildExperimental(st *BuildSettings) map[string]any {
 	return map[string]any{"cache_file": cache}
 }
 
-// parseCustomRules — JSON-строка {"rules":[...]} (формат пресета/оракула)
-// → список rule-объектов. Пустая строка/"{}" — пусто.
+// parseCustomRules — custom-правила (пресета или routing.custom_global) → список
+// rule-объектов. Принимаются массив и {"rules":[...]}; разбор общий с хранением
+// набора (presets.ParseCustomRules). Пустая строка/"{}" — пусто.
 func parseCustomRules(raw, key string) ([]any, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" || raw == "{}" {
-		return nil, nil
+	rules, err := presets.ParseCustomRules(raw)
+	if err != nil {
+		return nil, invalidArgument(key, "invalid JSON (%s expected array or {\"rules\":[...]}): %v", key, err)
 	}
-	var parsed struct {
-		Rules []any `json:"rules"`
-	}
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return nil, invalidArgument(key, "invalid JSON (%s expected {\"rules\":[...]}): %v", key, err)
-	}
-	return parsed.Rules, nil
+	return rules, nil
 }
 
 // splitLinesSkipSharp — многострочник → строки: пустые/пробельные и

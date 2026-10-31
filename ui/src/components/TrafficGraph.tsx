@@ -3,11 +3,11 @@
 // TrafficGraph.tsx — график трафика за сессию по прототипу v1.2:
 // canvas, заливка загрузки акцентом, пунктир отдачи, сетка, легенда,
 // пустое состояние. Данные — из StatsService.Subscribe (push-кадры).
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { JSX } from 'react';
-import { showCoreError } from '../lib/core';
-import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
+import { useTrafficStats } from '../hooks/useTraffic';
+import type { Speed } from '../hooks/useTraffic';
 import { formatBytes, formatSpeed } from '../lib/i18n';
 import { Icon } from '../components/Icon';
 
@@ -17,59 +17,29 @@ interface Props {
   readonly active: boolean;
 }
 
+/** Добавляет точку, держа в буфере не больше POINTS последних. */
+function pushPoint(buf: number[], v: number): void {
+  buf.push(v);
+  if (buf.length > POINTS) buf.shift();
+}
+
 export function TrafficGraph({ active }: Props): JSX.Element {
   const { t, lang } = useI18n();
-  const core = useCore();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const downRef = useRef<number[]>([]);
   const upRef = useRef<number[]>([]);
-  const [totals, setTotals] = useState({ down: 0, up: 0 });
-  const [speed, setSpeed] = useState({ down: 0, up: 0 });
-  const [err, setErr] = useState('');
 
-  // Приём push-кадров статистики (FR-UI-210/211).
+  // Точки копим по кадрам статистики (FR-UI-210/211): тот же хук, что у статус-бара.
+  const onSample = useCallback((s: Speed): void => {
+    pushPoint(downRef.current, s.down);
+    pushPoint(upRef.current, s.up);
+  }, []);
+  const { speed, totals, error } = useTrafficStats(active, onSample);
   useEffect(() => {
-    if (!active) {
-      downRef.current = [];
-      upRef.current = [];
-      setTotals({ down: 0, up: 0 });
-      setSpeed({ down: 0, up: 0 });
-      return undefined;
-    }
-    const ac = new AbortController();
-    void (async (): Promise<void> => {
-      try {
-        const stream = core.stats.subscribe({ intervalMs: 1000 }, { signal: ac.signal });
-        for await (const snap of stream) {
-          const sess = snap.session;
-          if (sess !== undefined) {
-            setTotals({
-              down: Number(sess.downlinkTotal),
-              up: Number(sess.uplinkTotal),
-            });
-          }
-          let downBps = 0;
-          let upBps = 0;
-          for (const tag of snap.tags) {
-            downBps += tag.downlinkBps;
-            upBps += tag.uplinkBps;
-          }
-          setSpeed({ down: downBps, up: upBps });
-          const push = (arr: number[], v: number): void => {
-            arr.push(v);
-            if (arr.length > POINTS) arr.shift();
-          };
-          push(downRef.current, downBps);
-          push(upRef.current, upBps);
-        }
-      } catch (e) {
-        if (!ac.signal.aborted) setErr(showCoreError(e, t));
-      }
-    })();
-    return (): void => {
-      ac.abort();
-    };
-  }, [active, core, t]);
+    if (active) return;
+    downRef.current = [];
+    upRef.current = [];
+  }, [active]);
 
   // Перерисовка: сетка, заливка загрузки, пунктир отдачи (как в прототипе).
   useEffect(() => {
@@ -192,7 +162,7 @@ export function TrafficGraph({ active }: Props): JSX.Element {
       </div>
       <canvas ref={canvasRef} height={170} role="img" aria-label={t('conn.traffic')} />
       {!active && <div className="graph-empty">{t('graph.empty')}</div>}
-      {err !== '' && <p className="cap">{err}</p>}
+      {error !== '' && <p className="cap" role="alert">{error}</p>}
     </div>
   );
 }

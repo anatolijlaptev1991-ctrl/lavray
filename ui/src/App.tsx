@@ -14,7 +14,7 @@ import { useI18n, useStartupLanguage } from './hooks/useI18n';
 import { useAgentAccessSync } from './hooks/useAgentAccess';
 import { useSystemProxyApplied } from './hooks/useSystemProxy';
 import { useSystemProxyFollow } from './hooks/useSystemProxyFollow';
-import { useTrafficSpeed } from './hooks/useTraffic';
+import { useTrafficStats } from './hooks/useTraffic';
 import { useTrayBridge } from './hooks/useTrayBridge';
 import { applyDocumentLanguage, formatSpeed } from './lib/i18n';
 import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
@@ -324,7 +324,7 @@ function AppInner(): JSX.Element {
   // Статус-бар: скорости и текущий профиль. Скорости — из того же потока
   // статистики, что и график; профиль берём из статуса ядра (его имя
   // приходит в CoreStatus), не загружая весь список.
-  const speed = useTrafficSpeed(connOn);
+  const { speed, error: trafficError } = useTrafficStats(connOn);
   const [modes, setModes] = useState(() => loadModes(window.localStorage));
   useEffect(() => {
     // Экран подключения меняет режимы — статус-бар подхватывает изменения.
@@ -573,7 +573,7 @@ function AppInner(): JSX.Element {
           <span className="mono">{activeProfileName}</span>
         </span>
         <span className="st-sep" />
-        <span className="st-item" style={{ gap: 10 }}>
+        <span className="st-item" style={{ gap: 10 }} title={trafficError === '' ? undefined : trafficError}>
           <span className="spd dn">
             <Icon name="download" size={16} />
             <span>{formatSpeed(speed.down, lang)}</span>

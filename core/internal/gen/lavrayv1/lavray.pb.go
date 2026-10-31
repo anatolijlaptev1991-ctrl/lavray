@@ -9827,8 +9827,8 @@ func (x *GetTailResponse) GetLines() []*LogLine {
 
 type SubscribeStatsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	IntervalMs    *int32                 `protobuf:"varint,1,opt,name=interval_ms,json=intervalMs,proto3,oneof" json:"interval_ms,omitempty"` // переопределение на сессию; 0 = из настроек
-	Tags          []string               `protobuf:"bytes,2,rep,name=tags,proto3" json:"tags,omitempty"`                                      // дефолт: ["proxy", "direct"] (+ цепочки)
+	IntervalMs    *int32                 `protobuf:"varint,1,opt,name=interval_ms,json=intervalMs,proto3,oneof" json:"interval_ms,omitempty"` // переопределение: 0 = из настроек, иначе 250..10000 мс
+	Tags          []string               `protobuf:"bytes,2,rep,name=tags,proto3" json:"tags,omitempty"`                                      // теги исходящих; пусто = все ("proxy", "direct", …)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

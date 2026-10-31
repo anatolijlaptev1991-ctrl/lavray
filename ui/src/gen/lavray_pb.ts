@@ -4623,14 +4623,14 @@ export const GetTailResponseSchema: GenMessage<GetTailResponse> = /*@__PURE__*/
  */
 export type SubscribeStatsRequest = Message<"lavray.v1.SubscribeStatsRequest"> & {
   /**
-   * переопределение на сессию; 0 = из настроек
+   * переопределение: 0 = из настроек, иначе 250..10000 мс
    *
    * @generated from field: optional int32 interval_ms = 1;
    */
   intervalMs?: number | undefined;
 
   /**
-   * дефолт: ["proxy", "direct"] (+ цепочки)
+   * теги исходящих; пусто = все ("proxy", "direct", …)
    *
    * @generated from field: repeated string tags = 2;
    */

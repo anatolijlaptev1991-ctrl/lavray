@@ -1475,8 +1475,8 @@ service StatsService {
 }
 
 message SubscribeStatsRequest {
-  optional int32 interval_ms = 1; // переопределение на сессию; 0 = из настроек
-  repeated string tags = 2; // дефолт: ["proxy", "direct"] (+ цепочки)
+  optional int32 interval_ms = 1; // переопределение: 0 = из настроек, иначе 250..10000 мс
+  repeated string tags = 2; // теги исходящих; пусто = все ("proxy", "direct", …)
 }
 
 message StatsSnapshot {

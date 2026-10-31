@@ -106,6 +106,17 @@ var migrations = []migration{
 			   WHERE key = 'routing.active_preset' AND value = '"lav-global"'`,
 		},
 	},
+	{
+		// T-08B: подтверждение custom-полей привязано к хэшу содержимого
+		// (model/customhash.go). Прежний флаг custom_confirmed мог выставить
+		// клиент сам, поэтому ему не доверяем: все подтверждения сбрасываются,
+		// колонка больше не читается и не пишется.
+		version: 3,
+		stmts: []string{
+			`ALTER TABLE profiles ADD COLUMN custom_hash TEXT`,
+			`UPDATE profiles SET custom_confirmed = 0`,
+		},
+	},
 }
 
 // schemaVersion читает текущую версию схемы (0 — свежая база).

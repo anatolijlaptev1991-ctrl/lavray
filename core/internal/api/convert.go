@@ -209,20 +209,20 @@ func profileToModel(p *lavrayv1.Profile) (*model.Profile, error) {
 		return nil, invalidArg("profile: неизвестный тип %d", int32(p.GetType()))
 	}
 	m := &model.Profile{
-		ID:                    p.GetId(),
-		GroupID:               p.GetGroupId(),
-		Type:                  mt,
-		Name:                  p.GetName(),
-		Geo:                   p.GetGeo(),
-		Address:               strings.TrimSpace(p.GetAddress()), // FR-UI-083
-		Port:                  int(p.GetPort()),
-		Favorite:              p.GetFavorite(),
-		Tags:                  p.GetTags(),
-		Notes:                 optStr(p.Notes),
-		CustomOutboundJSON:    optStr(p.CustomOutboundJson),
-		CustomConfigJSON:      optStr(p.CustomConfigJson),
-		CustomFieldsConfirmed: p.GetCustomFieldsConfirmed(),
-		Stream:                streamToModel(p.GetStream()),
+		ID:       p.GetId(),
+		GroupID:  p.GetGroupId(),
+		Type:     mt,
+		Name:     p.GetName(),
+		Geo:      p.GetGeo(),
+		Address:  strings.TrimSpace(p.GetAddress()), // FR-UI-083
+		Port:     int(p.GetPort()),
+		Favorite: p.GetFavorite(),
+		Tags:     p.GetTags(),
+		Notes:    optStr(p.Notes),
+		// custom_fields_confirmed клиента не читается: подтверждение — хэш (T-08B).
+		CustomOutboundJSON: optStr(p.CustomOutboundJson),
+		CustomConfigJSON:   optStr(p.CustomConfigJson),
+		Stream:             streamToModel(p.GetStream()),
 	}
 	if tr := p.GetTestResult(); tr != nil {
 		m.TestResult = model.TestResult{

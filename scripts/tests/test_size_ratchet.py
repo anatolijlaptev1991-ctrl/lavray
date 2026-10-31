@@ -94,6 +94,7 @@ class CheckTest(RatchetCase):
         for rel in [
             "core/internal/gen/lavrayv1/lavray.pb.go",
             "ui/src/gen/lavray_pb.ts",
+            "ui/src/lib/dictionaries/ru.ts",
             "core/internal/api/big_test.go",
             "ui/src/big.test.ts",
             "ui/src/big.test.tsx",

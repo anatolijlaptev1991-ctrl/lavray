@@ -161,7 +161,7 @@ func Build(req BuildRequest) (*BuildResult, error) {
 		// профиль открывал 0.0.0.0:9 без ведома пользователя.
 		if !req.Profile.CustomFieldsConfirmed {
 			return nil, invalidArgument("custom.bean.core",
-				"internal-full конфиг требует подтверждения (custom_fields_confirmed)")
+				"internal-full конфиг не подтверждён: откройте diff и подтвердите (PreviewCustomFields → ConfirmCustomFields)")
 		}
 		var err error
 		cfg, err = internalFullConfig(req.Profile)
@@ -288,10 +288,7 @@ func buildSingBoxConfig(req BuildRequest, st *BuildSettings, res *BuildResult) (
 
 // ---- internal-full ----------------------------------------------------------
 
-func isInternalFull(p *model.Profile) bool {
-	d, ok := p.Detail.(*model.CustomDetail)
-	return ok && p.Type == model.TypeCustomConfig && d.Core == "internal-full"
-}
+func isInternalFull(p *model.Profile) bool { return model.IsInternalFull(p) }
 
 func internalFullConfig(p *model.Profile) (map[string]any, error) {
 	d := p.Detail.(*model.CustomDetail)

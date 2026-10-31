@@ -20,7 +20,7 @@ const sortKeyStep = 1024 // вставка со сдвигом шагом 1024 (
 // CreateProfile сохраняет новый профиль. ID==0 → назначается хранилищем;
 // sort_key — в конец группы.
 func (s *Store) CreateProfile(p *model.Profile) error {
-	return s.createProfile(p, true)
+	return s.createProfile(withoutCustomHash(p), true) // T-08B: новый не подтверждён
 }
 
 // ImportProfile сохраняет профиль с СОХРАНЁННЫМ id (импортёр NekoBox, §5.3):
@@ -59,20 +59,19 @@ func (s *Store) createProfile(p *model.Profile, autoID bool) error {
 		}
 		p.UpdatedAtMs = now
 		// Канонический JSON пишем с фактическими id/временами.
-		saved := *p
-		data, err := json.Marshal(&saved)
+		data, err := profileData(p)
 		if err != nil {
-			return fmt.Errorf("store: marshal profile: %w", err)
+			return err
 		}
 		if _, err := tx.Exec(`INSERT INTO profiles (
 			id, group_id, type, name, address, port, sort_key, favorite, notes,
 			latency_ms, full_report, tested_at_ms, uplink_total, downlink_total,
-			data, custom_confirmed, legacy_bean, created_at_ms, updated_at_ms
+			data, custom_hash, legacy_bean, created_at_ms, updated_at_ms
 		) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 			p.ID, p.GroupID, string(p.Type), p.Name, p.Address, p.Port, sortKey, boolInt(p.Favorite), nullableString(p.Notes),
 			nullableLatency(&p.TestResult), nullableString(p.TestResult.FullReport), nullableInt64(p.TestResult.TestedAtMs),
 			p.Traffic.UplinkBytes, p.Traffic.DownlinkBytes,
-			string(data), boolInt(p.CustomFieldsConfirmed), nullableString(p.LegacyBean), p.CreatedAtMs, p.UpdatedAtMs,
+			string(data), nullableString(p.CustomHash), nullableString(p.LegacyBean), p.CreatedAtMs, p.UpdatedAtMs,
 		); err != nil {
 			return fmt.Errorf("store: insert profile: %w", err)
 		}
@@ -87,8 +86,7 @@ func (s *Store) UpdateProfile(p *model.Profile) error {
 		return fmt.Errorf("store: profile id is required")
 	}
 	return s.withTx(func(tx *sql.Tx) error {
-		var oldGroup int64
-		err := tx.QueryRow(`SELECT group_id FROM profiles WHERE id = ?`, p.ID).Scan(&oldGroup)
+		oldGroup, err := loadGroupAndCustomHash(tx, p) // T-08B: хэш — только из БД
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNotFound
 		}
@@ -96,9 +94,9 @@ func (s *Store) UpdateProfile(p *model.Profile) error {
 			return err
 		}
 		p.UpdatedAtMs = nowMs()
-		data, err := json.Marshal(p)
+		data, err := profileData(p)
 		if err != nil {
-			return fmt.Errorf("store: marshal profile: %w", err)
+			return err
 		}
 		// При переносе в другую группу sort_key пересчитывается (в конец новой
 		// группы). Два явных запроса вместо склейки «sort_key = ?»: плейсхолдеры
@@ -111,10 +109,10 @@ func (s *Store) UpdateProfile(p *model.Profile) error {
 			}
 			_, err = tx.Exec(`UPDATE profiles SET
 				group_id = ?, type = ?, name = ?, address = ?, port = ?, sort_key = ?,
-				favorite = ?, notes = ?, data = ?, custom_confirmed = ?, updated_at_ms = ?
+				favorite = ?, notes = ?, data = ?, custom_hash = ?, updated_at_ms = ?
 			WHERE id = ?`,
 				p.GroupID, string(p.Type), p.Name, p.Address, p.Port, sk,
-				boolInt(p.Favorite), nullableString(p.Notes), string(data), boolInt(p.CustomFieldsConfirmed),
+				boolInt(p.Favorite), nullableString(p.Notes), string(data), nullableString(p.CustomHash),
 				p.UpdatedAtMs, p.ID)
 			if err != nil {
 				return fmt.Errorf("store: update profile: %w", err)
@@ -123,10 +121,10 @@ func (s *Store) UpdateProfile(p *model.Profile) error {
 		}
 		_, err = tx.Exec(`UPDATE profiles SET
 			group_id = ?, type = ?, name = ?, address = ?, port = ?, sort_key = sort_key,
-			favorite = ?, notes = ?, data = ?, custom_confirmed = ?, updated_at_ms = ?
+			favorite = ?, notes = ?, data = ?, custom_hash = ?, updated_at_ms = ?
 		WHERE id = ?`,
 			p.GroupID, string(p.Type), p.Name, p.Address, p.Port,
-			boolInt(p.Favorite), nullableString(p.Notes), string(data), boolInt(p.CustomFieldsConfirmed),
+			boolInt(p.Favorite), nullableString(p.Notes), string(data), nullableString(p.CustomHash),
 			p.UpdatedAtMs, p.ID)
 		if err != nil {
 			return fmt.Errorf("store: update profile: %w", err)
@@ -190,7 +188,7 @@ func (s *Store) SaveTraffic(id int64, t model.TrafficCounters) error {
 // итерацией, вложенный запрос вечно ждёт освобождения (deadlock; regression:
 // листинги должны выбирать всё одним проходом, как здесь).
 const profileCols = `favorite, notes, latency_ms, full_report, tested_at_ms,
-	uplink_total, downlink_total, custom_confirmed, legacy_bean, created_at_ms, updated_at_ms, data`
+	uplink_total, downlink_total, custom_hash, legacy_bean, created_at_ms, updated_at_ms, data`
 
 // GetProfile возвращает профиль по id.
 func (s *Store) GetProfile(id int64) (*model.Profile, error) {
@@ -345,14 +343,14 @@ func scanProfile(row rowScanner) (*model.Profile, error) {
 		testedAt   sql.NullInt64
 		uplink     int64
 		downlink   int64
-		customConf int
+		customHash sql.NullString
 		legacyBean sql.NullString
 		createdAt  int64
 		updatedAt  int64
 		data       string
 	)
 	if err := row.Scan(&favorite, &notes, &latency, &fullReport, &testedAt,
-		&uplink, &downlink, &customConf, &legacyBean, &createdAt, &updatedAt, &data); err != nil {
+		&uplink, &downlink, &customHash, &legacyBean, &createdAt, &updatedAt, &data); err != nil {
 		return nil, err
 	}
 	if err := json.Unmarshal([]byte(data), &p); err != nil {
@@ -374,7 +372,7 @@ func scanProfile(row rowScanner) (*model.Profile, error) {
 		p.TestResult.TestedAtMs = nil
 	}
 	p.Traffic = model.TrafficCounters{UplinkBytes: uplink, DownlinkBytes: downlink}
-	p.CustomFieldsConfirmed = customConf != 0
+	applyScannedCustomHash(&p, customHash)
 	p.LegacyBean = legacyBean.String
 	p.CreatedAtMs = createdAt
 	p.UpdatedAtMs = updatedAt

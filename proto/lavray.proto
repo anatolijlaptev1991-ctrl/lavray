@@ -299,6 +299,21 @@ service ProfileService {
   // теги, заметки. Частичное обновление.
   rpc SetProfileMeta(SetProfileMetaRequest) returns (Profile);
 
+  // Подтверждение custom-полей (T-08B, FR-UI-257). Подтверждение привязано к
+  // sha256 канонического содержимого custom_outbound_json, custom_config_json
+  // и (для internal-full) полного конфига: любая правка содержимого снимает
+  // его, клиент выставить флаг не может.
+  // PreviewCustomFields — diff конфига без custom-полей и с ними (redacted),
+  // затронутые ключи и хэш, который нужно вернуть в ConfirmCustomFields.
+  // NOT_FOUND — нет профиля; FAILED_PRECONDITION — у профиля нет custom-полей;
+  // INVALID_ARGUMENT — custom-JSON или сборка конфига невалидны.
+  rpc PreviewCustomFields(PreviewCustomFieldsRequest) returns (PreviewCustomFieldsResponse);
+  // ConfirmCustomFields — подтвердить ровно то содержимое, хэш которого
+  // показал PreviewCustomFields. INVALID_ARGUMENT — хэш не из 64 hex-символов;
+  // NOT_FOUND; FAILED_PRECONDITION — содержимое изменилось после предпросмотра
+  // (хэш устарел) или custom-полей нет.
+  rpc ConfirmCustomFields(ConfirmCustomFieldsRequest) returns (Profile);
+
   // Импорт произвольного содержимого: ссылки всех схем, base64-блоб,
   // Clash YAML, happ://, подписка sing-box JSON (автопроба формата —
   // FR-UI-264), многострочник. Единая точка входа — FR-UI-114–129,
@@ -306,9 +321,10 @@ service ProfileService {
   //
   // БЕЗОПАСНЫЙ ИМПОРТ (FR-UI-257, LNB-25): у импортированных профилей поля
   // custom_config (c_cfg), custom_outbound (c_out), custom core/cmd
-  // ОТБРАСЫВАЮТСЯ. Разрешение — только двухфазно: preview_only=true
-  // (разбор без сохранения, с предупреждениями) → подтверждение
-  // allow_custom_fields=true (UI показывает diff). Валидатор URL подписки
+  // ОТБРАСЫВАЮТСЯ или сохраняются неподтверждёнными. preview_only=true —
+  // разбор без сохранения, с предупреждениями. Применить custom-поля можно
+  // только через PreviewCustomFields → ConfirmCustomFields (флаг
+  // allow_custom_fields удалён, T-08B). Валидатор URL подписки
   // на стороне ядра (LNB-05: только http/https, запрет приватных целей без
   // явного флага, лимит размера — LNB-12).
   rpc ImportContent(ImportContentRequest) returns (ImportContentResponse);
@@ -422,8 +438,9 @@ message Profile {
   // inbounds запрещены) — см. core-port-plan §3.1.1.
   optional string custom_outbound_json = 14;
   optional string custom_config_json = 15;
-  // true = поля установлены вручную пользователем (прошли diff+подтверждение,
-  // FR-UI-257); у импортированных всегда false — импорт их отбрасывает.
+  // ТОЛЬКО ЧТЕНИЕ (T-08B): true = текущее custom-содержимое подтверждено через
+  // ConfirmCustomFields (хэш совпадает). Значение от клиента в Create/
+  // UpdateProfile и в inline-профиле Connect игнорируется.
   bool custom_fields_confirmed = 16;
 
   // Транспорт/TLS для v2ray-подобных типов (socks/http/ss/vmess/vless/trojan).
@@ -775,6 +792,31 @@ message SetProfileMetaRequest {
   optional string notes = 4;
 }
 
+message PreviewCustomFieldsRequest {
+  int64 profile_id = 1;
+}
+
+message PreviewCustomFieldsResponse {
+  // sha256 (64 hex) текущего custom-содержимого — вернуть в ConfirmCustomFields.
+  string custom_hash = 1;
+  // Unified diff конфига sing-box: «---» без custom-полей, «+++» с ними.
+  // Каждая строка прошла маскирование секретов (logs.Redact).
+  string diff = 2;
+  // JSON-пути (до 3 уровней), которые custom-поля меняют: "dns.servers",
+  // "outbounds[0].tls" и т.п.
+  repeated string touched_keys = 3;
+  // Коды предупреждений: "internal_full" — конфиг заменяется целиком;
+  // "inbounds_changed" — custom-поля меняют входящие слушатели.
+  repeated string warnings = 4;
+  bool already_confirmed = 5;
+  bool diff_truncated = 6; // diff обрезан по пределу строк
+}
+
+message ConfirmCustomFieldsRequest {
+  int64 profile_id = 1;
+  string custom_hash = 2; // из PreviewCustomFieldsResponse.custom_hash
+}
+
 message ImportContentRequest {
   string content = 1; // ссылка/список/base64/YAML/happ:///sing-box JSON
   optional int64 target_group_id = 2;
@@ -790,10 +832,13 @@ message ImportContentRequest {
   // ДВУХФАЗНЫЙ БЕЗОПАСНЫЙ ИМПОРТ (FR-UI-257, LNB-25):
   // 1) preview_only=true — разобрать, НЕ сохранять; ответ содержит
   //    parsed-профили (без custom-полей) и custom_field_warnings с diff;
-  // 2) после подтверждения пользователя (UI показал diff) — повторный вызов
-  //    с allow_custom_fields=true применяет custom-поля (c_cfg/c_out/core/cmd).
+  // 2) повторный вызов без preview_only сохраняет профили; custom-поля
+  //    остаются неподтверждёнными до ConfirmCustomFields (T-08B).
   optional bool preview_only = 5;
-  optional bool allow_custom_fields = 6;
+  // allow_custom_fields — удалено (T-08B): клиентский флаг разрешал custom-поля
+  // без привязки к содержимому.
+  reserved 6;
+  reserved "allow_custom_fields";
 }
 
 message ImportContentResponse {
@@ -2081,3 +2126,9 @@ message RevokeSessionRequest {
 //   +DiagnosticsService (FR-UI-271/272/273), +GatewayService (OPENWRT-GATEWAY),
 //   +StatsService.GetTrafficSummary (UX-25), +WebSession List/Revoke (P2-35).
 //   UpdateService переработан под UPDATE-SYSTEM v2.0 (TUF-lite).
+//
+// ревизия 3 (0.3.0, T-08B):
+//   ProfileService: + PreviewCustomFields, ConfirmCustomFields — подтверждение
+//   custom-полей привязано к хэшу содержимого.
+//   ImportContentRequest: reserved 6 (allow_custom_fields).
+//   Profile.custom_fields_confirmed — только чтение, вычисляется ядром.

@@ -81,8 +81,10 @@ func TestApplyKeepsUserCustomFields(t *testing.T) {
 			old.Favorite, old.Notes = true, "основной"
 			old.CustomOutboundJSON = customOut
 			old.CustomConfigJSON = customCfg
-			old.CustomFieldsConfirmed = true
 			if err := st.CreateProfile(old); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := st.ConfirmCustomFields(old.ID, mustCustomHash(t, old)); err != nil { // T-08B
 				t.Fatal(err)
 			}
 			snap, err := TakeSnapshot(st, g.ID)
@@ -121,11 +123,13 @@ func TestApplyProviderCustomFieldsDoNotOverrideUser(t *testing.T) {
 	}
 	old := &model.Profile{
 		GroupID: g.ID, Type: model.TypeTrojan, Name: "a", Address: "tr.example.com", Port: 443,
-		Detail:                &model.TrojanVlessDetail{Password: "p"},
-		CustomConfigJSON:      `{"log":{"level":"debug"}}`,
-		CustomFieldsConfirmed: true,
+		Detail:           &model.TrojanVlessDetail{Password: "p"},
+		CustomConfigJSON: `{"log":{"level":"debug"}}`,
 	}
 	if err := st.CreateProfile(old); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.ConfirmCustomFields(old.ID, mustCustomHash(t, old)); err != nil {
 		t.Fatal(err)
 	}
 	snap, err := TakeSnapshot(st, g.ID)
@@ -147,4 +151,16 @@ func TestApplyProviderCustomFieldsDoNotOverrideUser(t *testing.T) {
 	if got.CustomConfigJSON != `{"log":{"level":"debug"}}` {
 		t.Errorf("пользовательский custom_config подменён данными провайдера: %q", got.CustomConfigJSON)
 	}
+	if !got.CustomFieldsConfirmed {
+		t.Error("подтверждение пользовательских полей потеряно")
+	}
+}
+
+func mustCustomHash(t *testing.T, p *model.Profile) string {
+	t.Helper()
+	h, err := model.CustomFieldsHash(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return h
 }

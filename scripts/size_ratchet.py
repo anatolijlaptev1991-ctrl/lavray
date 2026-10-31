@@ -10,7 +10,8 @@
 не попавших под .gitignore):
   * файл, записанный в baseline, не длиннее своего числа строк;
   * файл вне baseline — не длиннее NEW_FILE_LIMIT (200) строк.
-Не считаются: сгенерированный код (core/internal/gen/, ui/src/gen/), тесты
+Не считаются: сгенерированный код (core/internal/gen/, ui/src/gen/), словари
+интерфейса (ui/src/lib/dictionaries/ — данные, растут с каждой функцией), тесты
 (*_test.go, *.test.ts, *.test.tsx, shell/src/**/tests.rs, shell/tests/,
 scripts/tests/, testdata/), node_modules, target, dist.
 
@@ -28,6 +29,8 @@ NEW_FILE_LIMIT = 200
 CODE_EXTS = (".go", ".rs", ".ts", ".tsx", ".py")
 SKIP_DIRS = frozenset({"node_modules", "target", "dist", "testdata"})
 GENERATED_PREFIXES = ("core/internal/gen/", "ui/src/gen/")
+# Данные, а не логика: словари i18n дописываются каждой новой функцией.
+DATA_PREFIXES = ("ui/src/lib/dictionaries/",)
 TEST_SUFFIXES = ("_test.go", ".test.ts", ".test.tsx")
 TEST_DIR_PREFIXES = ("shell/tests/", "scripts/tests/")
 BASELINE_PATH = "scripts/size-ratchet.json"
@@ -38,7 +41,7 @@ def is_checked(rel: str) -> bool:
     path = PurePosixPath(rel)
     if path.suffix not in CODE_EXTS or SKIP_DIRS.intersection(path.parts):
         return False
-    if rel.startswith(GENERATED_PREFIXES) or rel.startswith(TEST_DIR_PREFIXES):
+    if rel.startswith(GENERATED_PREFIXES + DATA_PREFIXES) or rel.startswith(TEST_DIR_PREFIXES):
         return False
     if rel.endswith(TEST_SUFFIXES):
         return False

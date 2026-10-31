@@ -80,12 +80,12 @@ type Profile struct {
 	TestResult TestResult      `json:"test_result,omitempty"`
 	Traffic    TrafficCounters `json:"traffic"`
 
-	// Точки расширения конфига (FR-UI-084/085/256). У импортированных
-	// профилей custom-поля переносятся ТОЛЬКО с CustomFieldsConfirmed=false
-	// и не применяются до подтверждения (LNB-25).
+	// Точки расширения конфига (FR-UI-084/085/256), применяются после подтверждения:
+	// CustomHash — хэш подтверждённого содержимого, флаг вычисляется (customhash.go).
 	CustomOutboundJSON    string `json:"custom_outbound_json,omitempty"`
 	CustomConfigJSON      string `json:"custom_config_json,omitempty"`
 	CustomFieldsConfirmed bool   `json:"custom_fields_confirmed,omitempty"`
+	CustomHash            string `json:"-"`
 
 	Stream *StreamSettings `json:"stream,omitempty"`
 

@@ -145,6 +145,12 @@ const (
 	// ProfileServiceSetProfileMetaProcedure is the fully-qualified name of the ProfileService's
 	// SetProfileMeta RPC.
 	ProfileServiceSetProfileMetaProcedure = "/lavray.v1.ProfileService/SetProfileMeta"
+	// ProfileServicePreviewCustomFieldsProcedure is the fully-qualified name of the ProfileService's
+	// PreviewCustomFields RPC.
+	ProfileServicePreviewCustomFieldsProcedure = "/lavray.v1.ProfileService/PreviewCustomFields"
+	// ProfileServiceConfirmCustomFieldsProcedure is the fully-qualified name of the ProfileService's
+	// ConfirmCustomFields RPC.
+	ProfileServiceConfirmCustomFieldsProcedure = "/lavray.v1.ProfileService/ConfirmCustomFields"
 	// ProfileServiceImportContentProcedure is the fully-qualified name of the ProfileService's
 	// ImportContent RPC.
 	ProfileServiceImportContentProcedure = "/lavray.v1.ProfileService/ImportContent"
@@ -641,6 +647,20 @@ type ProfileServiceClient interface {
 	// Метаданные профиля — новинка LAVRay (REQUIREMENTS §20.18): избранное,
 	// теги, заметки. Частичное обновление.
 	SetProfileMeta(context.Context, *connect.Request[lavrayv1.SetProfileMetaRequest]) (*connect.Response[lavrayv1.Profile], error)
+	// Подтверждение custom-полей (T-08B, FR-UI-257). Подтверждение привязано к
+	// sha256 канонического содержимого custom_outbound_json, custom_config_json
+	// и (для internal-full) полного конфига: любая правка содержимого снимает
+	// его, клиент выставить флаг не может.
+	// PreviewCustomFields — diff конфига без custom-полей и с ними (redacted),
+	// затронутые ключи и хэш, который нужно вернуть в ConfirmCustomFields.
+	// NOT_FOUND — нет профиля; FAILED_PRECONDITION — у профиля нет custom-полей;
+	// INVALID_ARGUMENT — custom-JSON или сборка конфига невалидны.
+	PreviewCustomFields(context.Context, *connect.Request[lavrayv1.PreviewCustomFieldsRequest]) (*connect.Response[lavrayv1.PreviewCustomFieldsResponse], error)
+	// ConfirmCustomFields — подтвердить ровно то содержимое, хэш которого
+	// показал PreviewCustomFields. INVALID_ARGUMENT — хэш не из 64 hex-символов;
+	// NOT_FOUND; FAILED_PRECONDITION — содержимое изменилось после предпросмотра
+	// (хэш устарел) или custom-полей нет.
+	ConfirmCustomFields(context.Context, *connect.Request[lavrayv1.ConfirmCustomFieldsRequest]) (*connect.Response[lavrayv1.Profile], error)
 	// Импорт произвольного содержимого: ссылки всех схем, base64-блоб,
 	// Clash YAML, happ://, подписка sing-box JSON (автопроба формата —
 	// FR-UI-264), многострочник. Единая точка входа — FR-UI-114–129,
@@ -648,9 +668,10 @@ type ProfileServiceClient interface {
 	//
 	// БЕЗОПАСНЫЙ ИМПОРТ (FR-UI-257, LNB-25): у импортированных профилей поля
 	// custom_config (c_cfg), custom_outbound (c_out), custom core/cmd
-	// ОТБРАСЫВАЮТСЯ. Разрешение — только двухфазно: preview_only=true
-	// (разбор без сохранения, с предупреждениями) → подтверждение
-	// allow_custom_fields=true (UI показывает diff). Валидатор URL подписки
+	// ОТБРАСЫВАЮТСЯ или сохраняются неподтверждёнными. preview_only=true —
+	// разбор без сохранения, с предупреждениями. Применить custom-поля можно
+	// только через PreviewCustomFields → ConfirmCustomFields (флаг
+	// allow_custom_fields удалён, T-08B). Валидатор URL подписки
 	// на стороне ядра (LNB-05: только http/https, запрет приватных целей без
 	// явного флага, лимит размера — LNB-12).
 	ImportContent(context.Context, *connect.Request[lavrayv1.ImportContentRequest]) (*connect.Response[lavrayv1.ImportContentResponse], error)
@@ -771,6 +792,18 @@ func NewProfileServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(profileServiceMethods.ByName("SetProfileMeta")),
 			connect.WithClientOptions(opts...),
 		),
+		previewCustomFields: connect.NewClient[lavrayv1.PreviewCustomFieldsRequest, lavrayv1.PreviewCustomFieldsResponse](
+			httpClient,
+			baseURL+ProfileServicePreviewCustomFieldsProcedure,
+			connect.WithSchema(profileServiceMethods.ByName("PreviewCustomFields")),
+			connect.WithClientOptions(opts...),
+		),
+		confirmCustomFields: connect.NewClient[lavrayv1.ConfirmCustomFieldsRequest, lavrayv1.Profile](
+			httpClient,
+			baseURL+ProfileServiceConfirmCustomFieldsProcedure,
+			connect.WithSchema(profileServiceMethods.ByName("ConfirmCustomFields")),
+			connect.WithClientOptions(opts...),
+		),
 		importContent: connect.NewClient[lavrayv1.ImportContentRequest, lavrayv1.ImportContentResponse](
 			httpClient,
 			baseURL+ProfileServiceImportContentProcedure,
@@ -860,6 +893,8 @@ type profileServiceClient struct {
 	removeUnavailableProfiles *connect.Client[lavrayv1.RemoveUnavailableProfilesRequest, lavrayv1.RemoveUnavailableResponse]
 	deduplicateProfiles       *connect.Client[lavrayv1.DeduplicateProfilesRequest, lavrayv1.DeduplicateResponse]
 	setProfileMeta            *connect.Client[lavrayv1.SetProfileMetaRequest, lavrayv1.Profile]
+	previewCustomFields       *connect.Client[lavrayv1.PreviewCustomFieldsRequest, lavrayv1.PreviewCustomFieldsResponse]
+	confirmCustomFields       *connect.Client[lavrayv1.ConfirmCustomFieldsRequest, lavrayv1.Profile]
 	importContent             *connect.Client[lavrayv1.ImportContentRequest, lavrayv1.ImportContentResponse]
 	exportLinks               *connect.Client[lavrayv1.ExportLinksRequest, lavrayv1.ExportLinksResponse]
 	exportConfig              *connect.Client[lavrayv1.ExportConfigRequest, lavrayv1.ExportConfigResponse]
@@ -932,6 +967,16 @@ func (c *profileServiceClient) DeduplicateProfiles(ctx context.Context, req *con
 // SetProfileMeta calls lavray.v1.ProfileService.SetProfileMeta.
 func (c *profileServiceClient) SetProfileMeta(ctx context.Context, req *connect.Request[lavrayv1.SetProfileMetaRequest]) (*connect.Response[lavrayv1.Profile], error) {
 	return c.setProfileMeta.CallUnary(ctx, req)
+}
+
+// PreviewCustomFields calls lavray.v1.ProfileService.PreviewCustomFields.
+func (c *profileServiceClient) PreviewCustomFields(ctx context.Context, req *connect.Request[lavrayv1.PreviewCustomFieldsRequest]) (*connect.Response[lavrayv1.PreviewCustomFieldsResponse], error) {
+	return c.previewCustomFields.CallUnary(ctx, req)
+}
+
+// ConfirmCustomFields calls lavray.v1.ProfileService.ConfirmCustomFields.
+func (c *profileServiceClient) ConfirmCustomFields(ctx context.Context, req *connect.Request[lavrayv1.ConfirmCustomFieldsRequest]) (*connect.Response[lavrayv1.Profile], error) {
+	return c.confirmCustomFields.CallUnary(ctx, req)
 }
 
 // ImportContent calls lavray.v1.ProfileService.ImportContent.
@@ -1019,6 +1064,20 @@ type ProfileServiceHandler interface {
 	// Метаданные профиля — новинка LAVRay (REQUIREMENTS §20.18): избранное,
 	// теги, заметки. Частичное обновление.
 	SetProfileMeta(context.Context, *connect.Request[lavrayv1.SetProfileMetaRequest]) (*connect.Response[lavrayv1.Profile], error)
+	// Подтверждение custom-полей (T-08B, FR-UI-257). Подтверждение привязано к
+	// sha256 канонического содержимого custom_outbound_json, custom_config_json
+	// и (для internal-full) полного конфига: любая правка содержимого снимает
+	// его, клиент выставить флаг не может.
+	// PreviewCustomFields — diff конфига без custom-полей и с ними (redacted),
+	// затронутые ключи и хэш, который нужно вернуть в ConfirmCustomFields.
+	// NOT_FOUND — нет профиля; FAILED_PRECONDITION — у профиля нет custom-полей;
+	// INVALID_ARGUMENT — custom-JSON или сборка конфига невалидны.
+	PreviewCustomFields(context.Context, *connect.Request[lavrayv1.PreviewCustomFieldsRequest]) (*connect.Response[lavrayv1.PreviewCustomFieldsResponse], error)
+	// ConfirmCustomFields — подтвердить ровно то содержимое, хэш которого
+	// показал PreviewCustomFields. INVALID_ARGUMENT — хэш не из 64 hex-символов;
+	// NOT_FOUND; FAILED_PRECONDITION — содержимое изменилось после предпросмотра
+	// (хэш устарел) или custom-полей нет.
+	ConfirmCustomFields(context.Context, *connect.Request[lavrayv1.ConfirmCustomFieldsRequest]) (*connect.Response[lavrayv1.Profile], error)
 	// Импорт произвольного содержимого: ссылки всех схем, base64-блоб,
 	// Clash YAML, happ://, подписка sing-box JSON (автопроба формата —
 	// FR-UI-264), многострочник. Единая точка входа — FR-UI-114–129,
@@ -1026,9 +1085,10 @@ type ProfileServiceHandler interface {
 	//
 	// БЕЗОПАСНЫЙ ИМПОРТ (FR-UI-257, LNB-25): у импортированных профилей поля
 	// custom_config (c_cfg), custom_outbound (c_out), custom core/cmd
-	// ОТБРАСЫВАЮТСЯ. Разрешение — только двухфазно: preview_only=true
-	// (разбор без сохранения, с предупреждениями) → подтверждение
-	// allow_custom_fields=true (UI показывает diff). Валидатор URL подписки
+	// ОТБРАСЫВАЮТСЯ или сохраняются неподтверждёнными. preview_only=true —
+	// разбор без сохранения, с предупреждениями. Применить custom-поля можно
+	// только через PreviewCustomFields → ConfirmCustomFields (флаг
+	// allow_custom_fields удалён, T-08B). Валидатор URL подписки
 	// на стороне ядра (LNB-05: только http/https, запрет приватных целей без
 	// явного флага, лимит размера — LNB-12).
 	ImportContent(context.Context, *connect.Request[lavrayv1.ImportContentRequest]) (*connect.Response[lavrayv1.ImportContentResponse], error)
@@ -1145,6 +1205,18 @@ func NewProfileServiceHandler(svc ProfileServiceHandler, opts ...connect.Handler
 		connect.WithSchema(profileServiceMethods.ByName("SetProfileMeta")),
 		connect.WithHandlerOptions(opts...),
 	)
+	profileServicePreviewCustomFieldsHandler := connect.NewUnaryHandler(
+		ProfileServicePreviewCustomFieldsProcedure,
+		svc.PreviewCustomFields,
+		connect.WithSchema(profileServiceMethods.ByName("PreviewCustomFields")),
+		connect.WithHandlerOptions(opts...),
+	)
+	profileServiceConfirmCustomFieldsHandler := connect.NewUnaryHandler(
+		ProfileServiceConfirmCustomFieldsProcedure,
+		svc.ConfirmCustomFields,
+		connect.WithSchema(profileServiceMethods.ByName("ConfirmCustomFields")),
+		connect.WithHandlerOptions(opts...),
+	)
 	profileServiceImportContentHandler := connect.NewUnaryHandler(
 		ProfileServiceImportContentProcedure,
 		svc.ImportContent,
@@ -1243,6 +1315,10 @@ func NewProfileServiceHandler(svc ProfileServiceHandler, opts ...connect.Handler
 			profileServiceDeduplicateProfilesHandler.ServeHTTP(w, r)
 		case ProfileServiceSetProfileMetaProcedure:
 			profileServiceSetProfileMetaHandler.ServeHTTP(w, r)
+		case ProfileServicePreviewCustomFieldsProcedure:
+			profileServicePreviewCustomFieldsHandler.ServeHTTP(w, r)
+		case ProfileServiceConfirmCustomFieldsProcedure:
+			profileServiceConfirmCustomFieldsHandler.ServeHTTP(w, r)
 		case ProfileServiceImportContentProcedure:
 			profileServiceImportContentHandler.ServeHTTP(w, r)
 		case ProfileServiceExportLinksProcedure:
@@ -1322,6 +1398,14 @@ func (UnimplementedProfileServiceHandler) DeduplicateProfiles(context.Context, *
 
 func (UnimplementedProfileServiceHandler) SetProfileMeta(context.Context, *connect.Request[lavrayv1.SetProfileMetaRequest]) (*connect.Response[lavrayv1.Profile], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.ProfileService.SetProfileMeta is not implemented"))
+}
+
+func (UnimplementedProfileServiceHandler) PreviewCustomFields(context.Context, *connect.Request[lavrayv1.PreviewCustomFieldsRequest]) (*connect.Response[lavrayv1.PreviewCustomFieldsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.ProfileService.PreviewCustomFields is not implemented"))
+}
+
+func (UnimplementedProfileServiceHandler) ConfirmCustomFields(context.Context, *connect.Request[lavrayv1.ConfirmCustomFieldsRequest]) (*connect.Response[lavrayv1.Profile], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.ProfileService.ConfirmCustomFields is not implemented"))
 }
 
 func (UnimplementedProfileServiceHandler) ImportContent(context.Context, *connect.Request[lavrayv1.ImportContentRequest]) (*connect.Response[lavrayv1.ImportContentResponse], error) {

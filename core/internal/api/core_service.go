@@ -146,25 +146,9 @@ func (s *Server) rememberedMode() lavrayv1.ConnectMode {
 // Connect — FR-UI-032. Ровно один источник профиля: profile_id или inline.
 func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.ConnectRequest]) (*connect.Response[lavrayv1.ConnectResponse], error) {
 	in := req.Msg
-	if in.ProfileId != nil && in.InlineProfile != nil {
-		return nil, invalidArg("задан и profile_id, и inline_profile — ровно один источник")
-	}
-	var profile *model.Profile
-	if in.ProfileId != nil {
-		p, err := s.st.GetProfile(in.GetProfileId())
-		if err != nil {
-			return nil, err
-		}
-		profile = p
-	} else if in.InlineProfile != nil {
-		p, err := profileToModel(in.InlineProfile)
-		if err != nil {
-			return nil, err
-		}
-		// inline: подключение без сохранения — группа может быть не указана
-		profile = p
-	} else {
-		return nil, invalidArg("не задан ни profile_id, ни inline_profile")
+	profile, inlineWarns, err := s.connectProfile(in) // connect_profile.go
+	if err != nil {
+		return nil, err
 	}
 
 	if in.GetValidateOnly() {
@@ -173,7 +157,7 @@ func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.Conn
 		if err != nil {
 			return nil, err
 		}
-		warnings := []string{"validate_only: конфиг собран и валиден, инстанс не запущен"}
+		warnings := append([]string{"validate_only: конфиг собран и валиден, инстанс не запущен"}, inlineWarns...)
 		warnings = append(warnings, tunMixedWarning(built.Config, in.GetMode())...) // T-55: по факту конфига
 		return connect.NewResponse(&lavrayv1.ConnectResponse{
 			Status:   s.coreStatus(),
@@ -188,7 +172,7 @@ func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.Conn
 		}
 		return nil, err
 	}
-	return connect.NewResponse(&lavrayv1.ConnectResponse{Status: status, Warnings: warnings}), nil
+	return connect.NewResponse(&lavrayv1.ConnectResponse{Status: status, Warnings: append(inlineWarns, warnings...)}), nil
 }
 
 // dryRunBuild — сборка без запуска (валидация профиля/настроек).

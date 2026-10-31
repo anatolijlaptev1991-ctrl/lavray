@@ -48,6 +48,8 @@ var agentTable = map[string]agentDecision{
 	lavrayv1connect.ProfileServiceRemoveUnavailableProfilesProcedure: agentDeny,
 	lavrayv1connect.ProfileServiceDeduplicateProfilesProcedure:       agentDeny,
 	lavrayv1connect.ProfileServiceSetProfileMetaProcedure:            agentDeny,
+	lavrayv1connect.ProfileServicePreviewCustomFieldsProcedure:       agentDeny, // T-08B: подтверждает только человек
+	lavrayv1connect.ProfileServiceConfirmCustomFieldsProcedure:       agentDeny,
 	lavrayv1connect.ProfileServiceImportContentProcedure:             agentDeny,
 	lavrayv1connect.ProfileServiceExportLinksProcedure:               agentDeny,
 	lavrayv1connect.ProfileServiceExportConfigProcedure:              agentDeny,

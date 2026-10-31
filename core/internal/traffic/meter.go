@@ -21,9 +21,10 @@ type Meter struct {
 	gen     uint64
 	seen    map[string]seenConn
 	tags    map[string]*tagAcc
-	// Итоги источника на прошлом такте (TickSource).
-	haveTotal      bool
-	totUp, totDown int64
+	// Нарастающие итоги для TickSource: сколько байт дали списки соединений за
+	// всё время и сколько уже отнесено к "other" как невидимое в списках.
+	listUp, listDown int64
+	resUp, resDown   int64
 }
 
 // seenConn — что известно о соединении с прошлого Tick.
@@ -65,11 +66,15 @@ type totals struct{ up, down int64 }
 // соединений источника неполон: sing-box очищает его при сборке мусора и
 // ограничивает по числу, поэтому короткое соединение может закрыться и пропасть
 // между двумя тактами. Итоги (Total) такие соединения помнят, так что байты,
-// которых нет в списках, но есть в приросте итогов, записываются в тег "other":
-// общая скорость остаётся верной, а разбивка по тегам — лучшей из возможных.
+// которых нет в списках, но есть в итогах, записываются в тег "other": общая
+// скорость остаётся верной, а разбивка по тегам — лучшей из возможных.
+//
+// Итог читается ДО списков. Байты, пришедшие между чтениями, тогда есть в
+// списках, но ещё нет в итоге: они уменьшают невидимое, а не попадают в "other"
+// (а на следующем такте — второй раз, под своим тегом).
 func (m *Meter) TickSource(now time.Time, src Source) []TagRate {
+	up, down := src.Total()
 	active, closed := src.Active(), src.Closed()
-	up, down := src.Total() // после списков: итог не отстаёт от них
 	return m.tick(now, active, closed, &totals{up, down})
 }
 
@@ -88,33 +93,30 @@ func (m *Meter) tick(now time.Time, active, closed []ConnInfo, tot *totals) []Ta
 		}
 	}
 	if tot != nil {
-		if m.haveTotal && !first {
-			m.addResidual(tot)
-		}
-		m.haveTotal, m.totUp, m.totDown = true, tot.up, tot.down
+		m.addResidual(tot, first)
 	}
 	m.started, m.prevAt = true, now
 	return m.rates(first, dt)
 }
 
-// addResidual относит к тегу "other" прирост итогов, не объяснённый списками.
-func (m *Meter) addResidual(tot *totals) {
-	var sumUp, sumDown int64
-	for _, acc := range m.tags {
-		sumUp, sumDown = addSat(sumUp, acc.dUp), addSat(sumDown, acc.dDown)
-	}
-	resUp := nonNegative(tot.up - m.totUp - sumUp)
-	resDown := nonNegative(tot.down - m.totDown - sumDown)
-	if resUp == 0 && resDown == 0 {
+// addResidual относит к тегу "other" байты итогов, которых нет в списках.
+// Невидимое — нарастающий итог (итог источника минус всё, что дали списки), и
+// "other" получает только его рост сверх уже отнесённого: байт попадает туда
+// не больше одного раза, а дрожание между чтениями итога и списков (списки
+// впереди итога) лишь уменьшает невидимое. Первый такт кладёт вытесненное до
+// подписки в объём, не в скорость.
+func (m *Meter) addResidual(tot *totals, first bool) {
+	dUp := nonNegative(nonNegative(tot.up-m.listUp) - m.resUp)
+	dDown := nonNegative(nonNegative(tot.down-m.listDown) - m.resDown)
+	if dUp == 0 && dDown == 0 {
 		return
 	}
-	acc, ok := m.tags[otherTag]
-	if !ok {
-		acc = &tagAcc{}
-		m.tags[otherTag] = acc
+	m.resUp, m.resDown = addSat(m.resUp, dUp), addSat(m.resDown, dDown)
+	acc := m.accFor(otherTag)
+	acc.upTotal, acc.downTotal = addSat(acc.upTotal, dUp), addSat(acc.downTotal, dDown)
+	if !first {
+		acc.dUp, acc.dDown = addSat(acc.dUp, dUp), addSat(acc.dDown, dDown)
 	}
-	acc.dUp, acc.dDown = addSat(acc.dUp, resUp), addSat(acc.dDown, resDown)
-	acc.upTotal, acc.downTotal = addSat(acc.upTotal, resUp), addSat(acc.downTotal, resDown)
 }
 
 // observe применяет разность по каждому соединению списка.
@@ -129,6 +131,7 @@ func (m *Meter) observe(conns []ConnInfo, first bool) {
 		if known {
 			dUp, dDown = nonNegative(c.Up-prev.up), nonNegative(c.Down-prev.down)
 		}
+		m.listUp, m.listDown = addSat(m.listUp, dUp), addSat(m.listDown, dDown)
 		acc := m.tagAcc(c)
 		acc.upTotal = addSat(acc.upTotal, dUp)
 		acc.downTotal = addSat(acc.downTotal, dDown)
@@ -141,10 +144,13 @@ func (m *Meter) observe(conns []ConnInfo, first bool) {
 }
 
 func (m *Meter) tagAcc(c *ConnInfo) *tagAcc {
-	tag := c.Outbound
-	if tag == "" {
-		tag = otherTag
+	if c.Outbound == "" {
+		return m.accFor(otherTag)
 	}
+	return m.accFor(c.Outbound)
+}
+
+func (m *Meter) accFor(tag string) *tagAcc {
 	acc, ok := m.tags[tag]
 	if !ok {
 		acc = &tagAcc{}

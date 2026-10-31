@@ -278,6 +278,10 @@ jobs:
         working-directory: shell
         shell: bash
     steps:
+      # Репозиторий хранит LF (hygiene); без этого git на Windows выкачал бы CRLF.
+      - name: git без замены переводов строк
+        working-directory: .
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:

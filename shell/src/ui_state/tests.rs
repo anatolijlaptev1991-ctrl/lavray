@@ -289,7 +289,9 @@ mod windows_acl {
         assert!(status.status.success(), "icacls /save не удался");
         let bytes = std::fs::read(&out).unwrap();
         let units: Vec<u16> = bytes
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|p| u16::from_le_bytes([p[0], p[1]]))
             .collect();
         let _ = std::fs::remove_file(&out);
@@ -319,8 +321,14 @@ mod windows_acl {
         let sddl = saved_sddl(&dir.join(FILE_NAME));
 
         // обычный экземпляр того же пользователя сможет файл перезаписать
+        // встроенный администратор (RID 500, раннер CI) записан в SDDL как «LA»
+        let alias = if sid.ends_with("-500") {
+            "LA"
+        } else {
+            sid.as_str()
+        };
         assert!(
-            explicit_full_control(&sddl, &[sid.as_str()]),
+            explicit_full_control(&sddl, &[sid.as_str(), alias]),
             "пользователь: {sddl}"
         );
         assert!(

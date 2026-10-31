@@ -138,6 +138,12 @@ var agentTable = map[string]agentDecision{
 	lavrayv1connect.WebSessionServiceChangePasswordProcedure:   agentDeny,
 	lavrayv1connect.WebSessionServiceListSessionsProcedure:     agentDeny,
 	lavrayv1connect.WebSessionServiceRevokeSessionProcedure:    agentDeny,
+
+	// BackupService (T-83): копия содержит секреты и заменяет все данные —
+	// агентам закрыты все три процедуры.
+	lavrayv1connect.BackupServiceExportBackupProcedure:  agentDeny,
+	lavrayv1connect.BackupServicePreviewBackupProcedure: agentDeny,
+	lavrayv1connect.BackupServiceImportBackupProcedure:  agentDeny,
 }
 
 // agentProcedures — множество процедур с решением d.

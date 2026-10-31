@@ -10,6 +10,7 @@ import type { MenuAnchor } from '../../components/ContextMenu';
 import { Icon } from '../../components/Icon';
 import { useConnActions } from '../../hooks/useConnActions';
 import type { ConnNote } from '../../hooks/useConnActions';
+import { useConnRule } from '../../hooks/useConnRule';
 import { useConnections } from '../../hooks/useConnections';
 import { useI18n } from '../../hooks/useI18n';
 import type { Connection } from '../../gen/lavray_pb';
@@ -18,6 +19,7 @@ import type { ConnChip } from '../../lib/conns/filter';
 import { ConnRowMenu } from './ConnRowMenu';
 import { ConnsTable } from './ConnsTable';
 import { ConnsToolbar } from './ConnsToolbar';
+import { RuleCopyDialog } from './RuleCopyDialog';
 
 export interface ConnsScreenProps {
   /** Приложение подключено: только тогда есть что показывать и на что подписываться. */
@@ -32,6 +34,7 @@ interface OpenMenu {
 export function ConnsScreen({ active }: ConnsScreenProps): JSX.Element {
   const { view, paused, setPaused, error } = useConnections(active);
   const actions = useConnActions();
+  const rule = useConnRule(actions.notify);
   const [chip, setChip] = useState<ConnChip>('all');
   const [query, setQuery] = useState('');
   const [menu, setMenu] = useState<OpenMenu | null>(null);
@@ -66,9 +69,13 @@ export function ConnsScreen({ active }: ConnsScreenProps): JSX.Element {
           anchor={menu.anchor}
           conn={menu.conn}
           onCopy={(c) => void actions.copyAddress(c)}
+          onRule={(c, out) => void rule.start(c, out)}
           onCloseConn={(c) => void actions.closeConnection(c)}
           onDismiss={() => { setMenu(null); }}
         />
+      )}
+      {rule.pending !== null && (
+        <RuleCopyDialog pending={rule.pending} onConfirm={() => void rule.confirmCopy()} onClose={rule.cancel} />
       )}
     </div>
   );

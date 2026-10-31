@@ -60,8 +60,14 @@ func (s *Server) AutoUpdateSubscription(ctx context.Context, groupID int64) erro
 
 // StartSubscriptionScheduler запускает планировщик автообновления подписок
 // и возвращает функцию остановки: она отменяет планировщик и ждёт, пока
-// закончится текущее обновление (не дольше 5 с).
+// закончится текущее обновление (не дольше 5 с). Восстановление копии
+// перезапускает планировщик через s.sched (sched_ctl.go).
 func (s *Server) StartSubscriptionScheduler(ctx context.Context) (stop func()) {
+	return s.sched.start(ctx, s.runSubscriptionScheduler)
+}
+
+// runSubscriptionScheduler — один запуск планировщика; stop отменяет его.
+func (s *Server) runSubscriptionScheduler(ctx context.Context) (stop func()) {
 	sched := subs.NewScheduler(subs.SchedulerConfig{
 		Groups:            s.st.ListGroups,
 		GlobalIntervalMin: func() int { return s.settingInt("sub.auto_update") },

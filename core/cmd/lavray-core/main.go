@@ -69,7 +69,7 @@ func main() {
 	tokenCh := make(chan string, 1)
 	agentTokenCh := make(chan string, 1)
 	parentDead := make(chan struct{})
-	go readStartupStdin(os.Stdin, tokenCh, agentTokenCh, parentDead)
+	go readStartupStdin(ext.input(os.Stdin), tokenCh, agentTokenCh, parentDead)
 
 	mux := logs.NewMux(1000)
 	mux.Logf(logs.LevelInfo, "core", "lavray-core запускается: listen=%s data=%s", *listen, *dataDir)

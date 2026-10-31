@@ -5,6 +5,8 @@ package gateway
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -73,5 +75,60 @@ func TestExecRunnerMissingBinary(t *testing.T) {
 	err := ExecRunner{Bin: "lavray-no-such-nft-binary"}.Run(context.Background(), "x")
 	if err == nil || !strings.Contains(err.Error(), "nft:") {
 		t.Fatalf("err=%v", err)
+	}
+}
+
+// TestActiveFileForFw4 — применённый набор лежит в файле, который подхватит
+// include fw4; снятие и сбой nft убирают файл.
+func TestActiveFileForFw4(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "state", "active", "lavray.nft")
+	r := &fakeRunner{}
+	a := &NftApplier{Runner: r, ActiveFile: file}
+
+	if err := a.Apply("table inet lavray {}\n"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(file)
+	if err != nil || string(got) != "table inet lavray {}\n" {
+		t.Fatalf("файл правил: %q err=%v", got, err)
+	}
+	if err := a.Apply("table inet lavray { # v2\n}\n"); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(file); !strings.Contains(string(got), "v2") {
+		t.Fatalf("файл не заменён: %q", got)
+	}
+	if err := a.Remove(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("после Remove файл остался: %v", err)
+	}
+	if err := a.Remove(); err != nil {
+		t.Fatalf("повторный Remove: %v", err)
+	}
+
+	r.err = errors.New("nft: syntax error")
+	if err := a.Apply("плохой скрипт"); err == nil {
+		t.Fatal("сбой nft не возвращён")
+	}
+	if _, err := os.Stat(file); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("после сбоя nft файл для fw4 остался")
+	}
+}
+
+// TestActiveFileWriteFailureBlocksApply — не записали файл: nft не вызывается.
+func TestActiveFileWriteFailureBlocksApply(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := &fakeRunner{}
+	a := &NftApplier{Runner: r, ActiveFile: filepath.Join(blocker, "active", "lavray.nft")} // родитель — файл
+	if err := a.Apply("x"); err == nil {
+		t.Fatal("ошибка записи файла проглочена")
+	}
+	if len(r.scripts) != 0 {
+		t.Fatal("nft вызван, хотя файл для fw4 не записан")
 	}
 }

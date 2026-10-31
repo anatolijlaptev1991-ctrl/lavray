@@ -7,6 +7,7 @@ package main
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/api"
@@ -35,6 +36,9 @@ func (f *extFlags) enableGateway(server *api.Server, st *store.Store) error {
 	}
 	cfg := f.gatewayConfig()
 	applier := &gateway.NftApplier{Runner: gateway.ExecRunner{Bin: f.nftBin}}
+	if f.stateDir != "" { // include fw4 читает этот файл (docs/OPENWRT-PACKAGING.md)
+		applier.ActiveFile = filepath.Join(f.stateDir, "active", "lavray.nft")
+	}
 	svc, err := gateway.NewService(cfg, gateway.NewPolicyRepo(st), applier, nil)
 	if err != nil {
 		return err

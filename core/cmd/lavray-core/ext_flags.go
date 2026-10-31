@@ -39,6 +39,9 @@ type extFlags struct {
 	gwLAN      string
 	gwSelfUser string
 	nftBin     string
+	stateDir   string // --gateway-state-dir: active/lavray.nft для fw4-include
+	tokenFile  string // --token-file (ext_token.go)
+	token      string // токен из файла после validate
 }
 
 // addExtFlags регистрирует флаги на fs.
@@ -56,6 +59,8 @@ func addExtFlags(fs *flag.FlagSet) *extFlags {
 	fs.StringVar(&f.gwLAN, "gateway-lan", "br-lan", "интерфейсы LAN через запятую (openwrt)")
 	fs.StringVar(&f.gwSelfUser, "gateway-user", "lavray", "системный пользователь lavrayd для исключения из правил (openwrt)")
 	fs.StringVar(&f.nftBin, "nft", "", "путь к nft (по умолчанию из PATH)")
+	fs.StringVar(&f.stateDir, "gateway-state-dir", "", "каталог состояния шлюза (tmpfs): активный набор правил для include fw4 (openwrt)")
+	fs.StringVar(&f.tokenFile, "token-file", "", "файл с токеном ядра (права 0600) вместо stdin: сервисный режим без оболочки")
 	return f
 }
 
@@ -76,6 +81,11 @@ func (f *extFlags) validate() string {
 	}
 	if f.openwrt() && (f.gwPort < 1 || f.gwPort > 65535) {
 		return fmt.Sprintf("--gateway-tproxy-port: %d вне диапазона 1–65535", f.gwPort)
+	}
+	if f.tokenFile != "" {
+		if err := f.loadToken(); err != nil {
+			return err.Error()
+		}
 	}
 	return ""
 }

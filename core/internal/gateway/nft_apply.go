@@ -10,8 +10,11 @@ package gateway
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -61,6 +64,10 @@ func (r ExecRunner) Run(ctx context.Context, script string) error {
 type NftApplier struct {
 	Runner  Runner
 	Timeout time.Duration // 0 — 15 с
+	// ActiveFile — куда записывать применённый набор правил (tmpfs). Include fw4
+	// (ruleset-post) подхватывает файл при перезагрузке файрвола, и таблица
+	// inet lavray переживает `fw4 reload`. Пусто — не писать.
+	ActiveFile string
 }
 
 func (a *NftApplier) run(script string) error {
@@ -73,10 +80,65 @@ func (a *NftApplier) run(script string) error {
 	return a.Runner.Run(ctx, script)
 }
 
-// Apply устанавливает набор правил (заменяя прежний целиком).
-func (a *NftApplier) Apply(script string) error { return a.run(script) }
+// Apply устанавливает набор правил (заменяя прежний целиком). Файл для fw4
+// пишется ДО nft: не удалось записать — ничего не применено; nft отказал —
+// файл убирается, чтобы fw4 не поднял неприменимый набор.
+func (a *NftApplier) Apply(script string) error {
+	if err := a.writeActive(script); err != nil {
+		return err
+	}
+	if err := a.run(script); err != nil {
+		_ = a.removeActive()
+		return err
+	}
+	return nil
+}
 
-// Remove снимает таблицу inet lavray; интернет у LAN идёт напрямую.
-func (a *NftApplier) Remove() error { return a.run(removeScript) }
+// Remove снимает таблицу inet lavray; интернет у LAN идёт напрямую. Файл для
+// fw4 убирается первым, чтобы перезагрузка файрвола не вернула правила.
+func (a *NftApplier) Remove() error {
+	fileErr := a.removeActive()
+	if err := a.run(removeScript); err != nil {
+		return err
+	}
+	return fileErr
+}
+
+func (a *NftApplier) writeActive(script string) error {
+	if a.ActiveFile == "" {
+		return nil
+	}
+	dir := filepath.Dir(a.ActiveFile)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("gateway: каталог %s: %w", dir, err)
+	}
+	tmp, err := os.CreateTemp(dir, ".active-*")
+	if err != nil {
+		return fmt.Errorf("gateway: файл правил для fw4: %w", err)
+	}
+	name := tmp.Name()
+	_, werr := tmp.WriteString(script)
+	if cerr := tmp.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr == nil {
+		werr = os.Rename(name, a.ActiveFile)
+	}
+	if werr != nil {
+		_ = os.Remove(name)
+		return fmt.Errorf("gateway: файл правил для fw4: %w", werr)
+	}
+	return nil
+}
+
+func (a *NftApplier) removeActive() error {
+	if a.ActiveFile == "" {
+		return nil
+	}
+	if err := os.Remove(a.ActiveFile); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("gateway: удаление файла правил для fw4: %w", err)
+	}
+	return nil
+}
 
 var _ Applier = (*NftApplier)(nil)

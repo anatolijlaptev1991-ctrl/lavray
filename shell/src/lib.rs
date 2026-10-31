@@ -44,6 +44,7 @@
 
 pub mod agent;
 pub mod autostart;
+pub mod capture;
 pub mod coreproc;
 pub mod elevation;
 pub mod endpoint;

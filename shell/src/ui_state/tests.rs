@@ -289,7 +289,9 @@ mod windows_acl {
         assert!(status.status.success(), "icacls /save не удался");
         let bytes = std::fs::read(&out).unwrap();
         let units: Vec<u16> = bytes
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .map(|p| u16::from_le_bytes([p[0], p[1]]))
             .collect();
         let _ = std::fs::remove_file(&out);

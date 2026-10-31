@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // HotkeysCard.tsx — раздел «Горячие клавиши» в «Настройках»: сочетания внутри
-// приложения. Вынесен из screen_settings.tsx (T-82), чтобы раздел рос здесь.
+// приложения и глобальное «подключить / отключить». Вынесен из
+// screen_settings.tsx (T-82), чтобы раздел рос здесь.
 import type { JSX } from 'react';
 import { useI18n } from '../../hooks/useI18n';
 import { useKbdLabel } from '../../hooks/useKbdLabel';
 import { Icon } from '../Icon';
+import { GlobalHotkeyRow } from './GlobalHotkeyRow';
 
 /** Список горячих клавиш раздела: [ключ подписи, клавиша]. */
 export const HOTKEYS = [
@@ -32,6 +34,7 @@ export function HotkeysCard({ cardRef }: HotkeysCardProps): JSX.Element {
         <span>{t('sec.hotkeys')}</span>
       </h2>
       <p className="hint">{t('set.hotkeysD')}</p>
+      <GlobalHotkeyRow />
       {HOTKEYS.map(([key, keycap]) => (
         <div className="hk-row" key={key}>
           <div className="set-txt">

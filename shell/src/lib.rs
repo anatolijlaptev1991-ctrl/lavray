@@ -47,11 +47,14 @@ pub mod autostart;
 pub mod coreproc;
 pub mod elevation;
 pub mod endpoint;
+pub mod hotkey;
 pub mod integrity;
 pub mod launch;
 pub mod msgbox;
+pub mod notify;
 #[cfg(windows)]
 mod oemtext;
+pub mod os_integration;
 pub mod prefs;
 mod private_file;
 pub mod profile;

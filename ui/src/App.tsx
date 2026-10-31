@@ -15,7 +15,7 @@ import { useAgentAccessSync } from './hooks/useAgentAccess';
 import { useSystemProxyApplied } from './hooks/useSystemProxy';
 import { useSystemProxyFollow } from './hooks/useSystemProxyFollow';
 import { useTrafficStats } from './hooks/useTraffic';
-import { useTrayBridge } from './hooks/useTrayBridge';
+import { useShellBridge } from './hooks/useShellBridge';
 import { applyDocumentLanguage, formatSpeed } from './lib/i18n';
 import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
 import { focusWhenReady, hotkeyOf } from './lib/hotkeys';
@@ -294,7 +294,7 @@ function AppInner(): JSX.Element {
     },
     [connOn, handleToggleConnect],
   );
-  useTrayBridge(status, handleTrayAction);
+  useShellBridge(status, handleTrayAction, handleToggleConnect);
 
   const handleAbout = useCallback((): void => {
     selectSection('settings');

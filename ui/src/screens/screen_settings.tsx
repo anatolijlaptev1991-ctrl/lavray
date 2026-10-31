@@ -15,7 +15,7 @@ import { useI18n } from '../hooks/useI18n';
 import { AgentsSettings } from '../components/AgentsSettings';
 import { AutostartRow } from '../components/AutostartRow';
 import { HOTKEYS, HotkeysCard } from '../components/settings/HotkeysCard';
-import { WindowBehaviorRows } from '../components/settings/WindowBehaviorRows';
+import { ShellPrefRows } from '../components/settings/ShellPrefRows';
 import { ConfirmDialog } from '../components/dialogs';
 import { Icon, type IconName } from '../components/Icon';
 import { AGENT_MODE_KEY, parseAgentMode, type AgentMode } from '../lib/agents';
@@ -112,10 +112,15 @@ const SECTION_SEARCH: Readonly<Record<string, readonly SearchRow[]>> = {
     { labelKey: 'set.autostart', descKey: 'set.autostartD' },
     { labelKey: 'set.tray', descKey: 'set.trayD' },
     { labelKey: 'set.startMin', descKey: 'set.startMinD' },
+    { labelKey: 'set.notify', descKey: 'set.notifyD' },
   ],
   network: [{ labelKey: 'set.local' }, ...NETWORK_ROWS],
   tun: TUN_ROWS,
-  hotkeys: [{ labelKey: 'set.hotkeysD' }, ...HOTKEYS.map(([labelKey]) => ({ labelKey }))],
+  hotkeys: [
+    { labelKey: 'set.hotkeysD' },
+    { labelKey: 'hk.global', descKey: 'hk.globalD' },
+    ...HOTKEYS.map(([labelKey]) => ({ labelKey })),
+  ],
   appearance: [
     { labelKey: 'set.theme' },
     ...THEMES.map((th) => ({ labelKey: `theme.${th}` as MessageKey })),
@@ -559,7 +564,7 @@ export function SettingsScreen(): JSX.Element {
                 </div>
               </div>
               <AutostartRow />
-              <WindowBehaviorRows />
+              <ShellPrefRows />
             </div>
           )}
 

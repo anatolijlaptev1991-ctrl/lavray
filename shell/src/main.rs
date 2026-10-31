@@ -24,6 +24,7 @@ use lavray_shell::endpoint::{
 use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
 use lavray_shell::launch::{wait_for_exit, LaunchArgs, WAIT_PID_TIMEOUT};
 use lavray_shell::msgbox;
+use lavray_shell::os_integration;
 use lavray_shell::prefs::ShellPrefs;
 use lavray_shell::profile;
 use lavray_shell::single_instance::{self, Verdict};
@@ -610,7 +611,7 @@ fn main() {
     let rt_for_setup = Arc::clone(&runtime);
     let hub = Arc::new(EndpointHub::default());
     let hub_for_setup = Arc::clone(&hub);
-    tauri::Builder::default()
+    os_integration::attach(tauri::Builder::default(), data_dir())
         // Сингл-инстанс (shell-lifecycle §8.1): второй запуск фокусирует окно.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             tray_ui::show_main_window(app); // свёрнутое окно тоже разворачиваем
@@ -618,8 +619,6 @@ fn main() {
         // Внешние ссылки (target=_blank) — в системный браузер, только http/https
         // (scope в capabilities/default.json).
         .plugin(tauri_plugin_opener::init())
-        // T-82: размер, место и развёрнутость окна между запусками.
-        .plugin(window_geometry::plugin())
         .manage(Arc::clone(&runtime))
         .manage(hub)
         .manage(LaunchState {
@@ -664,8 +663,9 @@ fn main() {
             // Трей (DS §9, §10): меню по TrayMenuSpec, состояние и тексты
             // присылает UI (`tray_update`); закрытие окна — в трей.
             tray_ui::install(app)?;
-            // Окно в tauri.conf.json создаётся скрытым (`visible: false`): так
-            // `--tray` не мигает окном на старте.
+            os_integration::on_setup(app.handle(), &prefs); // T-82: глобальное сочетание
+                                                            // Окно в tauri.conf.json создаётся скрытым (`visible: false`): так
+                                                            // `--tray` не мигает окном на старте.
             if !start_hidden {
                 tray_ui::show_main_window(app.handle());
             }

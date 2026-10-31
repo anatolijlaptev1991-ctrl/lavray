@@ -2016,21 +2016,28 @@ message UpdateFailed {
 // Сервис 13: WebSessionService — вход/сессии веб-панели (OpenWrt)
 // ============================================================================
 
-// На десктопе сервис присутствует, но Login отвечает UNIMPLEMENTED: локальный
-// UI аутентифицируется локальным токеном (stdin/UDS), экрана входа нет.
-// В веб-режиме экран входа обязателен (fix-plan 00-README §4).
+// Сервис работает только при `--web-bind` (веб-режим, роутер). На десктопе без
+// этого флага все 9 методов отвечают UNIMPLEMENTED — постоянная запись в
+// allowUnimplemented: локальный UI аутентифицируется локальным токеном
+// (stdin/UDS), экрана входа нет. UI, получив UNIMPLEMENTED от
+// GetWebModeStatus, считает, что вход не нужен.
 //
-// Аутентификация (FR-UI-278, OPENWRT-GATEWAY §6, THREAT-MODEL §3):
-// - браузерные клиенты: cookie `HttpOnly; SameSite=Strict; Secure` (после
-//   Login) + CSRF-токен в каждом mutating-запросе (заголовок X-Lavray-CSRF);
-//   Bearer — только для headless-клиентов (curl/скрипты);
-// - WS (/api/v1/ws): аутентификация cookie ИЛИ первым сообщением AUTH;
-//   токен в query-строке ЗАПРЕЩЕН (LNB-18.2);
+// Аутентификация веб-слушателя (FR-UI-278, OPENWRT-GATEWAY §6, THREAT-MODEL §3):
+// - браузерные клиенты: cookie `HttpOnly; SameSite=Strict` (Secure — на HTTPS)
+//   после Login + CSRF-токен в каждом изменяющем запросе (заголовок
+//   X-Lavray-CSRF, значение — WebSession.csrf_token) + проверка Origin/Host;
+//   Bearer (токен ядра) — только для headless-клиентов (curl/скрипты);
+// - до входа открыты только GetWebModeStatus, SetupFirstAdmin и Login;
+// - токен в query-строке запрещён (LNB-18.2);
 // - перебор: per-ACCOUNT backoff с блокировкой (IP-лимит за NAT бесполезен):
-//   5 неудач → экспоненциальная задержка, 10 → блок на 15 мин;
-// - пароли — Argon2id (LNB-04); смена пароля отзывает все сессии, кроме
-//   текущей; сетап первого админа открывается в отдельном окне/странице
-//   (не в основной сессии) и гаснет навсегда после создания.
+//   5 неудач — экспоненциальная задержка, 10 — блок на 15 мин; сверх того
+//   лимиты по адресу и общий. Отказ — RESOURCE_EXHAUSTED с заголовком
+//   Retry-After;
+// - пароли — Argon2id (LNB-04), не короче 10 символов; смена пароля отзывает
+//   все сессии, кроме текущей; SetupFirstAdmin работает один раз (повтор —
+//   FAILED_PRECONDITION);
+// - сессий не более 64 на пользователя (старейшая по активности вытесняется),
+//   простой 12 ч, абсолютный предел 7 суток.
 service WebSessionService {
   rpc GetWebModeStatus(GetWebModeStatusRequest) returns (WebModeStatus);
   rpc SetupFirstAdmin(SetupFirstAdminRequest) returns (WebSession);
@@ -2049,17 +2056,18 @@ service WebSessionService {
 message GetWebModeStatusRequest {}
 
 message WebModeStatus {
-  bool web_mode_enabled = 1; // false на десктопе
-  bool first_run_setup_required = 2;
-  // Конкретный LAN-адрес из UCI (OPENWRT-GATEWAY §6); слушать 0.0.0.0 ядро
-  // ОТКАЗЫВАЕТСЯ без явного флага web.allow_all_interfaces (THREAT-MODEL).
+  bool web_mode_enabled = 1; // всегда true: на десктопе сервис UNIMPLEMENTED
+  bool first_run_setup_required = 2; // нет ни одного администратора
+  // Фактический адрес веб-слушателя (OPENWRT-GATEWAY §6). Не-loopback адрес
+  // ядро принимает только с `--web-allow-remote`, 0.0.0.0 — тоже только с ним.
   string bind_address = 3;
   bool tls_enabled = 4;
   // Отпечаток self-signed сертификата (TLS-бутстрап: показывается в LuCI
   // при первой установке соединения — OPENWRT-GATEWAY §6).
   optional string tls_fingerprint_sha256 = 5;
-  int32 session_ttl_minutes = 6;
+  int32 session_ttl_minutes = 6; // простой (сессия гаснет без запросов)
   int32 active_sessions = 7;
+  int32 session_absolute_ttl_minutes = 8; // предел жизни сессии (7 суток)
 }
 
 message SetupFirstAdminRequest {
@@ -2074,11 +2082,15 @@ message LoginRequest {
 }
 
 message WebSession {
-  string token = 1; // браузеру не отдаётся в теле (только cookie); headless — Bearer
+  // Всегда пусто: сессия живёт в cookie. Headless-клиенты ходят с Bearer-токеном
+  // ядра, сессию не создают. Поле зарезервировано под будущие токены сессий.
+  string token = 1;
   int64 expires_at_ms = 2;
   string username = 3;
   repeated string permissions = 4; // будущее RBAC; пока ["*"]
-  optional string csrf_token = 5; // для браузерных сессий (mutating-запросы)
+  // Значение для заголовка X-Lavray-CSRF изменяющих запросов. Отдают Login,
+  // SetupFirstAdmin, RenewSession и WhoAmI (последний — после перезагрузки страницы).
+  optional string csrf_token = 5;
 }
 
 message LogoutRequest {}
@@ -2104,6 +2116,9 @@ message SessionInfo {
   int64 created_at_ms = 3;
   int64 expires_at_ms = 4;
   optional string client_label = 5;
+  int64 last_seen_ms = 6;
+  bool current = 7; // сессия, из которой пришёл запрос
+  optional string remote_addr = 8; // адрес клиента при входе
 }
 
 message RevokeSessionRequest {
@@ -2136,3 +2151,8 @@ message RevokeSessionRequest {
 //   custom-полей привязано к хэшу содержимого.
 //   ImportContentRequest: reserved 6 (allow_custom_fields).
 //   Profile.custom_fields_confirmed — только чтение, вычисляется ядром.
+//
+// ревизия 4 (0.9.0, T-76): WebSessionService сверен с реализацией.
+//   WebModeStatus: + session_absolute_ttl_minutes=8. SessionInfo: + last_seen_ms=6,
+//   current=7, remote_addr=8. WebSession.token всегда пуст. Сервис UNIMPLEMENTED
+//   без `--web-bind`. GatewayService: на десктопе INVALID_ARGUMENT.

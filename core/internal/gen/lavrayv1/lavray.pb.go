@@ -13197,19 +13197,20 @@ func (*GetWebModeStatusRequest) Descriptor() ([]byte, []int) {
 
 type WebModeStatus struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
-	WebModeEnabled        bool                   `protobuf:"varint,1,opt,name=web_mode_enabled,json=webModeEnabled,proto3" json:"web_mode_enabled,omitempty"` // false на десктопе
-	FirstRunSetupRequired bool                   `protobuf:"varint,2,opt,name=first_run_setup_required,json=firstRunSetupRequired,proto3" json:"first_run_setup_required,omitempty"`
-	// Конкретный LAN-адрес из UCI (OPENWRT-GATEWAY §6); слушать 0.0.0.0 ядро
-	// ОТКАЗЫВАЕТСЯ без явного флага web.allow_all_interfaces (THREAT-MODEL).
+	WebModeEnabled        bool                   `protobuf:"varint,1,opt,name=web_mode_enabled,json=webModeEnabled,proto3" json:"web_mode_enabled,omitempty"`                        // всегда true: на десктопе сервис UNIMPLEMENTED
+	FirstRunSetupRequired bool                   `protobuf:"varint,2,opt,name=first_run_setup_required,json=firstRunSetupRequired,proto3" json:"first_run_setup_required,omitempty"` // нет ни одного администратора
+	// Фактический адрес веб-слушателя (OPENWRT-GATEWAY §6). Не-loopback адрес
+	// ядро принимает только с `--web-allow-remote`, 0.0.0.0 — тоже только с ним.
 	BindAddress string `protobuf:"bytes,3,opt,name=bind_address,json=bindAddress,proto3" json:"bind_address,omitempty"`
 	TlsEnabled  bool   `protobuf:"varint,4,opt,name=tls_enabled,json=tlsEnabled,proto3" json:"tls_enabled,omitempty"`
 	// Отпечаток self-signed сертификата (TLS-бутстрап: показывается в LuCI
 	// при первой установке соединения — OPENWRT-GATEWAY §6).
-	TlsFingerprintSha256 *string `protobuf:"bytes,5,opt,name=tls_fingerprint_sha256,json=tlsFingerprintSha256,proto3,oneof" json:"tls_fingerprint_sha256,omitempty"`
-	SessionTtlMinutes    int32   `protobuf:"varint,6,opt,name=session_ttl_minutes,json=sessionTtlMinutes,proto3" json:"session_ttl_minutes,omitempty"`
-	ActiveSessions       int32   `protobuf:"varint,7,opt,name=active_sessions,json=activeSessions,proto3" json:"active_sessions,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	TlsFingerprintSha256      *string `protobuf:"bytes,5,opt,name=tls_fingerprint_sha256,json=tlsFingerprintSha256,proto3,oneof" json:"tls_fingerprint_sha256,omitempty"`
+	SessionTtlMinutes         int32   `protobuf:"varint,6,opt,name=session_ttl_minutes,json=sessionTtlMinutes,proto3" json:"session_ttl_minutes,omitempty"` // простой (сессия гаснет без запросов)
+	ActiveSessions            int32   `protobuf:"varint,7,opt,name=active_sessions,json=activeSessions,proto3" json:"active_sessions,omitempty"`
+	SessionAbsoluteTtlMinutes int32   `protobuf:"varint,8,opt,name=session_absolute_ttl_minutes,json=sessionAbsoluteTtlMinutes,proto3" json:"session_absolute_ttl_minutes,omitempty"` // предел жизни сессии (7 суток)
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *WebModeStatus) Reset() {
@@ -13287,6 +13288,13 @@ func (x *WebModeStatus) GetSessionTtlMinutes() int32 {
 func (x *WebModeStatus) GetActiveSessions() int32 {
 	if x != nil {
 		return x.ActiveSessions
+	}
+	return 0
+}
+
+func (x *WebModeStatus) GetSessionAbsoluteTtlMinutes() int32 {
+	if x != nil {
+		return x.SessionAbsoluteTtlMinutes
 	}
 	return 0
 }
@@ -13404,12 +13412,16 @@ func (x *LoginRequest) GetClientLabel() string {
 }
 
 type WebSession struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"` // браузеру не отдаётся в теле (только cookie); headless — Bearer
-	ExpiresAtMs   int64                  `protobuf:"varint,2,opt,name=expires_at_ms,json=expiresAtMs,proto3" json:"expires_at_ms,omitempty"`
-	Username      string                 `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
-	Permissions   []string               `protobuf:"bytes,4,rep,name=permissions,proto3" json:"permissions,omitempty"`                    // будущее RBAC; пока ["*"]
-	CsrfToken     *string                `protobuf:"bytes,5,opt,name=csrf_token,json=csrfToken,proto3,oneof" json:"csrf_token,omitempty"` // для браузерных сессий (mutating-запросы)
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Всегда пусто: сессия живёт в cookie. Headless-клиенты ходят с Bearer-токеном
+	// ядра, сессию не создают. Поле зарезервировано под будущие токены сессий.
+	Token       string   `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	ExpiresAtMs int64    `protobuf:"varint,2,opt,name=expires_at_ms,json=expiresAtMs,proto3" json:"expires_at_ms,omitempty"`
+	Username    string   `protobuf:"bytes,3,opt,name=username,proto3" json:"username,omitempty"`
+	Permissions []string `protobuf:"bytes,4,rep,name=permissions,proto3" json:"permissions,omitempty"` // будущее RBAC; пока ["*"]
+	// Значение для заголовка X-Lavray-CSRF изменяющих запросов. Отдают Login,
+	// SetupFirstAdmin, RenewSession и WhoAmI (последний — после перезагрузки страницы).
+	CsrfToken     *string `protobuf:"bytes,5,opt,name=csrf_token,json=csrfToken,proto3,oneof" json:"csrf_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13734,6 +13746,9 @@ type SessionInfo struct {
 	CreatedAtMs   int64                  `protobuf:"varint,3,opt,name=created_at_ms,json=createdAtMs,proto3" json:"created_at_ms,omitempty"`
 	ExpiresAtMs   int64                  `protobuf:"varint,4,opt,name=expires_at_ms,json=expiresAtMs,proto3" json:"expires_at_ms,omitempty"`
 	ClientLabel   *string                `protobuf:"bytes,5,opt,name=client_label,json=clientLabel,proto3,oneof" json:"client_label,omitempty"`
+	LastSeenMs    int64                  `protobuf:"varint,6,opt,name=last_seen_ms,json=lastSeenMs,proto3" json:"last_seen_ms,omitempty"`
+	Current       bool                   `protobuf:"varint,7,opt,name=current,proto3" json:"current,omitempty"`                              // сессия, из которой пришёл запрос
+	RemoteAddr    *string                `protobuf:"bytes,8,opt,name=remote_addr,json=remoteAddr,proto3,oneof" json:"remote_addr,omitempty"` // адрес клиента при входе
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13799,6 +13814,27 @@ func (x *SessionInfo) GetExpiresAtMs() int64 {
 func (x *SessionInfo) GetClientLabel() string {
 	if x != nil && x.ClientLabel != nil {
 		return *x.ClientLabel
+	}
+	return ""
+}
+
+func (x *SessionInfo) GetLastSeenMs() int64 {
+	if x != nil {
+		return x.LastSeenMs
+	}
+	return 0
+}
+
+func (x *SessionInfo) GetCurrent() bool {
+	if x != nil {
+		return x.Current
+	}
+	return false
+}
+
+func (x *SessionInfo) GetRemoteAddr() string {
+	if x != nil && x.RemoteAddr != nil {
+		return *x.RemoteAddr
 	}
 	return ""
 }
@@ -15083,7 +15119,7 @@ const file_lavray_proto_rawDesc = "" +
 	"\x04code\x18\x02 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12 \n" +
 	"\vrecoverable\x18\x04 \x01(\bR\vrecoverable\"\x19\n" +
-	"\x17GetWebModeStatusRequest\"\xe5\x02\n" +
+	"\x17GetWebModeStatusRequest\"\xa6\x03\n" +
 	"\rWebModeStatus\x12(\n" +
 	"\x10web_mode_enabled\x18\x01 \x01(\bR\x0ewebModeEnabled\x127\n" +
 	"\x18first_run_setup_required\x18\x02 \x01(\bR\x15firstRunSetupRequired\x12!\n" +
@@ -15092,7 +15128,8 @@ const file_lavray_proto_rawDesc = "" +
 	"tlsEnabled\x129\n" +
 	"\x16tls_fingerprint_sha256\x18\x05 \x01(\tH\x00R\x14tlsFingerprintSha256\x88\x01\x01\x12.\n" +
 	"\x13session_ttl_minutes\x18\x06 \x01(\x05R\x11sessionTtlMinutes\x12'\n" +
-	"\x0factive_sessions\x18\a \x01(\x05R\x0eactiveSessionsB\x19\n" +
+	"\x0factive_sessions\x18\a \x01(\x05R\x0eactiveSessions\x12?\n" +
+	"\x1csession_absolute_ttl_minutes\x18\b \x01(\x05R\x19sessionAbsoluteTtlMinutesB\x19\n" +
 	"\x17_tls_fingerprint_sha256\"P\n" +
 	"\x16SetupFirstAdminRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
@@ -15120,15 +15157,21 @@ const file_lavray_proto_rawDesc = "" +
 	"\x16ChangePasswordResponse\x124\n" +
 	"\x16revoked_other_sessions\x18\x01 \x01(\x05R\x14revokedOtherSessions\"J\n" +
 	"\x14ListSessionsResponse\x122\n" +
-	"\bsessions\x18\x01 \x03(\v2\x16.lavray.v1.SessionInfoR\bsessions\"\xc9\x01\n" +
+	"\bsessions\x18\x01 \x03(\v2\x16.lavray.v1.SessionInfoR\bsessions\"\xbb\x02\n" +
 	"\vSessionInfo\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1a\n" +
 	"\busername\x18\x02 \x01(\tR\busername\x12\"\n" +
 	"\rcreated_at_ms\x18\x03 \x01(\x03R\vcreatedAtMs\x12\"\n" +
 	"\rexpires_at_ms\x18\x04 \x01(\x03R\vexpiresAtMs\x12&\n" +
-	"\fclient_label\x18\x05 \x01(\tH\x00R\vclientLabel\x88\x01\x01B\x0f\n" +
-	"\r_client_label\"5\n" +
+	"\fclient_label\x18\x05 \x01(\tH\x00R\vclientLabel\x88\x01\x01\x12 \n" +
+	"\flast_seen_ms\x18\x06 \x01(\x03R\n" +
+	"lastSeenMs\x12\x18\n" +
+	"\acurrent\x18\a \x01(\bR\acurrent\x12$\n" +
+	"\vremote_addr\x18\b \x01(\tH\x01R\n" +
+	"remoteAddr\x88\x01\x01B\x0f\n" +
+	"\r_client_labelB\x0e\n" +
+	"\f_remote_addr\"5\n" +
 	"\x14RevokeSessionRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId*a\n" +

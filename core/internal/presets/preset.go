@@ -94,6 +94,10 @@ type Preset struct {
 	MaintainerNotes string    `json:"maintainer_notes,omitempty"`
 	Routing         Routing   `json:"routing"`
 	DNS             DNSBlock  `json:"dns"`
+	// SourceID/SourceRevision — встроенный набор, с которого снята копия (T-80;
+	// у файлов встроенных и у наборов «с нуля» пусто, omitempty их не пишет).
+	SourceID       string `json:"source_id,omitempty"`
+	SourceRevision int    `json:"source_revision,omitempty"`
 }
 
 // Routing — блок routing (SCHEMA §2).
@@ -129,8 +133,9 @@ type DNSBlock struct {
 	AdvancedJSON        string `json:"advanced_json,omitempty"` // mode=advanced (FR-UI-149)
 }
 
-// Имена платформ процессных правил (SCHEMA §2.1).
-var knownPlatforms = map[string]bool{"windows": true, "linux": true, "macos": true}
+// Имена платформ процессных правил (SCHEMA §2.1). openwrt допустим в файле
+// (правило для роутера), но на ПК не действует — см. EffectiveProcessRules.
+var knownPlatforms = map[string]bool{"windows": true, "linux": true, "macos": true, "openwrt": true}
 
 // Известные префиксы строк списков (FR-UI-135); geoip — только ip-поля,
 // geosite — только domain-поля (валидация §4 SCHEMA).
@@ -195,7 +200,7 @@ func (p *Preset) Validate() error {
 		}
 		for _, plat := range rule.Platforms {
 			if !knownPlatforms[plat] {
-				return fmt.Errorf("%s.platforms: неизвестная платформа %q (windows/linux/macos)", path, plat)
+				return fmt.Errorf("%s.platforms: неизвестная платформа %q (windows/linux/macos/openwrt)", path, plat)
 			}
 		}
 		for _, name := range rule.ProcessNames {

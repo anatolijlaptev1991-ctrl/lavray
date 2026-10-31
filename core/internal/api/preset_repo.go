@@ -108,9 +108,6 @@ func builtinPreset(id string) (*presets.Preset, bool, error) {
 	return nil, false, nil
 }
 
-// customPresets — пользовательские наборы (см. presetRepo.List).
-func (s *Server) customPresets() ([]*presets.Preset, error) { return s.presetRepo.List() }
-
 // findPreset — встроенный или пользовательский набор по id.
 func (s *Server) findPreset(id string) (*presets.Preset, bool, error) {
 	if id == "" {

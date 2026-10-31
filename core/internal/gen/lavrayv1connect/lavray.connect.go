@@ -235,6 +235,12 @@ const (
 	// RoutingServiceImportNekoRayRouteProcedure is the fully-qualified name of the RoutingService's
 	// ImportNekoRayRoute RPC.
 	RoutingServiceImportNekoRayRouteProcedure = "/lavray.v1.RoutingService/ImportNekoRayRoute"
+	// RoutingServiceExportPresetProcedure is the fully-qualified name of the RoutingService's
+	// ExportPreset RPC.
+	RoutingServiceExportPresetProcedure = "/lavray.v1.RoutingService/ExportPreset"
+	// RoutingServiceImportPresetProcedure is the fully-qualified name of the RoutingService's
+	// ImportPreset RPC.
+	RoutingServiceImportPresetProcedure = "/lavray.v1.RoutingService/ImportPreset"
 	// DnsServiceGetDnsProcedure is the fully-qualified name of the DnsService's GetDns RPC.
 	DnsServiceGetDnsProcedure = "/lavray.v1.DnsService/GetDns"
 	// DnsServiceSetDnsProcedure is the fully-qualified name of the DnsService's SetDns RPC.
@@ -1740,7 +1746,9 @@ type RoutingServiceClient interface {
 	// клонировать (Create с builtin_id источником) или Reset к ревизии.
 	CreatePreset(context.Context, *connect.Request[lavrayv1.CreatePresetRequest]) (*connect.Response[lavrayv1.RoutingPreset], error)
 	UpdatePreset(context.Context, *connect.Request[lavrayv1.UpdatePresetRequest]) (*connect.Response[lavrayv1.UpdatePresetResponse], error)
-	DeletePreset(context.Context, *connect.Request[lavrayv1.DeletePresetRequest]) (*connect.Response[lavrayv1.Empty], error)
+	// Встроенный удалить нельзя; удаление активного переключает на «global»
+	// (T-80: DeletePresetResponse.new_active_id, needs_profile_restart).
+	DeletePreset(context.Context, *connect.Request[lavrayv1.DeletePresetRequest]) (*connect.Response[lavrayv1.DeletePresetResponse], error)
 	// Активация набора. Если соединение активно — ответ предлагает перезапуск
 	// (needs_profile_restart, FR-UI-141/062); headless может применить сам
 	// через CoreService.RestartProfile.
@@ -1754,7 +1762,13 @@ type RoutingServiceClient interface {
 	// NekoBox — config/routes_box/<name> (поправка аудита 2026-10; каталог
 	// routes/ старых форков тоже принимается). Эталон конвертации —
 	// nekobox-ru-bypass-games «RU-bypass + Games» (PRESET-LAV-RU §3).
-	ImportNekoRayRoute(context.Context, *connect.Request[lavrayv1.ImportNekoRayRouteRequest]) (*connect.Response[lavrayv1.RoutingPreset], error)
+	ImportNekoRayRoute(context.Context, *connect.Request[lavrayv1.ImportNekoRayRouteRequest]) (*connect.Response[lavrayv1.ImportNekoRayRouteResponse], error)
+	// Обмен наборами файлом (T-80, формат presets/SCHEMA.md). Экспорт отдаёт
+	// JSON набора (встроенного тоже); импорт принимает JSON LAVRay или маршрут
+	// NekoRay (формат определяется сам) и ВСЕГДА создаёт новый пользовательский
+	// набор с новым id — id встроенного файл занять не может.
+	ExportPreset(context.Context, *connect.Request[lavrayv1.ExportPresetRequest]) (*connect.Response[lavrayv1.ExportPresetResponse], error)
+	ImportPreset(context.Context, *connect.Request[lavrayv1.ImportPresetRequest]) (*connect.Response[lavrayv1.ImportPresetResponse], error)
 }
 
 // NewRoutingServiceClient constructs a client for the lavray.v1.RoutingService service. By default,
@@ -1792,7 +1806,7 @@ func NewRoutingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(routingServiceMethods.ByName("UpdatePreset")),
 			connect.WithClientOptions(opts...),
 		),
-		deletePreset: connect.NewClient[lavrayv1.DeletePresetRequest, lavrayv1.Empty](
+		deletePreset: connect.NewClient[lavrayv1.DeletePresetRequest, lavrayv1.DeletePresetResponse](
 			httpClient,
 			baseURL+RoutingServiceDeletePresetProcedure,
 			connect.WithSchema(routingServiceMethods.ByName("DeletePreset")),
@@ -1816,10 +1830,22 @@ func NewRoutingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(routingServiceMethods.ByName("ResetBuiltinPreset")),
 			connect.WithClientOptions(opts...),
 		),
-		importNekoRayRoute: connect.NewClient[lavrayv1.ImportNekoRayRouteRequest, lavrayv1.RoutingPreset](
+		importNekoRayRoute: connect.NewClient[lavrayv1.ImportNekoRayRouteRequest, lavrayv1.ImportNekoRayRouteResponse](
 			httpClient,
 			baseURL+RoutingServiceImportNekoRayRouteProcedure,
 			connect.WithSchema(routingServiceMethods.ByName("ImportNekoRayRoute")),
+			connect.WithClientOptions(opts...),
+		),
+		exportPreset: connect.NewClient[lavrayv1.ExportPresetRequest, lavrayv1.ExportPresetResponse](
+			httpClient,
+			baseURL+RoutingServiceExportPresetProcedure,
+			connect.WithSchema(routingServiceMethods.ByName("ExportPreset")),
+			connect.WithClientOptions(opts...),
+		),
+		importPreset: connect.NewClient[lavrayv1.ImportPresetRequest, lavrayv1.ImportPresetResponse](
+			httpClient,
+			baseURL+RoutingServiceImportPresetProcedure,
+			connect.WithSchema(routingServiceMethods.ByName("ImportPreset")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -1831,11 +1857,13 @@ type routingServiceClient struct {
 	getPreset          *connect.Client[lavrayv1.GetPresetRequest, lavrayv1.RoutingPreset]
 	createPreset       *connect.Client[lavrayv1.CreatePresetRequest, lavrayv1.RoutingPreset]
 	updatePreset       *connect.Client[lavrayv1.UpdatePresetRequest, lavrayv1.UpdatePresetResponse]
-	deletePreset       *connect.Client[lavrayv1.DeletePresetRequest, lavrayv1.Empty]
+	deletePreset       *connect.Client[lavrayv1.DeletePresetRequest, lavrayv1.DeletePresetResponse]
 	activatePreset     *connect.Client[lavrayv1.ActivatePresetRequest, lavrayv1.ActivatePresetResponse]
 	getActivePreset    *connect.Client[lavrayv1.GetActivePresetRequest, lavrayv1.RoutingPreset]
 	resetBuiltinPreset *connect.Client[lavrayv1.ResetBuiltinPresetRequest, lavrayv1.RoutingPreset]
-	importNekoRayRoute *connect.Client[lavrayv1.ImportNekoRayRouteRequest, lavrayv1.RoutingPreset]
+	importNekoRayRoute *connect.Client[lavrayv1.ImportNekoRayRouteRequest, lavrayv1.ImportNekoRayRouteResponse]
+	exportPreset       *connect.Client[lavrayv1.ExportPresetRequest, lavrayv1.ExportPresetResponse]
+	importPreset       *connect.Client[lavrayv1.ImportPresetRequest, lavrayv1.ImportPresetResponse]
 }
 
 // ListPresets calls lavray.v1.RoutingService.ListPresets.
@@ -1859,7 +1887,7 @@ func (c *routingServiceClient) UpdatePreset(ctx context.Context, req *connect.Re
 }
 
 // DeletePreset calls lavray.v1.RoutingService.DeletePreset.
-func (c *routingServiceClient) DeletePreset(ctx context.Context, req *connect.Request[lavrayv1.DeletePresetRequest]) (*connect.Response[lavrayv1.Empty], error) {
+func (c *routingServiceClient) DeletePreset(ctx context.Context, req *connect.Request[lavrayv1.DeletePresetRequest]) (*connect.Response[lavrayv1.DeletePresetResponse], error) {
 	return c.deletePreset.CallUnary(ctx, req)
 }
 
@@ -1879,8 +1907,18 @@ func (c *routingServiceClient) ResetBuiltinPreset(ctx context.Context, req *conn
 }
 
 // ImportNekoRayRoute calls lavray.v1.RoutingService.ImportNekoRayRoute.
-func (c *routingServiceClient) ImportNekoRayRoute(ctx context.Context, req *connect.Request[lavrayv1.ImportNekoRayRouteRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
+func (c *routingServiceClient) ImportNekoRayRoute(ctx context.Context, req *connect.Request[lavrayv1.ImportNekoRayRouteRequest]) (*connect.Response[lavrayv1.ImportNekoRayRouteResponse], error) {
 	return c.importNekoRayRoute.CallUnary(ctx, req)
+}
+
+// ExportPreset calls lavray.v1.RoutingService.ExportPreset.
+func (c *routingServiceClient) ExportPreset(ctx context.Context, req *connect.Request[lavrayv1.ExportPresetRequest]) (*connect.Response[lavrayv1.ExportPresetResponse], error) {
+	return c.exportPreset.CallUnary(ctx, req)
+}
+
+// ImportPreset calls lavray.v1.RoutingService.ImportPreset.
+func (c *routingServiceClient) ImportPreset(ctx context.Context, req *connect.Request[lavrayv1.ImportPresetRequest]) (*connect.Response[lavrayv1.ImportPresetResponse], error) {
+	return c.importPreset.CallUnary(ctx, req)
 }
 
 // RoutingServiceHandler is an implementation of the lavray.v1.RoutingService service.
@@ -1895,7 +1933,9 @@ type RoutingServiceHandler interface {
 	// клонировать (Create с builtin_id источником) или Reset к ревизии.
 	CreatePreset(context.Context, *connect.Request[lavrayv1.CreatePresetRequest]) (*connect.Response[lavrayv1.RoutingPreset], error)
 	UpdatePreset(context.Context, *connect.Request[lavrayv1.UpdatePresetRequest]) (*connect.Response[lavrayv1.UpdatePresetResponse], error)
-	DeletePreset(context.Context, *connect.Request[lavrayv1.DeletePresetRequest]) (*connect.Response[lavrayv1.Empty], error)
+	// Встроенный удалить нельзя; удаление активного переключает на «global»
+	// (T-80: DeletePresetResponse.new_active_id, needs_profile_restart).
+	DeletePreset(context.Context, *connect.Request[lavrayv1.DeletePresetRequest]) (*connect.Response[lavrayv1.DeletePresetResponse], error)
 	// Активация набора. Если соединение активно — ответ предлагает перезапуск
 	// (needs_profile_restart, FR-UI-141/062); headless может применить сам
 	// через CoreService.RestartProfile.
@@ -1909,7 +1949,13 @@ type RoutingServiceHandler interface {
 	// NekoBox — config/routes_box/<name> (поправка аудита 2026-10; каталог
 	// routes/ старых форков тоже принимается). Эталон конвертации —
 	// nekobox-ru-bypass-games «RU-bypass + Games» (PRESET-LAV-RU §3).
-	ImportNekoRayRoute(context.Context, *connect.Request[lavrayv1.ImportNekoRayRouteRequest]) (*connect.Response[lavrayv1.RoutingPreset], error)
+	ImportNekoRayRoute(context.Context, *connect.Request[lavrayv1.ImportNekoRayRouteRequest]) (*connect.Response[lavrayv1.ImportNekoRayRouteResponse], error)
+	// Обмен наборами файлом (T-80, формат presets/SCHEMA.md). Экспорт отдаёт
+	// JSON набора (встроенного тоже); импорт принимает JSON LAVRay или маршрут
+	// NekoRay (формат определяется сам) и ВСЕГДА создаёт новый пользовательский
+	// набор с новым id — id встроенного файл занять не может.
+	ExportPreset(context.Context, *connect.Request[lavrayv1.ExportPresetRequest]) (*connect.Response[lavrayv1.ExportPresetResponse], error)
+	ImportPreset(context.Context, *connect.Request[lavrayv1.ImportPresetRequest]) (*connect.Response[lavrayv1.ImportPresetResponse], error)
 }
 
 // NewRoutingServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -1973,6 +2019,18 @@ func NewRoutingServiceHandler(svc RoutingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(routingServiceMethods.ByName("ImportNekoRayRoute")),
 		connect.WithHandlerOptions(opts...),
 	)
+	routingServiceExportPresetHandler := connect.NewUnaryHandler(
+		RoutingServiceExportPresetProcedure,
+		svc.ExportPreset,
+		connect.WithSchema(routingServiceMethods.ByName("ExportPreset")),
+		connect.WithHandlerOptions(opts...),
+	)
+	routingServiceImportPresetHandler := connect.NewUnaryHandler(
+		RoutingServiceImportPresetProcedure,
+		svc.ImportPreset,
+		connect.WithSchema(routingServiceMethods.ByName("ImportPreset")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/lavray.v1.RoutingService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case RoutingServiceListPresetsProcedure:
@@ -1993,6 +2051,10 @@ func NewRoutingServiceHandler(svc RoutingServiceHandler, opts ...connect.Handler
 			routingServiceResetBuiltinPresetHandler.ServeHTTP(w, r)
 		case RoutingServiceImportNekoRayRouteProcedure:
 			routingServiceImportNekoRayRouteHandler.ServeHTTP(w, r)
+		case RoutingServiceExportPresetProcedure:
+			routingServiceExportPresetHandler.ServeHTTP(w, r)
+		case RoutingServiceImportPresetProcedure:
+			routingServiceImportPresetHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -2018,7 +2080,7 @@ func (UnimplementedRoutingServiceHandler) UpdatePreset(context.Context, *connect
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.RoutingService.UpdatePreset is not implemented"))
 }
 
-func (UnimplementedRoutingServiceHandler) DeletePreset(context.Context, *connect.Request[lavrayv1.DeletePresetRequest]) (*connect.Response[lavrayv1.Empty], error) {
+func (UnimplementedRoutingServiceHandler) DeletePreset(context.Context, *connect.Request[lavrayv1.DeletePresetRequest]) (*connect.Response[lavrayv1.DeletePresetResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.RoutingService.DeletePreset is not implemented"))
 }
 
@@ -2034,8 +2096,16 @@ func (UnimplementedRoutingServiceHandler) ResetBuiltinPreset(context.Context, *c
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.RoutingService.ResetBuiltinPreset is not implemented"))
 }
 
-func (UnimplementedRoutingServiceHandler) ImportNekoRayRoute(context.Context, *connect.Request[lavrayv1.ImportNekoRayRouteRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
+func (UnimplementedRoutingServiceHandler) ImportNekoRayRoute(context.Context, *connect.Request[lavrayv1.ImportNekoRayRouteRequest]) (*connect.Response[lavrayv1.ImportNekoRayRouteResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.RoutingService.ImportNekoRayRoute is not implemented"))
+}
+
+func (UnimplementedRoutingServiceHandler) ExportPreset(context.Context, *connect.Request[lavrayv1.ExportPresetRequest]) (*connect.Response[lavrayv1.ExportPresetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.RoutingService.ExportPreset is not implemented"))
+}
+
+func (UnimplementedRoutingServiceHandler) ImportPreset(context.Context, *connect.Request[lavrayv1.ImportPresetRequest]) (*connect.Response[lavrayv1.ImportPresetResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.RoutingService.ImportPreset is not implemented"))
 }
 
 // DnsServiceClient is a client for the lavray.v1.DnsService service.

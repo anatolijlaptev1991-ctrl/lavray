@@ -42,7 +42,7 @@ func (s *Server) UpdatePreset(ctx context.Context, req *connect.Request[lavrayv1
 	return nil, errNotYetW6
 }
 
-func (s *Server) DeletePreset(ctx context.Context, req *connect.Request[lavrayv1.DeletePresetRequest]) (*connect.Response[lavrayv1.Empty], error) {
+func (s *Server) DeletePreset(ctx context.Context, req *connect.Request[lavrayv1.DeletePresetRequest]) (*connect.Response[lavrayv1.DeletePresetResponse], error) {
 	return nil, errNotYetW6
 }
 
@@ -50,7 +50,15 @@ func (s *Server) ResetBuiltinPreset(ctx context.Context, req *connect.Request[la
 	return nil, errNotYetW6
 }
 
-func (s *Server) ImportNekoRayRoute(ctx context.Context, req *connect.Request[lavrayv1.ImportNekoRayRouteRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
+func (s *Server) ImportNekoRayRoute(ctx context.Context, req *connect.Request[lavrayv1.ImportNekoRayRouteRequest]) (*connect.Response[lavrayv1.ImportNekoRayRouteResponse], error) {
+	return nil, errNotYetW6
+}
+
+func (s *Server) ExportPreset(ctx context.Context, req *connect.Request[lavrayv1.ExportPresetRequest]) (*connect.Response[lavrayv1.ExportPresetResponse], error) {
+	return nil, errNotYetW6
+}
+
+func (s *Server) ImportPreset(ctx context.Context, req *connect.Request[lavrayv1.ImportPresetRequest]) (*connect.Response[lavrayv1.ImportPresetResponse], error) {
 	return nil, errNotYetW6
 }
 

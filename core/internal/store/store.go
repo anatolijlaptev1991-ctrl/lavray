@@ -171,10 +171,14 @@ func (s *Store) GetMeta(key string) (string, bool, error) {
 	return v, true, nil
 }
 
-// SetMeta записывает служебный ключ.
+// SetMeta записывает служебный ключ. Идёт через withTx: внутри InTx запись
+// входит в транзакцию серии (T-78: перенос из NekoBox пишет наборы маршрутов
+// вместе с профилями), вне её — отдельная транзакция.
 func (s *Store) SetMeta(key, value string) error {
-	_, err := s.db.Exec(
-		`INSERT INTO meta (key, value) VALUES (?, ?)
-		 ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
-	return err
+	return s.withTx(func(tx *sql.Tx) error {
+		_, err := tx.Exec(
+			`INSERT INTO meta (key, value) VALUES (?, ?)
+			 ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+		return err
+	})
 }

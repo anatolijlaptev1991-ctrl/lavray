@@ -6,7 +6,7 @@ import "fmt"
 
 // InTx выполняет fn над транзакционным представлением хранилища (T-51,
 // A1-16): все мутации внутри fn — CreateProfile, ImportProfile, UpdateProfile,
-// DeleteProfile, ReorderProfiles, UpdateGroup, CreateGroup — идут в ОДНОЙ
+// DeleteProfile, ReorderProfiles, UpdateGroup, CreateGroup, SetMeta, SetSetting — идут в ОДНОЙ
 // транзакции SQLite. fn вернула ошибку или запаниковала — откатывается всё;
 // процесс убит до COMMIT — после перезапуска ничего из серии не видно.
 //

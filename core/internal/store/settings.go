@@ -23,15 +23,18 @@ func (s *Store) GetSetting(key string) (string, bool, error) {
 	return v, true, nil
 }
 
-// SetSetting Upsert-ит значение ключа.
+// SetSetting Upsert-ит значение ключа. Идёт через withTx (см. SetMeta): внутри
+// InTx запись входит в транзакцию серии.
 func (s *Store) SetSetting(key, value string) error {
 	if key == "" {
 		return ErrConstraint
 	}
-	_, err := s.db.Exec(`INSERT INTO settings (key, value, updated_at_ms) VALUES (?, ?, ?)
-		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms`,
-		key, value, nowMs())
-	return err
+	return s.withTx(func(tx *sql.Tx) error {
+		_, err := tx.Exec(`INSERT INTO settings (key, value, updated_at_ms) VALUES (?, ?, ?)
+			ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms`,
+			key, value, nowMs())
+		return err
+	})
 }
 
 // Settings возвращает все заданные настройки.

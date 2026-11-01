@@ -10,6 +10,10 @@
 
 > **Предупреждение.** Ничего из частей 7–11 нельзя выполнять на личном ПК. Не отключайте SmartScreen, Defender и UAC: тестовые установщики не подписаны Authenticode, и если система блокирует запуск, шаг получает `BLOCKED` (причина — в отчёт). Перед частью 7 сделайте снимок ВМ.
 
+## Тестовый ПК
+
+- **Тестовый ПК подтверждён.** Первая команда файла: `. C:\lavray-test\env.ps1; Test-TestPc` должна напечатать `True` (маркер `C:\lavray-test\TESTPC_OK` есть, создан на этом ПК, не старше 30 суток; `01-ENVIRONMENT.md`, раздел 3). `False` — итог файла `BLOCKED`, ни одного действия.
+
 ## Что нужно для каждого шага
 
 Колонка «Нужно» в таблицах:
@@ -53,6 +57,7 @@
    . C:\lavray-test\env.ps1
    $m = 'C:\lavray-test\tmp\M12'
    $wt = 'C:\lavray-test\wt\M12'
+   if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
    if (-not (Test-Path $wt)) { git -C $env:LAVRAY_SRC worktree add --detach $wt $env:LAVRAY_REF }
    $root = (Get-Content "$m\stand\keys\root.b64" -Raw).Trim()
    $boot = 'http://127.0.0.1:28770/meta,http://127.0.0.1:28771/meta'

@@ -88,7 +88,7 @@ bash /c/lavray-test/tmp/A07/ci_smoke.sh > /c/lavray-test/results/A07/ci-smoke.tx
 cut -c1-200 /c/lavray-test/results/A07/ci-smoke.txt
 ```
 
-   Ожидается: `ci-smoke exit=0`, в выводе `healthz=200 no-auth=401 bad-auth=401`, строка `status={...}` с полем `coreVersion`, последняя строка `CI-SMOKE-OK`. Если `LAVRAY_CORE_EXE` не задана в сессии Git Bash, передайте путь вручную в формате `/c/lavray-test/portable/0.9.0/binaries/lavray-core.exe`.
+   Ожидается: `ci-smoke exit=0`, в выводе `healthz=200 no-auth=401 bad-auth=401`, строка `status={...}` с `"coreVersion":"0.9.0"` (равна `$env:LAVRAY_VERSION`; bash берёт её из окружения pwsh), строка `coreVersion=0.9.0 подтверждена`, последняя строка `CI-SMOKE-OK`. Другая версия — `FAIL` (`major`): ядро из ZIP релиза выдаёт чужую версию, а сравнение версий обновлений идёт по ней. Если `LAVRAY_CORE_EXE` не задана в сессии Git Bash, передайте путь вручную в формате `/c/lavray-test/portable/0.9.0/binaries/lavray-core.exe`.
 
 5. Часть В: T-08B и T-79 на настоящем ядре. Сохраните скрипт «Скрипт части В» как `C:\lavray-test\tmp\A07\a07_extra.py` и запустите:
 
@@ -133,7 +133,7 @@ Get-NetTCPConnection -State Listen -LocalPort 47950 -ErrorAction SilentlyContinu
 | К3 | Шаг 4: CI-проверка прошла | `CI-SMOKE-OK`, `ci-smoke exit=0` |
 | К4 | Шаг 5: часть В без провалов (`WARN` допустим) | `провалов 0` |
 | К5 | Шаг 7: системный прокси не менялся, процессов и открытых портов не осталось | `True` и пустые вывода |
-| К6 | Версия ядра в `status.initial` равна версии продукта | проверка `status.initial: версия ядра` |
+| К6 | Версия Windows-ядра из ZIP релиза равна версии релиза (`$env:LAVRAY_VERSION` = `0.9.0`) по API: и в `status.initial` (часть А), и в `ci_smoke.sh` (часть Б). Это единственная проверка версии Windows-ядра через API; A06 (`go version -m`) её не видит из-за `-trimpath` | `PASS status.initial: версия ядра`, `coreVersion=0.9.0 подтверждена` |
 
 Сетевые `fetch` без интернета — `BLOCKED` (итог файла `PARTIAL`), а не `FAIL`.
 
@@ -260,7 +260,9 @@ kill $CORE_PID 2>/dev/null || true
 test "$HEALTH" = "200"
 test "$NOAUTH" = "401"
 test "$BADAUTH" = "401"
-echo "$STATUS" | grep -q "coreVersion"
+VER="${LAVRAY_VERSION:?задайте LAVRAY_VERSION (выполните env.ps1 в pwsh, откуда запущен bash)}"
+echo "$STATUS" | grep -q "\"coreVersion\":\"$VER\""
+echo "coreVersion=$VER подтверждена"
 echo "CI-SMOKE-OK"
 ```
 

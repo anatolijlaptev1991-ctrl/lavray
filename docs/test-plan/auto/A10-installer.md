@@ -16,7 +16,7 @@
 
 ## Предусловия
 
-- **Тестовый ПК подтверждён**: `C:\lavray-test\TESTPC_OK` существует; иначе итог `BLOCKED`.
+- **Тестовый ПК подтверждён**: `Test-TestPc` (из `env.ps1`) возвращает `True` — маркер `C:\lavray-test\TESTPC_OK` есть, создан на этом ПК и не старше 30 суток; иначе итог `BLOCKED`.
 - PowerShell запущен **от имени администратора** (установщик на уровне компьютера). Проверка в шаге 1; без прав итог `BLOCKED` (тихая установка не может показать запрос UAC).
 - Скачаны `assets\0.3.0` и `assets\0.9.0` с проверенными суммами (A06). Без релиза 0.9.0 — `BLOCKED`.
 - LAVRay и `lavray-core` не запущены (страж из `01-ENVIRONMENT.md`).
@@ -32,7 +32,7 @@
 
 ```powershell
 . C:\lavray-test\env.ps1
-if (-not (Test-Path C:\lavray-test\TESTPC_OK)) { 'BLOCKED: нет маркера TESTPC_OK'; return }
+if (-not (Test-TestPc)) { 'BLOCKED: нет маркера TESTPC_OK (или он создан на другом ПК, или старше 30 суток)'; return }
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 "администратор: $isAdmin"
 $pf = Join-Path $env:ProgramFiles 'LAVRay'

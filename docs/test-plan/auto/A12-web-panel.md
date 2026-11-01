@@ -32,7 +32,8 @@
 
    ```powershell
    . C:\lavray-test\env.ps1
-   $wt = Join-Path $env:LAVRAY_TP_ROOT 'wt\A12'
+   $wt = 'C:\lavray-test\wt\A12'
+   if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
    git -C $env:LAVRAY_SRC worktree add --detach $wt $env:LAVRAY_REF
    Set-Location $wt
    bash scripts/build-webui.sh

@@ -27,7 +27,8 @@
 
 ```powershell
 . C:\lavray-test\env.ps1
-$wt = Join-Path $env:LAVRAY_TP_ROOT 'wt\A05'
+$wt = 'C:\lavray-test\wt\A05'
+if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
 git -C $env:LAVRAY_SRC worktree add --detach $wt $env:LAVRAY_REF
 Set-Location (Join-Path $wt 'ui')
 node --version
@@ -80,7 +81,7 @@ npx vitest run 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A05-vitest.txt
 "vitest exit=$LASTEXITCODE"
 ```
 
-   Ожидается: `vitest exit=0`; строки `Test Files  118 passed (118)` и `Tests  886 passed (886)` (эталон на `97624d6`; числа в цветном выводе окружены кодами цвета, ищите подстроки `118 passed` и `886 passed`). Меньше эталона — запишите разницу; провалы и `skipped` — `FAIL`/`WARN` ниже.
+   Ожидается: `vitest exit=0`; строки `Test Files  173 passed (173)` и `Tests  1444 passed (1444)` (эталон на `v0.9.0`; числа в цветном выводе окружены кодами цвета, ищите подстроки `173 passed` и `1444 passed`). Меньше эталона — запишите разницу; провалы и `skipped` — `FAIL`/`WARN` ниже.
 
    Проверка отсутствия пропущенных и упавших:
 
@@ -149,7 +150,7 @@ git grep -n "customFieldsConfirmed: true" -- ui/src
 | К1 | `npm ci` вернул 0, lock-файл не изменился | `npm ci exit=0`, `git status` пуст |
 | К2 | `npx tsc --noEmit` вернул 0 | `tsc exit=0` |
 | К3 | `npx eslint . --max-warnings=0` вернул 0 | `eslint exit=0` |
-| К4 | `npx vitest run` вернул 0; не меньше 118 файлов и 886 тестов; пропущенных нет | шаг 6 |
+| К4 | `npx vitest run` вернул 0; не меньше 173 файлов и 1444 тестов; пропущенных нет | шаг 6 |
 | К5 | Все 24 охранных файла существуют и проходят (в том числе `src/rpc-usage.test.ts`: каждый RPC из proto вызывается в интерфейсе или внесён в `rpc-unused.allow.ts` с причиной, 6 тестов) | шаг 7 |
 | К6 | Тесты словарей `passed`; запрещённого слова в словарях нет | шаг 8 |
 | К7 | `npm run build` вернул 0, файлов `.map` нет | шаг 9 |
@@ -164,9 +165,9 @@ git grep -n "customFieldsConfirmed: true" -- ui/src
 
 ```powershell
 Set-Location C:\lavray-test
-git -C $env:LAVRAY_SRC worktree remove --force (Join-Path $env:LAVRAY_TP_ROOT 'wt\A05')
+git -C $env:LAVRAY_SRC worktree remove --force C:\lavray-test\wt\A05
 git -C $env:LAVRAY_SRC worktree prune
-Test-Path (Join-Path $env:LAVRAY_TP_ROOT 'wt\A05')
+Test-Path C:\lavray-test\wt\A05
 ```
 
 Ожидается `False`. Удаление `node_modules` может занять минуту. Системного отката нет.

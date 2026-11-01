@@ -59,13 +59,13 @@
    $res.checks | Where-Object { -not $_.pass } | Select-Object id, warn, detail | Format-Table -AutoSize -Wrap
    ```
 
-   Ожидается: `a15 exit=0`, `провалов: 0`. Эталон на `main` `9b26be6`: 129 проверок и до четырёх `WARN`. Допустимые `WARN` (их список идёт в «Дефекты» с серьёзностью из таблицы ниже):
+   Ожидается: `a15 exit=0`, `провалов: 0`. Эталон на `main` `80be1e9`: 129 проверок и до трёх `WARN`. Допустимые `WARN` (их список идёт в «Дефекты» с серьёзностью из таблицы ниже):
 
    | `WARN` | Причина | Серьёзность |
    |---|---|---|
    | `8.symlink.can_create_links` | нет права на символические ссылки: проверки `8.symlink.*` пропущены (поведение покрывает Go-тест `TestSymlinkNotFollowed`, который без права тоже `SKIP`) | не дефект |
    | `9.concurrent.some_import_aborted` | диск настолько быстр, что ни один из шести параллельных переносов не получил `ABORTED`; поведение покрывает `TestConcurrentImportAborted` (шаг 3) | не дефект |
-   | `11.cli.failed_real_run_creates_no_database` | `import-nekobox` без `--dry-run` сначала открывает базу в `--data` и только потом проверяет `--from`, поэтому неудачный перенос оставляет пустую `lavray.db` | `minor` |
+   | `11.cli.failed_real_run_creates_no_database` | только на сборках до `470d5f2`: `import-nekobox` без `--dry-run` открывал базу в `--data` до проверки `--from`, и неудачный перенос оставлял пустую `lavray.db` (в `main` с `80be1e9` исправлено) | `minor` |
    | `1.detect.no_real_neko_process` | на ПК уже запущен настоящий NekoBox (не тестовый ПК) | не дефект |
 
    Если на тестовом ПК не прошла проверка `1.detect.process_looks_running`, сначала выполните `Get-Process nekobox, nekoray`, затем проверьте, не заблокировал ли антивирус запуск копии `PING.EXE`.

@@ -14,7 +14,7 @@
 
 Пройти по Connect JSON (`POST /lavray.v1.<Сервис>/<Метод>`, заголовок `Authorization: Bearer <токен ядра>`) сценарии каждого влитого сервиса и сверить **точные коды ошибок** с таблицами плана доработки. Покрывает: профили и группы (CRUD, метаданные, фильтры, клонирование, перенос), подтверждение custom-полей по хэшу (T-08B), соединения, статистику и сводку по группе (T-79), наборы маршрутов (T-80: создание из источника и из значений, обновление с ревизией, удаление, сброс копии, экспорт, импорт, маршрут NekoRay, лимит 100, конфликт ревизий → `ABORTED`), резервную копию (T-83), все RPC хвостов A (очистка недоступных, дубликаты, разрешение доменов с `failed`, экспорт конфига, сброс настроек, подписка на настройки, запоминание профиля, таблица читателей настроек), CORS отказы для агентского токена и `MigrationService` (T-78: малый набор, полные сценарии - файл A15).
 
-Раздел `MigrationService` (T-78) - раздел 7 скрипта. Раздел `UpdateService` (T-75) в этой версии файла отсутствует, он ждёт слияния: см. конец документа.
+Раздел `MigrationService` (T-78) - раздел 7 скрипта, `UpdateService` (T-75) - раздел 8 (на ядре этого выпуска, без сети; сценарии с тестовым корнем доверия и локальными зеркалами - файл A13).
 
 ## Предусловия
 
@@ -54,7 +54,7 @@
    $res.checks | Where-Object { -not $_.pass } | Select-Object id, warn, detail | Format-Table -AutoSize -Wrap
    ```
 
-   Ожидается: `a09 exit=0`, `провалов: 0`, список непройденных содержит только записи с `warn = True`. Эталон на `main` `9b26be6` (T-80, T-83, хвосты A, T-76, T-78): 181 проверка, из них 3 `FAIL` очистки (шаг 4) и 1 `WARN`. Каждая проверка в `run.txt` — строка `PASS <id>` / `WARN <id>` / `FAIL <id> :: <подробности>`.
+   Ожидается: `a09 exit=0`, `провалов: 0`, список непройденных содержит только записи с `warn = True`. Эталон на `main` `80be1e9` (T-80, T-83, хвосты A, T-76, T-78, T-75): 203 проверки, 0 `FAIL` и 1 `WARN`. На `main` `9b26be6` и раньше было 181 проверка и 3 `FAIL` очистки (шаг 4). Каждая проверка в `run.txt` — строка `PASS <id>` / `WARN <id>` / `FAIL <id> :: <подробности>`.
 
 3. Что и по каким кодам проверяет каждый раздел (для отчёта и поиска причины):
 
@@ -67,12 +67,13 @@
    | 3. Наборы маршрутов (T-80) | в списке пять встроенных (`lav-ru`, `lav-cn`, `global`, `all-proxy`, `all-direct`), активный `global`; создание из источника (`custom:<slug>`, ревизия 1, `builtinSourceId`); из значений с кириллическим названием; `UpdatePreset`: ревизия +1; параллельные обновления с одной ревизией: ровно одно `409 aborted`; активация; удаление активного → `newActiveId = global`; сброс копии к источнику; экспорт и повторный импорт; импорт никогда не занимает id встроенного; маршрут NekoRay (`presets/lav-ru.source.json`) создаёт набор с предупреждениями; лимит 100 | `CreatePreset`: ни источник ни значения / оба — `400 invalid_argument`; неизвестный источник `404`; неверное значение `400`; 101-й набор `429 resource_exhausted`. `UpdatePreset`: встроенный `400 failed_precondition`; неизвестный `404`; устаревшая ревизия `409 aborted`. `DeletePreset`: встроенный `400 failed_precondition`; неизвестный `404`. `ResetBuiltinPreset`: id встроенного и копия без источника `400 failed_precondition`; неизвестный `404`. `ImportPreset`: мусор, пусто, массив `400 invalid_argument`; больше 1 МиБ `429 resource_exhausted`. `ImportNekoRayRoute`: пусто, `null`, `[]`, `{oops` `400 invalid_argument`. Агент: `403` |
    | 4. Резервная копия (T-83) | пароль пустой, 7 символов, 1025 байт → отказ; экспорт: заголовок `LAVBK1`, имя `lavray-backup-….lavbk`, сводка; в файле нет секретов и заголовка SQLite; `PreviewBackup`: сводка равна экспорту, неверный пароль, порча середины, порча заголовка, обрезка, мусор; `ImportBackup`: без `confirmReplace`, при подключении, успешный; профиль с секретом и настройка возвращены; подписчики настроек уведомлены; пароль не попал ни в журнал, ни в настройки; агент; лимит 64 МиБ выше общего 16 МиБ | пароль `400 invalid_argument`; неверный пароль `403 permission_denied`; порча тела `500 data_loss`; не файл копии `400 invalid_argument` с причиной `backup_not_recognized`; без подтверждения и при подключении `400 failed_precondition`; агент `403` |
    | 5. Хвосты A | `RemoveUnavailableProfiles` (пробный прогон, применение, неизвестная группа); `DeduplicateProfiles` (первый остаётся, имя не учитывается, идемпотентность); `ResolveDomains` (`localhost` → IP, несуществующее имя → `failed` с причиной, IP пропущен; пустой список и больше 1000 id); `ExportConfig` (RUN содержит секрет без маскирования, TEST без `inbounds`, внешнее ядро); `ResetSettings` (ключ → умолчание, остальные целы, неизвестный, служебный `sub.hwid_id`, `update.channel`); `SubscribeSettings` (изменение и `removed`, медленный подписчик не блокирует запись); запоминание профиля; CORS | неизвестная группа `404`; пустой/длинный список доменов `400 invalid_argument`; внешнее ядро `400 failed_precondition`; неизвестный и служебный ключи `400 invalid_argument`; агент `403` |
+   | 8. UpdateService (T-75) | если в ядре заглушка корня (релиз до церемонии ключей): `CheckUpdates` и `DownloadUpdates` → `not_configured` (в начале сообщения и в заголовке `Lavray-Update-Reason`), `GetUpdateState` без времени проверки; во всех сборках: `ApplyUpdates` без загрузки → `not_staged`, `ApplyUpdates(CORE)` → `failed_precondition`, `Rollback(APP)` → `failed_precondition` («откат выполняет оболочка»), без компонента → `invalid_argument`, `PRESETS` → `unimplemented`; `VerifyLocalUpdate`: пустой путь и путь вне staging → `invalid_argument`; `SetSettings` служебных `update.*` → `200` без принятых ключей, `GetSettings` их не отдаёт; агент: `GetUpdateState` читает, `CheckUpdates`, `Rollback`, `VerifyLocalUpdate` → `403`. Если в ядре уже настоящий корень, сетевые вызовы пропускаются (`WARN`) | коды рядом с проверкой |
    | 6. Сервисный режим | запомненный профиль подключается вторым ядром с `--headless` только при `remember.enable = true` | в течение 30 с `CORE_STATE_CONNECTED` |
    | 7. MigrationService (T-78) | `DetectNekoBox` с переданным путём: первым идёт кандидат `manual` с числами по именам файлов (1 группа, 3 профиля, 1 маршрут); пути `""`, относительный, файл, каталог без `groups`/`profiles` → `400 invalid_argument`, несуществующий → `404 not_found` (и в `Preview`, и в `Import`); `Preview`: `dryRun`, 1 группа, 2 профиля, 1 маршрут, 1 пропуск (битый файл), база и наборы не изменились; `Import` равен предпросмотру, цепочка указывает на перенесённый профиль, маршрут стал `custom:neko-a09-route`; повтор: `alreadyPresent = 4`, ничего нового; агентский токен в режимах `read` и `control` на все три метода | `403 permission_denied`; остальное см. выше |
 
-4. Известные расхождения и наблюдения на `main` `9b26be6` (так же на `feat/tails-a`, `775a49b`; сверьте с вашим `<TAG>`; если расхождение исчезло, это улучшение):
+4. Известные расхождения и наблюдения (сверьте с вашим `<TAG>`; если расхождение исчезло, это улучшение):
 
-   - **Очистка недоступных не видит неудачных проверок.** `RemoveUnavailableProfiles` считает недоступным профиль с `latency_ms < 0`, а `TestLatency` при неудаче записывает только `lastError` (задержка остаётся пустой), поэтому после проверки доступности «мёртвого» сервера пробный прогон возвращает пустой список. Проверки `5.cleanup.dry_run_lists_only_failed`, `5.cleanup.apply_removes_only_failed_untested_kept`, `5.cleanup.remaining_two` на этой сборке дают `FAIL` (серьёзность `major`: живая проверка Ф5 п. 4 «Очистка «Недоступные»» невыполнима). Юнит-тесты очистки проходят, потому что пишут отрицательную задержку напрямую в хранилище.
+   - **Очистка недоступных не видела неудачных проверок (исправлено в `470d5f2`, в `main` с `80be1e9`).** До исправления `RemoveUnavailableProfiles` считала недоступным только профиль с `latency_ms < 0`, а `TestLatency` при неудаче записывает только `lastError` (задержка пуста), поэтому пробный прогон возвращал пустой список: проверки `5.cleanup.dry_run_lists_only_failed`, `5.cleanup.apply_removes_only_failed_untested_kept`, `5.cleanup.remaining_two` давали `FAIL` (серьёзность `major`). Теперь недоступным считается профиль с отрицательной задержкой либо с неудачной проверкой (время есть, задержки нет, есть ошибка); непроверенные и прерванные проверки не считаются. Если на вашем `<TAG>` эти три проверки снова `FAIL` — это регресс `major`.
    - **`CreateProfile` принимает порт 0** (`WARN 1.create.port0.invalid_argument`, серьёзность `minor`): профиль создаётся и не подключится.
    - Нормализация Unicode в пароле копии (NFC/NFD) выполняется интерфейсом (`lib/password.ts`), а не ядром; это проверяет A14 (`WARN`).
 
@@ -99,6 +100,7 @@
 | К6 | Агентский токен не получает доступа к RPC наборов, копии, экспорта конфига, сброса и подписки на настройки (`*.agent.denied`, `*.agent_denied`) | `PASS` |
 | К7 | Шаг 5: три защитных теста `--- PASS` | вывод |
 | К8 | `MigrationService`: коды путей, предпросмотр равен переносу, повтор без дублей, агент отказан (`7.*`, раздел 7) | `PASS` |
+| К9 | `UpdateService` на ядре выпуска: `not_configured` при заглушке корня, коды `Apply`/`Rollback`, служебные `update.*` закрыты, агент только читает состояние (`8.*`, раздел 8) | `PASS` |
 
 `WARN` не меняет итог файла, но попадает в «Дефекты». Отсутствие адреса интерфейса — `BLOCKED` для раздела 2.
 
@@ -114,14 +116,20 @@
 
 Поля отчёта: `groupsImported`, `profilesByType`, `alreadyPresent`, `skipped[]` (`file`, `id`, `type`, `reason`), `warnings[]`, `routesFound`, `routesImported`, `renumbered`, `settingsImported[]`, `dryRun`, `nekoboxActiveRoute`. Каталог установки с вложенным `config` принимается.
 
-## TODO: допишется после слияния T-75 (UpdateService)
+## UpdateService (T-75): таблица RPC и ошибок
 
-Раздел появится вместе с файлами A13 и M12, когда в `main` будет влит центр обновлений. Планируемое содержимое:
+`UpdateService` проверяет и скачивает установщик по цепочке «корень → timestamp → manifest» (TUF-lite, `docs/UPDATE-SYSTEM.md`), а устанавливает и откатывает оболочка. Корень доверия в релизах пока заглушка (владелец ещё не провёл церемонию ключей): ядро отвечает `not_configured`. Сценарии с **тестовым** корнем и локальными зеркалами (подписи, срок, `serial`, ротация, транспорт, `verify-artifact`) выполняет `A13-updater.md`, экран и установку с UAC - `M12-update-center.md`.
 
-- `CheckUpdates` без корня доверия → `not_configured`; с тестовым корнем и локальным статическим сервером → доступность версии, `minUpgradeFrom`;
-- `DownloadUpdates` → события `verified{staged_path, sha256}`; подмена артефакта, откат serial, просроченный timestamp → отказ;
-- `ApplyUpdates`, `Rollback` (для приложения: `FAILED_PRECONDITION «откат выполняет оболочка»`), `GetUpdateState`, `VerifyLocalUpdate` (только внутри staging);
-- коды ошибок по таблице RPC плана (раздел 4), отказ для агента.
+| RPC | Запрос | Ответ | Коды ошибок |
+|---|---|---|---|
+| `CheckUpdates` | `channel` (`STABLE`, `BETA`), `components` | `available[]` (`availableVersion`, `currentVersion`, `notes`, сводка манифеста), `lastCheckedAtMs`, `workingSources` | `failed_precondition` с причиной в начале сообщения и в заголовке `Lavray-Update-Reason`: `not_configured`, `bad_signature`, `expired`, `clock_skew`, `serial_rollback`, `wrong_product`, `wrong_channel`, `root_rotation`, `artifact_role_missing`; `unavailable` - все источники недоступны (`mirror_unreachable: <зеркало>`), время проверки не меняется; агенту `permission_denied` |
+| `DownloadUpdates` | `components` (только APP) | поток: `progress …`, затем `verified {stagedPath, sha256}` или `verifyFailed {reason}` (`sha256_mismatch`, `truncated`, `bad_signature`) или `failed` (сеть) | те же причины в конце потока; вторая загрузка → `aborted`; `no_update` (нет проверенного обновления) |
+| `ApplyUpdates` | `components`, `activeSessionConfirmed` | поток: `verified`, `readyForRestart "app"` либо `verifyFailed` (повторная проверка файла в staging) | `not_staged`, `active_session` (нужно подтверждение), CORE → `failed_precondition`, прочее → `unimplemented` |
+| `Rollback` | `component` | - | APP → `failed_precondition` (откат выполняет оболочка), без компонента → `invalid_argument`, остальные → `unimplemented` |
+| `GetUpdateState` | - | `components[].phase`, `lastCheckedAtMs`, `chainState` (`rootVersion`, `maxSerial` по каналам, `timestampFresh`) | единственный RPC, доступный агенту (только чтение) |
+| `VerifyLocalUpdate` | `installerPath`, `minisigPath`, `manifestPath` | `valid`, сводка подписи или `errors[]` | путь не внутри `<данные>\updates\staging` → `invalid_argument`; нет корня → `not_configured` |
+
+Служебные настройки `update.root_json`, `update.root_version`, `update.timestamp_version`, `update.serial_*`, `update.last_checked_at`, `update.last_url` клиент не пишет и не читает; пользовательские - `update.channel` и `update.auto_check`.
 
 ## Что собрать
 
@@ -912,7 +920,71 @@ def sec7_migration(c, X):
     shutil.rmtree(root, ignore_errors=True)
 
 
-SECTIONS = [sec1_profiles, sec2_connections, sec3_presets, sec4_backup, sec5_tails_a, sec7_migration, sec6_headless_remember]
+def sec8_updates(c, X):
+    """8. UpdateService (T-75) на ядре этого выпуска. Сетевые сценарии с тестовым корнем - файл A13; здесь коды без сети."""
+    U = "UpdateService"
+    stg = os.path.join(X["data"], "updates", "staging")
+    os.makedirs(stg, exist_ok=True)
+    probe = os.path.join(stg, "0" * 64 + "-a09-probe.exe")
+    with open(probe, "wb") as f:
+        f.write(b"x")
+    with open(probe + ".minisig", "wb") as f:
+        f.write(b"garbage")
+    st, r = c.rpc(U, "VerifyLocalUpdate", {"installerPath": probe})
+    placeholder = st == 400 and str(r.get("message", "")).startswith("not_configured")
+    if not placeholder:
+        check("8.build.has_trust_root_network_cases_skipped", False, "в ядре есть корень доверия: CheckUpdates/DownloadUpdates пошли бы в сеть и здесь не вызываются (см. A13)", warn=True)
+    st, r = c.rpc(U, "VerifyLocalUpdate", {"installerPath": ""})
+    check("8.verify_local.empty_path.invalid_argument", st == 400 and code((st, r)) == "invalid_argument", (st, r))
+    st, r = c.rpc(U, "VerifyLocalUpdate", {"installerPath": os.path.join(X["data"], "lavray.db")})
+    check("8.verify_local.outside_staging.invalid_argument", st == 400 and code((st, r)) == "invalid_argument", (st, r))
+    st, r = c.rpc(U, "GetUpdateState", {})
+    comp = r["components"][0] if st == 200 and r.get("components") else {}
+    check("8.state.idle_component", st == 200 and comp.get("component") == "UPDATE_COMPONENT_APP" and comp.get("phase") == "PHASE_IDLE", (st, r))
+    frames, end = c.stream(U, "ApplyUpdates", {})
+    check("8.apply.without_download.not_staged", not frames and end.get("error", {}).get("code") == "failed_precondition" and
+          str(end.get("error", {}).get("message", "")).startswith("not_staged"), end)
+    frames, end = c.stream(U, "ApplyUpdates", {"components": ["UPDATE_COMPONENT_CORE"]})
+    check("8.apply.core.failed_precondition", end.get("error", {}).get("code") == "failed_precondition", end)
+    frames, end = c.stream(U, "ApplyUpdates", {"components": ["UPDATE_COMPONENT_PRESETS"]})
+    check("8.apply.presets.not_staged_or_unimplemented", end.get("error", {}).get("code") in ("failed_precondition", "unimplemented"), end)
+    st, r = c.rpc(U, "Rollback", {"component": "UPDATE_COMPONENT_APP"})
+    check("8.rollback.app.failed_precondition", st == 400 and code((st, r)) == "failed_precondition" and "update_rollback" in r.get("message", ""), (st, r))
+    st, r = c.rpc(U, "Rollback", {"component": "UPDATE_COMPONENT_UNSPECIFIED"})
+    check("8.rollback.unspecified.invalid_argument", st == 400 and code((st, r)) == "invalid_argument", (st, r))
+    st, r = c.rpc(U, "Rollback", {"component": "UPDATE_COMPONENT_PRESETS"})
+    check("8.rollback.presets.unimplemented", st == 501 and code((st, r)) == "unimplemented", (st, r))
+    if placeholder:
+        st, r = c.rpc(U, "CheckUpdates", {})
+        check("8.check.not_configured", st == 400 and code((st, r)) == "failed_precondition" and str(r.get("message", "")).startswith("not_configured:"), (st, r))
+        frames, end = c.stream(U, "DownloadUpdates", {})
+        check("8.download.not_configured", not frames and end.get("error", {}).get("code") == "failed_precondition" and
+              end.get("metadata", {}).get("Lavray-Update-Reason") == ["not_configured"], end)
+        st, r = c.rpc(U, "GetUpdateState", {})
+        check("8.state.never_checked", st == 200 and "lastCheckedAtMs" not in r, r)
+    # служебные ключи update.* клиент не пишет и не читает
+    keys = ["update.root_json", "update.root_version", "update.timestamp_version", "update.serial_stable", "update.serial_beta", "update.last_checked_at", "update.last_url"]
+    st, r = c.rpc("SettingsService", "SetSettings", {"values": {k: {"stringValue": "999"} for k in keys}})
+    check("8.settings.internal_update_keys_not_accepted", st == 200 and not r.get("acceptedKeys"), (st, r))
+    st, r = c.rpc("SettingsService", "GetSettings", {"keys": keys + ["update.channel", "update.auto_check"]})
+    check("8.settings.internal_update_keys_not_readable", st == 200 and set(r.get("values", {})) <= {"update.channel", "update.auto_check"}, (st, sorted(r.get("values", {}))))
+    # агент: читает только состояние
+    for mode in ("read", "control"):
+        c.rpc("SettingsService", "SetSettings", {"values": {"agent.mode": {"stringValue": mode}}})
+        st, r = c.rpc(U, "GetUpdateState", {}, token=c.agent)
+        check(f"8.agent.{mode}.GetUpdateState.allowed", st == 200, (st, r))
+        for m_, body in (("CheckUpdates", {}), ("Rollback", {"component": "UPDATE_COMPONENT_APP"}), ("VerifyLocalUpdate", {"installerPath": probe})):
+            st, r = c.rpc(U, m_, body, token=c.agent)
+            check(f"8.agent.{mode}.{m_}.denied", st == 403 and code((st, r)) == "permission_denied", (st, r))
+    c.rpc("SettingsService", "SetSettings", {"values": {"agent.mode": {"stringValue": "off"}}})
+    for fn in (probe, probe + ".minisig"):
+        try:
+            os.remove(fn)
+        except OSError:
+            pass
+
+
+SECTIONS = [sec1_profiles, sec2_connections, sec3_presets, sec4_backup, sec5_tails_a, sec7_migration, sec8_updates, sec6_headless_remember]
 
 
 def main():

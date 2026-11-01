@@ -36,7 +36,6 @@ import (
 var allowUnimplemented = map[string]bool{
 	// unimplemented.go (заглушки W6).
 	"/lavray.v1.ProfileService/ExportConfig":       true,
-	"/lavray.v1.ProfileService/ResolveDomains":     true,
 	"/lavray.v1.RoutingService/CreatePreset":       true,
 	"/lavray.v1.RoutingService/UpdatePreset":       true,
 	"/lavray.v1.RoutingService/DeletePreset":       true,

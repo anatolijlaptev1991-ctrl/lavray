@@ -22,10 +22,6 @@ func (s *Server) ExportConfig(ctx context.Context, req *connect.Request[lavrayv1
 	return nil, errNotYetW6
 }
 
-func (s *Server) ResolveDomains(ctx context.Context, req *connect.Request[lavrayv1.ResolveDomainsRequest]) (*connect.Response[lavrayv1.ResolveDomainsResponse], error) {
-	return nil, errNotYetW6
-}
-
 func (s *Server) CreatePreset(ctx context.Context, req *connect.Request[lavrayv1.CreatePresetRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
 	return nil, errNotYetW6
 }

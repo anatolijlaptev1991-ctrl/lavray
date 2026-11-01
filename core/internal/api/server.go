@@ -85,6 +85,8 @@ type Server struct {
 	// IP»; nil → системный резолвер. Тесты подменяют оба.
 	newTestInst inst.TestInstanceFactory
 	lookupIP    func(ctx context.Context, host string) (netip.Addr, error)
+	// resolve — резолвер и пределы ResolveDomains (resolver.go); нулевой — системный.
+	resolve resolveConfig
 
 	// ---- обновления: доступ к общему клиенту сериализуется ----
 	updMu sync.Mutex

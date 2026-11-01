@@ -84,6 +84,20 @@ func (r *presetRepo) Modify(fn func(list []*presets.Preset) ([]*presets.Preset, 
 	return r.st.SetMeta(metaCustomPresets, string(b))
 }
 
+// Locked выполняет fn над снимком списка под замком репозитория, ничего не
+// записывая. Всё, что должно быть согласовано с правкой наборов (активация:
+// проверить набор и записать активный id), делается здесь, а не между
+// отдельными чтением и записью. fn не должна обращаться к репозиторию.
+func (r *presetRepo) Locked(fn func(list []*presets.Preset) error) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	list, err := r.read()
+	if err != nil {
+		return err
+	}
+	return fn(list)
+}
+
 // indexOfPreset — позиция набора с id в списке или -1.
 func indexOfPreset(list []*presets.Preset, id string) int {
 	for i, p := range list {
@@ -92,6 +106,17 @@ func indexOfPreset(list []*presets.Preset, id string) int {
 		}
 	}
 	return -1
+}
+
+// activeOrGlobal — активный набор; если его id больше не существует (гонка с
+// удалением, правка данных), работает встроенный «global».
+func (s *Server) activeOrGlobal() (*presets.Preset, error) {
+	p, found, err := s.findPreset(s.activePresetID())
+	if err != nil || found {
+		return p, err
+	}
+	p, _, err = builtinPreset("global")
+	return p, err
 }
 
 // builtinPreset — встроенный набор по id (false — такого нет).

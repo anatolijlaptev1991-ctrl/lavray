@@ -362,15 +362,9 @@ func (s *Server) activePresetID() string {
 
 // activePreset — активный набор (builtin, пользовательский или нейтральный).
 func (s *Server) activePreset() (*presets.Preset, error) {
-	p, found, err := s.findPreset(s.activePresetID())
+	p, err := s.activeOrGlobal()
 	if err != nil {
 		return nil, err
-	}
-	if !found {
-		// настройка указывает на удалённый пресет — конфигбилдер подставит
-		// нейтральный (nil); но DNS-настройки пользователя обязаны применяться
-		// и в этом случае (A5 аудита round 1).
-		p = nil
 	}
 	return s.applyDNSOverride(p), nil
 }

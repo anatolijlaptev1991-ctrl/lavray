@@ -26,4 +26,9 @@ type StreamSettings struct {
 
 	PacketEncoding string `json:"packet_encoding,omitempty"` // "" | packetaddr | xudp
 	Multiplex      int    `json:"multiplex,omitempty"`       // 0 default | 1 on | 2 off
+
+	// XHTTP (Xray): ядро транспорта не имеет, настройки хранятся ради круга
+	// «ссылка → профиль → ссылка» (proto xhttp_mode / xhttp_extra).
+	XHTTPMode  string `json:"xhttp_mode,omitempty"`  // auto | packet-up | stream-up | stream-one
+	XHTTPExtra string `json:"xhttp_extra,omitempty"` // сырой JSON параметра extra
 }

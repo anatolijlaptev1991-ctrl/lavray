@@ -2,7 +2,7 @@
 
 // useTrayBridge.ts — состояние подключения и строки меню → трей оболочки;
 // выбор «Подключить»/«Отключить» в трее → действие UI (T-45).
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import {
   buildTrayUpdate,
   listenTrayActions,
@@ -10,16 +10,20 @@ import {
   type TrayAction,
   type TrayStatusInput,
 } from '../lib/tray';
+import { isProxyKept, subscribeProxyKept } from '../lib/killSwitch';
 import { useI18n } from './useI18n';
 
 export function useTrayBridge(status: TrayStatusInput, onAction: (action: TrayAction) => void): void {
   const { t, tf } = useI18n();
   const { state, activeProfileName } = status;
+  // Kill switch: пока системный прокси оставлен, трей показывает ошибку при любой
+  // смене состояния, сервера или языка, а не один раз при событии.
+  const proxyKept = useSyncExternalStore(subscribeProxyKept, isProxyKept, isProxyKept);
 
-  // Новое сообщение — только при смене состояния, сервера или языка.
+  // Новое сообщение — только при смене состояния, сервера, языка или флага «оставлен».
   const update = useMemo(
-    () => buildTrayUpdate({ state, activeProfileName }, { t, tf }),
-    [state, activeProfileName, t, tf],
+    () => buildTrayUpdate({ state, activeProfileName, proxyKept }, { t, tf }),
+    [state, activeProfileName, proxyKept, t, tf],
   );
   useEffect(() => {
     pushTrayUpdate(update).catch(() => undefined); // оболочка без трея — меню прежнее

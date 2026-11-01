@@ -139,14 +139,51 @@ func TestUnsupportedReasonIsReadOnly(t *testing.T) {
 	}
 }
 
-// Сеть XHTTP переживает круг proto → модель → proto (редактор не превращает её в TCP).
+// Сеть XHTTP, режим и extra переживают круг proto → модель → proto (редактор не
+// превращает профиль в TCP и не стирает настройки сервера при UpdateProfile).
 func TestXHTTPNetworkRoundTrip(t *testing.T) {
-	in := &lavrayv1.StreamSettings{Network: lavrayv1.StreamSettings_NETWORK_XHTTP, Path: "/p"}
-	m := streamToModel(in)
-	if m.Network != "xhttp" {
-		t.Fatalf("модель: %q", m.Network)
+	const extra = `{"xPaddingBytes":"100-1000"}`
+	in := &lavrayv1.StreamSettings{
+		Network: lavrayv1.StreamSettings_NETWORK_XHTTP, Path: "/p", XhttpMode: "stream-up", XhttpExtra: extra,
 	}
-	if out := streamToProto(m); out.Network != lavrayv1.StreamSettings_NETWORK_XHTTP {
-		t.Errorf("proto: %v", out.Network)
+	m := streamToModel(in)
+	if m.Network != "xhttp" || m.XHTTPMode != "stream-up" || m.XHTTPExtra != extra {
+		t.Fatalf("модель: %+v", m)
+	}
+	out := streamToProto(m)
+	if out.Network != lavrayv1.StreamSettings_NETWORK_XHTTP || out.XhttpMode != "stream-up" || out.XhttpExtra != extra {
+		t.Errorf("proto: %+v", out)
+	}
+}
+
+// Сохранённый профиль отдаёт mode и extra списком, а UpdateProfile их не стирает.
+func TestXHTTPModeExtraSurviveStoreAndUpdate(t *testing.T) {
+	f := newSvcFixture(t, nil)
+	p, err := links.ParseLink(strings.Replace(xhttpTestLink, "#xhttp-node", "&extra=%7B%22a%22%3A1%7D#xhttp-node", 1))
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.GroupID = 1
+	if err := f.srv.st.CreateProfile(p); err != nil {
+		t.Fatal(err)
+	}
+	listed, err := f.srv.ListProfiles(context.Background(), newReq(&lavrayv1.ListProfilesRequest{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := listed.Msg.Profiles[0]
+	if got.GetStream().GetXhttpMode() != "auto" || got.GetStream().GetXhttpExtra() != `{"a":1}` {
+		t.Fatalf("список потерял mode/extra: %+v", got.GetStream())
+	}
+	got.Name = "renamed"
+	if _, err := f.srv.UpdateProfile(context.Background(), newReq(&lavrayv1.UpdateProfileRequest{Profile: got})); err != nil {
+		t.Fatal(err)
+	}
+	after, err := f.srv.st.GetProfile(p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.Stream.XHTTPMode != "auto" || after.Stream.XHTTPExtra != `{"a":1}` || after.Name != "renamed" {
+		t.Fatalf("после UpdateProfile: %+v / %q", after.Stream, after.Name)
 	}
 }

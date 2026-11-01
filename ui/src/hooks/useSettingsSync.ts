@@ -23,6 +23,14 @@ export function nextBackoff(previousMs: number): number {
   return previousMs === 0 ? BACKOFF_FIRST_MS : Math.min(previousMs * 2, BACKOFF_MAX_MS);
 }
 
+/**
+ * Пауза перед следующей подпиской. Если связь держалась (были события) или ядро
+ * штатно сбросило подписчика (ABORTED), счёт начинается заново; иначе пауза растёт.
+ */
+export function retryWait(previousMs: number, connectionHeld: boolean): number {
+  return connectionHeld ? BACKOFF_FIRST_MS : nextBackoff(previousMs);
+}
+
 /** Карта после события: изменённое заменяется, сброшенное к умолчанию убирается. */
 export function applyChange(map: SettingsMap, ev: SettingsChanged): SettingsMap {
   const next: Record<string, string | boolean | number> = { ...map, ...valuesOf(ev.changed) };
@@ -30,8 +38,9 @@ export function applyChange(map: SettingsMap, ev: SettingsChanged): SettingsMap 
   return next;
 }
 
-async function readAll(core: CoreClients): Promise<SettingsMap> {
-  return valuesOf((await core.settings.getSettings({})).values);
+/** Чтение всей карты; прерывается вместе с подпиской (смена ядра отменяет запрос). */
+async function readAll(core: CoreClients, signal: AbortSignal): Promise<SettingsMap> {
+  return valuesOf((await core.settings.getSettings({}, { signal })).values);
 }
 
 /** Пауза, прерываемая отменой: возвращает false, если отменили. */
@@ -56,28 +65,33 @@ function pause(ms: number, signal: AbortSignal): Promise<boolean> {
   });
 }
 
-/** Одна подписка: читает поток до конца или до ошибки; возвращает, пришло ли хоть одно событие. */
+/** Что подписка успела получить: по этому решается, сбрасывать ли паузу повтора. */
+interface Progress {
+  received: boolean;
+}
+
+/** Одна подписка: читает поток до конца или до ошибки; события отмечаются в `progress`. */
 async function listen(
   core: CoreClients,
   signal: AbortSignal,
   onMap: (update: (prev: SettingsMap) => SettingsMap) => void,
-): Promise<boolean> {
-  let received = false;
+  progress: Progress,
+): Promise<void> {
   const iterator = core.settings.subscribeSettings({}, { signal })[Symbol.asyncIterator]();
   const first = iterator.next(); // запрос уходит здесь, раньше GetSettings
   first.catch(() => undefined); // обрыв до await ниже не должен стать необработанным отказом
   try {
-    const initial = await readAll(core);
-    onMap((prev) => ({ ...prev, ...initial }));
+    const initial = await readAll(core, signal);
+    // Ответ старого ядра после его смены в карту не попадает.
+    if (!signal.aborted) onMap((prev) => ({ ...prev, ...initial }));
   } catch {
     /* ядро ответит при следующем круге: поток всё равно читаем */
   }
   for (let step = await first; step.done !== true; step = await iterator.next()) {
-    received = true;
+    progress.received = true;
     const ev = step.value;
     onMap((prev) => applyChange(prev, ev));
   }
-  return received;
 }
 
 export function useSettingsSync(): SettingsMap {
@@ -90,15 +104,17 @@ export function useSettingsSync(): SettingsMap {
     void (async (): Promise<void> => {
       let wait = 0;
       while (!stopped()) {
-        let reset = false;
+        const progress: Progress = { received: false };
+        let aborted = false;
         try {
-          reset = await listen(core, ac.signal, setMap);
+          await listen(core, ac.signal, setMap, progress);
         } catch (e) {
           if (stopped()) return;
           // ABORTED — штатный сброс подписчика: догоняем быстро, пауза не растёт.
-          reset = ConnectError.from(e).code === Code.Aborted;
+          aborted = ConnectError.from(e).code === Code.Aborted;
         }
-        wait = reset ? BACKOFF_FIRST_MS : nextBackoff(wait);
+        // Были события — связь держалась, пауза начинается заново; иначе нарастает.
+        wait = retryWait(wait, progress.received || aborted);
         if (!(await pause(wait, ac.signal))) return;
       }
     })();

@@ -12,6 +12,8 @@ import { useKillSwitch } from './useKillSwitch';
 import type { SettingsMap } from './useSettingsSync';
 
 const tauri = vi.hoisted(() => ({
+  /** Ответ оболочки на `proxy_kept`. */
+  kept: false,
   handlers: new Map<string, () => void>(),
   invoke: vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>(),
 }));
@@ -36,7 +38,8 @@ beforeEach(() => {
   stubCore({});
   tauri.handlers.clear();
   tauri.invoke.mockReset();
-  tauri.invoke.mockResolvedValue(true);
+  tauri.kept = false;
+  tauri.invoke.mockImplementation((cmd) => Promise.resolve(cmd === 'proxy_kept' ? tauri.kept : true));
   (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
   window.localStorage.clear();
 });
@@ -68,7 +71,7 @@ describe('useKillSwitch: зеркало для оболочки', () => {
 });
 
 describe('useKillSwitch: событие оболочки proxy-kept', () => {
-  it('ставит флаг, отправляет трею «ошибка» и показывает уведомление', async () => {
+  it('ставит флаг и показывает уведомление, не трогая трей (трей — дело useTrayBridge)', async () => {
     await probe({ [KILL_SWITCH_SETTING]: true });
     const fire = tauri.handlers.get('proxy-kept');
     expect(fire).toBeTypeOf('function');
@@ -78,12 +81,44 @@ describe('useKillSwitch: событие оболочки proxy-kept', () => {
     });
     await flush();
     expect(isProxyKept()).toBe(true);
-    const tray = tauri.invoke.mock.calls.find(([cmd]) => cmd === 'tray_update');
-    const update = (tray?.[1] as { update: { state: string; labels: { status: string } } }).update;
-    expect(update.state).toBe('error');
-    expect(update.labels.status).toContain(t('kill.tray'));
+    expect(tauri.invoke.mock.calls.some(([cmd]) => cmd === 'tray_update')).toBe(false);
     const note = tauri.invoke.mock.calls.find(([cmd]) => cmd === 'notify_show');
     expect(note?.[1]).toMatchObject({ kind: 'error', body: t('kill.notify') });
+  });
+
+  it('уведомление приходит и когда окно на виду и в фокусе, но не при выключенной настройке «Уведомления»', async () => {
+    vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    await probe({ [KILL_SWITCH_SETTING]: true });
+    await act(async () => {
+      tauri.handlers.get('proxy-kept')?.();
+      await Promise.resolve();
+    });
+    await flush();
+    expect(tauri.invoke.mock.calls.some(([cmd]) => cmd === 'notify_show')).toBe(true);
+
+    tauri.invoke.mockClear();
+    window.localStorage.setItem('lavray.notify', '0');
+    await act(async () => {
+      tauri.handlers.get('proxy-kept')?.();
+      await Promise.resolve();
+    });
+    await flush();
+    expect(tauri.invoke.mock.calls.some(([cmd]) => cmd === 'notify_show')).toBe(false);
+    expect(isProxyKept()).toBe(true); // флаг от уведомлений не зависит
+  });
+
+  it('при запуске спрашивает оболочку: прокси оставлен до перезагрузки окна — флаг возвращается без события', async () => {
+    tauri.kept = true;
+    await probe({ [KILL_SWITCH_SETTING]: true });
+    await flush();
+    expect(isProxyKept()).toBe(true);
+  });
+
+  it('оболочка говорит «не оставлен» — флаг не ставится', async () => {
+    tauri.kept = false;
+    await probe({ [KILL_SWITCH_SETTING]: true });
+    await flush();
+    expect(isProxyKept()).toBe(false);
   });
 
   it('подключение восстановлено — флаг гаснет', async () => {

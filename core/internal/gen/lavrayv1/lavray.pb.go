@@ -3729,8 +3729,14 @@ type StreamSettings struct {
 	RealitySpx     *string                        `protobuf:"bytes,18,opt,name=reality_spx,json=realitySpx,proto3,oneof" json:"reality_spx,omitempty"`
 	PacketEncoding StreamSettings_PacketEncoding  `protobuf:"varint,15,opt,name=packet_encoding,json=packetEncoding,proto3,enum=lavray.v1.StreamSettings_PacketEncoding" json:"packet_encoding,omitempty"`
 	Multiplex      StreamSettings_MultiplexStatus `protobuf:"varint,16,opt,name=multiplex,proto3,enum=lavray.v1.StreamSettings_MultiplexStatus" json:"multiplex,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// XHTTP (Xray; network = NETWORK_XHTTP): режим ("auto", "packet-up", "stream-up",
+	// "stream-one") и дополнительные параметры (сырой JSON, параметр extra ссылки). Ядро
+	// их не использует (транспорта нет), но хранит, чтобы импорт и экспорт ссылки не
+	// теряли настройки сервера и UpdateProfile их не стирал.
+	XhttpMode     string `protobuf:"bytes,19,opt,name=xhttp_mode,json=xhttpMode,proto3" json:"xhttp_mode,omitempty"`
+	XhttpExtra    string `protobuf:"bytes,20,opt,name=xhttp_extra,json=xhttpExtra,proto3" json:"xhttp_extra,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StreamSettings) Reset() {
@@ -3880,6 +3886,20 @@ func (x *StreamSettings) GetMultiplex() StreamSettings_MultiplexStatus {
 		return x.Multiplex
 	}
 	return StreamSettings_MULTIPLEX_DEFAULT
+}
+
+func (x *StreamSettings) GetXhttpMode() string {
+	if x != nil {
+		return x.XhttpMode
+	}
+	return ""
+}
+
+func (x *StreamSettings) GetXhttpExtra() string {
+	if x != nil {
+		return x.XhttpExtra
+	}
+	return ""
 }
 
 type SocksHttpDetail struct {
@@ -15287,7 +15307,7 @@ const file_lavray_proto_rawDesc = "" +
 	"\x0e_updated_at_msB\x17\n" +
 	"\x15_custom_outbound_jsonB\x15\n" +
 	"\x13_custom_config_jsonB\t\n" +
-	"\a_stream\"\xb8\n" +
+	"\a_stream\"\xf8\n" +
 	"\n" +
 	"\x0eStreamSettings\x12;\n" +
 	"\anetwork\x18\x01 \x01(\x0e2!.lavray.v1.StreamSettings.NetworkR\anetwork\x12$\n" +
@@ -15309,7 +15329,11 @@ const file_lavray_proto_rawDesc = "" +
 	"\vreality_spx\x18\x12 \x01(\tH\x06R\n" +
 	"realitySpx\x88\x01\x01\x12Q\n" +
 	"\x0fpacket_encoding\x18\x0f \x01(\x0e2(.lavray.v1.StreamSettings.PacketEncodingR\x0epacketEncoding\x12G\n" +
-	"\tmultiplex\x18\x10 \x01(\x0e2).lavray.v1.StreamSettings.MultiplexStatusR\tmultiplex\"\xa6\x01\n" +
+	"\tmultiplex\x18\x10 \x01(\x0e2).lavray.v1.StreamSettings.MultiplexStatusR\tmultiplex\x12\x1d\n" +
+	"\n" +
+	"xhttp_mode\x18\x13 \x01(\tR\txhttpMode\x12\x1f\n" +
+	"\vxhttp_extra\x18\x14 \x01(\tR\n" +
+	"xhttpExtra\"\xa6\x01\n" +
 	"\aNetwork\x12\x17\n" +
 	"\x13NETWORK_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vNETWORK_TCP\x10\x01\x12\x10\n" +

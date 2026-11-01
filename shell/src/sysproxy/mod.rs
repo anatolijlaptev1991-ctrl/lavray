@@ -56,7 +56,7 @@ mod wpad;
 mod wpad_tests;
 
 pub use backend::{apply, capture, clear, restore, Backend, System};
-pub use command::set_blocking;
+pub use command::{set_blocking, set_with};
 pub use outcome::{Applied, SetOutcome};
 pub use snapshot::ProxySnapshot;
 pub use validate::{validate_host, validate_port};

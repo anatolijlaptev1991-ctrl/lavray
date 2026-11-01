@@ -40,10 +40,12 @@ const byText = (c: HTMLElement, text: string): HTMLElement | undefined =>
 const okText = (c: HTMLElement): string => c.querySelector('.toast-ok')?.textContent ?? '';
 
 describe('Обновить все', () => {
+  // Кадры ровно такие, какие отдаёт ядро: у «тихого» обновления идут только итоговые
+  // DONE / CONFIRM_REQUIRED / FAILED / SKIPPED (STARTED, REQUESTING и прочие не доходят,
+  // core/internal/api/subscription_update_all_test.go читает тот же поток).
   it('один вызов UpdateAllSubscriptions; итог — сколько обновлено, пропущено и упало', async () => {
     const stub = core({
       'SubscriptionService/UpdateAllSubscriptions': new StreamReply([
-        frame('PHASE_STARTED'),
         frame('PHASE_DONE', '7'),
         frame('PHASE_DONE', '8'),
         frame('PHASE_SKIPPED', '9'),

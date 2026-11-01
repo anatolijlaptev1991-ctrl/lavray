@@ -18,7 +18,7 @@ import { ChainField } from './ChainField';
 import { SelectField, SwitchField, TextAreaField, TextField } from './fields';
 import type { Option } from './fields';
 import { isV2rayType } from './form';
-import { NETWORKS, networkHasPath } from './networks';
+import { networkHasPath, networkOptions } from './networks';
 import type { Form, FormErrors } from './form';
 
 export type SetField = <K extends keyof Form>(key: K, value: Form[K]) => void;
@@ -302,7 +302,7 @@ function TransportFold({ f, set }: BlockProps): JSX.Element {
           id="edf-network"
           label={t('ed.transport')}
           value={f.network}
-          options={NETWORKS}
+          options={networkOptions(f.network)}
           onChange={(v) => {
             set('network', v);
           }}

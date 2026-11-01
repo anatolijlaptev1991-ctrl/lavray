@@ -21,6 +21,8 @@ export interface TrayUpdate {
 export interface TrayStatusInput {
   readonly state: CoreState;
   readonly activeProfileName?: string | undefined;
+  /** Ядро умерло, kill switch оставил системный прокси: трей показывает ошибку, пока это так. */
+  readonly proxyKept?: boolean | undefined;
 }
 
 export interface TrayTranslate {
@@ -52,12 +54,13 @@ const STATE_KEY: Readonly<Record<TrayConnState, MessageKey>> = {
 
 /** Сообщение для `tray_update`: все строки — из словарей текущего языка. */
 export function buildTrayUpdate(status: TrayStatusInput, { t, tf }: TrayTranslate): TrayUpdate {
-  const state = trayStateOf(status.state);
+  const kept = status.proxyKept === true;
+  const state = kept ? 'error' : trayStateOf(status.state);
   const name = (status.activeProfileName ?? '').trim();
   return {
     state,
     labels: {
-      status: `LAVRay — ${t(STATE_KEY[state])}`,
+      status: `LAVRay — ${t(kept ? 'kill.tray' : STATE_KEY[state])}`,
       server: tf('tray.server', { name: name === '' ? '—' : name }),
       connect: t('conn.connect'),
       disconnect: t('conn.disconnect'),

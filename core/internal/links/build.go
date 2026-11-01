@@ -265,11 +265,9 @@ func appendStreamQuery(b *linkBuilder, st *model.StreamSettings, withEncryptionN
 	b.addQ("type", netw)
 	switch netw {
 	case "ws", "http", "httpupgrade", "xhttp":
-		if st.Path != "" {
-			b.addQ("path", st.Path)
-		}
-		if st.Host != "" {
-			b.addQ("host", st.Host)
+		b.addIf("path", st.Path).addIf("host", st.Host)
+		if netw == "xhttp" {
+			b.addIf("mode", st.XHTTPMode).addIf("extra", st.XHTTPExtra)
 		}
 	case "grpc":
 		if st.Path != "" {

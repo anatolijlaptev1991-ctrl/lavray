@@ -5,11 +5,14 @@
 // размонтировании. Ядро подставное (fetch), поток управляется ответами маршрута.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
+import { create } from '@bufbuild/protobuf';
+import { GetSettingsResponseSchema } from '../gen/lavray_pb';
 import { setLanguage } from '../lib/i18n';
+import { makeClients, mountWithCore } from '../test-harness';
 import { flush, mount, stubCore, unmountAll } from '../test-utils/coreStub';
 import type { Json } from '../test-utils/coreStub';
 import { StreamReply } from '../test-utils/streamStub';
-import { BACKOFF_FIRST_MS, BACKOFF_MAX_MS, nextBackoff, useSettingsSync } from './useSettingsSync';
+import { BACKOFF_FIRST_MS, BACKOFF_MAX_MS, nextBackoff, retryWait, useSettingsSync } from './useSettingsSync';
 import type { SettingsMap } from './useSettingsSync';
 
 let latest: SettingsMap = {};
@@ -104,5 +107,43 @@ describe('nextBackoff', () => {
     expect(nextBackoff(BACKOFF_FIRST_MS)).toBe(BACKOFF_FIRST_MS * 2);
     expect(nextBackoff(BACKOFF_MAX_MS)).toBe(BACKOFF_MAX_MS);
     expect(nextBackoff(BACKOFF_MAX_MS - 1)).toBe(BACKOFF_MAX_MS);
+  });
+});
+
+describe('retryWait', () => {
+  it('связь держалась (были события или ABORTED) — пауза начинается заново, иначе растёт', () => {
+    expect(retryWait(0, false)).toBe(BACKOFF_FIRST_MS);
+    expect(retryWait(BACKOFF_FIRST_MS, false)).toBe(BACKOFF_FIRST_MS * 2);
+    expect(retryWait(4000, true)).toBe(BACKOFF_FIRST_MS);
+    expect(retryWait(BACKOFF_MAX_MS, true)).toBe(BACKOFF_FIRST_MS);
+  });
+});
+
+describe('useSettingsSync: смена ядра', () => {
+  it('чтение карты и подписка получают сигнал отмены: смена ядра обрывает оба (старое ядро не вливается)', async () => {
+    const clients = makeClients();
+    const signals: (AbortSignal | undefined)[] = [];
+    vi.spyOn(clients.settings, 'getSettings').mockImplementation((_req, options) => {
+      signals.push(options?.signal);
+      return Promise.resolve(create(GetSettingsResponseSchema, {}));
+    });
+    // Подписка, которая молчит до отмены (как удерживаемый поток).
+    const hold = (signal?: AbortSignal): AsyncIterable<never> => ({
+      [Symbol.asyncIterator]: (): AsyncIterator<never> => ({
+        next: (): Promise<IteratorResult<never>> =>
+          new Promise((_resolve, reject) => {
+            signal?.addEventListener('abort', () => {
+              reject(new Error('aborted'));
+            });
+          }),
+      }),
+    });
+    vi.spyOn(clients.settings, 'subscribeSettings').mockImplementation((_req, options) => hold(options?.signal));
+    const view = await mountWithCore(clients, createElement(Probe));
+    expect(signals).toHaveLength(1);
+    expect(signals[0]).toBeDefined();
+    expect(signals[0]?.aborted).toBe(false);
+    view.unmount();
+    expect(signals[0]?.aborted).toBe(true);
   });
 });

@@ -522,6 +522,13 @@ message StreamSettings {
   optional string reality_spx = 18;
   PacketEncoding packet_encoding = 15;
   MultiplexStatus multiplex = 16;
+
+  // XHTTP (Xray; network = NETWORK_XHTTP): режим ("auto", "packet-up", "stream-up",
+  // "stream-one") и дополнительные параметры (сырой JSON, параметр extra ссылки). Ядро
+  // их не использует (транспорта нет), но хранит, чтобы импорт и экспорт ссылки не
+  // теряли настройки сервера и UpdateProfile их не стирал.
+  string xhttp_mode = 19;
+  string xhttp_extra = 20;
 }
 
 message SocksHttpDetail { // FR-UI-091

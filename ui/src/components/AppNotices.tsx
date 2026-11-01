@@ -7,12 +7,14 @@
 import type { JSX } from 'react';
 import type { CoreState } from '../gen/lavray_pb';
 import { useKillSwitch } from '../hooks/useKillSwitch';
+import { useRestartReset } from '../hooks/useRestartReset';
 import { useSettingsSync } from '../hooks/useSettingsSync';
 import { KillSwitchNotice } from './KillSwitchNotice';
 import { RestartNotice } from './RestartNotice';
 
 export function AppNotices({ state }: { readonly state: CoreState }): JSX.Element {
   useKillSwitch(useSettingsSync(), state);
+  useRestartReset(state);
   return (
     <>
       <KillSwitchNotice />

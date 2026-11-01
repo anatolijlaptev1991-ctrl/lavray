@@ -28,6 +28,8 @@ func streamToModel(st *lavrayv1.StreamSettings) *model.StreamSettings {
 		RealityPublicKey:  optStr(st.RealityPublicKey),
 		RealityShortID:    optStr(st.RealityShortId),
 		RealitySPX:        optStr(st.RealitySpx),
+		XHTTPMode:         st.XhttpMode,
+		XHTTPExtra:        st.XhttpExtra,
 	}
 	switch st.Network {
 	case lavrayv1.StreamSettings_NETWORK_TCP, lavrayv1.StreamSettings_NETWORK_UNSPECIFIED:
@@ -83,6 +85,8 @@ func streamToProto(m *model.StreamSettings) *lavrayv1.StreamSettings {
 		RealityPublicKey:  strpIf(m.RealityPublicKey),
 		RealityShortId:    strpIf(m.RealityShortID),
 		RealitySpx:        strpIf(m.RealitySPX),
+		XhttpMode:         m.XHTTPMode,
+		XhttpExtra:        m.XHTTPExtra,
 	}
 	if m.WSEarlyDataMax > 0 {
 		p.WsEarlyDataMax = int32p(int32(m.WSEarlyDataMax))

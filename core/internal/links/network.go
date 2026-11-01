@@ -12,6 +12,10 @@ var networks = map[string]bool{
 	"httpupgrade": true, "quic": true, "xhttp": true,
 }
 
+// maxXHTTPExtra — предел параметра extra у XHTTP, байт (JSON настроек транспорта
+// обычно занимает несколько сотен байт; maxFieldLength для него мал).
+const maxXHTTPExtra = 8192
+
 // canonicalNetwork приводит синонимы транспорта к имени модели: h2 → http,
 // splithttp (прежнее имя XHTTP в Xray) → xhttp. Остальное возвращается как есть.
 func canonicalNetwork(netw string) string {

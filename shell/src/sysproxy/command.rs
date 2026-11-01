@@ -9,12 +9,21 @@
 //! пуле блокирующих потоков. Операции по-прежнему идут по одной
 //! (`SysProxy::enable/disable` берут общую блокировку).
 
-use super::{SetOutcome, SysProxy};
+use super::{Backend, SetOutcome, SysProxy};
 use std::path::{Path, PathBuf};
 
 /// Включить (`port` уже проверен) или выключить прокси; блокирует поток.
 fn set_now(data_dir: &Path, enabled: bool, port: u16) -> Result<SetOutcome, String> {
-    let sp = SysProxy::new(data_dir);
+    set_with(&SysProxy::new(data_dir), enabled, port)
+}
+
+/// Тело `set_system_proxy` на любом менеджере (в тестах — с подставным бэкендом
+/// ОС). Выключение всегда возвращает снимок: `kill switch` на него не влияет.
+pub fn set_with<B: Backend>(
+    sp: &SysProxy<B>,
+    enabled: bool,
+    port: u16,
+) -> Result<SetOutcome, String> {
     if enabled {
         let applied = sp.enable("127.0.0.1", port)?;
         Ok(SetOutcome {

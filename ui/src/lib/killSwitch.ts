@@ -40,6 +40,22 @@ export async function listenProxyKept(handler: () => void): Promise<() => void> 
   });
 }
 
+/**
+ * Спросить оболочку, оставлен ли системный прокси после падения ядра. Оболочка
+ * ставит флаг раньше любого события, поэтому ответу можно верить, даже если
+ * `proxy-kept` ещё не дошло или окно было перезагружено. Вне окна приложения и при
+ * сбое команды — `false`.
+ */
+export async function queryProxyKept(): Promise<boolean> {
+  if (!inShell()) return false;
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    return (await invoke<unknown>('proxy_kept')) === true;
+  } catch {
+    return false;
+  }
+}
+
 let kept = false;
 const listeners = new Set<() => void>();
 

@@ -19,6 +19,11 @@ const REASONS = [
   'clock_skew',
   'mirror_unreachable',
   'active_session',
+  // Пресеты и гео-данные (T-75/7.5): состояния применения и отката.
+  'no_update',
+  'not_staged',
+  'no_previous',
+  'dir_busy',
 ] as const;
 
 export type UpdateReason = (typeof REASONS)[number];
@@ -53,6 +58,17 @@ const REASON_KEYS: Readonly<Record<string, MessageKey>> = {
   mirror_unreachable: 'upd.reason.mirror_unreachable',
   sha256_mismatch: 'upd.reason.sha256_mismatch',
   truncated: 'upd.reason.truncated',
+  too_large: 'upd.reason.too_large',
+  not_newer: 'upd.reason.not_newer',
+  preset_rejected: 'upd.reason.preset_rejected',
+  archive_unsafe: 'upd.reason.archive_unsafe',
+  archive_limits: 'upd.reason.archive_limits',
+  geo_incomplete: 'upd.reason.geo_incomplete',
+  geo_invalid: 'upd.reason.geo_invalid',
+  no_update: 'upd.reason.no_update',
+  not_staged: 'upd.reason.not_staged',
+  no_previous: 'upd.reason.no_previous',
+  dir_busy: 'upd.reason.dir_busy',
 };
 
 /** Ключ текста для причины события `verify_failed`; незнакомая причина — общий текст. */

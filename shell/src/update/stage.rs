@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! `update_stage_local` (T-75): установщик, выбранный пользователем («Из
+//! `stage_local` (T-75, вызывает `update_pick_installer`): установщик, выбранный пользователем («Из
 //! файла»), копируется в `<data>/updates/staging` под именем `<sha256>-<имя>`.
 //! Хэш считается потоково при копировании; дальше ядро проверяет подпись
-//! (`VerifyLocalUpdate`), а `update_apply` повторно проверяет хэш под блокировкой.
+//! (`VerifyLocalUpdate`), а `update_apply` под блокировкой проверяет подпись через `lavray-core verify-artifact`.
 //! Путь приходит от страницы, поэтому берутся только абсолютные пути обычных
 //! файлов (не UNC и не устройства), а имя очищается до безопасного.
 
@@ -22,7 +22,7 @@ const MAX_NAME: usize = 100;
 /// Размер блока копирования.
 const CHUNK: usize = 64 * 1024;
 
-/// Ответ `update_stage_local`.
+/// Результат `stage_local`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct StagedFile {
     pub staged_path: String,

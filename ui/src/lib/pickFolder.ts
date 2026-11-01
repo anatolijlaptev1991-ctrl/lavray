@@ -7,6 +7,9 @@
 
 const inShell = (): boolean => (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
 
+/** Есть ли системный диалог выбора папки (только в окне приложения). В веб-панели путь вводят вручную. */
+export const canPickFolder = inShell;
+
 /** Путь выбранной папки; `null` — отмена или нет окна приложения. Сбой оболочки — `Error`. */
 export async function pickFolder(): Promise<string | null> {
   if (!inShell()) return null;

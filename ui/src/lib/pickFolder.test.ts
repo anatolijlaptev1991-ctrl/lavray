@@ -3,7 +3,7 @@
 // pickFolder.test.ts — T-78: «Выбрать папку…» зовёт команду оболочки; отмена —
 // null, а не ошибка; вне окна приложения (веб-панель, тесты) — null без вызова.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { pickFolder } from './pickFolder';
+import { canPickFolder, pickFolder } from './pickFolder';
 
 const invokeMock = vi.hoisted(() => vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>());
 vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }));
@@ -38,6 +38,12 @@ describe('pickFolder (T-78)', () => {
     (window as TauriWindow).__TAURI_INTERNALS__ = {};
     invokeMock.mockResolvedValue('');
     await expect(pickFolder()).resolves.toBeNull();
+  });
+
+  it('can_pick_only_inside_the_app_window', () => {
+    expect(canPickFolder()).toBe(false);
+    (window as TauriWindow).__TAURI_INTERNALS__ = {};
+    expect(canPickFolder()).toBe(true);
   });
 
   it('outside_the_app_window_is_null_without_a_call', async () => {

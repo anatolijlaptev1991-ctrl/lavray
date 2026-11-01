@@ -8,6 +8,7 @@ import type { NekoBoxCandidate } from '../../gen/lavray_pb';
 import { useI18n } from '../../hooks/useI18n';
 import type { MessageKey } from '../../lib/i18n';
 import { countsLine } from '../../lib/nekoBox';
+import { canPickFolder } from '../../lib/pickFolder';
 
 interface Props {
   readonly path: string;
@@ -105,9 +106,11 @@ export function NekoBoxForm(p: Props): JSX.Element {
               p.onPath(e.target.value);
             }}
           />
-          <button className="btn btn-sec" type="button" disabled={p.busy} onClick={p.onPick}>
-            {t('nb.pick')}
-          </button>
+          {canPickFolder() && (
+            <button className="btn btn-sec" type="button" disabled={p.busy} onClick={p.onPick}>
+              {t('nb.pick')}
+            </button>
+          )}
         </div>
         <p className="cap" id="nbPathHint">
           {t('nb.pathHint')}

@@ -10,7 +10,7 @@ import { Failure, flush, mount, stubCore, unmountAll, type CoreStub } from '../.
 import { NekoBoxImportDialog } from './NekoBoxImportDialog';
 
 const pickFolderMock = vi.hoisted(() => vi.fn<() => Promise<string | null>>());
-vi.mock('../../lib/pickFolder', () => ({ pickFolder: pickFolderMock }));
+vi.mock('../../lib/pickFolder', () => ({ pickFolder: pickFolderMock, canPickFolder: (): boolean => true }));
 
 const CANDIDATES = {
   candidates: [

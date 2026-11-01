@@ -234,8 +234,9 @@ fn the_key_list_matches_the_ui_sources() {
             "нет {key} в uiState.ts"
         );
     }
-    // кэш, который намеренно остаётся только в профиле окна
-    let excluded = ["lavray.subErrors"];
+    // кэш, который намеренно остаётся только в профиле окна; lavray.core — домен
+    // ErrorInfo в lib/backupErrors.ts (T-83), а не ключ localStorage
+    let excluded = ["lavray.subErrors", "lavray.core"];
 
     fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
         for entry in std::fs::read_dir(dir).unwrap() {

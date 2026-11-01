@@ -5,6 +5,7 @@ package api
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -88,5 +89,20 @@ func TestRollbackWithoutComponentIsRejected(t *testing.T) {
 	}
 	if got, _, _ := st.GetSetting(setUpdSerialSt); got != "42" {
 		t.Fatalf("serial_stable = %q после отклонённого запроса", got)
+	}
+}
+
+// T-75: Rollback(APP) — FAILED_PRECONDITION «откат выполняет оболочка», serial не меняется.
+func TestRollbackKeepsSerial(t *testing.T) {
+	srv, st := rollbackTestServer(t)
+	if err := st.SetSetting(setUpdSerialSt, "11"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := srv.Rollback(context.Background(), connect.NewRequest(&lavrayv1.RollbackRequest{Component: lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "оболочка") {
+		t.Fatalf("Rollback(APP): ожидался FAILED_PRECONDITION с пояснением про оболочку, получено %v", err)
+	}
+	if v, _, _ := st.GetSetting(setUpdSerialSt); v != "11" {
+		t.Fatalf("serial изменился: %q", v)
 	}
 }

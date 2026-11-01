@@ -11,6 +11,8 @@ import (
 	"os"
 	"sort"
 	"time"
+
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
 )
 
 // canonical приводит JSON к каноническому виду: ключи по алфавиту, без
@@ -75,4 +77,24 @@ func readAndSign(in, out string, keys map[string]secretKey) ([]byte, error) {
 // expiresAt — момент истечения: now + срок.
 func expiresAt(now time.Time, ttl time.Duration) string {
 	return now.UTC().Add(ttl).Format(time.RFC3339)
+}
+
+func parseSignedSources(env []byte) (*updates.Sources, error) {
+	e, err := updates.ParseEnvelope(env)
+	if err != nil {
+		return nil, err
+	}
+	return updates.ParseSources(e.Signed)
+}
+
+// withDefault добавляет поле, если его нет.
+func withDefault(doc []byte, key string, val any) ([]byte, error) {
+	var m map[string]any
+	if err := json.Unmarshal(doc, &m); err != nil {
+		return nil, err
+	}
+	if _, has := m[key]; !has {
+		m[key] = val
+	}
+	return json.Marshal(m)
 }

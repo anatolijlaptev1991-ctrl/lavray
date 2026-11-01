@@ -122,26 +122,6 @@ func (c *cli) sources(args []string) error {
 	return writeFile(*out, append(env, '\n'), 0o644)
 }
 
-func parseSignedSources(env []byte) (*updates.Sources, error) {
-	e, err := updates.ParseEnvelope(env)
-	if err != nil {
-		return nil, err
-	}
-	return updates.ParseSources(e.Signed)
-}
-
-// withDefault добавляет поле, если его нет.
-func withDefault(doc []byte, key string, val any) ([]byte, error) {
-	var m map[string]any
-	if err := json.Unmarshal(doc, &m); err != nil {
-		return nil, err
-	}
-	if _, has := m[key]; !has {
-		m[key] = val
-	}
-	return json.Marshal(m)
-}
-
 // timestamp собирает timestamp.json по manifest-*.json каталога: версия —
 // монотонная (по умолчанию unix-время), срок — 7 суток.
 func (c *cli) timestamp(args []string) error {

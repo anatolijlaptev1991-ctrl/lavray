@@ -4,7 +4,7 @@
 // `serve --listen-socket <path>`; спека — docs/stage3/shell-lifecycle §3):
 //
 //	lavray-core serve --listen-socket <unix:///…|pipe|127.0.0.1:0> \
-//	                  [--data <dir>] [--headless]
+//	                  [--data <dir>] [--headless] [--web-bind … --platform openwrt]
 //
 // Протокол запуска: токен авторизации (32 байта CSPRNG → base64url) читается
 // ОДНОЙ строкой из stdin; необязательная вторая строка — агентский токен MCP
@@ -55,20 +55,20 @@ func main() {
 	listen := fs.String("listen-socket", "", "UDS-путь | \\\\.\\pipe\\name | 127.0.0.1:0")
 	dataDir := fs.String("data", defaultDataDir(), "каталог данных (права 0700)")
 	headless := fs.Bool("headless", false, "авторестарт последнего профиля (сервисный режим)")
+	ext := addExtFlags(fs) // веб-панель и шлюз OpenWrt (ext_flags.go)
 	if err := fs.Parse(os.Args[2:]); err != nil || *listen == "" {
 		fmt.Fprintln(os.Stderr, "--listen-socket обязателен")
 		os.Exit(2)
 	}
+	ext.checkExtFlags()
 
-	// §3.2: токен — из stdin (оболочка пишет сразу после spawn). Одну строку,
-	// дальше stdin остаётся открытым (EOF = смерть оболочки → выход).
-	// ОДИН читатель: первую строку отдаёт в tokenCh, дальше следит за EOF.
-	// Токен читается ровно один раз — гонки двух получателей нет.
-	// Вторая строка (необязательная) — агентский токен MCP, см. stdin.go.
+	// §3.2: токен — из stdin (оболочка пишет сразу после spawn); stdin остаётся
+	// открытым (EOF = смерть оболочки → выход). ОДИН читатель отдаёт первую
+	// строку в tokenCh, вторую (агентский токен MCP) — в agentTokenCh, см. stdin.go.
 	tokenCh := make(chan string, 1)
 	agentTokenCh := make(chan string, 1)
 	parentDead := make(chan struct{})
-	go readStartupStdin(os.Stdin, tokenCh, agentTokenCh, parentDead)
+	go readStartupStdin(ext.input(os.Stdin), tokenCh, agentTokenCh, parentDead)
 
 	mux := logs.NewMux(1000)
 	mux.Logf(logs.LevelInfo, "core", "lavray-core запускается: listen=%s data=%s", *listen, *dataDir)
@@ -98,18 +98,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// S12 (аудит shell): токен читается РОВНО ОДИН раз ДО старта сервера.
-	// Раньше его тянул из канала каждый первый запрос: при параллельных RPC
-	// (UI шлёт их сразу) второй получатель блокировался навсегда, а сами
-	// поля гонялись. Теперь значение фиксируется здесь.
+	// S12 (аудит shell): токен читается РОВНО ОДИН раз ДО старта сервера (иначе
+	// параллельные RPC блокировались на канале и гонялись за поле).
 	authToken := <-tokenCh
 	if authToken == "" {
 		mux.Logf(logs.LevelWarn, "core", "auth-токен пуст: все запросы будут отклонены (fail-closed)")
 	}
 
-	// L24 аудита №1: pickRunner() выбирает реальный sing-box в сборке с
-	// тегом singbox_run; раньше хардкод NopRunner означал, что туннель не
-	// запускался НИ В ОДНОЙ сборке.
+	// L24: pickRunner() — реальный sing-box в сборке с тегом singbox_run.
 	server := api.NewServer(api.Deps{Store: st, Logs: mux, Runner: pickRunner(), TunCheck: tunPrivilegeCheck})
 	// Агентский токен (MCP) приходит второй строкой stdin сразу за основным,
 	// но может не прийти вовсе (старая оболочка, тесты): тогда агентский
@@ -127,7 +123,7 @@ func main() {
 	// которых прошёл интервал; skip_auto_update и архив пропускаются.
 	stopAutoUpdate := server.StartSubscriptionScheduler(context.Background())
 	defer stopAutoUpdate()
-	// appVersion — билд-флаг платформенных репо.
+	rt := ext.enableExt(server, st, *dataDir, mux) // до Register: включает WebSession и Gateway
 	root := http.NewServeMux()
 	server.Register(root)
 	// RPC CoreService.Shutdown: инстанс он останавливает сам, а выход из
@@ -138,6 +134,7 @@ func main() {
 
 	errCh := make(chan error, 1)
 	go func() { errCh <- httpSrv.Serve(ln) }()
+	defer rt.serve(root, authToken, mux)() // веб-слушатель, если задан --web-bind
 
 	// Готовность (§3.4): printable-строка в stdout.
 	fmt.Printf("%s %s\n", readyPrefix, transport)
@@ -149,6 +146,7 @@ func main() {
 	if *headless {
 		go runHeadless(ctx, server, mux)
 	}
+	ext.runGateway(ctx, server)
 
 	select {
 	case <-ctx.Done():

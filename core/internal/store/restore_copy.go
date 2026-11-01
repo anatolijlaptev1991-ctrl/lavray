@@ -15,7 +15,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 // CopyInfo — что нашлось в файле копии.
@@ -45,7 +44,11 @@ func (s *Store) withCopy(ctx context.Context, src string, fn func(c *Store, path
 	if err != nil {
 		return fmt.Errorf("store: временный каталог: %w", err)
 	}
-	defer removeAllRetry(dir)
+	defer func() {
+		if err := RemoveTempDir(dir); err != nil {
+			s.warnf("%v; каталог подметёт следующий запуск", err)
+		}
+	}()
 	path := filepath.Join(dir, dbFileName)
 	if err := copyFile(src, path); err != nil {
 		return err
@@ -114,15 +117,4 @@ func copyFile(src, dst string) error {
 		return fmt.Errorf("store: запись копии: %w", err)
 	}
 	return out.Close()
-}
-
-// removeAllRetry удаляет каталог с повторами: на Windows хэндлы SQLite
-// закрываются с небольшой задержкой.
-func removeAllRetry(dir string) {
-	for i := 0; i < 50; i++ {
-		if os.RemoveAll(dir) == nil {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
 }

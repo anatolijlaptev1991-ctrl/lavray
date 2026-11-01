@@ -3,9 +3,9 @@
 // core.ts — ConnectRPC-клиент LAVRay-ядра (ui/src/lib). Один транспорт на
 // приложение: createConnectTransport (connect-web) на адрес ядра. В нативном
 // режиме адрес даёт оболочка (Tauri IPC: localhost-порт named-pipe-моста);
-// в веб-режиме — location.origin (панель за той же auth-cookie).
+// в веб-режиме — location.origin (панель за той же auth-cookie, coreAuth.ts).
 import { createConnectTransport } from '@connectrpc/connect-web';
-import { Code, ConnectError, createClient, type Interceptor } from '@connectrpc/connect';
+import { Code, ConnectError, createClient } from '@connectrpc/connect';
 import {
   CoreService,
   ProfileService,
@@ -18,14 +18,14 @@ import {
   ConnectionService,
   DiagnosticsService,
   UpdateService,
+  WebSessionService,
   BackupService,
   MigrationService,
 } from '../gen/lavray_pb';
+import { authInterceptors, cookieFetch, type CoreAuth } from './coreAuth';
 import { t as translate } from './i18n';
 
-export interface CoreAuth {
-  token?: string; // Bearer (натив: сгенерирован оболочкой; веб: cookie-сессия)
-}
+export type { CoreAuth } from './coreAuth';
 
 // createCoreClients — клиенты всех сервисов поверх одного транспорта.
 export interface CoreClients {
@@ -41,22 +41,22 @@ export interface CoreClients {
   connections: ReturnType<typeof createClient<typeof ConnectionService>>;
   diagnostics: ReturnType<typeof createClient<typeof DiagnosticsService>>;
   updates: ReturnType<typeof createClient<typeof UpdateService>>;
+  /** Вход и сессии веб-панели (UNIMPLEMENTED, если ядро запущено без --web-bind). */
+  web: ReturnType<typeof createClient<typeof WebSessionService>>;
   backup: ReturnType<typeof createClient<typeof BackupService>>;
   migration: ReturnType<typeof createClient<typeof MigrationService>>;
 }
 
 export function createCoreClients(baseUrl: string, auth?: CoreAuth): CoreClients {
-  // Bearer-токен через interceptor (в connect-web v2 headers-опции нет).
-  const token = auth?.token ?? '';
-  const authInterceptor: Interceptor | undefined = token
-    ? (next) => async (req) => {
-        req.header.set('Authorization', `Bearer ${token}`);
-        return next(req);
-      }
-    : undefined;
-  const interceptors: Interceptor[] = authInterceptor ? [authInterceptor] : [];
+  // Bearer-токен или cookie+CSRF — перехватчиками (в connect-web v2 headers-опции нет).
+  const interceptors = authInterceptors(auth);
   // JSON-кодек: веб-панель/тесты без binary; ядро принимает оба формата.
-  const transport = createConnectTransport({ baseUrl, interceptors, useBinaryFormat: false });
+  const transport = createConnectTransport({
+    baseUrl,
+    interceptors,
+    useBinaryFormat: false,
+    ...(auth?.mode === 'cookie' ? { fetch: cookieFetch } : {}),
+  });
   const c = <T extends Parameters<typeof createClient>[0]>(svc: T): ReturnType<typeof createClient<T>> =>
     createClient(svc, transport);
   return {
@@ -72,6 +72,7 @@ export function createCoreClients(baseUrl: string, auth?: CoreAuth): CoreClients
     connections: c(ConnectionService),
     diagnostics: c(DiagnosticsService),
     updates: c(UpdateService),
+    web: c(WebSessionService),
     backup: c(BackupService),
     migration: c(MigrationService),
   };

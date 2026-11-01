@@ -11,7 +11,12 @@ import { foundText } from '../../lib/nekoBox';
 import { Icon } from '../Icon';
 import { NekoBoxImportDialog } from './NekoBoxImportDialog';
 
-export function NekoBoxTile({ onImported }: { readonly onImported?: () => void }): JSX.Element {
+/** Перенос выполнен: открыть список серверов (так же делает быстрый импорт в App). */
+const openServers = (): void => {
+  window.location.hash = 'screen=servers&tab=profiles';
+};
+
+export function NekoBoxTile({ onImported = openServers }: { readonly onImported?: () => void }): JSX.Element {
   const { t, lang } = useI18n();
   const { candidates } = useNekoBoxDetect();
   const [open, setOpen] = useState(false);
@@ -33,7 +38,7 @@ export function NekoBoxTile({ onImported }: { readonly onImported?: () => void }
       </button>
       {open && (
         <NekoBoxImportDialog
-          {...(onImported === undefined ? {} : { onImported })}
+          onImported={onImported}
           onClose={() => {
             setOpen(false);
           }}

@@ -13,7 +13,7 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 )
 
-func TestMigrationV5(t *testing.T) {
+func TestMigrationV6(t *testing.T) {
 	s := openTemp(t)
 	if v, err := s.SchemaVersion(); err != nil || v < importMapSchemaVersion {
 		t.Fatalf("версия схемы = %d, %v; ждём не меньше %d", v, err, importMapSchemaVersion)

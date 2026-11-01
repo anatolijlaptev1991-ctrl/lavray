@@ -134,7 +134,7 @@ func TestBackupDamagedInsideRejected(t *testing.T) {
 	a := newBackupFixture(t)
 	seedBackupData(t, a.st, "A")
 	// копия, зашифрованная верно, но с мусором вместо SQLite внутри
-	body, err := backup.Pack([]byte(`{}`), []byte("не SQLite"))
+	body, err := backup.Pack([]byte(`{}`), bytes.NewReader([]byte("не SQLite")))
 	if err != nil {
 		t.Fatal(err)
 	}

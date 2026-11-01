@@ -34,7 +34,7 @@ export default tseslint.config(
   },
   {
     // Vitest config and test files: Node globals instead of browser
-    files: ['vite.config.ts', 'src/**/*.test.{ts,tsx}'],
+    files: ['vite.config.ts', 'playwright.config.ts', 'e2e/**/*.ts', 'src/**/*.test.{ts,tsx}'],
     languageOptions: {
       globals: { ...globals.browser, ...globals.node },
     },

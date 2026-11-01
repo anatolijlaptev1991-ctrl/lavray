@@ -51,4 +51,25 @@ describe('NekoBoxTile (T-78)', () => {
     await click(dialogButton(t('nb.import')));
     expect(onImported).toHaveBeenCalledTimes(1);
   });
+
+  it('по умолчанию после переноса открывается список серверов', async () => {
+    stubCore({
+      'MigrationService/DetectNekoBox': { candidates: [] },
+      'MigrationService/PreviewNekoBoxImport': { ...REPORT, dryRun: true },
+      'MigrationService/ImportNekoBox': REPORT,
+    });
+    window.location.hash = '#screen=connection';
+    await mount(createElement(NekoBoxTile));
+    await click(document.querySelector('.onb-src'));
+    const input = document.querySelector<HTMLInputElement>('#nbPath');
+    const descriptor = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value');
+    act(() => {
+      descriptor?.set?.call(input, 'C:/neko/config');
+      input?.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await click(dialogButton(t('nb.preview')));
+    expect(window.location.hash).toBe('#screen=connection');
+    await click(dialogButton(t('nb.import')));
+    expect(window.location.hash).toBe('#screen=servers&tab=profiles');
+  });
 });

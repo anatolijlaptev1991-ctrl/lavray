@@ -250,8 +250,7 @@ func (s *Server) SetSettings(ctx context.Context, req *connect.Request[lavrayv1.
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	type pending struct{ key, raw string }
-	var writes []pending
+	var writes []settingWrite
 	resp := &lavrayv1.SetSettingsResponse{}
 	for _, k := range keys {
 		v := req.Msg.Values[k]
@@ -295,7 +294,7 @@ func (s *Server) SetSettings(ctx context.Context, req *connect.Request[lavrayv1.
 		default:
 			continue
 		}
-		writes = append(writes, pending{k, raw})
+		writes = append(writes, settingWrite{k, raw})
 		resp.AcceptedKeys = append(resp.AcceptedKeys, k)
 		if d.RequiresProfileRestart && s.inst.Status().State != instStateIdle {
 			resp.NeedsProfileRestart = true
@@ -304,10 +303,8 @@ func (s *Server) SetSettings(ctx context.Context, req *connect.Request[lavrayv1.
 			resp.NeedsAppRestart = true
 		}
 	}
-	for _, w := range writes {
-		if err := s.st.SetSetting(w.key, w.raw); err != nil {
-			return nil, mapErr(err)
-		}
+	if err := s.writeSettings(writes); err != nil {
+		return nil, mapErr(err)
 	}
 	return connect.NewResponse(resp), nil
 }

@@ -579,3 +579,36 @@ func TestCorruptMetaDataLoss(t *testing.T) {
 	}
 	wantCode(t, calls["ListPresets"](), connect.CodeDataLoss, "[null]")
 }
+
+// ResetBuiltinPreset приводит сброшенную копию к хранимому виду: custom-правила
+// встроенного набора лежат как {"rules":[…]}, а в копии хранится массив.
+func TestResetNormalizesCustomRules(t *testing.T) {
+	cs := newE2E(t)
+	orig := getPreset(t, cs, "lav-ru")
+	if !strings.HasPrefix(orig.GetCustomRulesJson(), "{") {
+		t.Skipf("у lav-ru custom_rules уже не объект: %.40q", orig.GetCustomRulesJson())
+	}
+	cp := copyOf(t, cs, "lav-ru")
+	edit := proto.Clone(cp).(*lavrayv1.RoutingPreset)
+	edit.CustomRulesJson = nil
+	upd, err := updatePreset(cs, edit, cp.Revision)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := cs.routing.ResetBuiltinPreset(bg, connect.NewRequest(&lavrayv1.ResetBuiltinPresetRequest{Id: cp.Id}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := res.Msg.GetCustomRulesJson()
+	if !strings.HasPrefix(got, "[") || strings.Contains(got, `"rules"`) {
+		t.Fatalf("после сброса custom_rules = %.60q, ожидался массив", got)
+	}
+	// Те же правила, что у источника, и сборка конфига их принимает.
+	want, _ := presets.NormalizeCustomRules(orig.GetCustomRulesJson())
+	if got != want {
+		t.Fatalf("правила копии отличаются от источника")
+	}
+	if stored := getPreset(t, cs, cp.Id); stored.GetCustomRulesJson() != got || stored.Revision != upd.NewRevision+1 {
+		t.Fatalf("сохранено другое: rev %d", stored.Revision)
+	}
+}

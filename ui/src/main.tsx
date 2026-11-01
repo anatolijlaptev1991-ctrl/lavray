@@ -5,6 +5,7 @@ import { createRoot } from 'react-dom/client';
 import './prototype.css';
 import './base.css';
 import App from './App';
+import { WebGate } from './screens/web/WebGate';
 import { detectOS, osAttribute } from './platform/adapter';
 import { FIRST_ENDPOINT_WAIT_MS, followShellEndpoint } from './lib/coreEndpoint';
 import { installDropGuard } from './lib/external';
@@ -50,7 +51,9 @@ async function bootstrap(): Promise<void> {
   }
   createRoot(container).render(
     <StrictMode>
-      <App />
+      <WebGate>
+        <App />
+      </WebGate>
     </StrictMode>,
   );
 }

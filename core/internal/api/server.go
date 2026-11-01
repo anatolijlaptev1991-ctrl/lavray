@@ -84,6 +84,8 @@ type Server struct {
 	// IP»; nil → системный резолвер. Тесты подменяют оба.
 	newTestInst inst.TestInstanceFactory
 	lookupIP    func(ctx context.Context, host string) (netip.Addr, error)
+	// resolve — резолвер и пределы ResolveDomains (resolver.go); нулевой — системный.
+	resolve resolveConfig
 
 	// ---- обновления: доступ к общему клиенту сериализуется ----
 	updMu sync.Mutex
@@ -99,6 +101,7 @@ type Server struct {
 
 	// tunCheck — проверка прав на TUN перед стартом (nil — не проверять).
 	tunCheck func() error
+	ext      serverExt // веб-режим и шлюз (server_ext.go)
 
 	// health — итог проверки связи после подключения (connect_health.go).
 	health connHealth
@@ -158,8 +161,8 @@ func (s *Server) HandlerOptions() []connect.HandlerOption {
 	}
 }
 
-// Register монтирует все сервисы на mux; нереализованные (Gateway, WebSession)
-// отвечают UNIMPLEMENTED, чтобы сервер поднимался целиком.
+// Register монтирует все 13 сервисов на mux. WebSession и Gateway берутся из
+// server_ext.go: без включения обвязкой они UNIMPLEMENTED и INVALID_ARGUMENT.
 func (s *Server) Register(mux *http.ServeMux) {
 	opts := s.HandlerOptions()
 	mount := func(path string, h http.Handler) {
@@ -177,7 +180,6 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mount(path, h)
 	path, h = lavrayv1connect.NewSettingsServiceHandler(s, opts...)
 	mount(path, h)
-	// W7/W8: заглушки — контракт доступен, методы отвечают UNIMPLEMENTED.
 	path, h = lavrayv1connect.NewLogServiceHandler(s, opts...)
 	mount(path, h)
 	path, h = lavrayv1connect.NewStatsServiceHandler(statsSvc{s}, opts...)
@@ -186,11 +188,11 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mount(path, h)
 	path, h = lavrayv1connect.NewDiagnosticsServiceHandler(s, opts...)
 	mount(path, h)
-	path, h = lavrayv1connect.NewGatewayServiceHandler(lavrayv1connect.UnimplementedGatewayServiceHandler{}, opts...)
+	path, h = lavrayv1connect.NewGatewayServiceHandler(s.gatewayHandler(), opts...)
 	mount(path, h)
 	path, h = lavrayv1connect.NewUpdateServiceHandler(s, opts...)
 	mount(path, h)
-	path, h = lavrayv1connect.NewWebSessionServiceHandler(lavrayv1connect.UnimplementedWebSessionServiceHandler{}, opts...)
+	path, h = lavrayv1connect.NewWebSessionServiceHandler(s.webSessionHandler(), opts...)
 	mount(path, h)
 	path, h = lavrayv1connect.NewBackupServiceHandler(s.backup, s.backup.handlerOptions(opts)...)
 	mount(path, h)
@@ -307,15 +309,9 @@ func (s *Server) activePresetID() string {
 
 // activePreset — активный набор (builtin, пользовательский или нейтральный).
 func (s *Server) activePreset() (*presets.Preset, error) {
-	p, found, err := s.findPreset(s.activePresetID())
+	p, err := s.activeOrGlobal()
 	if err != nil {
 		return nil, err
-	}
-	if !found {
-		// настройка указывает на удалённый пресет — конфигбилдер подставит
-		// нейтральный (nil); но DNS-настройки пользователя обязаны применяться
-		// и в этом случае (A5 аудита round 1).
-		p = nil
 	}
 	return s.applyDNSOverride(p), nil
 }
@@ -366,36 +362,4 @@ func (s *Server) coreStatus() *lavrayv1.CoreStatus {
 		cs.Tun.InterfaceName = strp(tun.InterfaceName)
 	}
 	return cs
-}
-
-// corsWrap — CORS для Tauri-окна: webview отдаёт страницу с origin
-// tauri://localhost (или http://tauri.localhost на Windows), а ядро живёт на
-// http://127.0.0.1:<port> — это кросс-оригин запрос. Разрешаем только
-// локальные origin'ы оболочки и веб-панели; Bearer-токен остаётся
-// обязательным (CORS — не аутентификация).
-func corsWrap(next http.Handler) http.Handler {
-	allowed := map[string]bool{
-		"tauri://localhost":       true,
-		"http://tauri.localhost":  true,
-		"https://tauri.localhost": true,
-		"http://localhost:1420":   true, // vite dev
-		"http://127.0.0.1:1420":   true,
-	}
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		origin := r.Header.Get("Origin")
-		if origin != "" && (allowed[origin] || strings.HasPrefix(origin, "http://127.0.0.1:") || strings.HasPrefix(origin, "http://localhost:")) {
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Vary", "Origin")
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, Connect-Protocol-Version, Connect-Timeout-Ms, X-LAVRay-CSRF")
-			w.Header().Set("Access-Control-Expose-Headers", "Connect-Content-Encoding")
-			w.Header().Set("Access-Control-Max-Age", "600")
-		}
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }

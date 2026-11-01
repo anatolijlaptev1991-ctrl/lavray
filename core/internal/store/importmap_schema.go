@@ -6,7 +6,7 @@ package store
 // выдаёт порядок слияния веток: если до этой ветки в main попала другая
 // миграция, меняются две вещи — эта константа и номер в строке
 // testdata/migrations.sha256 (хэш текста не меняется).
-const importMapSchemaVersion = 5
+const importMapSchemaVersion = 6
 
 // importMapSchema — миграция import_map: что уже перенесено из внешнего
 // источника (NekoBox) и под каким локальным id. Повторный перенос по этой

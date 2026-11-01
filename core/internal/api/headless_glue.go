@@ -8,10 +8,9 @@ package api
 import (
 	"context"
 	"errors"
-	"strconv"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
-	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
 
 // ConnectLast — подключить «запомненный» профиль (remember.id/remember.enable,
@@ -25,6 +24,9 @@ func (s *Server) ConnectLast(ctx context.Context) error {
 		return errNoRememberedProfile
 	}
 	p, err := s.st.GetProfile(id)
+	if errors.Is(err, store.ErrNotFound) {
+		return errNoRememberedProfile // профиль удалён: автоподключения нет, ядро живо
+	}
 	if err != nil {
 		return err
 	}
@@ -53,12 +55,3 @@ var errNoRememberedProfile = errors.New("headless: запомненный про
 
 // ErrNoRememberedProfile — экспорт для вызывающей стороны (cmd).
 var ErrNoRememberedProfile = errNoRememberedProfile
-
-// RememberProfile — сохранить профиль как «последний» (вызывается после
-// успешного Connect, если remember.enable).
-func (s *Server) RememberProfile(p *model.Profile) {
-	if p == nil || !s.settingBool("remember.enable") {
-		return
-	}
-	_ = s.st.SetSetting("remember.id", strconv.FormatInt(p.ID, 10))
-}

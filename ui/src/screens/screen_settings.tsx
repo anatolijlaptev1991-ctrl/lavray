@@ -13,9 +13,8 @@ import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { AgentsSettings } from '../components/AgentsSettings';
-import { AutostartRow } from '../components/AutostartRow';
 import { HOTKEYS, HotkeysCard } from '../components/settings/HotkeysCard';
-import { ShellPrefRows } from '../components/settings/ShellPrefRows';
+import { PlatformRows } from '../components/settings/PlatformRows';
 import { ConfirmDialog } from '../components/dialogs';
 import { BackupRows } from '../components/settings/BackupRows';
 import { NekoBoxRow } from '../components/settings/NekoBoxRow';
@@ -518,8 +517,7 @@ export function SettingsScreen(): JSX.Element {
                   </select>
                 </div>
               </div>
-              <AutostartRow />
-              <ShellPrefRows />
+              <PlatformRows />
             </div>
           )}
 

@@ -27,6 +27,7 @@ describe('ошибки копии (T-83)', () => {
       [Code.FailedPrecondition, 'connection_active', 'bk.err.connected'],
       [Code.ResourceExhausted, 'backup_too_large', 'bk.err.tooLarge'],
       [Code.Aborted, 'backup_busy', 'bk.err.busy'],
+      [Code.Internal, 'backup_failed', 'bk.err.failed'],
     ];
     for (const [code, reason, key] of cases) {
       expect(backupErrorKey(coreError(code, reason)), reason).toBe(key);

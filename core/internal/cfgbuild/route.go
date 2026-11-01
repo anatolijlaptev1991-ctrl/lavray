@@ -167,7 +167,7 @@ func makeMatchRule(list []string, isIP bool, rs *ruleSetCollector) map[string]an
 // (lists[i]: "direct_domain", "process_rules[0]"...). ЕДИНСТВЕННОЕ место, где
 // задан порядок правил: его вызывают buildRoute (конфиг) и BuildRouteTable
 // (тестер маршрута), поэтому разойтись они не могут.
-func routeRules(preset *presets.Preset, st *BuildSettings, forTest bool, rs *ruleSetCollector) (rules []any, lists []string, _ error) {
+func routeRules(preset *presets.Preset, st *BuildSettings, forTest bool, rs *ruleSetCollector, warn func(string)) (rules []any, lists []string, _ error) {
 	// mark подписывает правила, добавленные с прошлого вызова, списком-источником.
 	mark := func(list string, indexed bool) {
 		for k := 0; len(lists) < len(rules); k++ {
@@ -210,11 +210,7 @@ func routeRules(preset *presets.Preset, st *BuildSettings, forTest bool, rs *rul
 		}
 		rules = append(rules, presetRules...)
 		mark("custom_rules", true)
-		globalRules, err := parseCustomRules(st.CustomRouteGlobalJSON, "routing.custom_global")
-		if err != nil {
-			return nil, nil, err
-		}
-		rules = append(rules, globalRules...)
+		rules = append(rules, globalCustomRules(st, warn)...)
 		mark("custom_global", true)
 	}
 
@@ -304,8 +300,8 @@ func routeRules(preset *presets.Preset, st *BuildSettings, forTest bool, rs *rul
 // buildRoute — route{} конфига (§3.4 шаг 6). kill-switch на уровне route —
 // см. deviations.yaml: v1 = форс strict_route (inbounds.go) + фаервол
 // оболочки (W8);DefOutbound final — только в рабочих конфигах (не forTest).
-func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTest, forExport bool, rs *ruleSetCollector) (map[string]any, error) {
-	rules, _, err := routeRules(preset, st, forTest, rs)
+func buildRoute(preset *presets.Preset, st *BuildSettings, res *BuildResult, forTest, forExport bool, rs *ruleSetCollector) (map[string]any, error) {
+	rules, _, err := routeRules(preset, st, forTest, rs, res.warn)
 	if err != nil {
 		return nil, err
 	}
@@ -346,17 +342,6 @@ func buildExperimental(st *BuildSettings) map[string]any {
 		cache["path"] = p
 	}
 	return map[string]any{"cache_file": cache}
-}
-
-// parseCustomRules — custom-правила (пресета или routing.custom_global) → список
-// rule-объектов. Принимаются массив и {"rules":[...]}; разбор общий с хранением
-// набора (presets.ParseCustomRules). Пустая строка/"{}" — пусто.
-func parseCustomRules(raw, key string) ([]any, error) {
-	rules, err := presets.ParseCustomRules(raw)
-	if err != nil {
-		return nil, invalidArgument(key, "invalid JSON (%s expected array or {\"rules\":[...]}): %v", key, err)
-	}
-	return rules, nil
 }
 
 // splitLinesSkipSharp — многострочник → строки: пустые/пробельные и

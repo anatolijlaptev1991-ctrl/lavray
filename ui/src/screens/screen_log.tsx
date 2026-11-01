@@ -7,11 +7,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import type { LogLine } from '../gen/lavray_pb';
 import { LogLevel } from '../gen/lavray_pb';
-import { CORE_UNAVAILABLE, friendlyCoreError, showCoreError } from '../lib/core';
+import { CORE_UNAVAILABLE, showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { Icon } from '../components/Icon';
 import { saveFile } from '../lib/saveFile';
+import { useLogBuffer } from './log/useLogBuffer';
 
 interface LevelOption {
   readonly level: LogLevel;
@@ -34,50 +35,23 @@ const LEVEL_LABEL: Record<number, string> = {
   [LogLevel.ERROR]: 'ERROR',
 };
 
-const MAX_LINES = 2000;
 /** Сколько строк истории ядро отдаёт сразу при подписке. */
 const TAIL_LINES = 200;
 
 export function LogScreen(): JSX.Element {
   const { t, lang } = useI18n();
   const core = useCore();
-  const [lines, setLines] = useState<LogLine[]>([]);
+  // T-70, хвосты A: буфер и поток — в useLogBuffer; предел строк — ui.max_log_lines.
+  const { lines, streamErr } = useLogBuffer(core, TAIL_LINES);
   // «Пауза» (прототип #logPause): список замораживается снимком, новые строки
   // продолжают копиться в lines и появляются после «Продолжить».
-  const [frozen, setFrozen] = useState<LogLine[] | null>(null);
-  const [streamErr, setStreamErr] = useState('');
+  const [frozen, setFrozen] = useState<readonly LogLine[] | null>(null);
   const [minLevel, setMinLevel] = useState<LogLevel>(LogLevel.INFO);
   const [query, setQuery] = useState('');
   const [autoscroll, setAutoscroll] = useState(true);
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
   const viewRef = useRef<HTMLDivElement | null>(null);
-
-  // T-70: один источник строк. Подписка сама отдаёт историю (tail_lines) и
-  // затем новые строки одним упорядоченным потоком — отдельный GetTail давал
-  // дубли. Все уровни приходят один раз; уровень и поиск применяются при
-  // показе, поэтому смена уровня мгновенна и не переподписывается.
-  useEffect(() => {
-    const abort = new AbortController();
-    setLines([]);
-    void (async (): Promise<void> => {
-      try {
-        const stream = core.logs.subscribe({ tailLines: TAIL_LINES }, { signal: abort.signal });
-        for await (const line of stream) {
-          if (abort.signal.aborted) return;
-          setLines((prev) => {
-            const next = prev.length >= MAX_LINES ? prev.slice(prev.length - MAX_LINES + 1) : prev;
-            return [...next, line];
-          });
-        }
-      } catch (e) {
-        if (!abort.signal.aborted) setStreamErr(friendlyCoreError(e));
-      }
-    })();
-    return (): void => {
-      abort.abort();
-    };
-  }, [core]);
 
   const source = frozen ?? lines;
   const filtered = useMemo(() => {

@@ -18,9 +18,16 @@ src-tauri/target/
 # --- Node / React (ui) ---
 node_modules/
 dist/
+# Встраиваемая копия ui/dist (тег with_webui): в репозитории только .gitkeep.
+!/core/internal/web/dist/
+/core/internal/web/dist/*
+!/core/internal/web/dist/.gitkeep
 dist-ssr/
 .vite/
 *.tsbuildinfo
+# Playwright (web-e2e): отчёты и трассы
+test-results/
+playwright-report/
 
 # --- Локальные секреты и окружение ---
 *.local

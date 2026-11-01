@@ -44,10 +44,14 @@ func (s *Server) ListPresets(ctx context.Context, req *connect.Request[lavrayv1.
 		return nil, mapErr(err)
 	}
 	out := make([]*lavrayv1.RoutingPreset, 0, len(list))
+	cur, active := s.activePresetID(), "global" // id, которого нет в списке, читается как global
 	for _, p := range list {
 		out = append(out, presetOut(p, rev))
+		if p.ID == cur {
+			active = p.ID
+		}
 	}
-	return connect.NewResponse(&lavrayv1.ListPresetsResponse{Presets: out, ActivePresetId: s.activePresetID()}), nil
+	return connect.NewResponse(&lavrayv1.ListPresetsResponse{Presets: out, ActivePresetId: active}), nil
 }
 
 func (s *Server) GetPreset(ctx context.Context, req *connect.Request[lavrayv1.GetPresetRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
@@ -66,19 +70,21 @@ func (s *Server) GetPreset(ctx context.Context, req *connect.Request[lavrayv1.Ge
 }
 
 func (s *Server) ActivatePreset(ctx context.Context, req *connect.Request[lavrayv1.ActivatePresetRequest]) (*connect.Response[lavrayv1.ActivatePresetResponse], error) {
-	p, ok, err := s.findPreset(req.Msg.Id)
+	// Проверка набора и запись активного id — под замком репозитория: иначе
+	// DeletePreset между ними оставил бы активным уже удалённый набор.
+	err := s.presetRepo.Locked(func(list []*presets.Preset) error {
+		p, err := lookupPreset(list, req.Msg.Id)
+		if err != nil {
+			return err
+		}
+		if err := p.Validate(); err != nil {
+			return err
+		}
+		// F2 (аудит №7): активный пресет — в settings (единственный источник,
+		// который читает activePresetID при сборке конфига), не в meta.
+		return s.setActivePreset(p.ID)
+	})
 	if err != nil {
-		return nil, mapErr(err)
-	}
-	if !ok {
-		return nil, notFound("пресет %q", req.Msg.Id)
-	}
-	if err := p.Validate(); err != nil {
-		return nil, mapErr(err)
-	}
-	// F2 (аудит №7): активный пресет — в settings (единственный источник,
-	// который читает activePresetID при сборке конфига), не в meta.
-	if err := s.setActivePreset(p.ID); err != nil {
 		return nil, mapErr(err)
 	}
 	needsRestart := s.inst.Status().State != instStateIdle
@@ -86,13 +92,9 @@ func (s *Server) ActivatePreset(ctx context.Context, req *connect.Request[lavray
 }
 
 func (s *Server) GetActivePreset(ctx context.Context, req *connect.Request[lavrayv1.GetActivePresetRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
-	active := s.activePresetID()
-	p, ok, err := s.findPreset(active)
+	p, err := s.activeOrGlobal()
 	if err != nil {
 		return nil, mapErr(err)
-	}
-	if !ok {
-		return nil, notFound("активный пресет %q", active)
 	}
 	out, err := s.presetProto(p)
 	if err != nil {

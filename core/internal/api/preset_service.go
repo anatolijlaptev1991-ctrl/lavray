@@ -133,6 +133,10 @@ func (s *Server) ResetBuiltinPreset(ctx context.Context, req *connect.Request[la
 		next := stored.Clone()
 		next.Routing, next.DNS = fresh.Routing, fresh.DNS
 		next.SourceID, next.SourceRevision = src.ID, src.Revision
+		// custom-правила встроенного — {"rules":[…]}: в хранимый вид, как при записи.
+		if err := next.PrepareUser(); err != nil {
+			return nil, &presetInvalidError{err}
+		}
 		next.Revision = stored.Revision + 1
 		reset, list[i] = next, next
 		return list, nil

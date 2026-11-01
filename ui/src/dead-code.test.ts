@@ -25,6 +25,7 @@ const ENTRY = new Set([
   './test-utils/settingsKit.tsx',
   './test-utils/tauriStub.ts',
   './test-utils/qrKit.ts',
+  './test-utils/webKit.ts',
   './screens/subscriptions.testkit.tsx',
 ]);
 

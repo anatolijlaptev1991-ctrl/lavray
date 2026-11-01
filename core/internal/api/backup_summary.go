@@ -10,6 +10,9 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
 
+// maxAppVersionLen — предел строки версии приложения в сводке.
+const maxAppVersionLen = 64
+
 // summaryDoc — JSON-сводка внутри копии (backup.Pack). Числа дублируют
 // содержимое снимка, но источником истины при показе служит сам снимок
 // (store.InspectCopy); из сводки берутся то, чего в БД нет: версия
@@ -53,6 +56,10 @@ func (d summaryDoc) withContent(info store.CopyInfo) summaryDoc {
 func parseSummaryDoc(raw []byte) (summaryDoc, error) {
 	var d summaryDoc
 	if err := json.Unmarshal(raw, &d); err != nil {
+		return summaryDoc{}, backup.ErrCorrupt
+	}
+	// версия приложения показывается в окне: длинная строка из чужой копии не нужна
+	if len(d.AppVersion) > maxAppVersionLen || d.CreatedAtMs < 0 || d.SchemaVersion < 0 {
 		return summaryDoc{}, backup.ErrCorrupt
 	}
 	return d, nil

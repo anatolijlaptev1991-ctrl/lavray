@@ -278,6 +278,7 @@ describe('BackupRestoreDialog', () => {
     click(button(t('bk.replaceBtn')));
     expect(document.querySelectorAll('[role="dialog"]').length).toBe(2);
     expect(document.body.textContent).toContain(t('bk.confirmTitle'));
+    expect(document.body.textContent).toContain(t('bk.confirmText')); // в нём — про настройки безопасности
     click(button(t('common.cancel')));
     expect(stub.importBackup).not.toHaveBeenCalled();
 

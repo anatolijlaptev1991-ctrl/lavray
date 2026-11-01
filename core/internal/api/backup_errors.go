@@ -7,6 +7,7 @@ package api
 // выбирает текст по причине, а не по тексту сообщения.
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"unicode/utf8"
@@ -15,6 +16,7 @@ import (
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/backup"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
 
@@ -30,6 +32,7 @@ const (
 	reasonConnectionActive = "connection_active"
 	reasonTooLarge         = "backup_too_large"
 	reasonBusy             = "backup_busy"
+	reasonFailed           = "backup_failed"
 
 	// errorDomain — домен ErrorInfo во всех ошибках ядра (proto/lavray.proto).
 	errorDomain = "lavray.core"
@@ -97,8 +100,24 @@ func contentBackupError(err error) error {
 	case errors.As(err, &tooNew):
 		return backupError(connect.CodeFailedPrecondition, reasonNewerVersion,
 			"копия сделана более новой версией LAVRay (схема v%d, эта сборка понимает до v%d)", tooNew.Found, tooNew.Supported)
-	case errors.Is(err, backup.ErrCorrupt), errors.Is(err, store.ErrCorrupt):
+	case errors.Is(err, backup.ErrCorrupt), errors.Is(err, store.ErrCorrupt), errors.Is(err, store.ErrConstraint):
 		return backupError(connect.CodeDataLoss, reasonTampered, "содержимое копии повреждено")
 	}
 	return err
+}
+
+// failed превращает необработанную ошибку операции в общий ответ INTERNAL без
+// текста ошибки: в нём бывают локальные пути (временный каталог, файл базы).
+// Подробности пишутся только в журнал ядра. Ошибки Connect (уже с причиной) и
+// отмена контекста проходят как есть.
+func (b *backupService) failed(op string, err error) error {
+	var ce *connect.Error
+	switch {
+	case err == nil, errors.As(err, &ce):
+		return err
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return mapErr(err)
+	}
+	b.srv.logs.Logf(logs.LevelError, logs.SourceAPI, "резервная копия (%s): %v", op, err)
+	return backupError(connect.CodeInternal, reasonFailed, "операция с резервной копией не удалась; подробности в журнале ядра")
 }

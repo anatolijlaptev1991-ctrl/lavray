@@ -68,7 +68,7 @@ $log = Get-Content C:\lavray-test\results\A02\go-test-all.txt
 ($log | Where-Object { $_ -match '^\?\s' }) -replace '\s+\[no test files\]',''
 ```
 
-   Ожидается на `v0.9.0`: `ok: 24`, `FAIL: 0`, и четыре пакета без тестов: `internal/gen/lavrayv1`, `internal/gen/lavrayv1connect`, `internal/testsocks` (сгенерированный код и вспомогательный SOCKS5-сервер для тестов), `internal/updates/updatestest` (вспомогательный код тестов обновлений). Если `ok` больше 24 (появились пакеты), это не ошибка; если меньше или какой-то пакет из таблицы ниже пропал, это `FAIL`.
+   Ожидается (на `v0.9.0` было 24, на `v0.9.1` не меньше): `ok: 24`, `FAIL: 0`, и четыре пакета без тестов: `internal/gen/lavrayv1`, `internal/gen/lavrayv1connect`, `internal/testsocks` (сгенерированный код и вспомогательный SOCKS5-сервер для тестов), `internal/updates/updatestest` (вспомогательный код тестов обновлений). Если `ok` больше 24 (появились пакеты), это не ошибка; если меньше или какой-то пакет из таблицы ниже пропал, это `FAIL`.
 
    Эталонные времена этой машины (для оценки, не критерий): `cmd/lavray-core` 22 с, `internal/api` 44 с, `internal/updates` 15 с, `internal/store` 11 с, `internal/mcp` 10 с, `internal/presets` 8 с, `internal/subs` 7 с, остальные до 4 с.
 

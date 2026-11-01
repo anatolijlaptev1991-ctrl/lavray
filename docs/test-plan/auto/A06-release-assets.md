@@ -5,19 +5,19 @@
 | ID | A06 |
 | Слой | авто |
 | Время | 8–12 минут (скачивание около 150 МБ: два Linux-ядра по 55–60 МБ) |
-| Зависимости | `01-ENVIRONMENT.md`, разделы 4–7 (доступ `gh` к приватному репозиторию, скачанные ассеты); для шага 16 — WSL2 с Ubuntu (на ПК без WSL только этот шаг получает `BLOCKED`) |
+| Зависимости | `01-ENVIRONMENT.md`, разделы 4–7 (релиз скачивается из публичного `lavray-windows` без входа; вход `gh` нужен только для клона `src\`); для шага 16 — WSL2 с Ubuntu (на ПК без WSL только этот шаг получает `BLOCKED`) |
 | Опасность | нет: файлы только скачиваются и читаются. Из скачанного запускаются `go version -m` (читает метаданные) и, в шаге 16, Linux-ядро внутри WSL на loopback в `/tmp` (без сети, без прав администратора) |
 
 ## Цель
 
-Проверить, что опубликованные ассеты версии под тестом (в плане — `v0.9.0`) целы, названы так, как задают `release-windows.yml` и `release-linux.yml`, собраны из нужного коммита с нужными тегами ядра и не содержат лишнего. Релиз состоит из **семи** файлов: Windows — `LAVRay-0.9.0-x64-setup.exe`, `LAVRay-0.9.0-portable-x64.zip`, `SHA256SUMS.txt`; Linux — `lavray-core-linux-amd64` и `lavray-core-linux-arm64` (оба собраны с тегом `with_webui`), `ui-dist.tar.gz`, `SHA256SUMS-linux.txt`. Покрывает шаг «Проверка ассетов (суммы, теги ядра, smoke, MCP)» общей готовности каждой фазы плана (п. 10.7); сам smoke и MCP — файлы A07 и A08 (они должны быть запущены на ядре из этого же ZIP). Каталога `meta/` (подписанные метаданные обновлений) в релизе **нет**: ключей подписи пока не создано, задание `sign` пропускает себя; отсутствие `meta/` — не `FAIL` (шаг 17).
+Проверить, что опубликованные ассеты версии под тестом (в плане — `v0.9.1`) целы, названы так, как задают `release-windows.yml` и `release-linux.yml`, собраны из нужного коммита с нужными тегами ядра и не содержат лишнего. Релиз состоит из **семи** файлов: Windows — `LAVRay-0.9.1-x64-setup.exe`, `LAVRay-0.9.1-portable-x64.zip`, `SHA256SUMS.txt`; Linux — `lavray-core-linux-amd64` и `lavray-core-linux-arm64` (оба собраны с тегом `with_webui`), `ui-dist.tar.gz`, `SHA256SUMS-linux.txt`. Покрывает шаг «Проверка ассетов (суммы, теги ядра, smoke, MCP)» общей готовности каждой фазы плана (п. 10.7); сам smoke и MCP — файлы A07 и A08 (они должны быть запущены на ядре из этого же ZIP). Каталога `meta/` (подписанные метаданные обновлений) в релизе **нет**: ключей подписи пока не создано, задание `sign` пропускает себя; отсутствие `meta/` — не `FAIL` (шаг 17).
 
 ## Предусловия
 
-- `gh auth status` успешен; доступ на чтение к `anatolijlaptev1991-ctrl/lavray` (репозиторий приватный).
+- Релиз лежит в публичном репозитории `anatolijlaptev1991-ctrl/lavray-windows` (`$env:LAVRAY_RELEASES_REPO`): `gh release view` и `gh release download` работают и без входа. `gh auth status` нужен для клона `lavray` (`src\`; приватный): без него не получить коммит тега для шагов 8 и 14 (`BLOCKED` для этих шагов, остальные идут).
 - Go (для `go version -m`), PowerShell 7, Git.
-- Релиз `v0.9.0` может быть ещё не опубликован. Тогда шаги 2–17 для этой версии получают `BLOCKED` (причина: релиз не найден; снять может владелец, выпустив тег). В этом случае для проверки самого файла выполните «репетицию» на `v0.3.0` (шаги 1–12, только Windows: Linux-ассетов у неё нет): те же шаги с `$ver = '0.3.0'`; результат репетиции в итог файла не входит, но показывает, что команды рабочие.
-- Ожидаемые значения ниже заданы для версии 0.9.0; для репетиции подставляются `0.3.0` и размеры из шага 4. Теги ядра берутся из `core/BUILD_TAGS` клона на коммите тега (на `773b4e8`: `singbox_run,with_quic,with_gvisor,with_utls`).
+- Релиз `v0.9.1` может быть ещё не опубликован. Тогда шаги 2–17 для этой версии получают `BLOCKED` (причина: релиз не найден; снять может владелец, выпустив тег). В этом случае для проверки самого файла выполните «репетицию» на `v0.3.0` (шаги 1–12, только Windows: Linux-ассетов у неё нет): те же шаги с `$ver = '0.3.0'`; результат репетиции в итог файла не входит, но показывает, что команды рабочие.
+- Ожидаемые значения ниже заданы для версии 0.9.1; для репетиции подставляются `0.3.0` и размеры из шага 4. Теги ядра берутся из `core/BUILD_TAGS` клона на коммите тега (на `773b4e8`: `singbox_run,with_quic,with_gvisor,with_utls`).
 
 ## Безопасность
 
@@ -31,15 +31,15 @@
 . C:\lavray-test\env.ps1
 $ver = $env:LAVRAY_VERSION
 $dir = $env:LAVRAY_ASSETS
-$repo = $env:LAVRAY_REPO
+$repo = $env:LAVRAY_RELEASES_REPO   # публичный lavray-windows: вход gh не нужен
 gh auth status
-"auth exit=$LASTEXITCODE"
+"auth exit=$LASTEXITCODE (нужен только для клона src)"
 "версия под тестом: $ver"
 git -C $env:LAVRAY_SRC fetch --tags origin
 "коммит тега v${ver}: " + (git -C $env:LAVRAY_SRC rev-parse "v$ver^{commit}")
 ```
 
-   Ожидается: `auth exit=0` и коммит тега из 40 шестнадцатеричных символов (он нужен шагам 8 и 14: сравнение ревизии идёт с коммитом **тега**, а не с `HEAD` клона). Иначе `BLOCKED` (просьба к владельцу: `gh auth login`; нет тега в клоне — релиз не выпущен).
+   Ожидается: коммит тега из 40 шестнадцатеричных символов (он нужен шагам 8 и 14: сравнение ревизии идёт с коммитом **тега**, а не с `HEAD` клона). `auth exit` не 0 не мешает скачиванию, но без клона `src\` нет коммита тега: шаги 8 и 14 получают `BLOCKED` (просьба к владельцу: `gh auth login`); нет тега в клоне — релиз не выпущен.
 
 2. Релиз опубликован, список ассетов.
 
@@ -52,7 +52,7 @@ $relObj | Select-Object tagName, isDraft, isPrerelease, targetCommitish | Format
 $relObj.assets | Select-Object name, size | Format-Table -AutoSize | Out-String
 ```
 
-   Ожидается: `view exit=0`, `isDraft=False`. Ответ `release not found` — `BLOCKED` для всех шагов версии 0.9.0 (см. «Предусловия»).
+   Ожидается: `view exit=0`, `isDraft=False`. Ответ `release not found` — `BLOCKED` для всех шагов версии 0.9.1 (см. «Предусловия»).
 
 3. Состав ассетов: ровно семь файлов с именами из двух workflow.
 
@@ -100,7 +100,7 @@ foreach ($l in $lines) {
    Ожидается: две строки `OK` (установщик и ZIP), `суммы совпали: True`. В файле сумм нет строки про сам `SHA256SUMS.txt` (workflow считает только `.exe` и `.zip`). То же через bash, если нужно (строки CRLF обрабатываются так):
 
 ```bash
-cd /c/lavray-test/assets/0.9.0 && tr -d '\r' < SHA256SUMS.txt | sha256sum -c -
+cd /c/lavray-test/assets/0.9.1 && tr -d '\r' < SHA256SUMS.txt | sha256sum -c -
 ```
 
    Ожидается: две строки `... OK`.
@@ -108,7 +108,7 @@ cd /c/lavray-test/assets/0.9.0 && tr -d '\r' < SHA256SUMS.txt | sha256sum -c -
    Суммы Linux-ассетов написаны на Linux (`sha256sum`, окончания строк LF), поэтому проверяются напрямую:
 
 ```bash
-cd /c/lavray-test/assets/0.9.0 && sha256sum -c SHA256SUMS-linux.txt
+cd /c/lavray-test/assets/0.9.1 && sha256sum -c SHA256SUMS-linux.txt
 grep -c . SHA256SUMS-linux.txt
 ```
 
@@ -165,11 +165,11 @@ $tagCommit = (git -C $env:LAVRAY_SRC rev-parse "v$ver^{commit}" 2>$null)
 "vcs.modified:       " + [regex]::Match($info, 'vcs\.modified=(\w+)').Groups[1].Value + '   (INFO: true ожидаемо, см. ниже)'
 ```
 
-   Ожидается: все пять строк `True`; `vcs.revision` равен коммиту тега `v0.9.0` (не `HEAD` клона; тег подтянул `git fetch --tags` шага 1). Версию форка в строке `форк закреплён` сверяйте с `replace` в `core/go.mod` на теге: если пин другой, подставьте его (запишите в отклонения).
+   Ожидается: все пять строк `True`; `vcs.revision` равен коммиту тега `v0.9.1` (не `HEAD` клона; тег подтянул `git fetch --tags` шага 1). Версию форка в строке `форк закреплён` сверяйте с `replace` в `core/go.mod` на теге: если пин другой, подставьте его (запишите в отклонения).
 
    **`vcs.modified` — только `INFO`**, не `WARN` и не `FAIL`: `true` у всех трёх ядер ожидаемо. Перед сборкой оба workflow выполняют `go mod tidy` с `GOFLAGS=-mod=mod` (так подтягивается приватный форк sing-box; `release-windows.yml`, `release-linux.yml`), а это правит `go.mod` и `go.sum`; Linux-сборка ещё копирует `ui/dist` в `core/internal/web/dist`. Дерево поэтому считается изменённым. Обязательно совпадение `vcs.revision` с коммитом тега.
 
-   **Флаг версии `-X …/internal/version.Version=<версия>` здесь не проверяется.** Оба workflow передают его через `-ldflags`, но при `-trimpath` Go не записывает `-ldflags` в метаданные сборки (go.dev/issue/52372), поэтому `go version -m` его не показывает, и проверка «версия в ldflags» не может быть `True` (ложный `FAIL`, проверено на релизе). Версию доказывают: шаг 9 (строка версии в бинарнике), шаг 16 (Linux-ядро в WSL, `coreVersion` = `0.9.0`) и A07 (Windows-ядро из этого же ZIP: `coreVersion` из `GetStatus`, часть А шаг `status.initial` и часть Б `ci_smoke.sh`).
+   **Флаг версии `-X …/internal/version.Version=<версия>` здесь не проверяется.** Оба workflow передают его через `-ldflags`, но при `-trimpath` Go не записывает `-ldflags` в метаданные сборки (go.dev/issue/52372), поэтому `go version -m` его не показывает, и проверка «версия в ldflags» не может быть `True` (ложный `FAIL`, проверено на релизе). Версию доказывают: шаг 9 (строка версии в бинарнике), шаг 16 (Linux-ядро в WSL, `coreVersion` = `0.9.1`) и A07 (Windows-ядро из этого же ZIP: `coreVersion` из `GetStatus`, часть А шаг `status.initial` и часть Б `ci_smoke.sh`).
 
 9. Ядро из ZIP — честная проверка версии без запуска сервера: строка версии в двоичном файле.
 
@@ -179,9 +179,9 @@ $text = [Text.Encoding]::ASCII.GetString($bytes)
 "версия $ver найдена в ядре: " + $text.Contains($ver)
 ```
 
-   Ожидается `True`. Это предварительная проверка; обязательная — `coreVersion` через API в A07 (часть А шаг `status.initial` и часть Б `ci_smoke.sh`): если там не `0.9.0`, A07 даёт `FAIL` (`major`).
+   Ожидается `True`. Это предварительная проверка; обязательная — `coreVersion` через API в A07 (часть А шаг `status.initial` и часть Б `ci_smoke.sh`): если там не `0.9.1`, A07 даёт `FAIL` (`major`).
 
-10. Подписи Authenticode. В версии 0.9.0 сборки не подписаны (если это изменится — улучшение) (заметки к выпуску: «Сборки не подписаны», SmartScreen предупредит); цель шага — зафиксировать текущее состояние, а не требовать подпись.
+10. Подписи Authenticode. В версии 0.9.1 сборки не подписаны (если это изменится — улучшение) (заметки к выпуску: «Сборки не подписаны», SmartScreen предупредит); цель шага — зафиксировать текущее состояние, а не требовать подпись.
 
 ```powershell
 foreach ($f in $setup, (Join-Path $env:LAVRAY_PORTABLE 'LAVRay.exe'), $core) {
@@ -191,24 +191,24 @@ foreach ($f in $setup, (Join-Path $env:LAVRAY_PORTABLE 'LAVRay.exe'), $core) {
 
     Ожидается: `NotSigned` для всех трёх. `Valid` (если владелец подписал сборку) — не ошибка, это улучшение: запишите издателя `(Get-AuthenticodeSignature $f).SignerCertificate.Subject`. `HashMismatch`, `NotTrusted`, `UnknownError` — `major`.
 
-11. Подписи minisign (если среди ассетов есть файлы `*.minisig`; в версии 0.9.0 их нет: задание `sign` пропускается без ключей, подпись метаданных и установщика появится после церемонии ключей).
+11. Подписи minisign (если среди ассетов есть файлы `*.minisig`; в версии 0.9.1 их нет: задание `sign` пропускается без ключей, подпись метаданных и установщика появится после церемонии ключей).
 
 ```powershell
 $sigs = Get-ChildItem $dir -Filter '*.minisig' -ErrorAction SilentlyContinue
-if (-not $sigs) { 'minisig: нет (ожидаемо для 0.9.0, ключей подписи ещё нет) -> SKIPPED' } else { $sigs | Select-Object Name, Length }
+if (-not $sigs) { 'minisig: нет (ожидаемо для 0.9.1, ключей подписи ещё нет) -> SKIPPED' } else { $sigs | Select-Object Name, Length }
 ```
 
-    Ожидается для 0.9.0: `minisig: нет ... SKIPPED`. Если подписи есть, проверьте каждую `minisign -Vm <файл> -P <публичный ключ из SECURITY.md>`; публичный ключ берите из репозитория (`docs/SECURITY.md`), не из релиза.
+    Ожидается для 0.9.1: `minisig: нет ... SKIPPED`. Если подписи есть, проверьте каждую `minisign -Vm <файл> -P <публичный ключ из SECURITY.md>`; публичный ключ берите из репозитория (`docs/SECURITY.md`), не из релиза.
 
-12. Зеркало в платформенном репозитории (необязательно; нужен доступ к приватному `lavray-windows`).
+12. Копия релиза в основном репозитории `lavray` (необязательно; он приватный, нужен вход `gh`). Основной источник ассетов теперь публичный `lavray-windows` (шаги 2–4), поэтому этот шаг только сверяет размеры, если копия есть.
 
 ```powershell
-$mirror = gh release view "v$ver" -R anatolijlaptev1991-ctrl/lavray-windows --json assets 2>&1
+$mirror = gh release view "v$ver" -R $env:LAVRAY_REPO --json assets 2>&1
 "mirror exit=$LASTEXITCODE"
 if ($LASTEXITCODE -eq 0) { ($mirror | ConvertFrom-Json).assets | Select-Object name, size | Format-Table -AutoSize | Out-String }
 ```
 
-    Ожидается: либо те же три Windows-ассета с теми же размерами (Linux-ассеты в платформенный репозиторий не копируются), либо `release not found`/нет доступа. Второе — `SKIPPED` с причиной, не `FAIL`. Совпадение размеров при несовпадении сумм — `major`.
+    Ожидается: либо те же ассеты с теми же размерами, что в шагах 2–4, либо `release not found`/нет доступа (копии в `lavray` может не быть). Второе — `SKIPPED` с причиной, не `FAIL`. Совпадение размеров при несовпадении сумм — `major`.
 
 13. Linux-ассеты: заголовки ELF (архитектура) и размеры. Ядра собраны для `linux/amd64` и `linux/arm64`; файл не должен быть переименованным Windows-бинарником.
 
@@ -303,12 +303,12 @@ $a = (($dir -replace '^C:', '/mnt/c') -replace '\\', '/') + '/lavray-core-linux-
 wsl -e bash $w $a 2>$null
 ```
 
-    Ожидается: `usage exit=2 :: использование: lavray-core serve --listen-socket <path> …`, `ready: yes`, JSON статуса с полем `coreVersion`, строка `healthz=200 no-auth=401`. **`coreVersion` обязан быть `0.9.0`.** У Linux-ядра `release-linux.yml` не передаёт флаг `-X …/internal/version.Version`, поэтому версия берётся из константы `core/internal/version/version.go` (на `773b4e8` — `0.4.0`): если на теге константу не подняли, шаг даёт `FAIL` (`major`: Linux-ядро выдаёт чужую версию, а сравнение версий обновлений идёт по ней). Скрипт для `arm64` не запускается (нет эмуляции): для него остаются шаги 13 и 14. Нет WSL — `BLOCKED` для этого шага (`wsl --status`).
+    Ожидается: `usage exit=2 :: использование: lavray-core serve --listen-socket <path> …`, `ready: yes`, JSON статуса с полем `coreVersion`, строка `healthz=200 no-auth=401`. **`coreVersion` обязан быть `0.9.1`.** У Linux-ядра `release-linux.yml` не передаёт флаг `-X …/internal/version.Version`, поэтому версия берётся из константы `core/internal/version/version.go` (на `773b4e8` — `0.4.0`): если на теге константу не подняли, шаг даёт `FAIL` (`major`: Linux-ядро выдаёт чужую версию, а сравнение версий обновлений идёт по ней). Скрипт для `arm64` не запускается (нет эмуляции): для него остаются шаги 13 и 14. Нет WSL — `BLOCKED` для этого шага (`wsl --status`).
 
 17. Каталога `meta/` нет, и это не `FAIL`. Ключей подписи пока не создано (церемония ключей у владельца), задание `sign` в `release-windows.yml` завершается успешно, ничего не публикуя; релиз выходит без `.minisig`, а ядро с заглушкой корня отвечает `not_configured` (A13, M12).
 
 ```powershell
-$m = gh api "repos/$repo/contents/meta?ref=gh-pages" 2>&1
+$m = gh api "repos/$($env:LAVRAY_REPO)/contents/meta?ref=gh-pages" 2>&1
 "meta в gh-pages: exit=$LASTEXITCODE"
 $assetsMeta = Get-ChildItem $dir -Recurse -Include 'timestamp.json', 'manifest-*.json', 'root.json' -ErrorAction SilentlyContinue
 "метаданные среди ассетов релиза: " + [bool]$assetsMeta
@@ -320,18 +320,18 @@ $assetsMeta = Get-ChildItem $dir -Recurse -Include 'timestamp.json', 'manifest-*
 
 | № | Критерий | Как проверить |
 |---|---|---|
-| К1 | Релиз `v0.9.0` опубликован и не черновик | шаг 2 (иначе `BLOCKED`) |
+| К1 | Релиз `v0.9.1` опубликован и не черновик | шаг 2 (иначе `BLOCKED`) |
 | К2 | Ровно семь ассетов с именами из двух workflow | `совпадают: True` |
 | К3 | Установщик не больше 25 МБ | шаг 4 |
 | К4 | Суммы совпали: `SHA256SUMS.txt` (2 файла) и `SHA256SUMS-linux.txt` (3 файла, `sha256sum -c`) | `суммы совпали: True`, три `OK` |
 | К5 | В ZIP ровно три файла: `LAVRay.exe`, `LICENSE`, `binaries/lavray-core.exe` | `состав верный: True` |
 | К6 | Оба exe — `Amd64` | шаг 7 |
 | К7 | Ядро: теги из `BUILD_TAGS`, `-trimpath`, без cgo, форк закреплён, ревизия равна коммиту тега (`vcs.modified=true` — `INFO`) | шаг 8, все пять строк `True` |
-| К8 | В Windows-ядре есть строка версии 0.9.0 (шаг 9), а `coreVersion` через API равна `0.9.0` (A07, К6); флаг `-X` через `go version -m` не проверяется: `-trimpath` скрывает `-ldflags` | шаг 9, A07 |
+| К8 | В Windows-ядре есть строка версии 0.9.1 (шаг 9), а `coreVersion` через API равна `0.9.1` (A07, К6); флаг `-X` через `go version -m` не проверяется: `-trimpath` скрывает `-ldflags` | шаг 9, A07 |
 | К9 | Подписи: `NotSigned` или `Valid`, без `HashMismatch`/`NotTrusted` | шаг 10 |
 | К10 | Linux-ядра: ELF нужной архитектуры, теги `BUILD_TAGS` + `with_webui` точно, `trimpath`, без cgo, `vcs.revision` равен коммиту тега | шаги 13–14 |
 | К11 | `ui-dist.tar.gz`: `index.html` есть, все ссылки на `assets/` разрешаются, карт нет | шаг 15 |
-| К12 | Linux-ядро запускается (справка с кодом 2, `GetStatus`, `healthz=200`, без токена `401`) и сообщает `coreVersion = 0.9.0` | шаг 16 (`BLOCKED` без WSL) |
+| К12 | Linux-ядро запускается (справка с кодом 2, `GetStatus`, `healthz=200`, без токена `401`) и сообщает `coreVersion = 0.9.1` | шаг 16 (`BLOCKED` без WSL) |
 | К13 | Отсутствие `meta/` зафиксировано и не считается провалом | шаг 17 |
 
 Если релиз не опубликован, итог файла `BLOCKED`, а не `FAIL`; репетиция на `v0.3.0` фиксируется в «Отклонениях».
@@ -342,7 +342,7 @@ $assetsMeta = Get-ChildItem $dir -Recurse -Include 'timestamp.json', 'manifest-*
 
 ## Откат / уборка
 
-Ничего системного не менялось. Скачанные файлы остаются нужными для A07, A10, A11, M01: не удаляйте `assets\0.9.0`, `assets\0.3.0` и `portable\0.9.0` до конца прогона. Финальная уборка — раздел 10 файла `01-ENVIRONMENT.md`.
+Ничего системного не менялось. Скачанные файлы остаются нужными для A07, A10, A11, M01: не удаляйте `assets\0.9.1`, `assets\0.3.0` и `portable\0.9.1` до конца прогона. Финальная уборка — раздел 10 файла `01-ENVIRONMENT.md`.
 
 ## Отчёт
 

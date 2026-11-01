@@ -27,12 +27,12 @@ C:\lavray-test\
   env.ps1            переменные окружения (создаёт оркестратор, раздел 4)
   guard.ps1          страж «тестовый ПК» (раздел 3)
   TESTPC_OK          маркер: страж пройден и владелец подтвердил (создаёт guard.ps1)
-  plan\              клон ветки main с документами docs\test-plan (план исправляется после выхода тега; код на main равен v0.9.0)
-  src\               клон продукта, переключённый на тег v0.9.0, ТОЛЬКО ЧТЕНИЕ
+  plan\              клон ветки main с документами docs\test-plan (план исправляется после выхода тега; код на main равен v0.9.1)
+  src\               клон продукта, переключённый на тег v0.9.1, ТОЛЬКО ЧТЕНИЕ
   wt\<ID>\           рабочая копия (git worktree) для файла <ID>; создаёт сам файл
-  assets\0.9.0\      скачанные ассеты релиза под тестом (семь файлов, раздел 7)
+  assets\0.9.1\      скачанные ассеты релиза под тестом (семь файлов, раздел 7)
   assets\0.3.0\      ассеты предыдущего релиза (для проверки обновления в A10, M01)
-  portable\0.9.0\    распакованный ZIP (LAVRay.exe и binaries\lavray-core.exe)
+  portable\0.9.1\    распакованный ZIP (LAVRay.exe и binaries\lavray-core.exe)
   baseline\          снимки состояния системы до тестов (раздел 8)
   tmp\<ID>\          временные данные файла <ID>
   results\           отчёты <ID>.md и вложения <ID>\ ; итоговая SUMMARY.md
@@ -134,11 +134,13 @@ PASS: код выхода `0` и существует файл `C:\lavray-test\T
 # env.ps1: переменные плана. Секреты здесь НЕ хранятся.
 $env:LAVRAY_TP_ROOT   = 'C:\lavray-test'
 $env:LAVRAY_REPO      = 'anatolijlaptev1991-ctrl/lavray'
-$env:LAVRAY_VERSION   = '0.9.0'
+# Релизы (ассеты) лежат в публичном lavray-windows: gh release download работает без входа. Клон lavray приватный: gh auth login.
+$env:LAVRAY_RELEASES_REPO = 'anatolijlaptev1991-ctrl/lavray-windows'
+$env:LAVRAY_VERSION   = '0.9.1'
 $env:LAVRAY_FROM_VERSION = '0.3.0'
-# Под тестом всегда РЕЛИЗ v0.9.0 (<TAG> в документах плана = v0.9.0). План берётся с main, где его исправляют уже после тега.
+# Под тестом всегда РЕЛИЗ v0.9.1 (<TAG> в документах плана = v0.9.1). План берётся с main, где его исправляют уже после тега.
 # main у продукта - только запасной вариант на случай, когда тег ещё не выпущен; тогда в отчёте указывайте фактический коммит.
-$env:LAVRAY_REF       = 'v0.9.0'
+$env:LAVRAY_REF       = 'v0.9.1'
 $env:LAVRAY_REF_FALLBACK = 'main'
 $env:LAVRAY_SRC       = Join-Path $env:LAVRAY_TP_ROOT 'src'
 $env:LAVRAY_PLAN      = Join-Path $env:LAVRAY_TP_ROOT 'plan'
@@ -174,7 +176,7 @@ function Test-TestPc {
 | `LAVRAY_TESTPC_CONFIRMED` | `YES-DISPOSABLE`: «это тестовый ПК» | страж (раздел 3) |
 | `LAVRAY_TEST_SUB_URL` | ссылка тестовой подписки провайдера (секрет) | M02, часть шагов M03 |
 | `LAVRAY_ALLOW_TUN` | `1`: разрешить включение TUN на этом ПК (сеть пропадёт на время теста) | часть D файла A11, M03 (TUN) |
-| `GH_TOKEN` | токен GitHub только для чтения репозитория; либо владелец заранее выполнил `gh auth login` | клонирование и скачивание ассетов |
+| `GH_TOKEN` | токен GitHub только для чтения репозитория; либо владелец заранее выполнил `gh auth login` | клонирование приватного `lavray` (скачивание ассетов из публичного `lavray-windows` входа не требует) |
 
 Проверка наличия без печати значений:
 
@@ -186,7 +188,7 @@ foreach ($n in 'LAVRAY_TESTPC_CONFIRMED','LAVRAY_TEST_SUB_URL','LAVRAY_ALLOW_TUN
 
 ## 5. Установка инструментов
 
-Репозиторий `lavray` приватный, поэтому доступ к нему нужен до любых загрузок: если `gh auth status` завершается кодом, отличным от нуля, и `GH_TOKEN` не задан, прогон получает итог `BLOCKED` с просьбой к владельцу выполнить `gh auth login` (оркестратор не вводит и не запрашивает пароли и токены).
+Репозиторий `lavray` приватный, поэтому доступ к нему нужен для клонирования `src\` и `plan\` (на них держатся почти все файлы): если `gh auth status` завершается кодом, отличным от нуля, и `GH_TOKEN` не задан, прогон получает итог `BLOCKED` с просьбой к владельцу выполнить `gh auth login`. Релизы публикуются в публичном `anatolijlaptev1991-ctrl/lavray-windows`: `gh release download v0.9.1 --repo anatolijlaptev1991-ctrl/lavray-windows` работает и без входа (оркестратор не вводит и не запрашивает пароли и токены).
 
 ```powershell
 gh auth status
@@ -267,9 +269,9 @@ git -C $env:LAVRAY_SRC checkout --detach $env:LAVRAY_REF
 git -C $env:LAVRAY_SRC status --short
 ```
 
-PASS: `HEAD клона` и `коммит v0.9.0` — одинаковые 40 шестнадцатеричных символов, `core.autocrlf: false`, `status --short` пуст. Во всех файлах плана коммит под тестом получают из `Get-RefCommit` (то есть `git rev-parse "v0.9.0^{commit}"`), а не из `HEAD`. По умолчанию проверяется тег `v0.9.0`. Если его нет, блок выше берёт запасной вариант `main` (`LAVRAY_REF_FALLBACK`): это отклонение, его и фактический коммит (`rev-parse HEAD`) записывают в отчёт; ассеты релиза при этом недоступны, и файлы с установщиком и ZIP получают `BLOCKED`.
+PASS: `HEAD клона` и `коммит v0.9.1` — одинаковые 40 шестнадцатеричных символов, `core.autocrlf: false`, `status --short` пуст. Во всех файлах плана коммит под тестом получают из `Get-RefCommit` (то есть `git rev-parse "v0.9.1^{commit}"`), а не из `HEAD`. По умолчанию проверяется тег `v0.9.1`. Если его нет, блок выше берёт запасной вариант `main` (`LAVRAY_REF_FALLBACK`): это отклонение, его и фактический коммит (`rev-parse HEAD`) записывают в отчёт; ассеты релиза при этом недоступны, и файлы с установщиком и ZIP получают `BLOCKED`.
 
-Документы плана берутся отдельным клоном **ветки `main`**: исправления плана вносятся после выхода тега, а исходный код на `main` равен `v0.9.0` (отличается только `docs\test-plan`). Продукт в `src\` остаётся только для чтения и стоит на теге; тестируется всегда релиз `v0.9.0` (ассеты скачиваются с релиза, сравнения коммитов идут с `Get-RefCommit`, не с `HEAD` клона плана). В быстром старте (`00-README.md`, раздел 9) владелец клонирует план так же:
+Документы плана берутся отдельным клоном **ветки `main`**: исправления плана вносятся после выхода тега, а исходный код на `main` равен `v0.9.1` (отличается только `docs\test-plan`). Продукт в `src\` остаётся только для чтения и стоит на теге; тестируется всегда релиз `v0.9.1` (ассеты скачиваются с релиза, сравнения коммитов идут с `Get-RefCommit`, не с `HEAD` клона плана). В быстром старте (`00-README.md`, раздел 9) владелец клонирует план так же:
 
 ```powershell
 gh repo clone $env:LAVRAY_REPO $env:LAVRAY_PLAN -- -c core.autocrlf=false
@@ -303,16 +305,16 @@ git -C $env:LAVRAY_SRC worktree add --detach C:\lavray-test\wt\A02 $env:LAVRAY_R
 ```powershell
 . C:\lavray-test\env.ps1
 New-Item -ItemType Directory -Force -Path $env:LAVRAY_ASSETS, $env:LAVRAY_ASSETS_OLD | Out-Null
-gh release download "v$($env:LAVRAY_VERSION)" -R $env:LAVRAY_REPO -D $env:LAVRAY_ASSETS --clobber
+gh release download "v$($env:LAVRAY_VERSION)" --repo $env:LAVRAY_RELEASES_REPO -D $env:LAVRAY_ASSETS --clobber
 "новая версия: код $LASTEXITCODE"
-gh release download "v$($env:LAVRAY_FROM_VERSION)" -R $env:LAVRAY_REPO -D $env:LAVRAY_ASSETS_OLD --clobber
+gh release download "v$($env:LAVRAY_FROM_VERSION)" --repo $env:LAVRAY_RELEASES_REPO -D $env:LAVRAY_ASSETS_OLD --clobber
 "прежняя версия: код $LASTEXITCODE"
 Get-ChildItem $env:LAVRAY_ASSETS, $env:LAVRAY_ASSETS_OLD | Select-Object Directory, Name, Length
 ```
 
-Состояние: финальный релиз — **v0.9.0** (семь файлов выше). Прежние релизы `v0.1.0`, `v0.2.0`, `v0.2.1`, `v0.3.0` опубликованы; `v0.3.0` нужен как «прежняя версия» для проверки обновления поверх (установщик 16 518 811 байт, ZIP 22 911 985 байт, `SHA256SUMS.txt` 191 байт; реальная база этой версии — схема SQLite 4). Поэтому:
+Состояние: финальный релиз — **v0.9.1** (семь файлов выше; репозиторий релизов `lavray-windows` публичный). Прежние релизы `v0.2.0`, `v0.2.1`, `v0.3.0` опубликованы (`v0.1.0` удалён); `v0.3.0` нужен как «прежняя версия» для проверки обновления поверх (установщик 16 518 811 байт, ZIP 22 911 985 байт, `SHA256SUMS.txt` 191 байт; реальная база этой версии — схема SQLite 4). Поэтому:
 
-- если скачивание `v0.9.0` завершилось ошибкой `release not found`, это `BLOCKED` для A06, A10, A11, M01 (шаги с установщиком и ZIP версии 0.9.0), а не `FAIL`. Кто снимает: владелец (тег `v0.9.0`, запуск `release-windows` и `release-linux`);
+- если скачивание `v0.9.1` завершилось ошибкой `release not found`, это `BLOCKED` для A06, A10, A11, M01 (шаги с установщиком и ZIP версии 0.9.1), а не `FAIL`. Кто снимает: владелец (тег `v0.9.1`, запуск `release-windows` и `release-linux`);
 - пока релиза нет, оркестратор может запускать файлы A01–A05, A07, A08, а A06, A10, A11, M-файлы с установщиком отмечать `BLOCKED`.
 
 Распаковка portable (после проверки сумм в A06; допустимо и до неё, если файл не меняется):

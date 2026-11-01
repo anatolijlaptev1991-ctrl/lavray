@@ -1,24 +1,24 @@
-# A10. Установщик NSIS: тихая установка, обновление 0.3.0 → 0.9.0 поверх, миграция базы, удаление
+# A10. Установщик NSIS: тихая установка, обновление 0.3.0 → 0.9.1 поверх, миграция базы, удаление
 
 | Поле | Значение |
 |---|---|
 | ID | A10 |
 | Слой | авто |
 | Время | 12–18 минут |
-| Зависимости | A06 (ассеты скачаны и сверены: `assets\0.9.0` и `assets\0.3.0`), `01-ENVIRONMENT.md`, разделы 3–7; Python 3.12 (модуль `sqlite3`) для проверки базы данных. Выполняется **последовательно**, после A04 и A11 (группа S в `00-README.md`) |
+| Зависимости | A06 (ассеты скачаны и сверены: `assets\0.9.1` и `assets\0.3.0`), `01-ENVIRONMENT.md`, разделы 3–7; Python 3.12 (модуль `sqlite3`) для проверки базы данных. Выполняется **последовательно**, после A04 и A11 (группа S в `00-README.md`) |
 | Опасность | **установка**: пишет в `C:\Program Files\LAVRay`, `HKLM\...\Uninstall`, меню «Пуск», общий рабочий стол (`C:\Users\Public\Desktop\LAVRay.lnk`), `HKCU\...\Run` (имитация автозапуска). Только тестовый ПК |
 
 ## Цель
 
-Проверить жизненный цикл установленной версии без окна: тихая установка прежней версии 0.3.0, обновление поверх неё версией 0.9.0 с сохранением данных и автозапуска, удаление с проверкой «хвостов». Покрывает: «Установка поверх 0.3.0 сохраняет серверы, подписки, настройки и автозапуск» (заметки к выпуску 0.9.0), хук удаления `shell/windows/hooks.nsh` (автозапуск снимается при удалении, но не при обновлении), раздел «Установка» требований плана Ф3.0 (поведение `/S`, per-machine установка, установка более старой версии), бюджет размера установщика. **Миграция базы данных**: на данных, созданных настоящим ядром 0.3.0 (схема SQLite 4; у более ранних прежних версий 2 или 3), ядро 0.9.0 доводит схему до **6** (добавляются таблицы `web_users` и `import_map`; таблица `sessions` есть с схемы 4), не теряя серверов и настроек; повторный запуск ничего не меняет; ядро 0.3.0 на базе новой схемы отказывается стартовать (защита от «базы из будущего»). Версия схемы хранится в таблице `schema_version` (`SELECT MAX(version) FROM schema_version`), а не в `PRAGMA user_version`.
+Проверить жизненный цикл установленной версии без окна: тихая установка прежней версии 0.3.0, обновление поверх неё версией 0.9.1 с сохранением данных и автозапуска, удаление с проверкой «хвостов». Покрывает: «Установка поверх 0.3.0 сохраняет серверы, подписки, настройки и автозапуск» (заметки к выпуску 0.9.0), хук удаления `shell/windows/hooks.nsh` (автозапуск снимается при удалении, но не при обновлении), раздел «Установка» требований плана Ф3.0 (поведение `/S`, per-machine установка, установка более старой версии), бюджет размера установщика. **Миграция базы данных**: на данных, созданных настоящим ядром 0.3.0 (схема SQLite 4; у более ранних прежних версий 2 или 3), ядро 0.9.1 доводит схему до **6** (добавляются таблицы `web_users` и `import_map`; таблица `sessions` есть с схемы 4), не теряя серверов и настроек; повторный запуск ничего не меняет; ядро 0.3.0 на базе новой схемы отказывается стартовать (защита от «базы из будущего»). Версия схемы хранится в таблице `schema_version` (`SELECT MAX(version) FROM schema_version`), а не в `PRAGMA user_version`.
 
-Внимание: поведение тихого NSIS-установщика Tauri при запущенном приложении и при понижении версии в плане помечено как неисследованное (риск «Поведение тихой установки NSIS неизвестно»). Шаги 8 и 9 поэтому только **фиксируют** наблюдение и не влияют на итог файла.
+Внимание: поведение тихого NSIS-установщика Tauri при запущенном приложении и при понижении версии исследовано на одноразовом раннере (workflow `nsis-recon`, `docs/UPDATE-SYSTEM.md`, §12.7: Restart Manager завершает оболочку, понижение разрешено). На `v0.9.0` установщик останавливал только оболочку, ядро и каталог установки при удалении работающего приложения могли остаться, а ключ `HKLM\SOFTWARE\LAVRay` не забывался (дефект D-2, известно в 0.9.0, исправлено в 0.9.1). С `v0.9.1` установщик и удалитель останавливают оболочку и ждут выхода ядра: шаг 8 проверяется критерием К12, удаление работающего приложения (шаг 10) критерием К9. Шаг 9 (понижение) остаётся наблюдением и не влияет на итог файла.
 
 ## Предусловия
 
 - **Тестовый ПК подтверждён**: `Test-TestPc` (из `env.ps1`) возвращает `True` — маркер `C:\lavray-test\TESTPC_OK` есть, создан на этом ПК и не старше 30 суток; иначе итог `BLOCKED`.
 - PowerShell запущен **от имени администратора** (установщик на уровне компьютера). Проверка в шаге 1; без прав итог `BLOCKED` (тихая установка не может показать запрос UAC).
-- Скачаны `assets\0.3.0` и `assets\0.9.0` с проверенными суммами (A06). Без релиза 0.9.0 — `BLOCKED`.
+- Скачаны `assets\0.3.0` и `assets\0.9.1` с проверенными суммами (A06). Без релиза 0.9.1 — `BLOCKED`.
 - LAVRay и `lavray-core` не запущены (страж из `01-ENVIRONMENT.md`).
 - Программа не установлена до теста. Если установлена, итог `BLOCKED`: тест не должен затирать чужую установку.
 
@@ -129,17 +129,17 @@ python -I "$t\a10_data.py" seed $coreOld $dbData 2>&1 | Tee-Object -FilePath C:\
 
    Ожидается: четыре строки `PASS` (`seed.profiles_created`, `seed.old_schema_is_2_3_or_4`, `seed.new_tables_absent`, `seed.port_saved`), `схема прежней версии: 4 (0.3.0: 4)`, `seed exit=0`.
 
-5. Обновление: установка 0.9.0 поверх 0.3.0.
+5. Обновление: установка 0.9.1 поверх 0.3.0.
 
 ```powershell
 $p = Start-Process -FilePath $setupNew -ArgumentList '/S' -Wait -PassThru
-"обновление до 0.9.0: код $($p.ExitCode)"
+"обновление до 0.9.1: код $($p.ExitCode)"
 $u = @(Get-LavrayUninstall)
 "записей об установке: $($u.Count)"
 $u | Format-List
 ```
 
-   Ожидается: код `0`; ровно **одна** запись об установке, `Version = 0.9.0` (две записи — прежняя не заменена, `FAIL`).
+   Ожидается: код `0`; ровно **одна** запись об установке, `Version = 0.9.1` (две записи — прежняя не заменена, `FAIL`).
 
 6. После обновления: файлы той же версии, что в portable; данные и автозапуск сохранены.
 
@@ -161,16 +161,16 @@ $runAfter = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\R
 
    Ожидается: обе строки «совпадает с portable: True» (установщик и ZIP собираются из одних и тех же файлов; расхождение хэшей — `WARN`, запишите оба хэша), маркер на месте и не изменён, автозапуск сохранён (заметки 0.9.0: «Установка поверх 0.3.0 сохраняет серверы, подписки, настройки и автозапуск»; хук удаления не должен срабатывать при обновлении), ярлык в меню «Пуск» и ярлык рабочего стола `C:\Users\Public\Desktop\LAVRay.lnk` на месте, задач планировщика нет (мы их не создавали).
 
-   База данных после обновления. Ядро 0.9.0 из установки открывает **ту же** базу, проверяются версия схемы, таблицы, данные и экспорт копии `.lavbk`:
+   База данных после обновления. Ядро 0.9.1 из установки открывает **ту же** базу, проверяются версия схемы, таблицы, данные и экспорт копии `.lavbk`:
 
 ```powershell
-$coreNew = Join-Path $pf 'binaries\lavray-core.exe'    # ядро 0.9.0 после обновления поверх
+$coreNew = Join-Path $pf 'binaries\lavray-core.exe'    # ядро 0.9.1 после обновления поверх
 python -I "$t\a10_data.py" verify $coreNew $dbData $env:LAVRAY_VERSION 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A10\verify.txt
 "verify exit=$LASTEXITCODE"
 python -I "$t\a10_data.py" state $dbData
 ```
 
-   Ожидается: двенадцать строк `PASS` (`verify.core_version`, `verify.profiles_kept`, `verify.fields_kept`, `verify.custom_fields_stay_unconfirmed`, `verify.setting_kept`, `verify.backup_export_works`, `verify.schema_is_6`, `verify.new_tables_created`, `verify.old_tables_kept`, `verify.rows_kept`, `verify.integrity_ok`, `verify.second_start_idempotent`) и `verify exit=0`; `state` печатает `"schema": 6`, `"versions": [1, 2, 3, 4, 5, 6]`, таблицы `web_users` и `import_map` и `"integrity": "ok"`. Таблица `schema_version` сохраняет строки прежних миграций (миграции только добавляются). Экспорт зашифрованной копии (`BackupService`) работает на мигрированной базе; старого открытого экспорта настроек в JSON в 0.9.0 нет (это интерфейс, M01 и M11)
+   Ожидается: двенадцать строк `PASS` (`verify.core_version`, `verify.profiles_kept`, `verify.fields_kept`, `verify.custom_fields_stay_unconfirmed`, `verify.setting_kept`, `verify.backup_export_works`, `verify.schema_is_6`, `verify.new_tables_created`, `verify.old_tables_kept`, `verify.rows_kept`, `verify.integrity_ok`, `verify.second_start_idempotent`) и `verify exit=0`; `state` печатает `"schema": 6`, `"versions": [1, 2, 3, 4, 5, 6]`, таблицы `web_users` и `import_map` и `"integrity": "ok"`. Таблица `schema_version` сохраняет строки прежних миграций (миграции только добавляются). Экспорт зашифрованной копии (`BackupService`) работает на мигрированной базе; старого открытого экспорта настроек в JSON в 0.9.1 нет (это интерфейс, M01 и M11)
 
 7. Размер установщика и подпись (справочно, повторяет A06).
 
@@ -195,9 +195,9 @@ Start-Sleep -Seconds 10
 Get-Process LAVRay, lavray-shell, lavray-core -ErrorAction SilentlyContinue | Stop-Process -Force
 ```
 
-   Запишите все четыре значения в таблицу «Наблюдения» отчёта (установщик остановил приложение, оставил его, завершился с ошибкой, перезапустил его). Любой исход допустим для этого шага. Если приложение в `--tray` не стартовало (процесса нет уже до установки), запишите это отдельным наблюдением: нужна диагностика запуска.
+   Запишите все четыре значения в таблицу «Наблюдения» отчёта (установщик остановил приложение, оставил его, завершился с ошибкой, перезапустил его). На `v0.9.0` любой исход допустим (ядро могло остаться). На `v0.9.1` и позже (D-2) исход определён (К12): код `0`, «процесс lavray-shell жив после установки: False», «процессов lavray-core: 0» (установщик остановил оболочку и дождался выхода ядра; само приложение он не перезапускает). Если приложение в `--tray` не стартовало (процесса нет уже до установки), запишите это отдельным наблюдением: нужна диагностика запуска.
 
-9. Наблюдение: установка прежней версии поверх новой (понижение, нужно для отката в плане Ф3.0), затем возврат к 0.9.0 для чистого удаления.
+9. Наблюдение: установка прежней версии поверх новой (понижение, нужно для отката в плане Ф3.0), затем возврат к 0.9.1 для чистого удаления.
 
 ```powershell
 $p = Start-Process -FilePath $setupOld -ArgumentList '/S' -Wait -PassThru
@@ -205,7 +205,7 @@ $v = (@(Get-LavrayUninstall) | ForEach-Object Version) -join ','
 "понижение до 0.3.0: код $($p.ExitCode); версия в реестре: $v"
 ```
 
-   База при понижении (на **копии** базы схемы 6; боевой каталог не трогается). Пока установлено ядро 0.3.0, до возврата к 0.9.0:
+   База при понижении (на **копии** базы схемы 6; боевой каталог не трогается). Пока установлено ядро 0.3.0, до возврата к 0.9.1:
 
 ```powershell
 python -I "$t\a10_data.py" probe (Join-Path $pf 'binaries\lavray-core.exe') $dbData 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A10\probe.txt
@@ -217,10 +217,10 @@ python -I "$t\a10_data.py" probe (Join-Path $pf 'binaries\lavray-core.exe') $dbD
 ```powershell
 $p = Start-Process -FilePath $setupNew -ArgumentList '/S' -Wait -PassThru
 $v = (@(Get-LavrayUninstall) | ForEach-Object Version) -join ','
-"возврат к 0.9.0: код $($p.ExitCode); версия в реестре: $v"
+"возврат к 0.9.1: код $($p.ExitCode); версия в реестре: $v"
 ```
 
-   Запишите коды и версии в «Наблюдения». Критерии: после возврата ровно одна запись об установке и `Version = 0.9.0` (К8); проверка базы выше (К11).
+   Запишите коды и версии в «Наблюдения». Критерии: после возврата ровно одна запись об установке и `Version = 0.9.1` (К8); проверка базы выше (К11).
 
 10. Удаление и «хвосты».
 
@@ -228,6 +228,13 @@ $v = (@(Get-LavrayUninstall) | ForEach-Object Version) -join ','
 $u = @(Get-LavrayUninstall)[0]
 $u.Uninstall
 $un = Join-Path $pf 'uninstall.exe'
+if ($env:LAVRAY_REF -ne 'v0.9.0') {
+  # С 0.9.1 (D-2) удаляем при ЗАПУЩЕННОМ приложении: удалитель обязан остановить оболочку и ядро и ничего не оставить.
+  $app = Start-Process -FilePath (Join-Path $pf 'lavray-shell.exe') -ArgumentList '--tray' -PassThru
+  Start-Sleep -Seconds 15
+  "оболочка работает перед удалением: " + [bool](Get-Process lavray-shell -ErrorAction SilentlyContinue)
+  "ядро работает перед удалением:     " + [bool](Get-Process lavray-core -ErrorAction SilentlyContinue)
+}
 $p = Start-Process -FilePath $un -ArgumentList '/S' -PassThru
 # удалитель NSIS может перезапустить себя из временного каталога и вернуть управление сразу: ждём результат опросом
 $sw = [Diagnostics.Stopwatch]::StartNew()
@@ -237,6 +244,7 @@ while ($sw.Elapsed.TotalSeconds -lt 90 -and ((Test-Path (Join-Path $pf 'lavray-s
 "binaries\lavray-core.exe удалён: " + (-not (Test-Path (Join-Path $pf 'binaries\lavray-core.exe')))
 "каталог программы удалён:     " + (-not (Test-Path $pf))
 "запись об установке удалена:  " + (-not [bool](Get-LavrayUninstall))
+"ключ HKLM\SOFTWARE\LAVRay удалён: " + (-not (Test-Path 'HKLM:\SOFTWARE\LAVRay'))
 "ярлыков нет:                  " + (-not [bool](Get-ChildItem "$env:ProgramData\Microsoft\Windows\Start Menu\Programs", "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter 'LAVRay*.lnk' -ErrorAction SilentlyContinue))
 "ярлык рабочего стола удалён:  " + (-not (Test-Path $desk))
 "автозапуск Run снят:          " + (-not [bool]((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).LAVRay))
@@ -251,21 +259,23 @@ while ($sw.Elapsed.TotalSeconds -lt 90 -and ((Test-Path (Join-Path $pf 'lavray-s
     |---|---|
     | Файлы в `C:\Program Files\LAVRay`, сам каталог | удалены |
     | Запись в `Uninstall`, ярлык «Пуск», ярлык `C:\Users\Public\Desktop\LAVRay.lnk` на общем рабочем столе | удалены |
+    | Ключ производителя `HKLM\SOFTWARE\LAVRay` (в нём запоминался каталог установки) | удалён (хук `NSIS_HOOK_POSTUNINSTALL`, D-2; на v0.9.0 оставался и отправлял следующую тихую установку не в `Program Files`) |
     | Значение `HKCU\...\Run\LAVRay`, задачи планировщика `LAVRay`, `LAVRay-<SID>` | удалены (хук `NSIS_HOOK_POSTUNINSTALL`, не при обновлении) |
     | `%APPDATA%\LAVRay` (серверы, подписки, настройки, `ui-state.json`) | **сохраняются**: удалитель их не знает и пользователь не должен терять данные |
     | `%APPDATA%\io.github.anatolijlaptev1991-ctrl.lavray`, `%LOCALAPPDATA%\io.github.anatolijlaptev1991-ctrl.lavray` (профиль WebView2) | допустимы; удалитель Tauri стирает их только по явной галочке «Удалить данные приложения»; поведение `/S` для этой галочки запишите в «Наблюдения» |
 
-    Ожидается: все строки `True`. Каждая `False` строка про файлы, запись, ярлык, автозапуск, задачи или процессы — `FAIL`.
+    Ожидается: все строки `True`. Каждая `False` строка про файлы, запись, ключ `HKLM\SOFTWARE\LAVRay`, ярлык, автозапуск, задачи или процессы — `FAIL`. На `v0.9.1` и позже удаление идёт при запущенном приложении (блок выше запускает его), и `Program Files\LAVRay` с `HKLM\SOFTWARE\LAVRay` обязаны исчезнуть. На `v0.9.0` блок запуска пропускается; строка про ключ `HKLM\SOFTWARE\LAVRay` там даёт `False` (известный D-2).
 
 11. Что осталось после удаления, для отчёта.
 
 ```powershell
 Get-ChildItem $env:ProgramFiles -Filter 'LAVRay*' -ErrorAction SilentlyContinue
 Get-ChildItem 'C:\Users\Public\Desktop' -Filter 'LAVRay*.lnk' -ErrorAction SilentlyContinue
+"HKLM\SOFTWARE\LAVRay: " + (Test-Path 'HKLM:\SOFTWARE\LAVRay')
 Get-ChildItem $dataDir, $webv[0], $webv[1] -ErrorAction SilentlyContinue | Select-Object FullName, Length -First 20
 ```
 
-    Ожидается: в `Program Files` и на общем рабочем столе (`C:\Users\Public\Desktop`) ничего; из пользовательских данных — только каталоги из таблицы политики.
+    Ожидается: в `Program Files` и на общем рабочем столе (`C:\Users\Public\Desktop`) ничего, `HKLM\SOFTWARE\LAVRay: False`; из пользовательских данных — только каталоги из таблицы политики.
 
 ## Критерии PASS/FAIL
 
@@ -274,16 +284,17 @@ Get-ChildItem $dataDir, $webv[0], $webv[1] -ErrorAction SilentlyContinue | Selec
 | К1 | Шаг 1: права администратора, маркер, чистое исходное состояние | значения |
 | К2 | Шаг 2: тихая установка 0.3.0, код 0, запись `Version = 0.3.0`, три файла | вывод |
 | К3 | Шаг 3: найден ярлык «Пуск» с целью `lavray-shell.exe` и ярлык рабочего стола `C:\Users\Public\Desktop\LAVRay.lnk` | вывод |
-| К4 | Шаг 5: обновление, код 0, **одна** запись, `Version = 0.9.0` | вывод |
+| К4 | Шаг 5: обновление, код 0, **одна** запись, `Version = 0.9.1` | вывод |
 | К5 | Шаг 6: установленные `lavray-shell.exe` и `lavray-core.exe` совпадают с `LAVRay.exe` и `binaries\lavray-core.exe` из portable (при расхождении `WARN`) | `True` |
 | К6 | Шаг 6: данные (маркер) и автозапуск сохранены, ярлыки («Пуск» и рабочий стол) на месте | `True` |
 | К7 | Шаг 7: установщик не больше 25 МБ | значение |
-| К8 | Шаг 9: после возврата одна запись и `Version = 0.9.0` | вывод |
-| К9 | Шаг 10: все строки удаления `True`, включая сохранение данных пользователя | вывод |
+| К8 | Шаг 9: после возврата одна запись и `Version = 0.9.1` | вывод |
+| К9 | Шаг 10: все строки удаления `True`, включая сохранение данных пользователя; с 0.9.1 удаление идёт при запущенном приложении и не оставляет `Program Files\LAVRay` и `HKLM\SOFTWARE\LAVRay` | вывод |
 | К10 | Шаги 4 и 6: база прежней версии (схема 4) после обновления имеет схему **6**, данные и настройки целы, второй запуск ничего не меняет, экспорт `.lavbk` работает | `seed exit=0`, `verify exit=0`, 12 строк `PASS` |
 | К11 | Шаг 9 (наблюдение с проверкой): ядро 0.3.0 не принимает базу схемы 6 или, приняв, не меняет её | `probe exit=0` |
+| К12 | Шаг 8 (с 0.9.1, D-2): тихая установка поверх работающего приложения завершается кодом `0` и останавливает оболочку и ядро (`lavray-shell` и `lavray-core` не живы после установки) | вывод |
 
-Шаги 8 и 9 (кроме К8 и К11) — наблюдения, их исход не меняет итог.
+Шаг 9 (кроме К8 и К11) — наблюдение, его исход не меняет итог. Шаг 8 на `v0.9.0` — наблюдение, на `v0.9.1` и позже — К12.
 
 ## Что собрать
 
@@ -307,6 +318,7 @@ if ($u.Count -gt 0) {
 Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'LAVRay' -ErrorAction SilentlyContinue
 Get-ScheduledTask -TaskName 'LAVRay', 'LAVRay-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
 Remove-Item -LiteralPath 'C:\Users\Public\Desktop\LAVRay.lnk' -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath 'HKLM:\SOFTWARE\LAVRay' -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force 'C:\lavray-test\tmp\A10' -ErrorAction SilentlyContinue
 if (-not $dataExisted -and (Test-Path $dataDir)) { Remove-Item -Recurse -Force $dataDir }
 else { Remove-Item -LiteralPath (Join-Path $dataDir 'a10-marker.txt') -Force -ErrorAction SilentlyContinue }
@@ -315,26 +327,27 @@ foreach ($d in $webv) { if (-not $webvBefore[$d] -and (Test-Path $d)) { Remove-I
 "каталог программы:   " + (Test-Path $pf)
 "автозапуск Run:      " + [bool]((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).LAVRay)
 "ярлык рабочего стола: " + (Test-Path 'C:\Users\Public\Desktop\LAVRay.lnk')
+"ключ HKLM\SOFTWARE\LAVRay: " + (Test-Path 'HKLM:\SOFTWARE\LAVRay')
 ```
 
-Ожидается: четыре строки `False`. Если запись или каталог остались, а удалитель не отработал, удалите вручную `C:\Program Files\LAVRay` и ключ `Uninstall`, найденный `Get-LavrayUninstall` (`Remove-Item -Recurse -Force <Key>`), и запишите это как дефект `major` (удалитель не убрал установку). Если машина виртуальная, откат снимка надёжнее.
+Ожидается: пять строк `False`. Если запись или каталог остались, а удалитель не отработал, удалите вручную `C:\Program Files\LAVRay` и ключ `Uninstall`, найденный `Get-LavrayUninstall` (`Remove-Item -Recurse -Force <Key>`), и запишите это как дефект `major` (удалитель не убрал установку). Если машина виртуальная, откат снимка надёжнее.
 
 Каталоги данных и профиля WebView2 удаляются только если их не было до теста (значения сохранены в шаге 1).
 
 ## Отчёт
 
-`results/A10.md` по `templates/REPORT.md`: статусы 11 шагов, К1–К11, таблица «Наблюдения». Провал К4 (две записи), К6 (потеря данных или автозапуска при обновлении) и К10 (потеря серверов или настроек, схема не дошла до 6, повреждение базы) — `critical`; К9 (оставленные файлы, запись, автозапуск, задачи) — `major`; остальные — `major`/`minor` по вашей оценке.
+`results/A10.md` по `templates/REPORT.md`: статусы 11 шагов, К1–К12, таблица «Наблюдения». Провал К4 (две записи), К6 (потеря данных или автозапуска при обновлении) и К10 (потеря серверов или настроек, схема не дошла до 6, повреждение базы) — `critical`; К9 (оставленные файлы, запись, ключ `HKLM\SOFTWARE\LAVRay`, автозапуск, задачи) и К12 (установщик не остановил ядро) — `major`; остальные — `major`/`minor` по вашей оценке.
 
 ## Скрипт `a10_data.py`
 
 ```python
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""A10 (часть «данные при обновлении»): настоящая база SQLite прежней версии 0.3.0 переживает обновление до 0.9.0.
+"""A10 (часть «данные при обновлении»): настоящая база SQLite прежней версии 0.3.0 переживает обновление до 0.9.1.
 
   python -I a10_data.py seed    <core 0.3.0> <каталог данных>             создать данные прежней версии (схема 2-4; у 0.3.0 - 4)
   python -I a10_data.py state   <каталог данных>                          схема, таблицы, число записей (только чтение)
-  python -I a10_data.py verify  <core 0.9.0> <каталог данных> <версия>    проверки после обновления (схема 6, данные целы)
+  python -I a10_data.py verify  <core 0.9.1> <каталог данных> <версия>    проверки после обновления (схема 6, данные целы)
   python -I a10_data.py probe   <core 0.3.0> <каталог данных>             наблюдение: старое ядро на копии базы новой схемы
 
 Код выхода 0 - все проверки PASS. Секреты не используются: пароль копии тестовый, копия в памяти и на диск не пишется.

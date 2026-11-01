@@ -25,7 +25,7 @@
 
 Единственная запись в систему — шаги 7–8: тест `wininet_roundtrip_on_fake_ras_name` вызывает `InternetSetOptionW` с `INTERNET_OPTION_PER_CONNECTION_OPTION` для имени `LAVRay CI fake RAS entry` (имени нет в телефонной книге RAS, настоящие подключения не затрагиваются).
 
-**Общий системный прокси LAN этот тест на `v0.9.0` не сохраняет.** Известный дефект D-1 («известно в 0.9.0, исправлено в 0.9.1»): на теге v0.9.0 настоящий вызов WinINET стирает `ProxyServer` в `HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings` и оставляет в подразделе `Connections` значение `LAVRay CI fake RAS entry`. Начиная с 0.9.1 тест сам снимает и возвращает четыре значения (`ProxyEnable`, `ProxyServer`, `ProxyOverride`, `AutoConfigURL`) и удаляет своё поддельное значение в `Connections`. Поэтому порядок такой:
+**Общий системный прокси LAN этот тест на `v0.9.0` не сохраняет.** Известный дефект D-1 («известно в 0.9.0, исправлено в 0.9.1»): на теге v0.9.0 настоящий вызов WinINET стирает `ProxyServer` в `HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings` и оставляет в подразделе `Connections` значение `LAVRay CI fake RAS entry`. Начиная с 0.9.1 тест сам снимает и возвращает четыре значения (`ProxyEnable`, `ProxyServer`, `ProxyOverride`, `AutoConfigURL`) и удаляет своё поддельное значение в `Connections`. На `v0.9.1` и позже шаги 7–9 обязаны пройти без расхождений: `Names одинаковы` и `ProxyServer то же` — `True` уже до уборки, а все остальные упоминания D-1 ниже относятся только к `v0.9.0`. Тест `lan_values_survive_a_real_ras_roundtrip` (с 0.9.1) на время теста записывает в `HKCU\...\Internet Settings` значения `ProxyEnable=0` и `ProxyServer=10.255.255.1:3128` и сам возвращает прежние. Поэтому порядок такой:
 
 1. **До шага 7** оркестратор экспортирует ключ целиком (это делает шаг 6): `reg export "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" C:\lavray-test\tmp\A04-internet-settings-before.reg /y`. Общий снимок `baseline\internet-settings.reg` (`01-ENVIRONMENT.md`, раздел 8) остаётся запасным: его читают, не изменяют.
 2. Шаг 9 сравнивает состояние после теста с состоянием шага 6 (`Names`, `DefaultConnectionSettings`, `ProxyEnable`, `ProxyServer`, `ProxyOverride`, `AutoConfigURL`) и удаляет поддельное значение из `Connections`.
@@ -49,7 +49,7 @@ Set-Location $wt
 "коммит $($env:LAVRAY_REF):  " + (Get-RefCommit)
 ```
 
-   Ожидается: маркер найден (`Test-TestPc` = `True`), `HEAD рабочей копии` равен `коммиту v0.9.0`.
+   Ожидается: маркер найден (`Test-TestPc` = `True`), `HEAD рабочей копии` равен `коммиту v0.9.1`.
 
 2. Сборка интерфейса (нужна для `frontendDist`).
 
@@ -137,9 +137,14 @@ Remove-Item Env:LAVRAY_CI_REAL_WININET
 $env:LAVRAY_CI_REAL_WININET = '1'
 cargo test wininet_roundtrip_on_fake_ras_name -- --nocapture 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A04-test-wininet-only.txt | Select-String -Pattern '(пропущен|test sysproxy|test result|wininet_roundtrip)'
 Remove-Item Env:LAVRAY_CI_REAL_WININET
+if ($env:LAVRAY_REF -ne 'v0.9.0') {   # тест D-1 добавлен в 0.9.1
+  $env:LAVRAY_CI_REAL_WININET = '1'
+  cargo test lan_values_survive_a_real_ras_roundtrip -- --nocapture 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A04-test-wininet-lan.txt | Select-String -Pattern '(пропущен|test result|lan_values)'
+  Remove-Item Env:LAVRAY_CI_REAL_WININET
+}
 ```
 
-   Ожидается: строка `wininet_roundtrip_on_fake_ras_name ... ok`, строка `test result: ok. 1 passed`, и **нет** строки `пропущен: LAVRAY_CI_REAL_WININET не равна 1`. Наличие этой строки — `FAIL` шага (тест пропущен, переменная не дошла).
+   Ожидается: строка `wininet_roundtrip_on_fake_ras_name ... ok`, строка `test result: ok. 1 passed`, и **нет** строки `пропущен: LAVRAY_CI_REAL_WININET не равна 1`. Наличие этой строки — `FAIL` шага (тест пропущен, переменная не дошла). Для `v0.9.1` и позже вторая команда блока даёт то же для `lan_values_survive_a_real_ras_roundtrip`: `test result: ok. 1 passed` и нет строки `пропущен`; на `v0.9.0` этого теста нет.
 
 9. Состояние **после**: сравнение и уборка.
 
@@ -177,7 +182,7 @@ cargo test --test capabilities --test main_wiring --test config_lint -- --list 2
 cargo test --test capabilities --test main_wiring --test config_lint 2>&1 | Select-String -Pattern '^test result'
 ```
 
-    Ожидается: в списке есть `capabilities_contain_only_the_permissions_the_ui_uses`, `the_page_cannot_roll_the_system_proxy_back`, `opener_plugin_is_registered_and_limited_to_http_and_https`, `main_window_is_created_by_code_hidden_and_shown_unless_tray`, `nsis_uninstall_hook_removes_autostart_but_not_on_update`; три строки `test result: ok.`. Содержимое `capabilities\default.json` не должно содержать `dialog:`, `fs:`, `notification:`:
+    Ожидается: в списке есть `capabilities_contain_only_the_permissions_the_ui_uses`, `the_page_cannot_roll_the_system_proxy_back`, `opener_plugin_is_registered_and_limited_to_http_and_https`, `main_window_is_created_by_code_hidden_and_shown_unless_tray`, `nsis_uninstall_hook_removes_autostart_but_not_on_update` и, начиная с 0.9.1, `nsis_hooks_stop_the_core_and_forget_the_install_dir` (хуки останавливают ядро и забывают каталог установки, D-2); три строки `test result: ok.`. Содержимое `capabilities\default.json` не должно содержать `dialog:`, `fs:`, `notification:`:
 
 ```powershell
 Select-String -Path (Join-Path $wt 'shell\capabilities\default.json') -Pattern '"(dialog|fs|notification|global-shortcut):' -Quiet
@@ -207,7 +212,7 @@ Set-Location (Join-Path $wt 'shell')
 (Get-ChildItem -Path src, tests -Recurse -Include *.rs | Select-String -Pattern '#\[test\]' | Measure-Object).Count
 ```
 
-    Ориентир: число `#[test]` в исходниках на `v0.9.0` равно 457. Часть тестов компилируется только под Windows или только под Unix, поэтому сумма `passed` обычно близка к 457, но точное эталонное число в плане не зафиксировано (при написании плана полный `cargo test` не запускался). Критерий: сумма `passed` от 90 до 115 % числа `#[test]`; точное значение запишите в отчёт.
+    Ориентир: число `#[test]` в исходниках на `v0.9.0` было 457 (на `v0.9.1` больше: добавлены тесты WinINET, RAS и хуков NSIS). Часть тестов компилируется только под Windows или только под Unix, поэтому сумма `passed` обычно близка к числу `#[test]`, но точное эталонное число в плане не зафиксировано (при написании плана полный `cargo test` не запускался). Критерий: сумма `passed` от 90 до 115 % числа `#[test]`; точное значение запишите в отчёт.
 
 ## Критерии PASS/FAIL
 
@@ -221,7 +226,7 @@ Set-Location (Join-Path $wt 'shell')
 | К6 | `cargo test` с `LAVRAY_CI_REAL_WININET=1` вернул 0 | шаг 7 |
 | К7 | Настоящий тест не пропущен: `wininet_roundtrip_on_fake_ras_name ... ok`, строки `пропущен` нет | шаг 8 |
 | К8 | После уборки состояние `Connections` и общие значения прокси равны исходным. На `v0.9.0` расхождение `ProxyServer` до возврата — известный дефект D-1: `FAIL` со ссылкой «известно в 0.9.0, исправлено в 0.9.1»; на более позднем теге такое расхождение недопустимо | шаг 9, после уборки все `True` |
-| К9 | Пять защитных тестов оболочки есть и проходят; в `capabilities` нет `dialog:`, `fs:`, `notification:` | шаг 10 |
+| К9 | Пять защитных тестов оболочки (на `v0.9.1` и позже шесть) есть и проходят; в `capabilities` нет `dialog:`, `fs:`, `notification:` | шаг 10 |
 | К10 | `Cargo.lock` и `Cargo.toml` не изменены, `cargo build` вернул 0 | шаг 11 |
 | К11 | Сумма `passed` в пределах 90–115 % от числа `#[test]` | шаг 12 |
 

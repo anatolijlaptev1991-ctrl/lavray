@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -88,6 +89,16 @@ type Release struct {
 	Notes                            map[string]string
 	Platform                         string // по умолчанию windows-x64
 	TSExpires                        time.Time
+	// Presets — обновлённые встроенные наборы (id → ревизия и файл); Geo — zip-архив
+	// гео-набора (nil — секции geo в манифесте нет).
+	Presets map[string]PresetArtifact
+	Geo     []byte
+}
+
+// PresetArtifact — файл набора ревизии Rev, публикуемый в секции presets манифеста.
+type PresetArtifact struct {
+	Rev  int
+	Data []byte
 }
 
 // Publish кладёт в src подписанные timestamp, manifest и установщик; возвращает
@@ -120,6 +131,7 @@ func (e *Env) Publish(t testing.TB, src *Source, r Release) string {
 	if r.Notes != nil {
 		mf["notes"] = r.Notes
 	}
+	e.publishComponents(src, mf, r)
 	signed, _ := json.Marshal(mf)
 	name := updates.ManifestName(r.Channel)
 	src.Put(name, Envelope(t, signed, "r1", e.Man))
@@ -130,4 +142,25 @@ func (e *Env) Publish(t testing.TB, src *Source, r Release) string {
 		"meta":    map[string]any{name: map[string]any{"serial": r.Serial, "sha256": hex.EncodeToString(msum[:]), "length": len(signed)}}})
 	src.Put("timestamp.json", Envelope(t, ts, "t1", e.TS))
 	return path
+}
+
+// publishComponents кладёт на источник файлы наборов и гео-архив и добавляет
+// секции presets и geo в манифест mf (sha256 и длина — как у настоящего релиза).
+func (e *Env) publishComponents(src *Source, mf map[string]any, r Release) {
+	if len(r.Presets) > 0 {
+		entries := map[string]any{}
+		for id, a := range r.Presets {
+			path := fmt.Sprintf("presets/%s-%d.json", id, a.Rev)
+			sum := sha256.Sum256(a.Data)
+			src.Put(path, a.Data)
+			entries[id] = map[string]any{"rev": a.Rev, "path": path, "sha256": hex.EncodeToString(sum[:])}
+		}
+		mf["presets"] = entries
+	}
+	if r.Geo != nil {
+		sum := sha256.Sum256(r.Geo)
+		src.Put("geo/set.zip", r.Geo)
+		mf["geo"] = map[string]any{"path": "geo/set.zip", "sha256": hex.EncodeToString(sum[:]),
+			"length": len(r.Geo), "generatedAt": "2026-10-20"}
+	}
 }

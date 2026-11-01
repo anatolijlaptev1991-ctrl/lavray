@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-// gateway_test.go — nft-рендер (golden-инварианты), watchdog-переходы,
-// per-MAC-политики. Платформо-независимо: Applier-мок.
+// gateway_test.go — переходы watchdog. Платформо-независимо: Applier-мок.
+// Рендер nft — nft_render_test.go.
 package gateway
 
 import (
 	"errors"
-	"strings"
 	"testing"
 	"time"
 )
@@ -35,55 +34,6 @@ func (m *memApplier) Remove() error {
 }
 
 func cfg() Config { return Config{TProxyPort: 7893, Enabled: true, DNSHijack: true} }
-
-func TestRenderGoldenInvariants(t *testing.T) {
-	r := NftRenderer{}
-	out := r.Render(cfg(), []DevicePolicy{
-		{MAC: "AA:BB:CC:11:22:33", Policy: "direct"},
-		{MAC: "aa:bb:cc:44:55:66", Policy: "proxy"},
-	}, "lavray")
-
-	checks := []struct{ what, sub string }{
-		{"таблица", "table inet lavray {"},
-		{"tproxy tcp+udp", "meta l4proto { tcp, udp } tproxy to :7893 accept"},
-		{"skuid-исключение", `meta skuid "lavray" return`},
-		{"приватные исключены", "192.168.0.0/16"},
-		{"DHCP не заворачиваем", "udp dport 67 return"},
-		{"DNS hijack", "udp dport 53 tproxy to :7893 accept"},
-		{"MAC direct", "ether saddr aa:bb:cc:11:22:33 return"},
-		{"MAC proxy", "ether saddr aa:bb:cc:44:55:66 tproxy to :7893 accept"},
-		{"idempotent header", "delete table inet lavray"},
-	}
-	for _, c := range checks {
-		if !strings.Contains(out, c.sub) {
-			t.Errorf("%s: нет %q", c.what, c.sub)
-		}
-	}
-	// Детерминизм: те же входы — тот же вывод.
-	if out2 := r.Render(cfg(), []DevicePolicy{
-		{MAC: "AA:BB:CC:11:22:33", Policy: "direct"},
-		{MAC: "aa:bb:cc:44:55:66", Policy: "proxy"},
-	}, "lavray"); out != out2 {
-		t.Fatal("рендер недетерминирован")
-	}
-	// MAC отсортированы (AA..33 перед aa..66 независимо от порядка входа).
-	i1 := strings.Index(out, "aa:bb:cc:11")
-	i2 := strings.Index(out, "aa:bb:cc:44")
-	if i1 < 0 || i2 < 0 || i1 > i2 {
-		t.Fatal("MAC-правила не отсортированы")
-	}
-}
-
-func TestRenderIPv6OffByDefault(t *testing.T) {
-	out := NftRenderer{}.Render(Config{TProxyPort: 1}, nil, "x")
-	if strings.Contains(out, "ip6 daddr") {
-		t.Fatal("IPv6 включён по умолчанию — должен быть ВЫКЛ (§5)")
-	}
-	out6 := NftRenderer{}.Render(Config{TProxyPort: 1, IPv6: true}, nil, "x")
-	if !strings.Contains(out6, "ip6 daddr @exclude_addr6") {
-		t.Fatal("IPv6-цепочка не сгенерирована при IPv6=true")
-	}
-}
 
 func TestWatchdogFailoverAndRecovery(t *testing.T) {
 	ap := &memApplier{}

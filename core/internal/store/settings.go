@@ -23,15 +23,18 @@ func (s *Store) GetSetting(key string) (string, bool, error) {
 	return v, true, nil
 }
 
-// SetSetting Upsert-ит значение ключа.
+// SetSetting Upsert-ит значение ключа. Идёт через withTx (см. SetMeta): внутри
+// InTx запись входит в транзакцию серии.
 func (s *Store) SetSetting(key, value string) error {
 	if key == "" {
 		return ErrConstraint
 	}
-	_, err := s.db.Exec(`INSERT INTO settings (key, value, updated_at_ms) VALUES (?, ?, ?)
-		ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms`,
-		key, value, nowMs())
-	return err
+	return s.withTx(func(tx *sql.Tx) error {
+		_, err := tx.Exec(`INSERT INTO settings (key, value, updated_at_ms) VALUES (?, ?, ?)
+			ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at_ms = excluded.updated_at_ms`,
+			key, value, nowMs())
+		return err
+	})
 }
 
 // Settings возвращает все заданные настройки.
@@ -50,4 +53,28 @@ func (s *Store) Settings() (map[string]string, error) {
 		out[k] = v
 	}
 	return out, rows.Err()
+}
+
+// DeleteSettings удаляет ключи одной транзакцией (сброс к умолчанию) и
+// возвращает те, у которых была запись, в порядке keys. Отсутствующие ключи
+// ошибкой не считаются.
+func (s *Store) DeleteSettings(keys []string) ([]string, error) {
+	var deleted []string
+	err := s.withTx(func(tx *sql.Tx) error {
+		deleted = nil
+		for _, key := range keys {
+			res, err := tx.Exec(`DELETE FROM settings WHERE key = ?`, key)
+			if err != nil {
+				return err
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				deleted = append(deleted, key)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return deleted, nil
 }

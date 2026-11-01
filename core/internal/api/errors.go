@@ -19,6 +19,7 @@ import (
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/cfgbuild"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/presets"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs/parser"
@@ -36,6 +37,8 @@ import (
 //	subs.ConfirmRequiredError→ FAILED_PRECONDITION (не в стриме — страховка)
 //	inst.ErrAlreadyRunning   → FAILED_PRECONDITION
 //	inst.ErrNotRunning       → FAILED_PRECONDITION
+//	presets.ErrLimit/ErrTooLarge → RESOURCE_EXHAUSTED (T-80)
+//	presets.ErrFormat, presetInvalidError → INVALID_ARGUMENT (T-80)
 //	context.DeadlineExceeded → DEADLINE_EXCEEDED
 //	прочее                   → INTERNAL
 func mapErr(err error) error {
@@ -60,6 +63,13 @@ func mapErr(err error) error {
 		return connect.NewError(connect.CodeFailedPrecondition, err)
 	case errors.Is(err, inst.ErrNotRunning):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
+	case errors.Is(err, presets.ErrLimit), errors.Is(err, presets.ErrTooLarge):
+		return connect.NewError(connect.CodeResourceExhausted, err)
+	case errors.Is(err, presets.ErrFormat):
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	if pie := new(presetInvalidError); errors.As(err, &pie) {
+		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	var confirm *subs.ConfirmRequiredError
 	if errors.As(err, &confirm) {

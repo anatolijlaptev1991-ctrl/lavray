@@ -24,7 +24,7 @@ ConfigBuilder (оригинал — `db/ConfigBuilder.cpp` в nekoray, порт 
 - `internal/presets/` — формат пресетов LAVRay и конвертер из NekoRay 4.x (см. `../presets/README.md`).
 - `internal/inst/` — менеджер инстанса sing-box.
 - `internal/api/` — реализация сервисов из `../proto/` (часть RPC — заглушки `unimplemented`).
-- `internal/logs/`, `internal/updates/`, `internal/web/`, `internal/gateway/`, `internal/headless/` — журнал, проверка обновлений, веб-панель, шлюз OpenWrt, сервисный режим; `updates`, `web` и `gateway` в ядро пока не подключены.
+- `internal/logs/`, `internal/updates/`, `internal/web/`, `internal/gateway/`, `internal/headless/` — журнал, проверка обновлений, веб-панель, шлюз OpenWrt, сервисный режим; `updates` в ядро пока не подключён; `web` включается флагом `--web-bind`, `gateway` — `--platform openwrt`.
 
 ## Neko-патчи над sing-box
 

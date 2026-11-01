@@ -3,11 +3,10 @@
 package api
 
 // Сохранение импортированных профилей и «ручные» серверы подписки (T-51,
-// A1-16, B1-27, B1-35).
+// A1-16, B1-27, B1-35). «Тот же сервер» определяет model.DedupKey — тот же
+// отпечаток, что у очистки дубликатов.
 
 import (
-	"encoding/json"
-
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
@@ -18,24 +17,6 @@ import (
 func (s *Server) isSubscriptionGroup(id int64) bool {
 	g, err := s.st.GetGroup(id)
 	return err == nil && g.Kind == model.GroupSubscription
-}
-
-// importKey — отпечаток «того же сервера» для дедупликации импорта: канонический
-// JSON профиля без служебных и пользовательских полей (id, группа, имя,
-// избранное, заметки, теги, страна, результаты тестов, трафик, времена).
-// Имя не входит в ключ: провайдер переименовал сервер — это тот же сервер.
-// Пустая строка — ключ построить не удалось, профиль считается новым.
-func importKey(p *model.Profile) string {
-	c := *p
-	c.ID, c.GroupID, c.Name = 0, 0, ""
-	c.Favorite, c.Tags, c.Notes, c.Geo, c.Manual = false, nil, "", "", false
-	c.TestResult, c.Traffic = model.TestResult{}, model.TrafficCounters{}
-	c.CreatedAtMs, c.UpdatedAtMs = 0, 0
-	b, err := json.Marshal(&c)
-	if err != nil {
-		return ""
-	}
-	return string(b)
 }
 
 // commitImport сохраняет разобранные профили в группу ОДНОЙ транзакцией и
@@ -50,14 +31,14 @@ func (s *Server) commitImport(groupID int64, list []*model.Profile) (added []int
 	}
 	seen := make(map[string]bool, len(existing)+len(list))
 	for _, p := range existing {
-		if k := importKey(p); k != "" {
+		if k := model.DedupKey(p); k != "" {
 			seen[k] = true
 		}
 	}
 	manual := s.isSubscriptionGroup(groupID)
 	var fresh []*model.Profile
 	for _, p := range list {
-		if k := importKey(p); k != "" {
+		if k := model.DedupKey(p); k != "" {
 			if seen[k] {
 				skipped++
 				continue

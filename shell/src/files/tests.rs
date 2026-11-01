@@ -96,3 +96,40 @@ fn percent_decoding() {
         assert_eq!(percent_decode(bad), None, "{bad}");
     }
 }
+
+/// Диалог выбора папки в памяти (T-78): отвечает заданным путём, считает вызовы.
+struct FakeFolderDialog {
+    answer: Option<PathBuf>,
+    asked: Cell<usize>,
+}
+
+impl pick::FolderDialog for FakeFolderDialog {
+    fn pick(&self) -> Option<PathBuf> {
+        self.asked.set(self.asked.get() + 1);
+        self.answer.clone()
+    }
+}
+
+#[test]
+fn picked_folder_is_returned_as_a_string() {
+    let chosen = PathBuf::from(r"C:\Users\Анна\Рабочий стол\nekoray\config");
+    let dialog = FakeFolderDialog {
+        answer: Some(chosen.clone()),
+        asked: Cell::new(0),
+    };
+    assert_eq!(
+        pick::pick_with(&dialog),
+        Some(chosen.to_string_lossy().into_owned())
+    );
+    assert_eq!(dialog.asked.get(), 1, "диалог открывается ровно один раз");
+}
+
+#[test]
+fn cancelled_folder_dialog_is_none() {
+    let dialog = FakeFolderDialog {
+        answer: None,
+        asked: Cell::new(0),
+    };
+    assert_eq!(pick::pick_with(&dialog), None);
+    assert_eq!(dialog.asked.get(), 1);
+}

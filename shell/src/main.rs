@@ -23,8 +23,7 @@ use lavray_shell::endpoint::{
 };
 use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
 use lavray_shell::launch::{wait_for_exit, LaunchArgs, WAIT_PID_TIMEOUT};
-use lavray_shell::msgbox;
-use lavray_shell::os_integration;
+use lavray_shell::{msgbox, os_integration};
 use lavray_shell::prefs::ShellPrefs;
 use lavray_shell::profile;
 use lavray_shell::single_instance::{self, Verdict};

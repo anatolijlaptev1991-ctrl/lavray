@@ -13,7 +13,6 @@ import {
   parseAgentMode,
   relayAgentMode,
 } from './agents';
-import { isAccessSettingKey, withoutSecrets } from './backup';
 import type { CoreClients } from './core';
 
 const shell = vi.hoisted(() => ({
@@ -94,13 +93,5 @@ describe('связь с оболочкой', () => {
     expect(await agentCorePath()).toBeNull();
     shell.invoke.mockResolvedValueOnce('');
     expect(await agentCorePath()).toBeNull();
-  });
-});
-
-describe('копия настроек', () => {
-  it('режим агентов в файл копии не попадает и из файла не восстанавливается', () => {
-    expect(isAccessSettingKey('agent.mode')).toBe(true);
-    expect(isAccessSettingKey('inbound.port')).toBe(false);
-    expect(withoutSecrets({ 'agent.mode': 'control', 'inbound.port': 2080 })).toEqual({ 'inbound.port': 2080 });
   });
 });

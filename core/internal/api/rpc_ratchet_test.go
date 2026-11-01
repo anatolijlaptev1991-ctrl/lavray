@@ -35,22 +35,11 @@ import (
 // реализованную» процедуру остаться в списке.
 var allowUnimplemented = map[string]bool{
 	// unimplemented.go (заглушки W6).
-	"/lavray.v1.ProfileService/RemoveUnavailableProfiles": true,
-	"/lavray.v1.ProfileService/DeduplicateProfiles":       true,
-	"/lavray.v1.ProfileService/ExportConfig":              true,
-	"/lavray.v1.ProfileService/ResolveDomains":            true,
-	"/lavray.v1.RoutingService/CreatePreset":              true,
-	"/lavray.v1.RoutingService/UpdatePreset":              true,
-	"/lavray.v1.RoutingService/DeletePreset":              true,
-	"/lavray.v1.RoutingService/ResetBuiltinPreset":        true,
-	"/lavray.v1.RoutingService/ImportNekoRayRoute":        true,
-	"/lavray.v1.SettingsService/ResetSettings":            true,
-	"/lavray.v1.SettingsService/SubscribeSettings":        true,
-	// GatewayService: встроенный UnimplementedGatewayServiceHandler (Ф7).
-	"/lavray.v1.GatewayService/GetGatewayStatus":   true,
-	"/lavray.v1.GatewayService/ListDevicePolicies": true,
-	"/lavray.v1.GatewayService/SetDevicePolicy":    true,
-	// WebSessionService: встроенный UnimplementedWebSessionServiceHandler (Ф7).
+	// WebSessionService: ПОСТОЯННАЯ запись (T-76). Сервис включается только при
+	// --web-bind (EnableWeb); десктоп без этого флага отвечает UNIMPLEMENTED
+	// намеренно, и ratchet-сервер флага не имеет. Работающие методы проверяют
+	// TestWebSessionServiceFlow и остальные websession_*_test.go с EnableWeb.
+	// GatewayService из списка убран: на десктопе он отвечает INVALID_ARGUMENT.
 	"/lavray.v1.WebSessionService/GetWebModeStatus": true,
 	"/lavray.v1.WebSessionService/SetupFirstAdmin":  true,
 	"/lavray.v1.WebSessionService/Login":            true,

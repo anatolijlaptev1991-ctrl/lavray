@@ -15,6 +15,7 @@ import { create } from '@bufbuild/protobuf';
 import type { CoreClients } from '../lib/core';
 import { createCoreClients, friendlyCoreError } from '../lib/core';
 import { getCoreEndpoint, subscribeCoreEndpoint } from '../lib/coreEndpoint';
+import { getCsrfToken, isWebShell } from '../lib/webSession';
 import type { CoreStatus, Profile } from '../gen/lavray_pb';
 import { CoreState, CoreStatusSchema } from '../gen/lavray_pb';
 
@@ -33,7 +34,13 @@ export function useCore(): CoreClients {
 export function useCoreClients(): CoreClients {
   // Третий аргумент — снимок для сервера (renderToString), как в useI18n и useSystemProxy.
   const { url, token } = useSyncExternalStore(subscribeCoreEndpoint, getCoreEndpoint, getCoreEndpoint);
-  return useMemo(() => createCoreClients(url, token === '' ? {} : { token }), [url, token]);
+  // Веб-панель: без токена оболочки клиенты ходят с cookie сессии и CSRF-заголовком.
+  const cookie = useMemo(() => isWebShell(), []) && token === '';
+  return useMemo(
+    () =>
+      createCoreClients(url, cookie ? { mode: 'cookie', csrf: getCsrfToken } : token === '' ? {} : { token }),
+    [url, token, cookie],
+  );
 }
 
 // Полный снимок статуса ядра (proto CoreStatus): нужен UI для таймера

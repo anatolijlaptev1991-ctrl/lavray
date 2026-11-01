@@ -321,8 +321,14 @@ mod windows_acl {
         let sddl = saved_sddl(&dir.join(FILE_NAME));
 
         // обычный экземпляр того же пользователя сможет файл перезаписать
+        // встроенный администратор (RID 500, раннер CI) записан в SDDL как «LA»
+        let alias = if sid.ends_with("-500") {
+            "LA"
+        } else {
+            sid.as_str()
+        };
         assert!(
-            explicit_full_control(&sddl, &[sid.as_str()]),
+            explicit_full_control(&sddl, &[sid.as_str(), alias]),
             "пользователь: {sddl}"
         );
         assert!(

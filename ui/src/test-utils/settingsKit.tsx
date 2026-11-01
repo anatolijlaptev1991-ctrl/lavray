@@ -52,6 +52,7 @@ export async function mountSettings(
   initial: RawSettings = {},
   coreVersion = '9.9.9-core',
   descriptors: readonly SettingDescriptor[] = [],
+  extra: Partial<Record<keyof CoreClients, unknown>> = {},
 ): Promise<SettingsHarness> {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   const setSettings = vi.fn((req: SetSettingsRequest): Promise<{ acceptedKeys: string[] }> =>
@@ -67,6 +68,7 @@ export async function mountSettings(
       setSettings,
     },
     core: { getStatus: vi.fn(() => Promise.resolve({ coreVersion })) },
+    ...extra,
   } as unknown as CoreClients;
 
   const container = document.createElement('div');

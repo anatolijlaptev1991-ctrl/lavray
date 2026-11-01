@@ -79,9 +79,9 @@ type BuildSettings struct {
 	// CacheFilePath — experimental.cache_file.path; "" → путь по умолчанию sing-box.
 	CacheFilePath string `json:"cache_file_path,omitempty"`
 	// GOOS — платформа для процессных правил пресета ("" → runtime.GOOS).
-	GOOS string `json:"goos,omitempty"`
-	// OpenWRT — сборка шлюза: процессные правила опускаются (SCHEMA §2.1).
-	OpenWRT bool `json:"openwrt,omitempty"`
+	GOOS    string         `json:"goos,omitempty"`
+	OpenWRT bool           `json:"openwrt,omitempty"` // --platform openwrt: без процессных правил (SCHEMA §2.1)
+	TProxy  TProxySettings `json:"tproxy"`            // tproxy-вход шлюза (tproxy.go)
 	// DNSRemoteDirect — запросы к dns-remote идут напрямую, без detour в
 	// туннель (карточка «DoH» экрана DNS); по умолчанию — внутри туннеля.
 	DNSRemoteDirect bool `json:"dns_remote_direct,omitempty"`
@@ -117,21 +117,21 @@ type BuildResult struct {
 	// OutboundTag — тег «последней мили» цепочки, всегда "proxy".
 	OutboundTag string
 
-	// OutboundTags — все теги outbound'ов, созданных для профиля
-	// (для allowlist-мержа custom_config → outbounds).
+	// OutboundTags — теги outbound'ов профиля (для allowlist-мержа custom_config → outbounds).
 	OutboundTags []string
 
-	// IgnoreConnTags — теги промежуточных outbound'ов цепочки (index != 0),
-	// соединения с ними не считаются пользовательскими (оракул).
+	// IgnoreConnTags — теги промежуточных outbound'ов (index != 0): их соединения не пользовательские.
 	IgnoreConnTags []string
 
-	// ServerDomains — домены серверов цепочки («full:<домен>»), для
-	// dns-direct правил W5 (§3.1.4).
+	// ServerDomains — домены серверов цепочки («full:<домен>») для dns-direct правил (§3.1.4).
 	ServerDomains []string
 
 	// ExternalCores — записи о внешних ядрах (всегда пуст в W4: внешние
 	// ядра за флагом enable_external_cores, W6).
 	ExternalCores []ExternalCore
+
+	// Warnings — замечания сборки, не мешающие запуску (напр. проигнорированная настройка).
+	Warnings []string
 }
 
 // ExternalCore — описание внешнего ядра (заполняется только в W6 за флагом).

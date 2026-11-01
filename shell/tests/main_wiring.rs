@@ -7,7 +7,10 @@
 /// Исходник из `shell/src` (читается во время теста).
 fn source(name: &str) -> String {
     let path = format!("{}/src/{name}", env!("CARGO_MANIFEST_DIR"));
-    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("не прочитать {path}: {e}"))
+    std::fs::read_to_string(&path)
+        .unwrap_or_else(|e| panic!("не прочитать {path}: {e}"))
+        // git на Windows может выкачать файлы с CRLF; проверки ищут LF
+        .replace("\r\n", "\n")
 }
 
 /// Команда есть в списке `generate_handler!` (`src/commands.rs`, T-82).

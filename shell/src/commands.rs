@@ -38,6 +38,7 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         lavray_shell::os_integration::notify_show,
         lavray_shell::hotkey::hotkey_set,
         lavray_shell::files::file_save,
+        lavray_shell::files::pick::file_pick_folder,
         lavray_shell::capture::qr_capture_screen,
         lavray_shell::update::wiring::update_apply,
         lavray_shell::update::wiring::update_rollback,

@@ -278,6 +278,10 @@ jobs:
         working-directory: shell
         shell: bash
     steps:
+      # Репозиторий хранит LF (hygiene); без этого git на Windows выкачал бы CRLF.
+      - name: git без замены переводов строк
+        working-directory: .
+        run: git config --global core.autocrlf false
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -332,6 +336,81 @@ jobs:
         run: npx vitest run
       - name: vite build
         run: npm run build
+
+  # --------------------------------------------------------------------------
+  # nft-check (T-76): golden-выводы NftRenderer (core/internal/gateway/testdata)
+  # проходят `nft -c -f`: проверяются синтаксис и ядро, правила НЕ применяются.
+  # Равенство рендера и golden проверяет job go (TestRenderGolden).
+  # --------------------------------------------------------------------------
+  nft-check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: nftables
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends nftables
+          nft --version
+      - name: "Системный пользователь lavray (на него ссылается meta skuid)"
+        run: sudo useradd --system --no-create-home --shell /usr/sbin/nologin lavray
+      - name: "Модули ядра для tproxy и fib (если они модулями)"
+        run: sudo modprobe -a nf_tables nft_tproxy nft_fib nft_fib_inet nft_fib_ipv4 nft_fib_ipv6 || true
+      - name: "nft -c -f для каждого golden"
+        run: |
+          shopt -s nullglob
+          files=(core/internal/gateway/testdata/*.nft)
+          test "${#files[@]}" -gt 0 || { echo "::error::golden-файлов нет"; exit 1; }
+          for f in "${files[@]}"; do
+            echo "::group::nft -c -f $f"
+            sudo nft -c -f "$f"
+            echo "::endgroup::"
+          done
+
+  # --------------------------------------------------------------------------
+  # web-e2e (T-76): Playwright в Chromium против настоящего ядра с --web-bind на
+  # loopback и встроенным ui/dist (тег with_webui): первичная настройка →
+  # список серверов → выход → вход. Браузер ставится только здесь.
+  # --------------------------------------------------------------------------
+  web-e2e:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - name: "Интерфейс: npm ci, сборка, копия в core/internal/web/dist"
+        run: bash scripts/build-webui.sh
+      - name: "Ядро с тегом with_webui"
+        working-directory: core
+        env:
+          CGO_ENABLED: '0'
+        # Только with_webui: для входа в панель sing-box не нужен (NopRunner).
+        run: |
+          tags=with_webui
+          go build -tags "$tags" -o ../lavray-core ./cmd/lavray-core
+      - name: "Chromium для Playwright"
+        working-directory: ui
+        run: npx playwright install --with-deps chromium
+      - name: "Playwright: вход → список серверов → выход"
+        working-directory: ui
+        env:
+          LAVRAY_CORE_BIN: ${{ github.workspace }}/lavray-core
+        run: npx playwright test
+      - name: "Отчёт и трассы при сбое"
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-e2e-report
+          path: |
+            ui/playwright-report
+            ui/test-results
+          if-no-files-found: ignore
 
   # --------------------------------------------------------------------------
   # hygiene: размерная трещотка, SPDX, окончания строк LF и тесты скриптов (Ф1.0).

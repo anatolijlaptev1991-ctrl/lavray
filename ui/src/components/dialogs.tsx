@@ -1,90 +1,26 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-// dialogs.tsx — остальные диалоги прототипа v1.2 одним модулем:
+// dialogs.tsx — остальные диалоги прототипа v1.2 одним модулем (оболочка
+// DialogShell вынесена в DialogShell.tsx и переэкспортируется отсюда):
 // группы серверов, подтверждение, горячие клавиши, лицензии, онбординг.
 // Общая оболочка Dialog повторяет .dlg-back/.dlg/.dlg-h/.dlg-b/.dlg-f из DS.
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
 import type { JSX } from 'react';
-import { createPortal } from 'react-dom';
 import { Group_Kind } from '../gen/lavray_pb';
 import type { Group } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useKbdLabel } from '../hooks/useKbdLabel';
-import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
+import { DialogShell } from './DialogShell';
+import { NekoBoxTile } from './nekobox/NekoBoxTile';
 import { loadModes, saveModes } from '../lib/connection';
 import { groupDisplayName } from '../lib/groups';
 import { LANGUAGES, LANG_NATIVE, type MessageKey } from '../lib/i18n';
 import { presetTitle } from '../lib/presets';
 
-interface ShellProps {
-  readonly titleId: string;
-  readonly title: string;
-  readonly size?: 'sm' | 'md' | 'lg';
-  readonly children: ReactNode;
-  readonly footer?: ReactNode;
-  readonly onClose: () => void;
-  readonly autofocusRef?: React.RefObject<HTMLElement | null>;
-  /** false — клик по затемнению не закрывает диалог (формы и мастер: не терять ввод). */
-  readonly dismissOnBackdrop?: boolean;
-}
-
-/** Оболочка диалога: focus-trap, Esc, клик по фону. */
-export function DialogShell({
-  titleId,
-  title,
-  size = 'sm',
-  children,
-  footer,
-  onClose,
-  autofocusRef,
-  dismissOnBackdrop = true,
-}: ShellProps): JSX.Element {
-  const { t } = useI18n();
-  const rootRef = useRef<HTMLDivElement | null>(null);
-
-  // T-05: фокус ставится один раз при открытии (useModal читает onClose через
-  // latest-ref), а не при каждом ререндере родителя.
-  useModal(rootRef, { onClose, autofocusRef });
-
-  // T-06: диалог рендерится в портале на <body>, а не внутри экрана. После
-  // анимации .screen.active>* на предке остаётся transform, а он делает предка
-  // containing block для position:fixed — диалог центрировался по высоте
-  // списка серверов и уезжал за окно.
-  return createPortal(
-    <div
-      className="dlg-back open"
-      role="presentation"
-      onClick={(e) => {
-        if (dismissOnBackdrop && e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div
-        className={`dlg dlg-${size}`}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        ref={rootRef}
-        tabIndex={-1}
-      >
-        <div className="dlg-h">
-          <h2 id={titleId}>{title}</h2>
-          <button className="btn btn-ic btn-sm" aria-label={t('common.close')} title={t('common.close')} onClick={onClose}>
-            <Icon name="x" />
-          </button>
-        </div>
-        <div className="dlg-b">{children}</div>
-        {footer !== undefined && <div className="dlg-f">{footer}</div>}
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
-
+export { DialogShell };
 
 // ============================================================================
 // Подтверждение (dlgConfirm)
@@ -377,8 +313,6 @@ export function OnboardingDialog({
   // открытии мастера из меню), а не с зашитых значений.
   const [sysProxy, setSysProxy] = useState(() => loadModes(window.localStorage).sysProxy);
   const [tunMode, setTunMode] = useState(() => loadModes(window.localStorage).tunMode);
-  // T-73: нажали «Перенести из NekoBox» — показываем, что функции пока нет.
-  const [nekoSoon, setNekoSoon] = useState(false);
   const [err, setErr] = useState('');
 
   useEffect(() => {
@@ -541,22 +475,10 @@ export function OnboardingDialog({
                   <Icon name="download" />
                   <span>{t('onb.src.v2ray')}</span>
                 </button>
-                {/* Перенос из NekoBox пока не подключён к ядру (эпик T-78): честная
-                    кнопка «Скоро». Раньше здесь был span с подсказкой-шаблоном
-                    «Найдено: {servers}, {subs}», которую никто не раскрывал. */}
-                <button
-                  type="button"
-                  className="onb-src onb-src-btn"
-                  aria-disabled="true"
-                  title={t('onb.neko.soonHint')}
-                  onClick={() => { setNekoSoon(true); }}
-                >
-                  <Icon name="layers" />
-                  <span>{t('onb.src.neko')}</span>
-                  <span className="badge badge-soft">{t('onb.neko.soon')}</span>
-                </button>
+                {/* Перенос из NekoBox (T-78): настоящая кнопка, открывает диалог переноса;
+                    при найденной установке показывает «Найдено: …» с числами. */}
+                <NekoBoxTile />
               </div>
-              {nekoSoon && <p className="cap" role="status" style={{ marginTop: 8 }}>{t('onb.neko.soonHint')}</p>}
               <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={() => { setStep(3); }}>
                 {t('onb.later')}
               </button>

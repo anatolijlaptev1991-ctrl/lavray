@@ -157,7 +157,7 @@ func baseDescriptors() []SettingDescriptor {
 		// T-75: фоновая проверка раз в ~6 ч; выключается пользователем.
 		{Key: "update.auto_check", Type: SettingBool, GroupID: "update", DefaultValue: `true`},
 		{Key: "stats.interval_ms", Type: SettingInt, GroupID: "misc", DefaultValue: `1000`, DeprecatedBy: "traffic_loop_interval"},
-		{Key: "share.vmess_old_format", Type: SettingBool, GroupID: "misc", DeprecatedBy: "old_share_link_format"},
+		{Key: "share.vmess_old_format", Type: SettingBool, GroupID: "misc", DefaultValue: `true`, DeprecatedBy: "old_share_link_format"},
 		{Key: "enable_external_cores", Type: SettingBool, GroupID: "core", DefaultValue: `false`},
 		{Key: "web.bind", Type: SettingString, GroupID: "core"},
 		{Key: "web.tls", Type: SettingBool, GroupID: "core", DefaultValue: `false`},

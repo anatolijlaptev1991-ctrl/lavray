@@ -94,6 +94,10 @@ type Preset struct {
 	MaintainerNotes string    `json:"maintainer_notes,omitempty"`
 	Routing         Routing   `json:"routing"`
 	DNS             DNSBlock  `json:"dns"`
+	// SourceID/SourceRevision — встроенный набор, с которого снята копия (T-80;
+	// у файлов встроенных и у наборов «с нуля» пусто, omitempty их не пишет).
+	SourceID       string `json:"source_id,omitempty"`
+	SourceRevision int    `json:"source_revision,omitempty"`
 }
 
 // Routing — блок routing (SCHEMA §2).
@@ -129,8 +133,9 @@ type DNSBlock struct {
 	AdvancedJSON        string `json:"advanced_json,omitempty"` // mode=advanced (FR-UI-149)
 }
 
-// Имена платформ процессных правил (SCHEMA §2.1).
-var knownPlatforms = map[string]bool{"windows": true, "linux": true, "macos": true}
+// Имена платформ процессных правил (SCHEMA §2.1). openwrt допустим в файле
+// (правило для роутера), но на ПК не действует — см. EffectiveProcessRules.
+var knownPlatforms = map[string]bool{"windows": true, "linux": true, "macos": true, "openwrt": true}
 
 // Известные префиксы строк списков (FR-UI-135); geoip — только ip-поля,
 // geosite — только domain-поля (валидация §4 SCHEMA).
@@ -195,7 +200,7 @@ func (p *Preset) Validate() error {
 		}
 		for _, plat := range rule.Platforms {
 			if !knownPlatforms[plat] {
-				return fmt.Errorf("%s.platforms: неизвестная платформа %q (windows/linux/macos)", path, plat)
+				return fmt.Errorf("%s.platforms: неизвестная платформа %q (windows/linux/macos/openwrt)", path, plat)
 			}
 		}
 		for _, name := range rule.ProcessNames {
@@ -333,47 +338,4 @@ func BuiltinPresets() ([]*Preset, error) {
 		out = append(out, p)
 	}
 	return out, nil
-}
-
-// EffectiveProcessRules — правила, применимые на платформе goos
-// ("windows"/"linux"/"macos"; пустые platforms = все). На OpenWrt-сборке
-// процессные правила опускаются с предупреждением (SCHEMA §2.1: «Не действует
-// на роутере» — локализация в UI; ядро в конфиг их не вставляет).
-func EffectiveProcessRules(p *Preset, goos string, openwrt bool) ([]ProcessRule, []string) {
-	var out []ProcessRule
-	var warnings []string
-	if openwrt {
-		for _, r := range p.Routing.ProcessRules {
-			warnings = append(warnings,
-				fmt.Sprintf("процессное правило (%s) не действует на роутере — опущено", firstOr(r.ProcessNames, r.Outbound)))
-		}
-		return nil, warnings
-	}
-	plat := map[string]string{"windows": "windows", "darwin": "macos", "linux": "linux"}[goos]
-	if plat == "" {
-		if len(p.Routing.ProcessRules) > 0 {
-			warnings = append(warnings, fmt.Sprintf("платформа %s не поддерживает процессные правила — опущены", goos))
-		}
-		return nil, warnings
-	}
-	for _, r := range p.Routing.ProcessRules {
-		if len(r.Platforms) == 0 {
-			out = append(out, r)
-			continue
-		}
-		for _, p2 := range r.Platforms {
-			if p2 == plat {
-				out = append(out, r)
-				break
-			}
-		}
-	}
-	return out, warnings
-}
-
-func firstOr(list []string, def string) string {
-	if len(list) > 0 {
-		return list[0]
-	}
-	return def
 }

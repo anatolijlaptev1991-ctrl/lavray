@@ -1,0 +1,98 @@
+# release-linux.yml — артефакты для роутеров (T-76): ядро lavray-core под linux
+# amd64/arm64 с тегом with_webui (панель встроена) и ui-dist.tar.gz (та же
+# панель отдельным архивом). Пакеты OpenWrt (procd, UCI, luci-app, фиды) живут
+# вне этого репозитория (docs/OPENWRT-PACKAGING.md) и забирают эти ассеты.
+# mipsel_24kc не поддерживается. Отдельный файл, чтобы не трогать release-windows.yml:
+# Windows-выпуск не зависит от этого workflow, и наоборот.
+name: release-linux
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: "Версия: тег должен совпасть с shell/tauri.conf.json"
+        run: |
+          ver="$(python3 -c "import json;print(json.load(open('shell/tauri.conf.json', encoding='utf-8'))['version'])")"
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "${GITHUB_REF_NAME}" != "v${ver}" ]; then
+            echo "::error::тег ${GITHUB_REF_NAME} не равен v${ver}"; exit 1
+          fi
+          echo "VERSION=${ver}" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: "Интерфейс: сборка и копия в core/internal/web/dist"
+        run: bash scripts/build-webui.sh
+
+      - name: "Теги ядра: единый список, запрет clash_api (T-02, T-47)"
+        working-directory: core
+        run: go test ./internal/buildtags/ -count=1
+
+      - name: "Ядро: linux/amd64 и linux/arm64 с тегом with_webui"
+        working-directory: core
+        env:
+          CGO_ENABLED: '0'
+          GOPRIVATE: github.com/anatolijlaptev1991-ctrl/*
+          GOFLAGS: -mod=mod
+        run: |
+          go mod tidy
+          tags="$(tr -d '[:space:]' < BUILD_TAGS),with_webui"
+          mkdir -p ../dist
+          for arch in amd64 arm64; do
+            GOOS=linux GOARCH="$arch" go build -tags "$tags" -trimpath -ldflags '-s -w' \
+              -o "../dist/lavray-core-linux-${arch}" ./cmd/lavray-core/
+            # В бинарнике записан with_webui, а панель действительно встроена.
+            go version -m "../dist/lavray-core-linux-${arch}" | grep -q -- "-tags=${tags}" \
+              || { echo "::error::в lavray-core-linux-${arch} нет тегов ${tags}"; exit 1; }
+          done
+
+      - name: "ui-dist.tar.gz"
+        run: tar -C ui/dist -czf dist/ui-dist.tar.gz .
+
+      - name: "Checksums SHA256"
+        working-directory: dist
+        run: sha256sum lavray-core-linux-amd64 lavray-core-linux-arm64 ui-dist.tar.gz | tee SHA256SUMS-linux.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: LAVRay-linux
+          path: |
+            dist/lavray-core-linux-amd64
+            dist/lavray-core-linux-arm64
+            dist/ui-dist.tar.gz
+            dist/SHA256SUMS-linux.txt
+
+      # Windows-workflow создаёт релиз по тому же тегу; кто первый, тот создаёт,
+      # второй добавляет ассеты (повтор при гонке).
+      - name: "Прикрепить к релизу (при теге)"
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          files=(dist/lavray-core-linux-amd64 dist/lavray-core-linux-arm64 dist/ui-dist.tar.gz dist/SHA256SUMS-linux.txt)
+          for attempt in 1 2 3 4 5; do
+            if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+              gh release upload "$GITHUB_REF_NAME" "${files[@]}" --clobber && exit 0
+            else
+              gh release create "$GITHUB_REF_NAME" "${files[@]}" --title "LAVRay $GITHUB_REF_NAME" --generate-notes && exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::не удалось прикрепить ассеты к релизу"; exit 1

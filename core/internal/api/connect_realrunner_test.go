@@ -33,8 +33,14 @@ func realRunnerEnv(t *testing.T, socksPort int) (*Server, int64) {
 	t.Cleanup(func() { _, _ = s.Disconnect(context.Background(), connect.NewRequest(&lavrayv1.DisconnectRequest{})) })
 	t55SetInboundPort(t, s, int64(freeLoopbackPort(t)))
 	// Встроенные пресеты ссылаются на наборы правил geosite (.srs), а каталога
-	// geo в тестовой среде нет. Неизвестный пресет — нейтральный набор без них.
-	if err := s.st.SetSetting("routing.active_preset", `"none"`); err != nil {
+	// geo в тестовой среде нет. Пустой пользовательский набор — без них.
+	empty, err := s.CreatePreset(context.Background(), connect.NewRequest(&lavrayv1.CreatePresetRequest{
+		Preset: &lavrayv1.RoutingPreset{DisplayName: "empty", DefaultOutbound: lavrayv1.Outbound_OUTBOUND_PROXY},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ActivatePreset(context.Background(), connect.NewRequest(&lavrayv1.ActivatePresetRequest{Id: empty.Msg.Id})); err != nil {
 		t.Fatal(err)
 	}
 	p := &model.Profile{

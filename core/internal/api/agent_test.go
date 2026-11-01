@@ -61,31 +61,33 @@ func agentHandler(srv *Server) http.Handler {
 
 // apiClients — клиенты всех нужных сервисов под одним токеном.
 type apiClients struct {
-	core     lavrayv1connect.CoreServiceClient
-	profile  lavrayv1connect.ProfileServiceClient
-	subs     lavrayv1connect.SubscriptionServiceClient
-	settings lavrayv1connect.SettingsServiceClient
-	logs     lavrayv1connect.LogServiceClient
-	stats    lavrayv1connect.StatsServiceClient
-	conns    lavrayv1connect.ConnectionServiceClient
-	diag     lavrayv1connect.DiagnosticsServiceClient
-	routing  lavrayv1connect.RoutingServiceClient
-	dns      lavrayv1connect.DnsServiceClient
+	core      lavrayv1connect.CoreServiceClient
+	profile   lavrayv1connect.ProfileServiceClient
+	subs      lavrayv1connect.SubscriptionServiceClient
+	settings  lavrayv1connect.SettingsServiceClient
+	logs      lavrayv1connect.LogServiceClient
+	stats     lavrayv1connect.StatsServiceClient
+	conns     lavrayv1connect.ConnectionServiceClient
+	diag      lavrayv1connect.DiagnosticsServiceClient
+	routing   lavrayv1connect.RoutingServiceClient
+	dns       lavrayv1connect.DnsServiceClient
+	migration lavrayv1connect.MigrationServiceClient
 }
 
 func newAPIClients(url, token string) *apiClients {
 	hc := &http.Client{Transport: bearerRT{token}}
 	return &apiClients{
-		core:     lavrayv1connect.NewCoreServiceClient(hc, url),
-		profile:  lavrayv1connect.NewProfileServiceClient(hc, url),
-		subs:     lavrayv1connect.NewSubscriptionServiceClient(hc, url),
-		settings: lavrayv1connect.NewSettingsServiceClient(hc, url),
-		logs:     lavrayv1connect.NewLogServiceClient(hc, url),
-		stats:    lavrayv1connect.NewStatsServiceClient(hc, url),
-		conns:    lavrayv1connect.NewConnectionServiceClient(hc, url),
-		diag:     lavrayv1connect.NewDiagnosticsServiceClient(hc, url),
-		routing:  lavrayv1connect.NewRoutingServiceClient(hc, url),
-		dns:      lavrayv1connect.NewDnsServiceClient(hc, url),
+		core:      lavrayv1connect.NewCoreServiceClient(hc, url),
+		profile:   lavrayv1connect.NewProfileServiceClient(hc, url),
+		subs:      lavrayv1connect.NewSubscriptionServiceClient(hc, url),
+		settings:  lavrayv1connect.NewSettingsServiceClient(hc, url),
+		logs:      lavrayv1connect.NewLogServiceClient(hc, url),
+		stats:     lavrayv1connect.NewStatsServiceClient(hc, url),
+		conns:     lavrayv1connect.NewConnectionServiceClient(hc, url),
+		diag:      lavrayv1connect.NewDiagnosticsServiceClient(hc, url),
+		routing:   lavrayv1connect.NewRoutingServiceClient(hc, url),
+		dns:       lavrayv1connect.NewDnsServiceClient(hc, url),
+		migration: lavrayv1connect.NewMigrationServiceClient(hc, url),
 	}
 }
 

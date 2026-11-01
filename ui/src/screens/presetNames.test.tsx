@@ -18,7 +18,7 @@ import {
 } from '../test-utils/coreStub';
 import type { Json } from '../test-utils/coreStub';
 import { ConnectionScreen } from './screen_connection';
-import { RulesScreen } from './screen_rules';
+import { RulesScreen } from './rules/RulesScreen';
 
 const builtin = (id: string, revision: number, lists: Json = {}): Json => ({
   id,

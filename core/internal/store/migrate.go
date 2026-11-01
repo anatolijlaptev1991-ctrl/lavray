@@ -122,6 +122,16 @@ var migrations = []migration{
 		version: sessionsSchemaVersion,
 		stmts:   sessionsSchema,
 	},
+	{
+		// T-76: пользователи веб-панели (web_users_schema.go).
+		version: webUsersSchemaVersion,
+		stmts:   webUsersSchema,
+	},
+	{
+		// T-78: что уже перенесено из NekoBox (importmap_schema.go).
+		version: importMapSchemaVersion,
+		stmts:   importMapSchema,
+	},
 }
 
 // schemaVersion читает текущую версию схемы (0 — свежая база).

@@ -82,6 +82,8 @@ var agentTable = map[string]agentDecision{
 	lavrayv1connect.RoutingServiceGetActivePresetProcedure:    agentDeny,
 	lavrayv1connect.RoutingServiceResetBuiltinPresetProcedure: agentDeny,
 	lavrayv1connect.RoutingServiceImportNekoRayRouteProcedure: agentDeny,
+	lavrayv1connect.RoutingServiceExportPresetProcedure:       agentDeny, // T-80: наборы агенту закрыты целиком
+	lavrayv1connect.RoutingServiceImportPresetProcedure:       agentDeny,
 
 	// DnsService.
 	lavrayv1connect.DnsServiceGetDnsProcedure:          agentDeny,
@@ -138,6 +140,18 @@ var agentTable = map[string]agentDecision{
 	lavrayv1connect.WebSessionServiceChangePasswordProcedure:   agentDeny,
 	lavrayv1connect.WebSessionServiceListSessionsProcedure:     agentDeny,
 	lavrayv1connect.WebSessionServiceRevokeSessionProcedure:    agentDeny,
+
+	// BackupService (T-83): копия содержит секреты и заменяет все данные —
+	// агентам закрыты все три процедуры.
+	lavrayv1connect.BackupServiceExportBackupProcedure:  agentDeny,
+	lavrayv1connect.BackupServicePreviewBackupProcedure: agentDeny,
+	lavrayv1connect.BackupServiceImportBackupProcedure:  agentDeny,
+
+	// MigrationService (T-78): читает произвольные каталоги диска и пишет в базу —
+	// агентам закрыт весь сервис.
+	lavrayv1connect.MigrationServiceDetectNekoBoxProcedure:        agentDeny,
+	lavrayv1connect.MigrationServicePreviewNekoBoxImportProcedure: agentDeny,
+	lavrayv1connect.MigrationServiceImportNekoBoxProcedure:        agentDeny,
 }
 
 // agentProcedures — множество процедур с решением d.

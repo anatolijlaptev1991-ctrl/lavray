@@ -13,7 +13,6 @@ package api
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"connectrpc.com/connect"
 
@@ -28,9 +27,9 @@ import (
 // Connect / Disconnect / Restart
 // ============================================================================
 
-// startRun — общая логика запуска Connect и RestartProfile: сборка конфига,
+// startRunLocked — общая логика запуска Connect и RestartProfile: сборка конфига,
 // валидаторы, старт менеджера. Возвращает статус и предупреждения сборки.
-func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavrayv1.ConnectMode) (*lavrayv1.CoreStatus, []string, error) {
+func (s *Server) startRunLocked(ctx context.Context, profile *model.Profile, mode lavrayv1.ConnectMode) (*lavrayv1.CoreStatus, []string, error) {
 	// Гейт внешних ядер (решение №5): naive/custom-external off по умолчанию.
 	if profile.Type == model.TypeNaive || profile.Type == model.TypeCustomExternal {
 		if !s.settingBool("enable_external_cores") {
@@ -47,9 +46,8 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 			mode = lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY
 		}
 	}
-	switch mode {
-	case lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TPROXY, lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TUN:
-		return nil, nil, invalidArg("режим шлюза доступен только в сборке для роутера; на компьютере — системный прокси или TUN")
+	if err := s.checkGatewayMode(mode); err != nil { // gateway_mode.go
+		return nil, nil, err
 	}
 
 	// Режим TUN без прав: понятная причина вместо сырой ошибки sing-box
@@ -61,6 +59,7 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 	}
 
 	st := s.buildSettings(mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN)
+	s.applyGateway(st, mode)
 	var warnings []string
 	if mode != lavrayv1.ConnectMode_CONNECT_MODE_TUN {
 		// T-55: в TUN mixed-слушатель остаётся (cfgbuild/inbounds.go), и
@@ -93,16 +92,13 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 	if err != nil {
 		return nil, nil, err
 	}
-	warnings = append(warnings, tunMixedWarning(result.Config, mode)...) // T-55: по факту конфига
+	warnings = append(warnings, s.buildWarnings(result, mode)...)
 	configJSON, err := cfgbuild.MarshalIndent(result.Config)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	modeStr := "system_proxy"
-	if mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN {
-		modeStr = "tun"
-	}
+	modeStr := runModeString(mode)
 	// Итог проверки связи прежнего запуска к новому не относится.
 	s.resetHealth()
 	startCtx, cancel := context.WithTimeout(ctx, inst.StartTimeout) // LNB-06
@@ -130,20 +126,6 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 	return s.coreStatus(), warnings, nil
 }
 
-// rememberedMode — последний режим профиля (remember.modes, перенос §5.4;
-// формат NekoBox — список "system_proxy"/"tun"; пусто = не запомнен).
-func (s *Server) rememberedMode() lavrayv1.ConnectMode {
-	for _, v := range s.settingStringList("remember.modes") {
-		switch strings.TrimSpace(v) {
-		case "tun", "vpn":
-			return lavrayv1.ConnectMode_CONNECT_MODE_TUN
-		case "system_proxy", "proxy":
-			return lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY
-		}
-	}
-	return lavrayv1.ConnectMode_CONNECT_MODE_UNSPECIFIED
-}
-
 // Connect — FR-UI-032. Ровно один источник профиля: profile_id или inline.
 func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.ConnectRequest]) (*connect.Response[lavrayv1.ConnectResponse], error) {
 	in := req.Msg
@@ -159,7 +141,7 @@ func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.Conn
 			return nil, err
 		}
 		warnings := append([]string{"validate_only: конфиг собран и валиден, инстанс не запущен"}, inlineWarns...)
-		warnings = append(warnings, tunMixedWarning(built.Config, in.GetMode())...) // T-55: по факту конфига
+		warnings = append(warnings, s.buildWarnings(built, in.GetMode())...)
 		return connect.NewResponse(&lavrayv1.ConnectResponse{
 			Status:   s.coreStatus(),
 			Warnings: warnings,
@@ -173,6 +155,7 @@ func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.Conn
 		}
 		return nil, err
 	}
+	s.rememberConnect(in, status) // remember.go: профиль и режим для Ctrl+D и автоподключения
 	return connect.NewResponse(&lavrayv1.ConnectResponse{Status: status, Warnings: append(inlineWarns, warnings...)}), nil
 }
 
@@ -183,10 +166,11 @@ func (s *Server) dryRunBuild(profile *model.Profile, mode lavrayv1.ConnectMode) 
 			return nil, failedPrecondition("тип %s требует внешнего ядра (enable_external_cores)", profile.Type)
 		}
 	}
-	if mode == lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TPROXY || mode == lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TUN {
-		return nil, invalidArg("режим шлюза доступен только в сборке для роутера")
+	if err := s.checkGatewayMode(mode); err != nil {
+		return nil, err
 	}
 	st := s.buildSettings(mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN)
+	s.applyGateway(st, mode)
 	if mode != lavrayv1.ConnectMode_CONNECT_MODE_TUN {
 		if err := s.validateInboundLAN(st.Inbound); err != nil {
 			return nil, err

@@ -57,10 +57,10 @@ func checkManifest(trust *Trust, raw []byte, entry TimestampEntry, q ManifestQue
 	}
 	sum := sha256.Sum256(env.Signed)
 	if hex.EncodeToString(sum[:]) != entry.Sha256 {
-		return nil, fmt.Errorf("%w: manifest не совпал с timestamp", ErrHashMismatch)
+		return nil, fmt.Errorf("%w: %w: sha256 manifest не совпал с timestamp", ErrManifestMismatch, ErrHashMismatch)
 	}
 	if int64(len(env.Signed)) != entry.Length {
-		return nil, fmt.Errorf("%w: длина manifest не совпала с timestamp", ErrLengthMismatch)
+		return nil, fmt.Errorf("%w: %w: длина manifest не совпала с timestamp", ErrManifestMismatch, ErrLengthMismatch)
 	}
 	mf, err := ParseManifest(env.Signed)
 	if err != nil {
@@ -76,7 +76,7 @@ func checkManifestClaims(mf *Manifest, entry TimestampEntry, q ManifestQuery) er
 	case q.Product != "" && mf.Product != q.Product:
 		return fmt.Errorf("%w: %q вместо %q", ErrWrongProduct, mf.Product, q.Product)
 	case mf.Serial != entry.Serial:
-		return fmt.Errorf("%w: serial манифеста %d, в timestamp %d", ErrHashMismatch, mf.Serial, entry.Serial)
+		return fmt.Errorf("%w: %w: serial манифеста %d, в timestamp %d", ErrManifestMismatch, ErrHashMismatch, mf.Serial, entry.Serial)
 	case expires(mf.Expires, q.Now):
 		return fmt.Errorf("%w: manifest истёк", ErrExpired)
 	case mf.Serial < q.SavedSerial:

@@ -260,17 +260,49 @@ jobs:
           json.dump({"ru": text} if text else {}, open("notes.json", "w", encoding="utf-8"), ensure_ascii=False)
           PY
 
-      # Версия не новее уже опубликованной в канале — отказ (-published-dir).
+      # Наборы маршрутов и гео-данные идут в манифест, только если в репозитории есть
+      # входы: release-data/presets/<id>.json и/или release-data/geo/{geoip,geosite}/*.srs.
+      # Нет входов — шаги ниже пропускаются, манифест несёт одно приложение.
+      - name: "Наборы и гео: входы"
+        id: data
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          presets=false; geo=false
+          if ls release-data/presets/*.json >/dev/null 2>&1; then presets=true; fi
+          if [ -d release-data/geo ]; then geo=true; fi
+          echo "presets=$presets" >> "$GITHUB_OUTPUT"
+          echo "geo=$geo" >> "$GITHUB_OUTPUT"
+          if [ "$presets" = false ] && [ "$geo" = false ]; then
+            echo "::notice title=Наборы и гео пропущены::нет release-data/presets/*.json и release-data/geo: в манифест попадает только приложение"
+          fi
+
+      - name: "Гео: упаковка (updsign geo-pack)"
+        if: steps.gate.outputs.enabled == 'true' && steps.data.outputs.geo == 'true'
+        run: |
+          mkdir -p build
+          ./updsign geo-pack -in release-data/geo -out build/geo.zip
+
+      # Версия не новее уже опубликованной в канале, а ревизия набора ниже
+      # опубликованной — отказ (-published-dir). Файлы данных кладутся в dist под
+      # своими именами на источнике: их проверяет verify (-assets dist) и загружает
+      # публикация в релиз.
       - name: "Подпись манифеста (ключи manifest и artifact)"
         if: steps.gate.outputs.enabled == 'true'
         env:
           LAVRAY_MANIFEST_KEY: ${{ secrets.LAVRAY_MANIFEST_KEY }}
           LAVRAY_ARTIFACT_KEY: ${{ secrets.LAVRAY_ARTIFACT_KEY }}
+          DATA_PRESETS: ${{ steps.data.outputs.presets }}
+          DATA_GEO: ${{ steps.data.outputs.geo }}
         run: |
+          data=()
+          if [ "$DATA_PRESETS" = true ]; then data+=(-presets-dir release-data/presets); fi
+          if [ "$DATA_GEO" = true ]; then data+=(-geo-zip build/geo.zip); fi
+          if [ "${#data[@]}" -gt 0 ]; then data+=(-data-prefix "v$VER/" -data-out dist); fi
           ./updsign manifest -key env:LAVRAY_MANIFEST_KEY -artifact-key env:LAVRAY_ARTIFACT_KEY \
             -product lavray-windows -channel "$CHANNEL" -version "$VER" -notes notes.json \
             -published-dir pages/meta \
             -asset "windows-x64=v$VER/$SETUP_NAME=dist/$SETUP_NAME" \
+            "${data[@]}" \
             -out "pages/meta/manifest-$CHANNEL.json"
 
       - name: "Подпись sources.json (ключ manifest)"
@@ -307,6 +339,9 @@ jobs:
           auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
           echo "::add-mask::$auth"
           gh release upload "$GITHUB_REF_NAME" "dist/$SETUP_NAME.minisig" --clobber
+          shopt -s nullglob
+          data=(dist/presets-*.json dist/geo-*.zip)
+          if [ "${#data[@]}" -gt 0 ]; then gh release upload "$GITHUB_REF_NAME" "${data[@]}" --clobber; fi
           git -C pages config user.name "github-actions[bot]"
           git -C pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C pages add meta

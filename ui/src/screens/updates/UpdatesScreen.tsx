@@ -10,6 +10,7 @@ import type { JSX } from 'react';
 import { Icon } from '../../components/Icon';
 import { useI18n } from '../../hooks/useI18n';
 import { useUpdateFlow } from '../../hooks/useUpdateFlow';
+import { useUpdateData } from '../../hooks/useUpdateData';
 import { useUpdateSettings } from '../../hooks/useUpdateSettings';
 import { useUpdateState } from '../../hooks/useUpdateState';
 import { showCoreError } from '../../lib/core';
@@ -17,6 +18,7 @@ import { inShell } from '../../lib/updates/shell';
 import type { Channel } from '../../lib/updates/types';
 import { AutoCheckRow } from './AutoCheckRow';
 import { ChainStateCard } from './ChainStateCard';
+import { DataComponentsCard } from './DataComponentsCard';
 import { InstallFromFileRow } from './InstallFromFileRow';
 import { RollbackRow } from './RollbackRow';
 import { UpdateStatusCard } from './UpdateStatusCard';
@@ -28,7 +30,8 @@ export function UpdatesScreen(): JSX.Element {
   const settings = useUpdateSettings((e) => {
     setSaveError(showCoreError(e, t));
   });
-  const flow = useUpdateFlow(settings.channel);
+  const data = useUpdateData();
+  const flow = useUpdateFlow(settings.channel, { onCheck: data.observeCheck });
   const info = useUpdateState();
   const { markNotConfigured, channelChanged } = flow;
 
@@ -62,6 +65,7 @@ export function UpdatesScreen(): JSX.Element {
         lastCheckedAtMs={Math.max(flow.lastCheckedAtMs, info.lastCheckedAtMs)}
       />
       <UpdateStatusCard flow={flow} />
+      <DataComponentsCard data={data} />
       <div className="card">
         <AutoCheckRow checked={settings.autoCheck} onChange={(next) => void settings.setAutoCheck(next)} />
         {native && <InstallFromFileRow />}

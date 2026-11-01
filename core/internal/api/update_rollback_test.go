@@ -53,10 +53,13 @@ func TestRollbackKeepsMonotonicSerials(t *testing.T) {
 	}
 
 	// T-75: откат приложения выполняет оболочка, ядро отвечает FAILED_PRECONDITION;
-	// остальные компоненты пока не реализованы. Ни в одном случае serial не меняется.
+	// пресеты и гео (T-75/7.5) без прошлой ревизии — тоже; ядро пока не реализовано.
+	// Ни в одном случае serial не меняется.
 	for comp, want := range map[lavrayv1.UpdateComponent]connect.Code{
-		lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP:  connect.CodeFailedPrecondition,
-		lavrayv1.UpdateComponent_UPDATE_COMPONENT_CORE: connect.CodeUnimplemented,
+		lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP:     connect.CodeFailedPrecondition,
+		lavrayv1.UpdateComponent_UPDATE_COMPONENT_PRESETS: connect.CodeFailedPrecondition,
+		lavrayv1.UpdateComponent_UPDATE_COMPONENT_GEO:     connect.CodeFailedPrecondition,
+		lavrayv1.UpdateComponent_UPDATE_COMPONENT_CORE:    connect.CodeUnimplemented,
 	} {
 		_, err := srv.Rollback(ctx, connect.NewRequest(&lavrayv1.RollbackRequest{Component: comp}))
 		if connect.CodeOf(err) != want {

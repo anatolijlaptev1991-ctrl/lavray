@@ -153,8 +153,8 @@ func (p *Preset) Validate() error {
 	if p.ID == "" {
 		return errors.New("id: пуст")
 	}
-	if p.Revision < 0 {
-		return fmt.Errorf("revision: %d < 0", p.Revision)
+	if p.Revision < 0 || p.Revision > MaxRevision {
+		return fmt.Errorf("revision: %d вне 0…%d", p.Revision, MaxRevision)
 	}
 	if len(p.Name) == 0 {
 		return errors.New("name: пуст")

@@ -146,3 +146,28 @@ func TestSetSettingsReportsRestartFlagsAndKeepsLists(t *testing.T) {
 		}
 	}
 }
+
+// T-75: update.channel принимает только известные каналы; всё остальное —
+// INVALID_ARGUMENT, значение не записывается (иначе чужой канал молча сводился бы к stable).
+func TestSetSettingsUpdateChannelOnlyKnown(t *testing.T) {
+	s := newSvcFixture(t, nil).srv
+	for _, bad := range []string{"", "nightly", "Stable", "BETA", "stable ", "../beta", "beta" + string(rune(10))} {
+		if err := setSetting(t, s, "update.channel", strSetting(bad)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+			t.Errorf("update.channel=%q: ожидался INVALID_ARGUMENT, получено %v", bad, err)
+		}
+	}
+	if err := setSetting(t, s, "update.channel", intSetting(1)); connect.CodeOf(err) != connect.CodeInvalidArgument {
+		t.Errorf("update.channel=1: %v", err)
+	}
+	if got := getSettings(t, s, "update.channel")["update.channel"].GetStringValue(); got != "stable" {
+		t.Fatalf("отвергнутые значения изменили канал: %q", got)
+	}
+	for _, ok := range []string{"beta", "stable"} {
+		if err := setSetting(t, s, "update.channel", strSetting(ok)); err != nil {
+			t.Errorf("update.channel=%q отвергнут: %v", ok, err)
+		}
+		if got := getSettings(t, s, "update.channel")["update.channel"].GetStringValue(); got != ok {
+			t.Errorf("канал после записи %q = %q", ok, got)
+		}
+	}
+}

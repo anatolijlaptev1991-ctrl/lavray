@@ -34,9 +34,9 @@ func presetOut(p *presets.Preset, rev map[string]int) *lavrayv1.RoutingPreset {
 	return r
 }
 
-// builtinRevisions — ревизии встроенных наборов по id.
-func builtinRevisions() (map[string]int, error) {
-	list, err := presets.BuiltinPresets()
+// builtinRevisions — действующие ревизии встроенных наборов по id (с переопределениями).
+func (s *Server) builtinRevisions() (map[string]int, error) {
+	list, err := s.builtinList()
 	if err != nil {
 		return nil, err
 	}

@@ -225,9 +225,12 @@ type PresetEntry struct {
 
 // GeoSection — подписанный набор гео-данных (LNB-31).
 type GeoSection struct {
-	Path        string `json:"path"`
-	Sha256      string `json:"sha256"`
-	Length      int64  `json:"length"`
+	Path   string `json:"path"`
+	Sha256 string `json:"sha256"`
+	Length int64  `json:"length"`
+	// Rev — монотонная ревизия набора: клиент не применяет набор, чья ревизия не
+	// выше установленной (стабильный канал после беты не откатывает гео).
+	Rev         int64  `json:"rev"`
 	GeneratedAt string `json:"generatedAt,omitempty"`
 }
 
@@ -309,8 +312,8 @@ func ParseManifest(signed json.RawMessage) (*Manifest, error) {
 		}
 	}
 	for name, p := range m.Presets {
-		if p.Rev < 1 {
-			return nil, fmt.Errorf("%w: presets[%s].rev=%d < 1", ErrBadValue, name, p.Rev)
+		if p.Rev < 1 || p.Rev > MaxPresetRev {
+			return nil, fmt.Errorf("%w: presets[%s].rev=%d вне 1…%d", ErrBadValue, name, p.Rev, MaxPresetRev)
 		}
 		if err := checkRelativePath(p.Path); err != nil {
 			return nil, fmt.Errorf("presets[%s].path: %w", name, err)
@@ -320,17 +323,8 @@ func ParseManifest(signed json.RawMessage) (*Manifest, error) {
 		}
 	}
 	if m.Geo != nil {
-		if err := requireSectionKeys(signed, "geo", "path", "sha256", "length"); err != nil {
+		if err := m.Geo.validate(signed); err != nil {
 			return nil, err
-		}
-		if err := checkRelativePath(m.Geo.Path); err != nil {
-			return nil, fmt.Errorf("geo.path: %w", err)
-		}
-		if err := checkHex64(m.Geo.Sha256); err != nil {
-			return nil, fmt.Errorf("geo.sha256: %w", err)
-		}
-		if m.Geo.Length < 1 {
-			return nil, fmt.Errorf("%w: geo.length=%d < 1", ErrBadValue, m.Geo.Length)
 		}
 	}
 	return &m, nil

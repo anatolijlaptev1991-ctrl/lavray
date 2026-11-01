@@ -4,7 +4,7 @@
 // (GetRuntimeConfig): по кнопке, с подсказкой про маскирование, скрыть и копировать.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
-import { setLanguage } from '../../lib/i18n';
+import { setLanguage, t } from '../../lib/i18n';
 import { Failure, click, mount, stubCore, unmountAll } from '../../test-utils/coreStub';
 import { RuntimeConfigCard } from './RuntimeConfigCard';
 
@@ -65,6 +65,25 @@ describe('RuntimeConfigCard', () => {
     await click(byText(view.container, 'Show current config (without secrets)'));
     await click(byText(view.container, 'Copy'));
     expect(writeText).toHaveBeenCalledWith(CONFIG);
+  });
+
+  it('после копирования кнопка говорит нейтральное «Copied», а не «Link copied» (конфиг — не ссылка)', async () => {
+    vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(() => Promise.resolve()) } });
+    stubCore({ 'CoreService/GetRuntimeConfig': { singBoxJson: CONFIG } });
+    const view = await mount(createElement(RuntimeConfigCard));
+    await click(byText(view.container, 'Show current config (without secrets)'));
+    await click(byText(view.container, 'Copy'));
+    expect(byText(view.container, t('diag.cfg.copied'))).toBeDefined();
+    expect(t('diag.cfg.copied')).toBe('Copied');
+    expect(view.container.textContent).not.toContain(t('toast.copied'));
+    expect(view.container.textContent?.toLowerCase()).not.toContain('link');
+  });
+
+  it('текст «скопировано» нейтральный на всех языках: не про ссылку', () => {
+    for (const lang of ['ru', 'en', 'de', 'es', 'zh'] as const) {
+      expect(t('diag.cfg.copied', lang), lang).not.toBe(t('toast.copied', lang));
+    }
+    expect(t('diag.cfg.copied', 'ru')).toBe('Скопировано');
   });
 
   it('ошибка ядра показана, конфиг не выводится (R)', async () => {

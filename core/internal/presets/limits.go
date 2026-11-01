@@ -26,6 +26,9 @@ const (
 	MaxAllCustomBytes = 4 << 20
 	// MaxImportBytes — размер файла при импорте набора.
 	MaxImportBytes = 1 << 20
+	// MaxRevision — потолок ревизии набора: один подписанный огромный rev не
+	// должен навсегда закрыть набор для всех последующих ревизий.
+	MaxRevision = 1_000_000_000
 )
 
 var (

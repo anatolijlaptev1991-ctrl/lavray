@@ -138,13 +138,33 @@ func (s *Server) activeOrGlobal() (*presets.Preset, error) {
 	if err != nil || found {
 		return p, err
 	}
-	p, _, err = builtinPreset("global")
+	p, _, err = s.builtinPreset("global")
 	return p, err
 }
 
-// builtinPreset — встроенный набор по id (false — такого нет).
-func builtinPreset(id string) (*presets.Preset, bool, error) {
+// builtinList — встроенные наборы с переопределениями, доставленными апдейтером
+// (<данные>/presets/override, T-75/7.5): набор той же id с более высокой ревизией.
+func (s *Server) builtinList() ([]*presets.Preset, error) {
+	return presets.BuiltinPresetsWith(s.presetOverrideDir())
+}
+
+// isBuiltinID — id принадлежит встроенному набору (состав не зависит от переопределений).
+func isBuiltinID(id string) (bool, error) {
 	list, err := presets.BuiltinPresets()
+	if err != nil {
+		return false, err
+	}
+	for _, p := range list {
+		if p.ID == id {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// builtinPreset — встроенный набор по id (false — такого нет).
+func (s *Server) builtinPreset(id string) (*presets.Preset, bool, error) {
+	list, err := s.builtinList()
 	if err != nil {
 		return nil, false, err
 	}
@@ -161,7 +181,7 @@ func (s *Server) findPreset(id string) (*presets.Preset, bool, error) {
 	if id == "" {
 		return nil, false, nil
 	}
-	if p, ok, err := builtinPreset(id); err != nil || ok {
+	if p, ok, err := s.builtinPreset(id); err != nil || ok {
 		return p, ok, err
 	}
 	custom, err := s.presetRepo.List()

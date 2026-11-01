@@ -54,6 +54,7 @@ func (s *Server) checkResponse(res *updates.Result, st *updates.State, want []la
 			Mandatory:        optBool(mf.Mandatory),
 		})
 	}
+	out.Available = append(out.Available, s.componentOffers(res, want)...)
 	return out
 }
 
@@ -95,7 +96,7 @@ func (s *Server) GetUpdateState(ctx context.Context, req *connect.Request[lavray
 	st := s.loadUpdateState()
 	fresh := st.LastCheckedAt > 0 && time.Since(time.UnixMilli(st.LastCheckedAt)) < 7*24*time.Hour
 	return connect.NewResponse(&lavrayv1.UpdateStateResponse{
-		Components:      []*lavrayv1.ComponentState{s.appComponentState()},
+		Components:      append([]*lavrayv1.ComponentState{s.appComponentState()}, s.componentStates()...),
 		LastCheckedAtMs: st.LastCheckedAt,
 		ChainState: &lavrayv1.ChainStateInfo{
 			RootVersion:    int32(st.RootVersion),

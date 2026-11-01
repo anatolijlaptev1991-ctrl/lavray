@@ -40,6 +40,10 @@ var (
 	ErrHashMismatch = errors.New("updates: sha256 не совпал")
 	// ErrLengthMismatch — длина не совпала с манифестом/timestamp.
 	ErrLengthMismatch = errors.New("updates: длина не совпала")
+	// ErrManifestMismatch — манифест не тот, что пиннит timestamp (sha256, длина
+	// или serial): подмена документа при валидной подписи. Идёт вместе с
+	// ErrHashMismatch/ErrLengthMismatch, чтобы прежние проверки errors.Is работали.
+	ErrManifestMismatch = errors.New("updates: манифест не совпал с пином timestamp")
 	// ErrUnsafePath — путь артефакта пытается выйти за корень (zip-slip).
 	ErrUnsafePath = errors.New("updates: небезопасный путь артефакта")
 	// ErrBadURL — источник не HTTPS или не разбирается (§2 MITM).

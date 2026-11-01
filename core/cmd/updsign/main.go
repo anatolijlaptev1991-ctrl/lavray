@@ -12,6 +12,7 @@
 //	verify     проверить каталог meta/ тем же кодом, что и клиент
 //	resign     продлить срок manifest/sources, не меняя содержимого
 //	expiry     предупредить об истекающих manifest/sources
+//	geo-pack   собрать детерминированный zip гео-набора из geoip/ и geosite/
 //
 // Приватный ключ читается из файла (file:ПУТЬ) или переменной окружения
 // (env:ИМЯ), никогда не печатается и не принимается из файла внутри git-дерева.
@@ -35,7 +36,7 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	cmds := map[string]func([]string) error{
 		"genkey": c.genkey, "root": c.root, "sources": c.sources, "manifest": c.manifest,
 		"timestamp": c.timestamp, "artifact": c.artifact, "verify": c.verify,
-		"resign": c.resign, "expiry": c.expiry,
+		"resign": c.resign, "expiry": c.expiry, "geo-pack": c.geoPack,
 	}
 	fn, ok := cmds[args[0]]
 	if !ok {
@@ -59,9 +60,11 @@ const usage = `использование: updsign <команда> [флаги]
   genkey    -role root|timestamp|manifest|artifact -out ФАЙЛ [-pub ФАЙЛ]
   root      -key ID=file:ПУТЬ|env:ИМЯ [...] -in ЧЕРНОВИК -out root.json [-prev СТАРЫЙ_root.json]
   sources   -key file:ПУТЬ|env:ИМЯ -in ЧЕРНОВИК -out sources.json [-keyid r1] [-expires 720h]
-  manifest  -key ... -artifact-key ... -product P -channel stable|beta -version V -asset ПЛАТФОРМА=ПУТЬ=ФАЙЛ -out ФАЙЛ
+  manifest  -key ... [-artifact-key ... -version V -asset ПЛАТФОРМА=ПУТЬ=ФАЙЛ] [-presets-dir ДИР] [-geo-zip ФАЙЛ]
+            [-data-prefix v1.2.0/] [-data-out ДИР] -product P -channel stable|beta -out ФАЙЛ [-published-dir meta]
   timestamp -key ... -dir meta -out meta/timestamp.json [-keyid t1] [-expires 168h]
   artifact  -key ... -file ФАЙЛ -product P -platform PL -channel C -version V -serial N [-out ФАЙЛ.minisig]
   verify    -root root.json -dir meta [-assets ДИР] [-product P] [-channel stable|beta]
   resign    -key ... -in manifest-X.json|sources.json -out ФАЙЛ [-expires 2160h]
-  expiry    -dir meta [-within 336h]`
+  expiry    -dir meta [-within 336h]
+  geo-pack  -in ДИР(geoip/, geosite/) -out geo.zip`

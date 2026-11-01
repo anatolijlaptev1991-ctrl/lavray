@@ -6,6 +6,8 @@ package updates
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"testing"
@@ -270,5 +272,51 @@ func TestSourcesJSONAddsMirrors(t *testing.T) {
 	e.src.put("sources.json", envelope(t, doc, map[string]signer{"r1": newSigner(t)}))
 	if srcs, signed = e.cl.fetchSources(context.Background(), time.Now()); signed != nil || len(srcs) != 1 {
 		t.Fatalf("чужой sources.json: srcs=%d", len(srcs))
+	}
+}
+
+// Подменённый манифест (валидная подпись, но не тот документ, что пиннит timestamp)
+// даёт ErrManifestMismatch — отдельную причину проверки, а не безымянный сбой.
+func TestSwappedManifestIsManifestMismatch(t *testing.T) {
+	e := newEnv(t, "0.5.0")
+	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 1, tsVersion: 1})
+	old := append([]byte(nil), e.src.files[ManifestName(ChannelStable)]...)
+	e.def.publish(t, e.src, relOpts{version: "0.7.0", serial: 2, tsVersion: 2})
+	e.src.put(ManifestName(ChannelStable), old) // подпись настоящая, документ другой
+	_, err := e.check(t)
+	if !errors.Is(err, ErrManifestMismatch) {
+		t.Fatalf("ожидалась ErrManifestMismatch: %v", err)
+	}
+	if !errors.Is(err, ErrHashMismatch) {
+		t.Fatalf("прежний признак ErrHashMismatch сохраняется: %v", err)
+	}
+	if e.cl.State.LastCheckedAt != 0 {
+		t.Fatal("неудачная проверка не меняет last_checked_at")
+	}
+}
+
+// Длина и serial манифеста против пина timestamp — тоже подмена манифеста.
+func TestManifestPinLengthAndSerialMismatch(t *testing.T) {
+	e := newEnv(t, "0.5.0")
+	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 3, tsVersion: 1})
+	raw := e.src.files[ManifestName(ChannelStable)]
+	trust := mustTrust(t, e.def.selfSigned(t))
+	env, err := trust.Verify(raw, RoleManifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(env.Signed)
+	good := TimestampEntry{Serial: 3, Sha256: hex.EncodeToString(sum[:]), Length: int64(len(env.Signed))}
+	q := ManifestQuery{Channel: ChannelStable, Product: "lavray-windows", Now: time.Now()}
+	if _, err := checkManifest(trust, raw, good, q); err != nil {
+		t.Fatalf("исходный пин: %v", err)
+	}
+	badLen, badSerial := good, good
+	badLen.Length++
+	badSerial.Serial++
+	for name, entry := range map[string]TimestampEntry{"length": badLen, "serial": badSerial} {
+		if _, err := checkManifest(trust, raw, entry, q); !errors.Is(err, ErrManifestMismatch) {
+			t.Errorf("%s: ожидалась ErrManifestMismatch: %v", name, err)
+		}
 	}
 }

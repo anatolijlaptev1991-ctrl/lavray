@@ -14,49 +14,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"io"
-	"net/http"
 	"sync"
 	"time"
 )
-
-// Source — откуда тянут метаданные/артефакты (интерфейс для тестов;
-// прод: http.Source поверх источников из sources.json).
-type Source interface {
-	// Fetch возвращает тело по имени (например "timestamp.json") либо ошибку.
-	Fetch(ctx context.Context, name string) ([]byte, error)
-}
-
-// HTTPSource — HTTP(S)-источник с базой URL (…/releases/download/…).
-type HTTPSource struct {
-	Base     string
-	Client   *http.Client
-	MaxBytes int64 // лимит тела (0 → 8 МиБ)
-}
-
-func (s *HTTPSource) Fetch(ctx context.Context, name string) ([]byte, error) {
-	cl := s.Client
-	if cl == nil {
-		cl = http.DefaultClient
-	}
-	limit := s.MaxBytes
-	if limit <= 0 {
-		limit = 8 << 20
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.Base+"/"+name, nil)
-	if err != nil {
-		return nil, err
-	}
-	resp, err := cl.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("updates: %s: HTTP %d", name, resp.StatusCode)
-	}
-	return io.ReadAll(io.LimitReader(resp.Body, limit+1))
-}
 
 // Result — успешная проверка обновлений (нет обновления → IsNewer=false).
 type Result struct {

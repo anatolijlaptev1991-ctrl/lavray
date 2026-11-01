@@ -98,6 +98,9 @@ const (
 	RoleTimestamp = "timestamp"
 	RoleManifest  = "manifest"
 	RoleSources   = "sources"
+	// RoleArtifact — подпись установщиков minisign (ключ a1); без неё клиент
+	// отказывает (fail-closed).
+	RoleArtifact = "artifact"
 )
 
 // ParseRoot — строгий разбор подписанной части root.json + структурная
@@ -122,39 +125,11 @@ func ParseRoot(signed json.RawMessage) (*Root, error) {
 	if len(r.Keys) == 0 {
 		return nil, fmt.Errorf("%w: root.keys пуст", ErrBadValue)
 	}
-	for id, k := range r.Keys {
-		if k.Alg != "ed25519" {
-			return nil, fmt.Errorf("%w: ключ %s: alg=%q (поддерживается только ed25519)", ErrBadValue, id, k.Alg)
-		}
-		pub, err := base64.StdEncoding.DecodeString(k.Pub)
-		if err != nil || len(pub) != ed25519.PublicKeySize {
-			return nil, fmt.Errorf("%w: ключ %s: pub не является ed25519-ключом (base64, %d байт)", ErrBadValue, id, ed25519.PublicKeySize)
-		}
+	if err := validateRootKeys(&r); err != nil {
+		return nil, err
 	}
-	for _, role := range []string{RoleRoot, RoleTimestamp, RoleManifest, RoleSources} {
-		rl, ok := r.Roles[role]
-		if !ok {
-			return nil, fmt.Errorf("%w: root.roles без роли %q", ErrMissingField, role)
-		}
-		if rl.Threshold < 1 {
-			return nil, fmt.Errorf("%w: роль %s: threshold=%d < 1", ErrBadValue, role, rl.Threshold)
-		}
-		if len(rl.Keyids) < rl.Threshold {
-			return nil, fmt.Errorf("%w: роль %s: keyids (%d) меньше threshold (%d)", ErrBadValue, role, len(rl.Keyids), rl.Threshold)
-		}
-		seen := map[string]bool{}
-		for _, id := range rl.Keyids {
-			if id == "" {
-				return nil, fmt.Errorf("%w: роль %s: пустой keyid", ErrBadValue, role)
-			}
-			if seen[id] {
-				return nil, fmt.Errorf("%w: роль %s: дубликат keyid %s", ErrBadValue, role, id)
-			}
-			seen[id] = true
-			if _, ok := r.Keys[id]; !ok {
-				return nil, fmt.Errorf("%w: роль %s: keyid %s отсутствует в keys", ErrBadValue, role, id)
-			}
-		}
+	if err := validateRootRoles(&r); err != nil {
+		return nil, err
 	}
 	return &r, nil
 }
@@ -472,8 +447,8 @@ func VerifyEnvelope(env *Envelope, role string, root *Root) error {
 			continue
 		}
 		key, ok := root.Keys[s.Keyid]
-		if !ok {
-			continue // отозванный/неизвестный ключ не считается
+		if !ok || key.Alg != algEd25519 {
+			continue // отозванный/неизвестный ключ (и не-ed25519) не считается
 		}
 		pub, err := base64.StdEncoding.DecodeString(key.Pub)
 		if err != nil || len(pub) != ed25519.PublicKeySize {
@@ -565,9 +540,8 @@ func (t *Trust) VerifyRootUpdate(raw []byte) (*Trust, error) {
 	if err := VerifyEnvelope(env, RoleRoot, newRoot); err != nil {
 		return nil, fmt.Errorf("ротация root: не подписан новыми ключами: %w", err)
 	}
-	// Срок действия нового корня тоже обязан быть в будущем.
-	if newRoot.Expires.IsZero() || !time.Now().Before(newRoot.Expires) {
-		return nil, fmt.Errorf("%w: новый root просрочен или без expires", ErrExpired)
-	}
+	// Срок действия промежуточного корня не проверяется: «просроченный
+	// встроенный корень → валидный по цепочке» (rootchain.go проверяет только
+	// итоговый корень).
 	return &Trust{raw: append([]byte(nil), raw...), root: newRoot}, nil
 }

@@ -50,10 +50,16 @@ fn ok_output(version: &str, sha: &str) -> RunOutput {
     }
 }
 
+// Каталог установки без букв диска: тесты идут и на Linux, где «\» — не
+// разделитель пути.
+fn install_root() -> PathBuf {
+    PathBuf::from("Program Files").join("LAVRay")
+}
+
 fn verifier(runner: FakeRunner) -> CoreVerifier {
     CoreVerifier::new(
-        PathBuf::from(r"C:\Program Files\LAVRay\binaries\lavray-core.exe"),
-        PathBuf::from(r"C:\data"),
+        install_root().join("binaries").join("lavray-core.exe"),
+        PathBuf::from("userdata"),
         Box::new(runner),
     )
 }
@@ -141,7 +147,7 @@ fn the_bundled_core_runs_from_the_install_dir_with_the_given_files() {
     assert_eq!(facts.version, "0.5.1");
     let seen = seen.borrow();
     assert_eq!(seen.len(), 1);
-    assert!(seen[0].0.starts_with(r"C:\Program Files\LAVRay"));
+    assert!(seen[0].0.starts_with(install_root()));
     assert!(!seen[0].0.to_string_lossy().contains("staging"));
     assert!(!seen[0].0.to_string_lossy().contains("data"));
 }
@@ -158,11 +164,11 @@ fn a_core_that_cannot_run_means_core_unavailable_not_a_pass() {
 
 #[test]
 fn candidates_are_only_inside_the_install_directory() {
-    let exe = Path::new(r"C:\Program Files\LAVRay\LAVRay.exe");
-    let found = bundled_core_candidates(exe);
+    let exe = install_root().join("LAVRay.exe");
+    let found = bundled_core_candidates(&exe);
     assert_eq!(found.len(), 3);
     for path in found {
-        assert!(path.starts_with(r"C:\Program Files\LAVRay"), "{path:?}");
+        assert!(path.starts_with(install_root()), "{path:?}");
     }
 }
 

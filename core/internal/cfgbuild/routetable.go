@@ -42,7 +42,7 @@ func BuildRouteTable(preset *presets.Preset, st *BuildSettings) (*RouteTable, er
 		preset = NeutralPreset()
 	}
 	rs := newRuleSetCollector(st)
-	rules, lists, err := routeRules(preset, st, false, rs)
+	rules, lists, err := routeRules(preset, st, false, rs, nil)
 	if err != nil {
 		return nil, err
 	}

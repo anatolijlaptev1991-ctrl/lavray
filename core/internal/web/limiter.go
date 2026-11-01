@@ -52,6 +52,9 @@ func NewLimiter(now func() time.Time, cfg LimiterConfig) *Limiter {
 // normalizeAccount приводит имя к ключу: без регистра и пробелов по краям, не
 // длиннее 128 байт (длинное имя от клиента не должно раздувать память).
 func normalizeAccount(name string) string {
+	if len(name) > 2*maxAccountKB { // не копировать гигантское имя целиком
+		name = name[:2*maxAccountKB]
+	}
 	k := strings.ToLower(strings.TrimSpace(name))
 	if len(k) > maxAccountKB {
 		k = k[:maxAccountKB]

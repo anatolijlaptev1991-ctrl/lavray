@@ -14,6 +14,7 @@ import (
 // webErr переводит ошибки входа в коды Connect:
 //
 //	ErrBadCredentials     → UNAUTHENTICATED (общий текст, без подсказок)
+//	ErrBadSetupCode       → PERMISSION_DENIED
 //	ErrNoAdmin            → FAILED_PRECONDITION (нужна первичная настройка)
 //	ErrAdminExists        → FAILED_PRECONDITION (настройка уже выполнена)
 //	ErrWeakPassword/Name  → INVALID_ARGUMENT
@@ -28,6 +29,8 @@ func webErr(err error) error {
 		ce := connect.NewError(connect.CodeResourceExhausted, rl)
 		ce.Meta().Set("Retry-After", strconv.Itoa(rl.RetrySeconds()))
 		return ce
+	case errors.Is(err, web.ErrBadSetupCode):
+		return connect.NewError(connect.CodePermissionDenied, err)
 	case errors.Is(err, web.ErrBadCredentials):
 		return connect.NewError(connect.CodeUnauthenticated, web.ErrBadCredentials)
 	case errors.Is(err, web.ErrNoAdmin), errors.Is(err, web.ErrAdminExists):

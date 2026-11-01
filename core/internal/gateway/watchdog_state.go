@@ -37,6 +37,19 @@ func (w *Watchdog) Trip() (bool, error) {
 	return true, nil
 }
 
+// Reapply заново применяет правила с текущим списком политик под замком watchdog,
+// если они сейчас установлены (applied=false — нет, ничего не делалось). Так
+// смена политики не обгоняет Beat и Tick: правила, снятые watchdog'ом, обратно
+// не возвращаются.
+func (w *Watchdog) Reapply() (applied bool, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if !w.armed || !w.rulesUp {
+		return false, nil
+	}
+	return true, w.Applier.Apply(w.Renderer.Render(w.Config, w.Policies(), w.Config.SelfUser))
+}
+
 // Disarm снимает правила и разоружает watchdog (шлюз выключен: отключение,
 // выход процесса). Beat после этого правила не вернёт, пока не вызван StartArmed.
 func (w *Watchdog) Disarm() error {

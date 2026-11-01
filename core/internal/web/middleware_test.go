@@ -3,6 +3,7 @@
 package web
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -228,5 +229,38 @@ func TestStaticIsPublic(t *testing.T) {
 	f.h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/login", nil))
 	if rec.Code != http.StatusOK || !strings.HasPrefix(rec.Header().Get("Content-Type"), "text/html") {
 		t.Fatalf("/login: %d %q", rec.Code, rec.Header().Get("Content-Type"))
+	}
+}
+
+// TestPublicProceduresLimitBody — до входа тело запроса ограничено килобайтами (S).
+func TestPublicProceduresLimitBody(t *testing.T) {
+	api := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := io.ReadAll(r.Body); err != nil {
+			http.Error(w, "too large", http.StatusRequestEntityTooLarge)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+	h := NewHandler(&Gate{Sessions: NewSessions(nil), Bearer: "tok", API: api})
+	post := func(proc string, size int) int {
+		r := httptest.NewRequest(http.MethodPost, proc, strings.NewReader(strings.Repeat("x", size)))
+		r.Host = "router.lan"
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec.Code
+	}
+	if code := post(procLogin, 1024); code != http.StatusOK {
+		t.Fatalf("тело в 1 КиБ: %d", code)
+	}
+	if code := post(procLogin, 64<<10); code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("тело в 64 КиБ: %d, ждали 413", code)
+	}
+	// Закрытые процедуры лимит публичных не получают: у них свой (16 МиБ в api).
+	r := httptest.NewRequest(http.MethodPost, procStatus, strings.NewReader(strings.Repeat("x", 64<<10)))
+	r.Header.Set("Authorization", "Bearer tok")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, r)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("закрытая процедура с телом 64 КиБ: %d", rec.Code)
 	}
 }

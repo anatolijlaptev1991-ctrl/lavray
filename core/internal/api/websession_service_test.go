@@ -35,8 +35,8 @@ func TestWebSessionServiceFlow(t *testing.T) {
 	if setup.Code != "" || setup.str("username") != "admin" || b.csrf == "" || setup.str("token") != "" {
 		t.Fatalf("настройка: %+v", setup)
 	}
-	if st := b.call("WebSessionService/GetWebModeStatus", `{}`); st.Body["firstRunSetupRequired"] == true || st.Body["activeSessions"] != float64(1) {
-		t.Fatalf("статус после настройки: %+v", st.Body)
+	if st := b.call("WebSessionService/GetWebModeStatus", `{}`); st.Body["firstRunSetupRequired"] == true || st.Body["activeSessions"] != nil {
+		t.Fatalf("статус после настройки (число сессий до входа не раскрывается): %+v", st.Body)
 	}
 
 	// Перезагрузка страницы: CSRF утерян, WhoAmI возвращает его по cookie.
@@ -293,5 +293,36 @@ func TestWebProcedureConstantsMatchProto(t *testing.T) {
 		if got != want {
 			t.Errorf("константа шлюза %q != %q", got, want)
 		}
+	}
+}
+
+// TestSetupCodeProtectsFirstAdmin — панель не на loopback: первый администратор
+// создаётся только с кодом из файла, чужой клиент LAN не успевает занять панель (S).
+func TestSetupCodeProtectsFirstAdmin(t *testing.T) {
+	code, err := web.NewSetupCode(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := newWebFixtureCode(t, false, code)
+	b := f.newBrowser()
+	if st := b.call("WebSessionService/GetWebModeStatus", `{}`); st.Body["setupCodeRequired"] != true || st.Body["firstRunSetupRequired"] != true {
+		t.Fatalf("статус до настройки: %+v", st.Body)
+	}
+	for _, bad := range []string{"", "WRONGCODE1"} {
+		if r := b.setupWithCode("attacker", goodWebPass, bad); r.Code != "permission_denied" {
+			t.Fatalf("код %q: %+v", bad, r)
+		}
+	}
+	if st := b.call("WebSessionService/GetWebModeStatus", `{}`); st.Body["firstRunSetupRequired"] != true {
+		t.Fatal("администратор создан без верного кода")
+	}
+	if r := b.setupWithCode("admin", goodWebPass, code.Code()); r.Code != "" {
+		t.Fatalf("верный код: %+v", r)
+	}
+	if st := b.call("WebSessionService/GetWebModeStatus", `{}`); st.Body["setupCodeRequired"] == true {
+		t.Fatalf("после настройки код всё ещё требуется: %+v", st.Body)
+	}
+	if code.Code() != "" {
+		t.Fatal("код не потреблён")
 	}
 }

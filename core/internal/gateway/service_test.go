@@ -256,3 +256,45 @@ func TestRunLoopBeatsWhileProbeOk(t *testing.T) {
 		t.Fatal("цикл не вернул правила")
 	}
 }
+
+// TestPolicyChangeVsWatchdog — смена политик параллельно с Beat/Tick/Trip не
+// теряет политику и не возвращает правила, снятые watchdog'ом (C, R).
+func TestPolicyChangeVsWatchdog(t *testing.T) {
+	f := newSvc(t)
+	_ = f.svc.Activate()
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				_ = f.svc.Trip()
+				f.svc.Beat()
+				f.svc.Tick()
+			}
+		}
+	}()
+	for i := 0; i < 30; i++ {
+		if _, err := f.svc.SetPolicy(DevicePolicy{MAC: macN(i + 1), Policy: PolicyDirect}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	close(stop)
+	<-done
+	f.svc.Beat() // связь есть: правила на месте
+	if !f.svc.Status().Active {
+		t.Fatal("правила не вернулись после Beat")
+	}
+	last := f.lastScript()
+	for i := 0; i < 30; i++ {
+		if !strings.Contains(last, "ether saddr "+macN(i+1)+" return") {
+			t.Fatalf("в итоговых правилах нет политики %d", i+1)
+		}
+	}
+	if len(f.svc.Policies()) != 30 {
+		t.Fatalf("политик %d, ждали 30", len(f.svc.Policies()))
+	}
+}

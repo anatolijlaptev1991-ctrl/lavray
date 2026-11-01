@@ -58,12 +58,19 @@ type webFixture struct {
 // newWebFixture поднимает шлюз; tlsMode — HTTPS (проверка Secure у cookie).
 func newWebFixture(t *testing.T, tlsMode bool) *webFixture {
 	t.Helper()
+	return newWebFixtureCode(t, tlsMode, nil)
+}
+
+// newWebFixtureCode — то же с кодом первичной настройки (панель не на loopback).
+func newWebFixtureCode(t *testing.T, tlsMode bool, code *web.SetupCode) *webFixture {
+	t.Helper()
 	f := &webFixture{t: t, clk: &webClock{t: time.Date(2026, 10, 31, 12, 0, 0, 0, time.UTC)}}
 	newE2EServer(t, Deps{Runner: &inst.FakeRunner{}}, func(s *Server) {
 		f.srv = s
 		f.auth = s.EnableWeb(WebOptions{
 			BindAddress: "127.0.0.1:0",
 			TLSEnabled:  tlsMode,
+			SetupCode:   code,
 			Sessions:    web.NewSessions(f.clk.Now),
 			Limiter:     web.NewLimiter(f.clk.Now, web.LimiterConfig{}),
 		})
@@ -157,9 +164,16 @@ func (b *browser) login(user, pass string) rpcResult {
 }
 
 // setup создаёт первого администратора.
-func (b *browser) setup(user, pass string) rpcResult {
+func (b *browser) setup(user, pass string) rpcResult { return b.setupWithCode(user, pass, "") }
+
+// setupWithCode — то же с кодом первичной настройки.
+func (b *browser) setupWithCode(user, pass, code string) rpcResult {
 	b.f.t.Helper()
-	res := b.call("WebSessionService/SetupFirstAdmin", `{"username":"`+user+`","password":"`+pass+`"}`)
+	body := `{"username":"` + user + `","password":"` + pass + `"`
+	if code != "" {
+		body += `,"setupCode":"` + code + `"`
+	}
+	res := b.call("WebSessionService/SetupFirstAdmin", body+`}`)
 	if res.Code == "" {
 		b.csrf = res.str("csrfToken")
 	}

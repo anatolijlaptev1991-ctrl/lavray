@@ -18,6 +18,8 @@ type WebOptions struct {
 	BindAddress    string // фактический адрес слушателя
 	TLSEnabled     bool
 	TLSFingerprint string // sha256 сертификата; пусто без TLS
+	// SetupCode — код первичной настройки (панель не на loopback); nil — не нужен.
+	SetupCode *web.SetupCode
 	// Limiter, Sessions — для тестов (часы); nil — по умолчанию.
 	Limiter  *web.Limiter
 	Sessions *web.Sessions
@@ -36,6 +38,7 @@ func (s *Server) EnableWeb(opts WebOptions) *web.Auth {
 		limiter = web.NewLimiter(nil, web.LimiterConfig{})
 	}
 	auth := web.NewAuth(users, sessions, limiter)
+	auth.SetupCode = opts.SetupCode
 	s.ext.web = &webSessionService{auth: auth, opts: opts, logs: s.logs}
 	return auth
 }

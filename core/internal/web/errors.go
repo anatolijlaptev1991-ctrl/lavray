@@ -24,6 +24,8 @@ var (
 	ErrWeakPassword = errors.New("пароль не подходит")
 	// ErrBadUsername — имя не проходит проверку.
 	ErrBadUsername = errors.New("недопустимое имя пользователя")
+	// ErrBadSetupCode — неверный или отсутствующий код первичной настройки.
+	ErrBadSetupCode = errors.New("неверный код первичной настройки")
 	// ErrSessionNotFound — сессии с таким id нет.
 	ErrSessionNotFound = errors.New("сессия не найдена")
 )

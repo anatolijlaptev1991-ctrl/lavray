@@ -56,25 +56,30 @@ func (s *Service) change(p DevicePolicy, remove bool) error {
 	if len(next) > MaxPolicies {
 		return ErrTooManyPolicies
 	}
-	if _, up := s.wd.State(); up {
-		if err := s.wd.Applier.Apply(s.wd.Renderer.Render(s.cfg, next, s.cfg.SelfUser)); err != nil {
-			return fmt.Errorf("gateway: правила не применены, политика не сохранена: %w", err)
-		}
+	// Кэш обновляется до применения: параллельный Beat watchdog'а строит правила
+	// уже из нового списка, а не из устаревшего снимка.
+	s.setPolicies(next)
+	if _, err := s.wd.Reapply(); err != nil {
+		s.rollback(old)
+		return fmt.Errorf("gateway: правила не применены, политика не сохранена: %w", err)
 	}
 	if err := s.repo.Save(next); err != nil {
-		s.restoreRules(old)
+		s.rollback(old)
 		s.setErr(err)
 		return fmt.Errorf("gateway: политика не сохранена: %w", err)
 	}
-	s.polMu.Lock()
-	s.policies = next
-	s.polMu.Unlock()
 	return nil
 }
 
-// restoreRules возвращает правила со старым списком политик после сбоя записи.
-func (s *Service) restoreRules(old []DevicePolicy) {
-	if _, up := s.wd.State(); up {
-		_ = s.wd.Applier.Apply(s.wd.Renderer.Render(s.cfg, old, s.cfg.SelfUser))
-	}
+func (s *Service) setPolicies(list []DevicePolicy) {
+	s.polMu.Lock()
+	s.policies = list
+	s.polMu.Unlock()
+}
+
+// rollback возвращает прежний список политик и прежние правила (ошибка
+// повторного применения уже записана в статус рекордером).
+func (s *Service) rollback(old []DevicePolicy) {
+	s.setPolicies(old)
+	_, _ = s.wd.Reapply()
 }

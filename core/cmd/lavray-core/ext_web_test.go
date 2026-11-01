@@ -289,3 +289,25 @@ func removeAllRetry(dir string) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// TestNeedSetupCode — код первичной настройки нужен только панели не на loopback
+// и только пока нет администратора.
+func TestNeedSetupCode(t *testing.T) {
+	cases := []struct {
+		bind   string
+		admins int
+		want   bool
+	}{
+		{"192.168.1.1:9090", 0, true},
+		{"0.0.0.0:9090", 0, true},
+		{"192.168.1.1:9090", 1, false},
+		{"127.0.0.1:9090", 0, false},
+		{"[::1]:9090", 0, false},
+		{"localhost:9090", 0, false},
+	}
+	for _, c := range cases {
+		if got := needSetupCode(c.bind, c.admins); got != c.want {
+			t.Errorf("needSetupCode(%q, %d) = %v, ждали %v", c.bind, c.admins, got, c.want)
+		}
+	}
+}

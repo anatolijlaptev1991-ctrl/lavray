@@ -45,7 +45,8 @@ func (w *webSessionService) GetWebModeStatus(_ context.Context, _ *connect.Reque
 		TlsEnabled:                w.opts.TLSEnabled,
 		SessionTtlMinutes:         int32(web.IdleTTL / time.Minute),
 		SessionAbsoluteTtlMinutes: int32(web.AbsoluteTTL / time.Minute),
-		ActiveSessions:            int32(w.auth.Sessions.Count()),
+		// ActiveSessions до входа не раскрывается: статус открыт любому клиенту LAN.
+		SetupCodeRequired: need && w.opts.SetupCode != nil && w.opts.SetupCode.Code() != "",
 	}
 	if w.opts.TLSEnabled && w.opts.TLSFingerprint != "" {
 		st.TlsFingerprintSha256 = strpIf(w.opts.TLSFingerprint)
@@ -55,8 +56,11 @@ func (w *webSessionService) GetWebModeStatus(_ context.Context, _ *connect.Reque
 
 func (w *webSessionService) SetupFirstAdmin(ctx context.Context, req *connect.Request[lavrayv1.SetupFirstAdminRequest]) (*connect.Response[lavrayv1.WebSession], error) {
 	info, _ := web.InfoFrom(ctx)
-	res, err := w.auth.SetupFirstAdmin(req.Msg.Username, req.Msg.Password, clientOf(info, req.Header().Get("User-Agent"), ""))
+	res, err := w.auth.SetupFirstAdmin(req.Msg.Username, req.Msg.Password, req.Msg.GetSetupCode(), clientOf(info, req.Header().Get("User-Agent"), ""))
 	if err != nil {
+		if errors.Is(err, web.ErrBadSetupCode) {
+			w.logf(logs.LevelWarn, "неверный код первичной настройки с %s", info.IP)
+		}
 		return nil, webErr(err)
 	}
 	w.logf(logs.LevelInfo, "создан первый администратор %q с %s", res.Session.Username, info.IP)
@@ -69,7 +73,7 @@ func (w *webSessionService) Login(ctx context.Context, req *connect.Request[lavr
 	res, err := w.auth.Login(req.Msg.Username, req.Msg.Password, client)
 	if err != nil {
 		if errors.Is(err, web.ErrBadCredentials) {
-			w.logf(logs.LevelWarn, "неудачный вход %q с %s", req.Msg.Username, info.IP)
+			w.logf(logs.LevelWarn, "неудачный вход %q с %s", clipLog(req.Msg.Username), info.IP)
 		}
 		return nil, webErr(err)
 	}
@@ -141,6 +145,15 @@ func (w *webSessionService) sessionMessage(s web.Session, withCSRF bool) *lavray
 		m.CsrfToken = strp(s.CSRF)
 	}
 	return m
+}
+
+// clipLog укорачивает чужой ввод перед записью в журнал: имя из запроса может
+// быть огромным, а журнал прогоняет каждую строку через маскирование секретов.
+func clipLog(s string) string {
+	if r := []rune(s); len(r) > 64 {
+		return string(r[:64]) + "…"
+	}
+	return s
 }
 
 // clientOf — адрес и метка клиента для лимитера и списка сессий. Метка:

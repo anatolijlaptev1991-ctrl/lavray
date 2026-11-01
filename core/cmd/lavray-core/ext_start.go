@@ -26,7 +26,7 @@ func (f *extFlags) enableExt(server *api.Server, st *store.Store, dataDir string
 	var rt *webRuntime
 	err := f.enableGateway(server, st)
 	if err == nil && f.webBind != "" {
-		rt, err = f.enableWeb(server, dataDir)
+		rt, err = f.enableWeb(server, st, dataDir)
 	}
 	if err != nil {
 		mux.Logf(logs.LevelError, "core", "запуск: %v", err)

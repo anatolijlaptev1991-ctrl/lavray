@@ -30,6 +30,11 @@ const (
 	ProcWhoAmI           = "/lavray.v1.WebSessionService/WhoAmI"
 )
 
+// publicBodyLimit — потолок тела запроса до входа: вход, настройка и статус
+// укладываются в килобайты, а общий лимит RPC (16 МиБ) открывал бы память роутера
+// любому клиенту LAN.
+const publicBodyLimit = 8 << 10
+
 var publicProcedures = map[string]bool{ProcGetWebModeStatus: true, ProcSetupFirstAdmin: true, ProcLogin: true}
 
 // Gate — шлюз: API — мультиплексор RPC ядра, UI — раздача интерфейса
@@ -75,6 +80,7 @@ func (g *Gate) serveRPC(w http.ResponseWriter, r *http.Request) {
 			writeRPCError(w, http.StatusForbidden, "permission_denied", "Origin не совпадает с Host")
 			return
 		}
+		r.Body = http.MaxBytesReader(w, r.Body, publicBodyLimit)
 	case r.Header.Get("Authorization") != "":
 		if !g.bearerOK(r) {
 			writeRPCError(w, http.StatusUnauthorized, "unauthenticated", "неверный токен")

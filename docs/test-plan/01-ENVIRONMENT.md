@@ -1,0 +1,354 @@
+# 01. Окружение тестового ПК
+
+Выполняет оркестратор один раз до запуска файлов `auto/` и `manual/`. Субагенты читают только свой файл и этот документ (разделы 3, 4 и 10), поэтому переменные, каталоги и правила именования ниже обязательны для всех.
+
+Команды в блоках `powershell` выполняются в PowerShell 7 (`pwsh`), в блоках `bash` — в Git Bash. Все пути и имена — примеры для каталога `C:\lavray-test`; если владелец выбрал другой, меняется только `LAVRAY_TP_ROOT`.
+
+## 1. Что нужно от тестового ПК
+
+| Требование | Значение | Почему |
+|---|---|---|
+| ОС | Windows 10 22H2 или Windows 11, x64 | Единственная поддерживаемая платформа текущего выпуска |
+| Тип машины | Виртуальная машина со снимком «до тестов» или отдельный ПК без личных данных | Файлы A04, A10, A11, M01, M03, M06, M08 меняют системный прокси, реестр, установленные программы; снимок — самый быстрый откат |
+| Диск | не менее 30 ГБ свободно | Rust-сборка оболочки (`shell/target`) занимает 6–10 ГБ, `node_modules` около 0,5 ГБ, модули Go около 2 ГБ |
+| Память | не менее 8 ГБ | Сборка оболочки и параллельные субагенты |
+| Сеть | исходящий доступ к `github.com`, `proxy.golang.org`, `registry.npmjs.org`, `static.rust-lang.org`, `index.crates.io` | Установка инструментов и зависимостей |
+| Пользователь | обычная учётная запись; возможность запустить PowerShell «от имени администратора» | A10 ставит программу в `C:\Program Files`; часть D файла A11 и M03 включают TUN |
+| WebView2 Runtime | установлен (в Windows 11 есть) | Без него окно LAVRay не открывается; проверка: `Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -Name pv` |
+| Время | синхронизировано | REALITY и VMess не подключаются при расхождении часов более чем на пару минут (см. строку `chk.time.err` словаря) |
+| Антивирус | без исключений для проверки | Сборки не подписаны; если антивирус удалил или заблокировал файл, это результат прогона (`BLOCKED` в A06 или M01), а не повод отключать защиту |
+
+Тестовый ПК не должен быть ПК, где владелец пользуется работающим VPN (NekoBox, TUN, свой системный прокси). Это проверяет страж из раздела 3.
+
+## 2. Договорённости об именах (для всех файлов)
+
+```text
+C:\lavray-test\
+  env.ps1            переменные окружения (создаёт оркестратор, раздел 4)
+  guard.ps1          страж «тестовый ПК» (раздел 3)
+  TESTPC_OK          маркер: страж пройден и владелец подтвердил (создаёт guard.ps1)
+  plan\              клон ветки main с документами docs\test-plan
+  src\               клон продукта на нужной версии, ТОЛЬКО ЧТЕНИЕ
+  wt\<ID>\           рабочая копия (git worktree) для файла <ID>; создаёт сам файл
+  assets\0.4.0\      скачанные ассеты релиза под тестом
+  assets\0.3.0\      ассеты предыдущего релиза (для проверки обновления в A10, M01)
+  portable\0.4.0\    распакованный ZIP (LAVRay.exe и binaries\lavray-core.exe)
+  baseline\          снимки состояния системы до тестов (раздел 8)
+  tmp\<ID>\          временные данные файла <ID>
+  results\           отчёты <ID>.md и вложения <ID>\ ; итоговая SUMMARY.md
+```
+
+Правила для всех:
+
+1. Продукт под тестом не правится. `src\` не изменяется; всё, что собирает или меняет файлы репозитория (`go mod tidy`, `buf generate`, `npm ci`, `cargo`), делается в своей рабочей копии `wt\<ID>`.
+2. Ничего из `C:\lavray-test` не коммитится и не публикуется. В отчётах нет секретов: ссылки подписок, токены и содержимое `agent-endpoint.json` заменяются на `***`.
+3. Порты: файлы используют случайные свободные loopback-порты (`127.0.0.1:0` или функция выбора свободного порта). Порт 2080 не занимается никогда. Диапазон `47950–47999` зарезервирован за A07 (`--mixed-port`).
+4. Один исполнитель на файл. Два исполнителя не работают в одном каталоге `wt\<ID>` или `tmp\<ID>`.
+
+## 3. Страж «тестовый ПК»
+
+Страж защищает ПК владельца от ошибки: он отказывается ставить маркер, если видит признаки рабочего VPN. Маркер `TESTPC_OK` нужен каждому файлу с опасностью `прокси`, `TUN`, `реестр` или `установка` (шаг 1 такого файла проверяет его наличие). Без маркера файл завершается итогом `BLOCKED`.
+
+Подтверждение даёт только владелец: переменная окружения `LAVRAY_TESTPC_CONFIRMED=YES-DISPOSABLE` задаётся им в окне, откуда запущен ZCode (или в промпте из `00-README.md`). Оркестратор не имеет права задавать её сам, даже если страж ничего не нашёл.
+
+Создайте файл `C:\lavray-test\guard.ps1` с таким содержимым:
+
+```powershell
+# guard.ps1: проверка «это тестовый ПК». Код выхода 0 - маркер создан, 1 - отказ.
+$ErrorActionPreference = 'Stop'
+$root = if ($env:LAVRAY_TP_ROOT) { $env:LAVRAY_TP_ROOT } else { 'C:\lavray-test' }
+$marker = Join-Path $root 'TESTPC_OK'
+$problems = New-Object System.Collections.Generic.List[string]
+
+if ($env:LAVRAY_TESTPC_CONFIRMED -ne 'YES-DISPOSABLE') {
+  $problems.Add('владелец не подтвердил: переменная LAVRAY_TESTPC_CONFIRMED не равна YES-DISPOSABLE')
+}
+
+$vpnProcs = Get-Process -ErrorAction SilentlyContinue |
+  Where-Object { $_.ProcessName -match '^(nekobox|nekoray|nekobox_core|v2rayN|clash|mihomo|sing-box|xray|wireguard|openvpn|LAVRay|lavray-core)' }
+if ($vpnProcs) {
+  $problems.Add('запущены процессы VPN или LAVRay: ' + (($vpnProcs | Select-Object -ExpandProperty ProcessName -Unique) -join ', '))
+}
+
+$adapters = Get-NetAdapter -ErrorAction SilentlyContinue |
+  Where-Object { $_.Name -match 'neko|tun|wintun|wireguard|lavray' -or $_.InterfaceDescription -match 'Wintun|WireGuard|TAP' }
+if ($adapters) {
+  $problems.Add('сетевые адаптеры VPN: ' + (($adapters | Select-Object -ExpandProperty Name) -join ', '))
+}
+
+if (Get-NetTCPConnection -State Listen -LocalPort 2080 -ErrorAction SilentlyContinue) {
+  $problems.Add('порт 2080 занят (там работает чужой прокси)')
+}
+
+$inet = Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings'
+if ($inet.ProxyEnable -eq 1) {
+  $problems.Add('системный прокси уже включён: ' + $inet.ProxyServer)
+}
+if ($inet.AutoConfigURL) {
+  $problems.Add('в системе задан PAC-скрипт: ' + $inet.AutoConfigURL)
+}
+
+# VPN-подключения Windows (RAS) не запрещают тест, но LAVRay временно меняет их прокси.
+$ras = @(Get-VpnConnection -ErrorAction SilentlyContinue | Where-Object { $_.Name -ne 'LavrayTestVpn' })
+if ($ras.Count -gt 0) {
+  Write-Host ('ВНИМАНИЕ: в Windows есть VPN-подключения: ' + (($ras | Select-Object -ExpandProperty Name) -join ', ') +
+              '. Тест временно сменит их прокси и вернёт обратно.')
+}
+
+if ($problems.Count -gt 0) {
+  Remove-Item -LiteralPath $marker -ErrorAction SilentlyContinue
+  Write-Host 'СТОП: это не тестовый ПК или он не подтверждён:'
+  $problems | ForEach-Object { Write-Host (' - ' + $_) }
+  exit 1
+}
+
+New-Item -ItemType Directory -Force -Path $root | Out-Null
+[pscustomobject]@{
+  machine = $env:COMPUTERNAME
+  user    = $env:USERNAME
+  utc     = (Get-Date).ToUniversalTime().ToString('o')
+} | ConvertTo-Json | Set-Content -LiteralPath $marker -Encoding utf8
+Write-Host "OK: маркер создан: $marker"
+exit 0
+```
+
+Запуск и критерий:
+
+```powershell
+pwsh -NoProfile -File C:\lavray-test\guard.ps1
+$LASTEXITCODE
+```
+
+PASS: код выхода `0` и существует файл `C:\lavray-test\TESTPC_OK`. FAIL (стоп всего прогона опасных файлов): код `1`; оркестратор показывает владельцу список причин и не продолжает. Файлы без опасности (A01, A02, A03, A05, A06, A07, A08, M02, M05, M07, M18) запускаются и без маркера.
+
+## 4. Переменные окружения
+
+Создайте `C:\lavray-test\env.ps1`. Каждый субагент первым шагом выполняет `. C:\lavray-test\env.ps1`.
+
+```powershell
+# env.ps1: переменные плана. Секреты здесь НЕ хранятся.
+$env:LAVRAY_TP_ROOT   = 'C:\lavray-test'
+$env:LAVRAY_REPO      = 'anatolijlaptev1991-ctrl/lavray'
+$env:LAVRAY_VERSION   = '0.4.0'
+$env:LAVRAY_FROM_VERSION = '0.3.0'
+# Версия под тестом: тег v0.4.0, если он опубликован, иначе коммит main, на котором написан план.
+$env:LAVRAY_REF       = 'v0.4.0'
+$env:LAVRAY_REF_FALLBACK = '97624d61c28f875b295505afa607cc605e880ac9'
+$env:LAVRAY_SRC       = Join-Path $env:LAVRAY_TP_ROOT 'src'
+$env:LAVRAY_PLAN      = Join-Path $env:LAVRAY_TP_ROOT 'plan'
+$env:LAVRAY_ASSETS    = Join-Path $env:LAVRAY_TP_ROOT ('assets\' + $env:LAVRAY_VERSION)
+$env:LAVRAY_ASSETS_OLD = Join-Path $env:LAVRAY_TP_ROOT ('assets\' + $env:LAVRAY_FROM_VERSION)
+$env:LAVRAY_PORTABLE  = Join-Path $env:LAVRAY_TP_ROOT ('portable\' + $env:LAVRAY_VERSION)
+$env:LAVRAY_CORE_EXE  = Join-Path $env:LAVRAY_PORTABLE 'binaries\lavray-core.exe'
+$env:LAVRAY_RESULTS   = Join-Path $env:LAVRAY_TP_ROOT 'results'
+$env:LAVRAY_BASELINE  = Join-Path $env:LAVRAY_TP_ROOT 'baseline'
+# Go: на свежем ПК прокси модулей включён (A02 разрешает сеть).
+$env:CGO_ENABLED      = '0'
+```
+
+Переменные, которые задаёт только владелец (оркестратор их лишь читает и никогда не печатает значения):
+
+| Переменная | Назначение | Обязательна для |
+|---|---|---|
+| `LAVRAY_TESTPC_CONFIRMED` | `YES-DISPOSABLE`: «это тестовый ПК» | страж (раздел 3) |
+| `LAVRAY_TEST_SUB_URL` | ссылка тестовой подписки провайдера (секрет) | M02, часть шагов M03 |
+| `LAVRAY_ALLOW_TUN` | `1`: разрешить включение TUN на этом ПК (сеть пропадёт на время теста) | часть D файла A11, M03 (TUN) |
+| `GH_TOKEN` | токен GitHub только для чтения репозитория; либо владелец заранее выполнил `gh auth login` | клонирование и скачивание ассетов |
+
+Проверка наличия без печати значений:
+
+```powershell
+foreach ($n in 'LAVRAY_TESTPC_CONFIRMED','LAVRAY_TEST_SUB_URL','LAVRAY_ALLOW_TUN','GH_TOKEN') {
+  '{0}: {1}' -f $n, $(if ([Environment]::GetEnvironmentVariable($n)) { 'задана' } else { 'не задана' })
+}
+```
+
+## 5. Установка инструментов
+
+Репозиторий `lavray` приватный, поэтому доступ к нему нужен до любых загрузок: если `gh auth status` завершается кодом, отличным от нуля, и `GH_TOKEN` не задан, прогон получает итог `BLOCKED` с просьбой к владельцу выполнить `gh auth login` (оркестратор не вводит и не запрашивает пароли и токены).
+
+```powershell
+gh auth status
+$LASTEXITCODE
+```
+
+Установка через winget (если инструмент уже есть и версия не ниже минимальной, пропустите). Для Windows 10 без winget установите «Установщик приложений» из Microsoft Store.
+
+```powershell
+winget install --id Git.Git -e --accept-package-agreements --accept-source-agreements
+winget install --id GitHub.cli -e
+winget install --id Microsoft.PowerShell -e
+winget install --id GoLang.Go -e
+winget install --id Rustlang.Rustup -e
+winget install --id Microsoft.VisualStudio.2022.BuildTools -e --override "--quiet --wait --add Microsoft.VisualStudio.Workload.VCTools --includeRecommended"
+winget install --id OpenJS.NodeJS -e --version 24.16.0
+winget install --id Python.Python.3.12 -e
+rustup default stable
+rustup component add rustfmt clippy
+npm install -g @bufbuild/buf@1.75.0
+go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
+go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.21.1
+```
+
+После установки откройте новое окно PowerShell (PATH обновляется только там) и проверьте версии. Минимумы взяты из CI и из файлов репозитория; столбец «Эталон» — версии, на которых план проверялся при написании.
+
+| Инструмент | Команда | Минимум | Эталон | Откуда минимум |
+|---|---|---|---|---|
+| Git | `git --version` | 2.40 | 2.56.0.windows.2 | любой современный |
+| Go | `go version` | версия из строки `go` файла `core/go.mod` (сейчас 1.27) | go1.27.0 windows/amd64 | `core/go.mod`; `actions/setup-go` с `go-version-file` |
+| Rust | `rustc --version`, `cargo --version` | stable | 1.96.0 | CI: `dtolnay/rust-toolchain@stable` |
+| Node | `node --version` | 24 | v24.16.0 | CI: `node-version: 24` |
+| npm | `npm --version` | 10 | 11.16.0 | идёт с Node |
+| Python | `python --version` | 3.12 | 3.12.0 | CI: `python-version: "3.12"` |
+| buf | `buf --version` | 1.75.0 | 1.75.0 | CI: `buf_version: "1.75.0"` |
+| gh | `gh --version` | 2.40 | 2.96.0 | любой современный |
+| PowerShell | `pwsh --version` | 7.4 | 7.6.9 | нужен для `Add-VpnConnection` и `Parser` |
+| protoc-gen-go | `protoc-gen-go --version` | v1.36.12 | `protoc-gen-go.exe v1.36.12` | заголовок `core/internal/gen/lavrayv1/lavray.pb.go` |
+| protoc-gen-connect-go | `protoc-gen-connect-go --version` | 1.21.1 | 1.21.1 (печатает без буквы `v`) | версия `connectrpc.com/connect` в `core/go.mod` |
+
+Проверка одним блоком (PASS: каждая строка печатает версию, код выхода каждой команды 0):
+
+```powershell
+foreach ($c in 'git --version','go version','rustc --version','cargo --version','node --version','npm --version',
+               'python --version','buf --version','gh --version','pwsh --version',
+               'protoc-gen-go --version','protoc-gen-connect-go --version') {
+  $out = & cmd.exe /c "$c 2>&1"
+  '{0,-32} exit={1}  {2}' -f $c, $LASTEXITCODE, ($out | Select-Object -First 1)
+}
+```
+
+Git: репозиторий хранит LF, поэтому выключите преобразование окончаний строк, как это делает CI для Windows-сборки:
+
+```powershell
+git config --global core.autocrlf false
+gh auth setup-git
+```
+
+## 6. Клонирование
+
+Продукт под тестом клонируется один раз в `src\` и после этого только читается. Рабочие копии файлы создают сами через `git worktree add`.
+
+```powershell
+. C:\lavray-test\env.ps1
+New-Item -ItemType Directory -Force -Path $env:LAVRAY_TP_ROOT, $env:LAVRAY_RESULTS, $env:LAVRAY_BASELINE | Out-Null
+gh repo clone $env:LAVRAY_REPO $env:LAVRAY_SRC
+git -C $env:LAVRAY_SRC fetch --tags origin
+git -C $env:LAVRAY_SRC rev-parse --verify --quiet "refs/tags/$($env:LAVRAY_REF)^{commit}"
+if ($LASTEXITCODE -ne 0) {
+  Write-Host "тега $($env:LAVRAY_REF) нет: берём коммит $($env:LAVRAY_REF_FALLBACK)"
+  $env:LAVRAY_REF = $env:LAVRAY_REF_FALLBACK
+}
+git -C $env:LAVRAY_SRC checkout --detach $env:LAVRAY_REF
+git -C $env:LAVRAY_SRC rev-parse HEAD
+git -C $env:LAVRAY_SRC status --short
+```
+
+PASS: `rev-parse HEAD` печатает 40 шестнадцатеричных символов, `status --short` пуст. Если тега `v0.4.0` нет, в `env.ps1` замените строку `LAVRAY_REF` на значение `LAVRAY_REF_FALLBACK` и запишите это в отчёт (отклонение).
+
+Документы плана берутся из ветки `main` отдельным клоном, потому что тег продукта может быть старше плана:
+
+```powershell
+gh repo clone $env:LAVRAY_REPO $env:LAVRAY_PLAN -- --branch main
+Test-Path (Join-Path $env:LAVRAY_PLAN 'docs\test-plan\00-README.md')
+```
+
+PASS: `True`. До слияния плана в `main` владелец указывает ветку в промпте (`--branch docs/test-plan`).
+
+Рабочая копия для файла `<ID>` создаётся так (каждый файл повторяет это в своём первом шаге):
+
+```powershell
+git -C $env:LAVRAY_SRC worktree add --detach (Join-Path $env:LAVRAY_TP_ROOT 'wt\A02') $env:LAVRAY_REF
+```
+
+## 7. Ассеты релиза
+
+Имена задаёт `.github/workflows/release-windows.yml` (шаг «Версия и имена ассетов») и подтверждает тест `core/internal/buildtags`:
+
+| Файл | Что это |
+|---|---|
+| `LAVRay-<версия>-x64-setup.exe` | установщик NSIS, на уровне компьютера (`C:\Program Files\LAVRay`) |
+| `LAVRay-<версия>-portable-x64.zip` | `LAVRay.exe`, `binaries\lavray-core.exe`, `LICENSE` |
+| `SHA256SUMS.txt` | суммы SHA-256 двух файлов выше, строки `<хэш>  <имя>`, окончания строк CRLF (файл написан `Set-Content` в Windows) |
+
+```powershell
+. C:\lavray-test\env.ps1
+New-Item -ItemType Directory -Force -Path $env:LAVRAY_ASSETS, $env:LAVRAY_ASSETS_OLD | Out-Null
+gh release download "v$($env:LAVRAY_VERSION)" -R $env:LAVRAY_REPO -D $env:LAVRAY_ASSETS --clobber
+"новая версия: код $LASTEXITCODE"
+gh release download "v$($env:LAVRAY_FROM_VERSION)" -R $env:LAVRAY_REPO -D $env:LAVRAY_ASSETS_OLD --clobber
+"прежняя версия: код $LASTEXITCODE"
+Get-ChildItem $env:LAVRAY_ASSETS, $env:LAVRAY_ASSETS_OLD | Select-Object Directory, Name, Length
+```
+
+Состояние на момент написания плана: опубликованы релизы `v0.1.0`, `v0.2.0`, `v0.2.1`, `v0.3.0`; релиз `v0.4.0` ещё не опубликован. Поэтому:
+
+- скачивание `v0.4.0` может завершиться ошибкой `release not found`. Это `BLOCKED` для A06, A10, A11, M01 (шаги с установщиком и ZIP версии 0.4.0), а не `FAIL`. Кто снимает: владелец (тег `v0.4.0`, запуск `release-windows`);
+- ассеты `v0.3.0` нужны как «прежняя версия» для проверки обновления поверх; они опубликованы (установщик 16 518 811 байт, ZIP 22 911 985 байт, `SHA256SUMS.txt` 191 байт);
+- пока релиза нет, оркестратор может запускать файлы A01–A05, A07, A08, а A06, A10, A11, M-файлы с установщиком отмечать `BLOCKED`.
+
+Распаковка portable (после проверки сумм в A06; допустимо и до неё, если файл не меняется):
+
+```powershell
+Expand-Archive -LiteralPath (Join-Path $env:LAVRAY_ASSETS ('LAVRay-' + $env:LAVRAY_VERSION + '-portable-x64.zip')) -DestinationPath $env:LAVRAY_PORTABLE -Force
+Test-Path $env:LAVRAY_CORE_EXE
+Test-Path (Join-Path $env:LAVRAY_PORTABLE 'LAVRay.exe')
+```
+
+PASS: оба `True`.
+
+Файлы, скачанные через `gh`, не получают метку «из интернета» (Zone.Identifier), поэтому SmartScreen при запуске из скрипта не вмешивается. Ручные файлы (M01) проверяют поведение SmartScreen отдельно.
+
+## 8. Порты, NekoBox, снимок системы
+
+Порты, которые должны быть свободны на старте:
+
+```powershell
+Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue |
+  Where-Object { $_.LocalPort -eq 2080 -or ($_.LocalPort -ge 47950 -and $_.LocalPort -le 47999) } |
+  Select-Object LocalAddress, LocalPort, OwningProcess
+```
+
+PASS: вывод пуст. Если порт 2080 занят, страж уже отказал (раздел 3); не освобождайте его принудительно.
+
+NekoBox. Если на машине обнаружен NekoBox (`nekobox.exe`, `nekobox_core.exe`, `nekoray.exe`), это признак того, что машина не тестовая. Оркестратор останавливается и сообщает владельцу. Если владелец письменно подтвердил, что машина тестовая, NekoBox закрывают в таком порядке: пункт «Выход» в меню значка в трее; если процесс остался, `Stop-Process -Name nekobox, nekobox_core, nekoray -Force`; затем проверка, что адаптера `neko-tun` нет (`Get-NetAdapter -Name neko-tun -ErrorAction SilentlyContinue` ничего не печатает) и системный прокси выключен. Оркестратор не удаляет NekoBox и не меняет его настройки.
+
+Снимок системы до тестов нужен для проверки отката (все файлы с опасностью `прокси`, `TUN`, `реестр` сравнивают состояние с ним):
+
+```powershell
+. C:\lavray-test\env.ps1
+$b = $env:LAVRAY_BASELINE
+New-Item -ItemType Directory -Force -Path $b | Out-Null
+reg export "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" (Join-Path $b 'internet-settings.reg') /y
+$LASTEXITCODE
+reg export "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" (Join-Path $b 'run.reg') /y
+$LASTEXITCODE
+Get-NetAdapter | Select-Object Name, InterfaceDescription, Status | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $b 'adapters.json')
+Get-NetRoute -AddressFamily IPv4 | Select-Object DestinationPrefix, NextHop, InterfaceIndex, RouteMetric | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $b 'routes.json')
+Get-VpnConnection -ErrorAction SilentlyContinue | Select-Object Name, ServerAddress, TunnelType | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $b 'vpn.json')
+Get-ChildItem $b | Select-Object Name, Length
+```
+
+PASS: оба `reg export` вернули `0`, в `baseline\` есть пять файлов, `internet-settings.reg` непустой. Если `Get-VpnConnection` ничего не нашёл, `vpn.json` содержит пустой массив или `null`: это допустимо.
+
+Читать эти файлы можно в любой момент; изменять нельзя.
+
+## 9. Проверка Go-модулей и сети (быстрая)
+
+Перед стартом убедитесь, что Go умеет скачивать модули (A02 разрешает сеть, A03 тоже). В отличие от ПК владельца, где модули кэшированы и `GOPROXY=off`, на свежей машине нужен доступ в сеть:
+
+```powershell
+go env GOPROXY GOFLAGS GOTOOLCHAIN
+```
+
+Ожидается `GOPROXY=https://proxy.golang.org,direct`. Форк sing-box (`github.com/anatolijlaptev1991-ctrl/sing-box`) публичный; для него, как в CI, при тегированных сборках задаются `GOPRIVATE=github.com/anatolijlaptev1991-ctrl/*` и `GOFLAGS=-mod=mod` (это делает файл A03 только внутри своей рабочей копии, потому что `-mod=mod` переписывает `core/go.mod`).
+
+## 10. Порядок завершения прогона
+
+После последнего файла оркестратор:
+
+1. Проверяет, что процессов `LAVRay`, `lavray-core` нет: `Get-Process LAVRay, lavray-core -ErrorAction SilentlyContinue` ничего не печатает.
+2. Сверяет `Internet Settings` с `baseline\internet-settings.reg` (команда есть в «Откате» файла A11).
+3. Удаляет рабочие копии: `git -C $env:LAVRAY_SRC worktree prune` и `Remove-Item -Recurse -Force C:\lavray-test\wt`.
+4. Удаляет маркер `TESTPC_OK` (чтобы опасные файлы нельзя было запустить случайно позже).
+5. Оставляет `results\`, `assets\` и `baseline\` для владельца. Секретов в них нет.
+6. Если машина виртуальная — откатывает снимок «до тестов» после того, как владелец забрал `results\`.

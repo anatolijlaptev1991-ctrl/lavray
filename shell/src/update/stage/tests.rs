@@ -167,3 +167,33 @@ fn error_codes_are_stable() {
     assert_eq!(StageError::TooLarge.code(), "too_large");
     assert_eq!(StageError::Io.code(), "stage_failed");
 }
+
+#[test]
+fn a_signature_next_to_the_installer_is_copied_along() {
+    let tmp = TempDir::new("stage-sig");
+    let layout = Layout::new(&tmp.path().join("data"));
+    let src = source(&tmp, "setup.exe", b"installer bytes");
+    source(&tmp, "setup.exe.minisig", b"signature text");
+
+    let staged = stage_local(&layout, &src, MAX_INSTALLER_BYTES).unwrap();
+    let sig = PathBuf::from(format!("{}.minisig", staged.staged_path));
+    assert_eq!(std::fs::read(sig).unwrap(), b"signature text");
+}
+
+#[test]
+fn a_missing_or_oversized_signature_is_skipped_without_error() {
+    let tmp = TempDir::new("stage-nosig");
+    let layout = Layout::new(&tmp.path().join("data"));
+    let src = source(&tmp, "a.exe", b"one");
+    let staged = stage_local(&layout, &src, MAX_INSTALLER_BYTES).unwrap();
+    assert!(!PathBuf::from(format!("{}.minisig", staged.staged_path)).exists());
+
+    let big = source(&tmp, "b.exe", b"two");
+    source(
+        &tmp,
+        "b.exe.minisig",
+        &vec![b'x'; (MAX_SIGNATURE_BYTES + 1) as usize],
+    );
+    let staged = stage_local(&layout, &big, MAX_INSTALLER_BYTES).unwrap();
+    assert!(!PathBuf::from(format!("{}.minisig", staged.staged_path)).exists());
+}

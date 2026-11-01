@@ -120,6 +120,26 @@ fn write_part(source: &Path, part: &Path, max: u64) -> Result<[u8; 32], StageErr
     Ok(sum)
 }
 
+/// Предел размера файла подписи minisign рядом с установщиком.
+const MAX_SIGNATURE_BYTES: u64 = 4096;
+
+/// Подпись `<источник>.minisig`, если лежит рядом, копируется как
+/// `<установщик>.minisig`: ядро проверит по ней файл без сети. Подписи нет или
+/// она не читается — молча пропускаем (ядро сошлётся на манифест).
+fn copy_signature(source: &Path, target: &Path) {
+    let sibling = |p: &Path| {
+        let mut name = p.as_os_str().to_os_string();
+        name.push(".minisig");
+        PathBuf::from(name)
+    };
+    let from = sibling(source);
+    let small =
+        std::fs::metadata(&from).is_ok_and(|m| m.is_file() && m.len() <= MAX_SIGNATURE_BYTES);
+    if small {
+        let _ = std::fs::copy(&from, sibling(target));
+    }
+}
+
 /// Положить выбранный установщик в staging и вернуть путь и сумму.
 pub fn stage_local(layout: &Layout, source: &Path, max: u64) -> Result<StagedFile, StageError> {
     static COUNTER: AtomicU32 = AtomicU32::new(0);
@@ -137,6 +157,7 @@ pub fn stage_local(layout: &Layout, source: &Path, max: u64) -> Result<StagedFil
         let sha256 = to_hex(&sum);
         let target: PathBuf = staging.join(format!("{sha256}-{name}"));
         std::fs::rename(&part, &target).map_err(|_| StageError::Io)?;
+        copy_signature(source, &target);
         Ok(StagedFile {
             staged_path: target.to_string_lossy().into_owned(),
             sha256,

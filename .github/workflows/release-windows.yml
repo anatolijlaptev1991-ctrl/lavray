@@ -6,12 +6,16 @@ on:
     tags: ['v*']
   workflow_dispatch:
 
+# T-75: права по умолчанию — чтение; запись нужна только джобам, которые
+# прикрепляют ассеты к релизу (build) и публикуют метаданные обновлений (sign).
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
 
@@ -72,7 +76,9 @@ jobs:
           # with_gvisor — TUN со стеком по умолчанию.
           $tags = (Get-Content BUILD_TAGS -Raw).Trim()
           if ($tags -eq '') { throw 'core/BUILD_TAGS пуст' }
-          go build -tags $tags -trimpath -ldflags '-s -w' -o ../shell/binaries/lavray-core.exe ./cmd/lavray-core/
+          # T-75: версия приложения в ядре — флагом компоновщика (internal/version).
+          $ld = "-s -w -X github.com/anatolijlaptev1991-ctrl/lavray/core/internal/version.Version=$env:VERSION"
+          go build -tags $tags -trimpath -ldflags $ld -o ../shell/binaries/lavray-core.exe ./cmd/lavray-core/
           if ($LASTEXITCODE -ne 0) { throw 'ядро не собралось' }
           # В собранном exe записаны ровно эти теги.
           $info = (go version -m ../shell/binaries/lavray-core.exe) -join "`n"
@@ -154,3 +160,109 @@ jobs:
               --title "LAVRay $GITHUB_REF_NAME для Windows" \
               --notes-file "docs/RELEASE-NOTES-windows-v${VERSION}.md"
           fi
+
+  # T-75: подпись метаданных обновлений. Секреты LAVRAY_TIMESTAMP_KEY,
+  # LAVRAY_MANIFEST_KEY и LAVRAY_ARTIFACT_KEY лежат в Environment
+  # release-signing (ревьюер — владелец). Секретов нет — все шаги пропускаются
+  # и джоб завершается успешно: релиз выходит без meta/, клиент честно говорит
+  # «обновления не настроены». Секреты нельзя проверить в job-level `if`, поэтому
+  # вентиль — первый шаг.
+  sign:
+    name: "Подпись метаданных обновлений"
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    environment: release-signing
+    permissions:
+      contents: write
+    env:
+      LAVRAY_TIMESTAMP_KEY: ${{ secrets.LAVRAY_TIMESTAMP_KEY }}
+      LAVRAY_MANIFEST_KEY: ${{ secrets.LAVRAY_MANIFEST_KEY }}
+      LAVRAY_ARTIFACT_KEY: ${{ secrets.LAVRAY_ARTIFACT_KEY }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: "Ключи подписи заданы?"
+        id: gate
+        run: |
+          if [ -n "$LAVRAY_TIMESTAMP_KEY" ] && [ -n "$LAVRAY_MANIFEST_KEY" ] && [ -n "$LAVRAY_ARTIFACT_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Подпись обновлений пропущена::секреты LAVRAY_TIMESTAMP_KEY, LAVRAY_MANIFEST_KEY, LAVRAY_ARTIFACT_KEY окружения release-signing не заданы: meta/ не публикуется"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.enabled == 'true'
+
+      - uses: actions/setup-go@v5
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - uses: actions/download-artifact@v4
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          name: LAVRay-windows
+          path: dist
+
+      - name: "Версия, канал и корень доверия"
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          ver="${GITHUB_REF_NAME#v}"
+          case "$ver" in *-*) channel=beta ;; *) channel=stable ;; esac
+          echo "VER=$ver" >> "$GITHUB_ENV"
+          echo "CHANNEL=$channel" >> "$GITHUB_ENV"
+          echo "SETUP_NAME=LAVRay-$ver-x64-setup.exe" >> "$GITHUB_ENV"
+          python3 - <<'PY'
+          import json, sys
+          doc = json.load(open("core/cmd/lavray-core/root.json", encoding="utf-8"))
+          if "signed" not in doc:
+              sys.exit("core/cmd/lavray-core/root.json — заглушка: подписать релиз нечем, положите root.json после церемонии ключей (docs/UPDATE-SYSTEM.md)")
+          PY
+
+      - name: "updsign: сборка утилиты"
+        if: steps.gate.outputs.enabled == 'true'
+        working-directory: core
+        run: go build -o ../updsign ./cmd/updsign
+
+      - name: "meta/: текущее состояние gh-pages"
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code --heads "$remote" gh-pages >/dev/null 2>&1; then
+            git clone --depth 1 --branch gh-pages "$remote" pages
+          else
+            mkdir pages && git -C pages init -q -b gh-pages && git -C pages remote add origin "$remote"
+          fi
+          mkdir -p pages/meta
+          cp core/cmd/lavray-core/root.json pages/meta/root.json
+
+      - name: "Подпись: манифест, sources, timestamp, .minisig"
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          python3 - <<'PY'
+          import json, os
+          path = f"docs/RELEASE-NOTES-windows-v{os.environ['VER']}.md"
+          text = open(path, encoding="utf-8").read()[:4000] if os.path.exists(path) else ""
+          json.dump({"ru": text} if text else {}, open("notes.json", "w", encoding="utf-8"), ensure_ascii=False)
+          PY
+          ./updsign manifest -key env:LAVRAY_MANIFEST_KEY -artifact-key env:LAVRAY_ARTIFACT_KEY             -product lavray-windows -channel "$CHANNEL" -version "$VER" -notes notes.json             -asset "windows-x64=v$VER/$SETUP_NAME=dist/$SETUP_NAME"             -out "pages/meta/manifest-$CHANNEL.json"
+          ./updsign sources -key env:LAVRAY_MANIFEST_KEY -in scripts/release/sources.draft.json -out pages/meta/sources.json
+          ./updsign timestamp -key env:LAVRAY_TIMESTAMP_KEY -dir pages/meta -out pages/meta/timestamp.json
+          serial=$(python3 -c "import json,sys; print(json.load(open('pages/meta/manifest-$CHANNEL.json'))['signed']['serial'])")
+          ./updsign artifact -key env:LAVRAY_ARTIFACT_KEY -file "dist/$SETUP_NAME" -product lavray-windows             -channel "$CHANNEL" -version "$VER" -serial "$serial"
+
+      - name: "updsign verify (до публикации)"
+        if: steps.gate.outputs.enabled == 'true'
+        run: ./updsign verify -root core/cmd/lavray-core/root.json -dir pages/meta -assets dist -product lavray-windows
+
+      - name: "Публикация meta/ в gh-pages и .minisig в релиз"
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          gh release upload "$GITHUB_REF_NAME" "dist/$SETUP_NAME.minisig" --clobber
+          git -C pages config user.name "github-actions[bot]"
+          git -C pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C pages add meta
+          git -C pages commit -m "meta: $GITHUB_REF_NAME ($CHANNEL)" || { echo "метаданные не изменились"; exit 0; }
+          git -C pages push origin gh-pages

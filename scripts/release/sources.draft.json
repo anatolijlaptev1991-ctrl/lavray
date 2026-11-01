@@ -1,0 +1,11 @@
+{
+  "type": "sources",
+  "version": 1,
+  "artifacts": [
+    "https://github.com/anatolijlaptev1991-ctrl/lavray-windows/releases/download"
+  ],
+  "metadata": [
+    "https://anatolijlaptev1991-ctrl.github.io/lavray/meta",
+    "https://cdn.jsdelivr.net/gh/anatolijlaptev1991-ctrl/lavray@gh-pages/meta"
+  ]
+}

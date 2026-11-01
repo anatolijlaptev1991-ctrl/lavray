@@ -62,7 +62,7 @@
 | T-82 системный прокси: вживую (LAN, RAS, WPAD, откат, падение ядра/оболочки, выход) | | A11 | M08, M03 (часть 5), M06 (1.7–1.8) | покрыто |
 | T-82 права окна (`capabilities`) и проводка команд | `capabilities.rs`, `main_wiring.rs`, `config_lint.rs` | A04 (шаг 10) | | покрыто |
 | T-82 автозапуск: подставная ОС, задача планировщика, хук удаления | `autostart/tests.rs`, `nsis_uninstall_hook_removes_autostart_but_not_on_update` | A04 (шаги 5, 10) | M01 (2.9–2.10), M06 (часть 4) | покрыто |
-| T-82 автозапуск и данные при установке/удалении | | A10 (шаги 4, 6, 10) | M01 (части 2–3, 6) | покрыто |
+| T-82 автозапуск, ярлыки («Пуск» и общий рабочий стол) и данные при установке/удалении | | A10 (шаги 3–4, 6, 10–11) | M01 (части 1–3, 6) | покрыто |
 | T-82 перезапуск от администратора, TUN без службы | `elevation.rs`, `launch.rs` (`--elevated-relaunch`, `--wait-pid`) | A04 | M03 (часть 6) | покрыто |
 | **T-77** QR: логика | `decodes_generated_qr`, `encode_too_long_throws`, `capture_payload_short_buffer_rejected`, `link_secret_detection` (VU) | A05 | | покрыто |
 | T-77 QR: компоненты | `qr_not_found_message`, `paste_image_handled`, `scan_button_only_in_tauri`, `ctrl_q_opens_for_selected_row`, `secret_warning_shown` (VC) | A05 | M02 (часть 3) | покрыто |
@@ -104,7 +104,7 @@
 | 9. Сеть и жизненный цикл | A11 (падение ядра и оболочки), M03, M04, M08 | покрыто частично: сон/пробуждение, смена сети, captive portal, IPv6-only, потери и задержки не покрыты |
 | 10. Обновления | A13, A09 (раздел 8), A02 | покрыто: цепочка доверия, загрузка, установка, откат (M12) на тестовом корне; пресеты и geo через обновления (§7.5) — A13 «§7.5 наборы и geo», M12 (часть 13) |
 | 11. E2E UI | M01–M09, M11, M13, M16–M18 (ручной прогон); A12 (Playwright-спецификация `web-login.spec.ts` для веб-режима) | tauri-driver не входит; Playwright в A12 запускается отдельным шагом и может быть `BLOCKED` без сети (скачивание браузера) |
-| Бюджеты производительности (раздел 2) | размер установщика: A06 (шаг 4), A10 (шаг 7) | остальные бюджеты не измеряются |
+| Бюджеты производительности (раздел 2) | размер установщика: A06 (шаг 4), A10 (шаг 7); бандл ≤ 250 КБ gzip: A05 (шаг 9, К9; на v0.9.0 известное превышение D-3) | остальные бюджеты не измеряются |
 
 ## 4. Эпики фаз 3–7
 
@@ -167,7 +167,7 @@
 | T-75 §7.5 гео-данные через апдейтер | `geoip/*.srs` и `geosite/*.srs` в zip; подмена каталога `geo` с `geo.prev`, `source.json`, `revision.txt`; запуск не затирает; откат и второй откат `no_previous`; `dir_busy` при работающем sing-box (Windows) | A13 (12.geo, 12.persist, 12.rollback, 12.session) | M12 (13.4, 13.5, 13.12, 13.15) | покрыто (`dir_busy` проверен на настоящем sing-box) |
 | T-75 §7.5 отказы целостности | подмена (`sha256_mismatch`), обрыв (`truncated`), ревизия не новее (не предлагается; `not_newer` при применении), `serial_rollback`, `expired` | A13 (12.tamper, 12.not_newer, 12.fresh, 12.race) | M12 (13.10–13.11) | покрыто |
 | T-75 §7.5 враждебный архив с верной подписью | zip-slip, абсолютный путь, обратная косая, диск, ссылка, каталог, чужой файл, дубль регистра, bzip2 → `archive_unsafe`; вложенная zlib-бомба в `.srs`, 520 записей, запись больше 8 МиБ → `archive_limits`; не `.srs` → `geo_invalid`; неполный набор → `geo_incomplete`; данные и каталог целы | A13 (12.hostile), Go `TestGeoZipBombCaps`, `TestGeoApplyRejectsInflationBomb` | M12 (13.11: подмена файла в интерфейсе) | покрыто |
-| T-75 §7.5 манифест данных: нет `geo.rev`, подмена, канал | манифест без `geo.rev` отвергается; подмена манифеста → `manifest_mismatch`; `update.channel = bogus` → `invalid_argument` | A13 (12.norev, 12.swap, 12.settings) | M12 (часть 5: канал) | покрыто (без `geo.rev` ответ без причины — `minor`) |
+| T-75 §7.5 манифест данных: нет `geo.rev`, подмена, канал | манифест без `geo.rev` отвергается; подмена манифеста → `manifest_mismatch`; `update.channel = bogus` → `invalid_argument` | A13 (12.norev, 12.swap, 12.settings) | M12 (часть 5: канал) | покрыто (отказ без `geo.rev` несёт причину `metadata_invalid`) |
 | T-75 §7.5 соединение и перезапуск профиля | `ready_for_restart("profile")` при применении наборов, `needsProfileRestart` при откате | A13 (12.session), Go `TestGeoApplyFlagsProfileRestartInSession`, `TestPresetApplyFlagsProfileRestart` | M12 (13.14–13.16) | покрыто |
 | T-75 §7.5 экран «Обновления»: карточка «Наборы маршрутов и гео-данные» | «было → стало», «Обновить», «Откатить» с подтверждением, подписи, отметка «Исходный набор обновился» | A05 (`DataComponents.test`) | M12 (13.2–13.13, 13.17) | покрыто |
 | Таблицы агента для данных обновлений (§7.5) | новых RPC нет, решения не менялись: deny у `CheckUpdates`, `DownloadUpdates`, `ApplyUpdates`, `Rollback`, read у `GetUpdateState` | A13 (раздел 10), A02 (шаг 6), Go `TestAgentDeniedDataUpdates` | | покрыто |

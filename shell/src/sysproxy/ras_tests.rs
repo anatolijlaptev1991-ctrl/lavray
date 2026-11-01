@@ -3,9 +3,10 @@
 //! Прокси на подключениях RAS/VPN (T-82). Реестр, WinINET и список RAS —
 //! подставные (`fakes.rs`), настоящую ОС тесты не трогают.
 
-use super::conn::{ConnSettings, AUTO_DETECT, DIRECT, PROXY};
+use super::conn::{ConnChange, ConnSettings, Connections, AUTO_DETECT, DIRECT, PROXY};
 use super::fakes::{conn, fresh_dir, state, vpn_env, Env, HOME, OFFICE};
 use super::values::{RegValue, BYPASS};
+use super::{windows::Windows, SysProxy};
 use serde_json::json;
 
 #[test]
@@ -138,4 +139,51 @@ fn connection_record_roundtrips_through_the_snapshot_format() {
     let back = ConnSettings::from_record(&rich.to_record()).unwrap();
     assert_eq!(back, rich);
     assert!(ConnSettings::from_record(&json!("строка")).is_err());
+}
+
+/// WinINET, каким его увидел прогон 0.9.0 (D-1): запись подключения RAS
+/// переписывает и общие значения LAN в реестре.
+struct LanEcho<'a>(&'a Env);
+
+impl Connections for LanEcho<'_> {
+    fn get(&self, conn: Option<&str>) -> Result<ConnSettings, String> {
+        self.0.conns.get(conn)
+    }
+
+    fn set(&self, conn: Option<&str>, change: &ConnChange) -> Result<(), String> {
+        self.0.conns.set(conn, change)?;
+        if conn.is_some() {
+            let on = change.flags.is_some_and(|f| f & PROXY != 0);
+            let reg = &self.0.reg;
+            reg.set("ProxyEnable", "REG_DWORD", if on { "0x1" } else { "0x0" });
+            if let Some(server) = &change.server {
+                reg.set("ProxyServer", "REG_SZ", server);
+            }
+            if let Some(bypass) = &change.bypass {
+                reg.set("ProxyOverride", "REG_SZ", bypass);
+            }
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn lan_values_survive_wininet_echo_of_ras_writes() {
+    let env = vpn_env();
+    // Как на ПК прогона: прокси выключен, но адрес сервера в реестре задан.
+    env.reg.set("ProxyServer", "REG_SZ", "127.0.0.1:2080");
+    let before = state(&env);
+    let backend = Windows {
+        reg: &env.reg,
+        conns: LanEcho(&env),
+        ras: &env.ras,
+    };
+    let sp = SysProxy::with_backend(&fresh_dir("ras-echo"), backend);
+    sp.enable("127.0.0.1", 9).unwrap();
+    let on = env.reg.dump();
+    assert_eq!(on["ProxyServer"], RegValue::sz("127.0.0.1:9"));
+    assert_eq!(on["ProxyOverride"], RegValue::sz(BYPASS));
+    assert_eq!(on["ProxyEnable"], RegValue::dword(1));
+    sp.disable().unwrap();
+    assert_eq!(state(&env), before);
 }

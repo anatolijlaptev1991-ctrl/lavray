@@ -16,10 +16,20 @@ token="${LAVRAY_E2E_TOKEN:-e2e-core-token-0123456789abcdef0123456789}"
 data="$(mktemp -d)"
 trap 'rm -rf "$data"' EXIT
 
-# Токен идёт из подстановки процесса: когда ядро выходит, скрипт завершается
-# сразу (в конвейере он ждал бы sleep).
+# Держатель stdin: токен, затем ждёт, пока жив этот скрипт (проверка раз в
+# секунду). Раньше там был sleep 3600: в Git Bash он переживал ядро и держал
+# унаследованный stderr webServer, и Playwright ждал EOF ещё ~10 минут после
+# тестов (D-8 прогона 0.9.0). Его stderr теперь в /dev/null, каналов
+# Playwright он не держит.
+hold_stdin() {
+  printf '%s\n' "$token"
+  while kill -0 "$1" 2>/dev/null; do sleep 1; done
+}
+
+# Подстановка процесса, а не конвейер: когда ядро выходит, скрипт завершается
+# сразу (в конвейере он ждал бы держателя).
 "$core" serve \
   --listen-socket 127.0.0.1:0 \
   --data "$data" \
   --web-bind "127.0.0.1:${port}" \
-  < <(printf '%s\n' "$token"; sleep 3600)
+  < <(hold_stdin "$$" 2>/dev/null)

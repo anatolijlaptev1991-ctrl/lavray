@@ -83,13 +83,13 @@ go build -tags $tags -trimpath -ldflags '-s -w' -o $exe ./cmd/lavray-core/
 ```powershell
 $info = (go version -m $exe) -join "`n"
 $info | Select-String -SimpleMatch "-tags=$tags" -Quiet
-$info | Select-String -SimpleMatch "=> github.com/anatolijlaptev1991-ctrl/sing-box" -Quiet
+$info | Select-String -Pattern '=>\s+github\.com/anatolijlaptev1991-ctrl/sing-box\s' -Quiet
 $info | Select-String -SimpleMatch "CGO_ENABLED=0" -Quiet
 $info | Select-String -SimpleMatch "-trimpath=true" -Quiet
 ($info -split "`n")[0]
 ```
 
-   Ожидается: четыре `True`; первая строка — `...lavray-core.exe: go1.27.0` (версия не ниже указанной в `go.mod`). Строку `vcs.modified=true` в этой локальной сборке игнорируйте (она вызвана правкой `go.mod` на шаге 3); для ассета релиза ожидается `vcs.modified=false`, это проверяет A06.
+   Ожидается: четыре `True`; первая строка — `...lavray-core.exe: go1.27.0` (версия не ниже указанной в `go.mod`). Для форка используется регулярное выражение с `\s+`, а не буквальная строка `=> github.com/...`: `go version -m` печатает после `=>` символ табуляции, не пробел, и буквальное совпадение даёт ложный `False`. Строку `vcs.modified=true` в этой локальной сборке игнорируйте (она вызвана правкой `go.mod` на шаге 3); для ассета релиза ожидается `vcs.modified=false`, это проверяет A06.
 
 6. Тесты с тегами: `internal/inst` и `internal/api`. Именно эта команда стоит в CI.
 
@@ -100,7 +100,7 @@ go test -tags $tags ./internal/inst/ ./internal/api/ -count=1 -timeout 300s 2>&1
 
    Ожидается: `tagged exit=0` и две строки `ok` (эталон: `inst` около 8 с, `api` около 43 с). Любая строка `FAIL` или `panic` — `FAIL`.
 
-7. Число тестов с тегами не уменьшилось (без тегов эти пакеты содержат 20 и 181 тестов, см. A02).
+7. Число тестов с тегами не уменьшилось (без тегов эти пакеты содержат 20 и 404 теста, см. A02).
 
 ```powershell
 foreach ($p in 'internal/inst','internal/api') {
@@ -109,7 +109,7 @@ foreach ($p in 'internal/inst','internal/api') {
 }
 ```
 
-   Ожидается не меньше эталона: `internal/inst` 53, `internal/api` 194.
+   Ожидается не меньше эталона для тега v0.9.0 (коммит `8093656`): `internal/inst` 53, `internal/api` 417.
 
 8. Ключевые сквозные тесты не пропущены и проходят (защита от «зелёный, потому что пропущен»).
 
@@ -164,7 +164,7 @@ $p.ExitCode
 | К3 | Шаг 4: ядро собрано, размер 40–80 МБ | `build exit=0`, размер |
 | К4 | Шаг 5: теги, форк, `CGO_ENABLED=0`, `-trimpath=true` записаны в бинарник | четыре `True` |
 | К5 | Шаг 6: `go test -tags … ./internal/inst/ ./internal/api/` вернул 0 | `tagged exit=0`, 2 строки `ok` |
-| К6 | Шаг 7: тестов с тегами не меньше 53 и 194 | числа |
+| К6 | Шаг 7: тестов с тегами не меньше 53 и 417 | числа |
 | К7 | Шаг 8: 17 + 4 ключевых теста `--- PASS`, без `SKIP` | вывод |
 | К8 | Шаг 9: golden-проверка `ok`, не менее 30 `--- PASS`, фразы `is not included in this build` нет | вывод |
 | К9 | Шаг 10: ядро отвечает 200/401, версия `0.9.0`, выходит с кодом 0 за 20 с после EOF | значения |

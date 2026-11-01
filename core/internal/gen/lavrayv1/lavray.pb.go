@@ -2252,7 +2252,7 @@ type ConnectResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Status *CoreStatus            `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
 	// Предупреждения сборки конфига: systemd-resolved+TUN (FR-UI-154),
-	// устаревший custom DNS (LNB-08), отключение mixed-слушателя в TUN
+	// устаревший custom DNS (LNB-08), mixed-слушатель в TUN остаётся
 	// (FR-UI-279), DROP-поля пресета (domain_strategy и пр.) и т.п.
 	Warnings      []string `protobuf:"bytes,2,rep,name=warnings,proto3" json:"warnings,omitempty"`
 	unknownFields protoimpl.UnknownFields

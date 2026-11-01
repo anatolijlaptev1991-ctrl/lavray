@@ -25,7 +25,7 @@
    # Copy-Item "<путь к NekoBox>\config" C:\lavray-test\tmp\M10\real-copy\config -Recurse
    ```
 
-   Если настоящего NekoBox нет (обычный случай на тестовом ПК), создайте синтетический каталог скриптом из конца файла: сохраните его как `C:\lavray-test\tmp\M10\m10_fixture.py` и выполните
+   Если NekoBox на тестовом ПК не установлен (обычный случай), перенос проверяется только на синтетической папке `config`, которую выбирают кнопкой «Выбрать папку…» (или вводят путь в поле «Папка config NekoBox»). **Никогда не указывайте путь к живому NekoBox**: ни к его рабочей `config`, ни к папке запущенной программы. Папку можно взять готовой из репозитория: образец лежит в клоне `src\` по пути `core\internal\store\nekoimport\testdata\nekobox\config` (15 файлов: `groups` 4, `profiles` 9, `routes_box` 2); скопируйте его (`Copy-Item "$env:LAVRAY_SRC\core\internal\store\nekoimport\testdata\nekobox\config" C:\lavray-test\tmp\M10\install\config -Recurse`, предварительно создав `C:\lavray-test\tmp\M10\install`), а путь в диалоге указывайте на копию в `tmp\M10`, не на `src\`. Либо создайте синтетический каталог скриптом из конца файла: сохраните его как `C:\lavray-test\tmp\M10\m10_fixture.py` и выполните
 
    ```powershell
    New-Item -ItemType Directory -Force -Path C:\lavray-test\tmp\M10\install | Out-Null

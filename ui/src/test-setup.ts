@@ -4,6 +4,18 @@
 // Нужны, чтобы монтирование экранов не сыпало «Not implemented» в лог:
 // график трафика и подсветка TOC деградируют безопасно.
 import { vi } from 'vitest';
+import { deDict } from './lib/dictionaries/de';
+import { esDict } from './lib/dictionaries/es';
+import { ruDict } from './lib/dictionaries/ru';
+import { zhDict } from './lib/dictionaries/zh';
+import { registerDictionary } from './lib/i18n';
+
+// D-3: в приложении словари ru/zh/es/de подгружаются лениво (i18nLoad.ts); в тестах
+// все пять зарегистрированы заранее, поэтому t() и setLanguage() остаются синхронными.
+registerDictionary('ru', ruDict);
+registerDictionary('zh', zhDict);
+registerDictionary('es', esDict);
+registerDictionary('de', deDict);
 
 // canvas: jsdom без пакета `canvas` не реализует getContext. Возвращаем
 // минимальный 2D-контекст-пустышку — график просто ничего не рисует.

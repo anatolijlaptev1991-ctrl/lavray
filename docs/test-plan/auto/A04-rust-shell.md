@@ -6,7 +6,7 @@
 | Слой | авто |
 | Время | 15–30 минут на свежем ПК (первая сборка дерева Tauri), 3–5 минут с тёплым кэшем |
 | Зависимости | `01-ENVIRONMENT.md`, разделы 3–6 (страж, маркер `TESTPC_OK`). Выполняется последовательно с A10, A11 и M-файлами (см. `00-README.md`, группа S) |
-| Опасность | реестр: один шаг (7–8) выполняет настоящие вызовы WinINET на **выдуманной** записи RAS и пишет значение в `HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Connections`. Файл сам возвращает прежнее состояние и проверяет это |
+| Опасность | реестр: один шаг (7–8) выполняет настоящие вызовы WinINET на **выдуманной** записи RAS и пишет значение в `HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings\Connections`. Файл сам возвращает прежнее состояние и проверяет это. На теге v0.9.0 тест сам портит общий `ProxyServer` (известный дефект D-1), поэтому перед шагом 7 обязателен экспорт ключа `Internet Settings` (шаг 6), а возврат идёт из него |
 
 ## Цель
 
@@ -23,7 +23,14 @@
 
 ## Безопасность
 
-Единственная запись в систему — шаг 7–8: тест вызывает `InternetSetOptionW` с `INTERNET_OPTION_PER_CONNECTION_OPTION` для имени `LAVRay CI fake RAS entry` (имени нет в телефонной книге RAS, настоящие подключения не затрагиваются) и сразу возвращает прежние настройки. Побочный эффект: WinINET может создать значение `LAVRay CI fake RAS entry` в разделе `Connections`. Файл снимает состояние раздела до теста (шаг 6), после теста сравнивает (шаг 9) и удаляет это значение, если его не было. Общий системный прокси LAN (`ProxyEnable`, `ProxyServer`, `DefaultConnectionSettings`) тест не меняет; шаг 9 это проверяет.
+Единственная запись в систему — шаги 7–8: тест `wininet_roundtrip_on_fake_ras_name` вызывает `InternetSetOptionW` с `INTERNET_OPTION_PER_CONNECTION_OPTION` для имени `LAVRay CI fake RAS entry` (имени нет в телефонной книге RAS, настоящие подключения не затрагиваются).
+
+**Общий системный прокси LAN этот тест на `v0.9.0` не сохраняет.** Известный дефект D-1 («известно в 0.9.0, исправлено в 0.9.1»): на теге v0.9.0 настоящий вызов WinINET стирает `ProxyServer` в `HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings` и оставляет в подразделе `Connections` значение `LAVRay CI fake RAS entry`. Начиная с 0.9.1 тест сам снимает и возвращает четыре значения (`ProxyEnable`, `ProxyServer`, `ProxyOverride`, `AutoConfigURL`) и удаляет своё поддельное значение в `Connections`. Поэтому порядок такой:
+
+1. **До шага 7** оркестратор экспортирует ключ целиком (это делает шаг 6): `reg export "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" C:\lavray-test\tmp\A04-internet-settings-before.reg /y`. Общий снимок `baseline\internet-settings.reg` (`01-ENVIRONMENT.md`, раздел 8) остаётся запасным: его читают, не изменяют.
+2. Шаг 9 сравнивает состояние после теста с состоянием шага 6 (`Names`, `DefaultConnectionSettings`, `ProxyEnable`, `ProxyServer`, `ProxyOverride`, `AutoConfigURL`) и удаляет поддельное значение из `Connections`.
+3. Если `ProxyServer` изменён: на теге `v0.9.0` это известный дефект D-1, записывается как `FAIL` со ссылкой «известно в 0.9.0, исправлено в 0.9.1», на любом более позднем теге это регрессия (`FAIL`, новый дефект). В обоих случаях значение возвращается командой `reg import` из экспорта шага 6 (шаг 9 делает это сам).
+4. Если расхождение дали `ProxyEnable`, `ProxyOverride`, `AutoConfigURL` или `DefaultConnectionSettings`, это не D-1: `FAIL`, `major`, откат из раздела «Откат».
 
 Не запускайте шаги 7–8 на ПК, где работает чужой VPN: это правило CI («на ПК разработчика — никогда»). Страж из `01-ENVIRONMENT.md` это отсекает.
 
@@ -106,9 +113,12 @@ function Get-ConnState {
 $before = Get-ConnState
 $before | ConvertTo-Json | Set-Content C:\lavray-test\tmp\A04-before.json -Encoding utf8
 $before | Format-List
+# Полный экспорт ключа ДО настоящего теста: из него шаг 9 возвращает ProxyServer, если тест его испортил (дефект D-1 на v0.9.0).
+reg export "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" C:\lavray-test\tmp\A04-internet-settings-before.reg /y
+"reg export exit=$LASTEXITCODE"
 ```
 
-   Ожидается: печатается состояние; `Names` содержит как минимум `DefaultConnectionSettings` и `SavedLegacySettings` (на «чистой» Windows), значения `ProxyEnable` пусты или `0`. Если `ProxyEnable` равно `1`, страж не должен был пропустить машину: остановитесь с `BLOCKED`.
+   Ожидается: `reg export exit=0`, файл `tmp\A04-internet-settings-before.reg` непустой; печатается состояние; `Names` содержит как минимум `DefaultConnectionSettings` и `SavedLegacySettings` (на «чистой» Windows), значения `ProxyEnable` пусты или `0`. Если `ProxyEnable` равно `1`, страж не должен был пропустить машину: остановитесь с `BLOCKED`.
 
 7. Настоящий WinINET: весь набор, как в CI на Windows (`cargo test` с `LAVRAY_CI_REAL_WININET=1`).
 
@@ -147,11 +157,18 @@ if ((Get-ItemProperty -Path $conn -ErrorAction SilentlyContinue).PSObject.Proper
   Remove-ItemProperty -Path $conn -Name $fake
   "значение '$fake' удалено"
 }
+if ($before.ProxyServer -ne $after.ProxyServer) {
+  if ($env:LAVRAY_REF -eq 'v0.9.0') { 'FAIL D-1 (известно в 0.9.0, исправлено в 0.9.1): тест изменил ProxyServer' }
+  else { 'FAIL: регрессия D-1 (исправлено в 0.9.1): тест изменил ProxyServer' }
+  reg import C:\lavray-test\tmp\A04-internet-settings-before.reg
+  "reg import exit=$LASTEXITCODE"
+}
 $final = Get-ConnState
 "Names после уборки = до: " + ($before.Names -eq $final.Names)
+"ProxyServer после уборки = до: " + ($before.ProxyServer -eq $final.ProxyServer)
 ```
 
-   Ожидается: все строки `True` после уборки. До уборки допустимо `Names одинаковы: False`, если ровно на значение `LAVRay CI fake RAS entry` больше; это нужно записать в отчёт. Расхождение `DefaultConnection`, `ProxyEnable`, `ProxyServer`, `ProxyOverride` или `AutoConfigURL` — `FAIL` с серьёзностью `major`, и обязателен откат из раздела «Откат».
+   Ожидается: все строки `True` после уборки. До уборки на теге `v0.9.0` ожидаемо `Names одинаковы: False` (лишнее значение `LAVRay CI fake RAS entry` оставляет тест, это часть D-1) и, при дефекте, `ProxyServer то же: False`: запишите оба факта в отчёт как `FAIL` К8 с отметкой «D-1, известно в 0.9.0, исправлено в 0.9.1»; после возврата все строки обязаны стать `True`. На более позднем теге лишнее значение в `Connections` и любое расхождение до уборки — регрессия. Расхождение `DefaultConnection`, `ProxyEnable`, `ProxyOverride` или `AutoConfigURL` — `FAIL` с серьёзностью `major` независимо от тега, и обязателен откат из раздела «Откат». Если после `reg import` `ProxyServer` всё ещё отличается (значения до теста не существовало, а `reg import` пустое значение не удаляет), приведите его к исходному вручную (`Remove-ItemProperty` для отсутствовавшего значения) и запишите в отчёт.
 
 10. Права окна (capabilities) и проводка команд — отдельные тесты оболочки, запускаются явно, чтобы видеть их имена.
 
@@ -203,14 +220,14 @@ Set-Location (Join-Path $wt 'shell')
 | К5 | `cargo test` без разрешения вернул 0, у каждого `test result:` `0 failed` | шаг 5 |
 | К6 | `cargo test` с `LAVRAY_CI_REAL_WININET=1` вернул 0 | шаг 7 |
 | К7 | Настоящий тест не пропущен: `wininet_roundtrip_on_fake_ras_name ... ok`, строки `пропущен` нет | шаг 8 |
-| К8 | После уборки состояние `Connections` и общие значения прокси равны исходным | шаг 9, все `True` |
+| К8 | После уборки состояние `Connections` и общие значения прокси равны исходным. На `v0.9.0` расхождение `ProxyServer` до возврата — известный дефект D-1: `FAIL` со ссылкой «известно в 0.9.0, исправлено в 0.9.1»; на более позднем теге такое расхождение недопустимо | шаг 9, после уборки все `True` |
 | К9 | Пять защитных тестов оболочки есть и проходят; в `capabilities` нет `dialog:`, `fs:`, `notification:` | шаг 10 |
 | К10 | `Cargo.lock` и `Cargo.toml` не изменены, `cargo build` вернул 0 | шаг 11 |
 | К11 | Сумма `passed` в пределах 90–115 % от числа `#[test]` | шаг 12 |
 
 ## Что собрать
 
-В `results\A04\`: `A04-clippy.txt`, `A04-test-default.txt`, `A04-test-real-wininet.txt`, `A04-test-wininet-only.txt`, `tmp\A04-before.json` и итоговое состояние шага 9, версии `rustc --version`, `cargo --version`.
+В `results\A04\`: `A04-clippy.txt`, `A04-test-default.txt`, `A04-test-real-wininet.txt`, `A04-test-wininet-only.txt`, `tmp\A04-before.json`, `tmp\A04-internet-settings-before.reg` и итоговое состояние шага 9, версии `rustc --version`, `cargo --version`.
 
 ## Откат / уборка
 
@@ -224,7 +241,7 @@ if ((Get-ItemProperty -Path $conn -ErrorAction SilentlyContinue).PSObject.Proper
 (Get-ItemProperty -Path $conn -ErrorAction SilentlyContinue).PSObject.Properties.Name -contains $fake
 ```
 
-Ожидается последняя строка `False`. Если шаг 9 показал расхождение общих значений прокси, верните раздел из снимка (`reg import C:\lavray-test\baseline\internet-settings.reg`) и повторите проверку из шага 9; повторное расхождение — `major`.
+Ожидается последняя строка `False`. Если шаг 9 показал расхождение общих значений прокси, которое он сам не вернул, верните ключ из экспорта шага 6 (`reg import C:\lavray-test\tmp\A04-internet-settings-before.reg`; запасной вариант — общий снимок `reg import C:\lavray-test\baseline\internet-settings.reg`) и повторите проверку из шага 9; повторное расхождение — `major`.
 
 Затем удалите рабочую копию (каталог `target` большой, удаление может занять минуту):
 
@@ -239,4 +256,4 @@ Test-Path C:\lavray-test\wt\A04
 
 ## Отчёт
 
-`results/A04.md` по `templates/REPORT.md`: статусы шагов 1–12, К1–К11, время сборки, сумма `passed`. Провал К3–К6 — `major`; К7 — `major` (проверка настоящего WinINET не выполнена); К8 — `critical`, если общие настройки прокси ПК изменились и не вернулись, иначе `major`.
+`results/A04.md` по `templates/REPORT.md`: статусы шагов 1–12, К1–К11, время сборки, сумма `passed`. Провал К3–К6 — `major`; К7 — `major` (проверка настоящего WinINET не выполнена); К8 — `critical`, если общие настройки прокси ПК изменились и не вернулись, иначе `major`; на `v0.9.0` расхождение `ProxyServer` — известный дефект D-1 (`major`, «известно в 0.9.0, исправлено в 0.9.1»), новым дефектом его не заводят.

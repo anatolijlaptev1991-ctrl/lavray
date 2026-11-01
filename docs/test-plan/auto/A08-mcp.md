@@ -63,9 +63,12 @@ $r[2].result.content[0].text
 3. Основной сценарий. Сохраните скрипт из раздела «Скрипт `a08_mcp_check.py`» ниже как `C:\lavray-test\tmp\A08\a08_mcp_check.py` и запустите:
 
 ```powershell
+# Скрипт печатает UTF-8 (sys.stdout.reconfigure); без этих двух строк pwsh читает вывод в OEM-кодировке консоли и в check.txt попадает кракозябра.
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new()
+$OutputEncoding = [Text.UTF8Encoding]::new()
 python -I "$t\a08_mcp_check.py" $exe "$t\run" 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A08\check.txt | Select-Object -Last 12
 "check exit=$LASTEXITCODE"
-$res = Get-Content "$t\run\a08-result.json" -Raw | ConvertFrom-Json
+$res = Get-Content "$t\run\a08-result.json" -Raw -Encoding utf8 | ConvertFrom-Json
 "проверок: $($res.total), провалов: $($res.failed)"
 ($res.checks | Where-Object { -not $_.pass } | Select-Object id, detail | Format-List | Out-String)
 ```
@@ -93,15 +96,19 @@ $res = Get-Content "$t\run\a08-result.json" -Raw | ConvertFrom-Json
    | `secrets.absent.*` | во всём, что увидел агент (ответы инструментов и RPC), нет: основного токена, агентского токена, портов обоих апстримов и входящего порта, адреса `127.0.0.1` | подстрок нет |
    | `mcp.no_endpoint_message`, `mcp.exit_code_0` | после удаления файла доступа инструменты отвечают сообщением «LAVRay не запущен…»; сервер выходит с кодом 0 | текст, код |
 
-5. Именованные тесты ядра, на которых держится белый список, не удалены (быстрая проверка в клоне `src\`; нужна рабочая копия с Go).
+5. Именованные тесты ядра, на которых держится белый список, не удалены. `src\` только для чтения (`01-ENVIRONMENT.md`, раздел 2, правило 1), поэтому тесты идут в собственной рабочей копии `wt\A08` (нужен Go).
 
 ```powershell
-Set-Location (Join-Path $env:LAVRAY_SRC 'core')
+. C:\lavray-test\env.ps1
+$wt = 'C:\lavray-test\wt\A08'
+if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
+git -C $env:LAVRAY_SRC worktree add --detach $wt $env:LAVRAY_REF
+Set-Location (Join-Path $wt 'core')
 go test -count=1 -v -run '^(TestEveryProcedureHasAgentDecision|TestAgentTableKeepsPreviousAllowlists)$' ./internal/api/ 2>&1 | Select-String -Pattern '^(--- |ok|FAIL)'
 Set-Location C:\lavray-test
 ```
 
-   Ожидается: `--- PASS: TestEveryProcedureHasAgentDecision`, `--- PASS: TestAgentTableKeepsPreviousAllowlists`, `ok`. (Команда читает `src\`, но `go test` может создать кэш сборки только в `GOCACHE`; файлы репозитория не меняются.)
+   Ожидается: `--- PASS: TestEveryProcedureHasAgentDecision`, `--- PASS: TestAgentTableKeepsPreviousAllowlists`, `ok`. (Рабочая копия `wt\A08` создана без ошибок; `go test` пишет только в кэш сборки `GOCACHE`. Клон `src\` не затрагивается, проверка в «Откате».)
 
 ## Критерии PASS/FAIL
 
@@ -121,11 +128,16 @@ Set-Location C:\lavray-test
 
 ```powershell
 Get-Process lavray-core -ErrorAction SilentlyContinue | Where-Object { $_.Path -like 'C:\lavray-test\*' } | Stop-Process -Force
+Set-Location C:\lavray-test
+git -C $env:LAVRAY_SRC worktree remove --force C:\lavray-test\wt\A08
+git -C $env:LAVRAY_SRC worktree prune
 Remove-Item -Recurse -Force C:\lavray-test\tmp\A08
 Test-Path C:\lavray-test\tmp\A08
+Test-Path C:\lavray-test\wt\A08
+git -C $env:LAVRAY_SRC status --short
 ```
 
-Ожидается `False`. Системного отката нет.
+Ожидается два `False` и пустой вывод `git status --short` (клон `src\` не изменён). Системного отката нет.
 
 ## Отчёт
 
@@ -192,7 +204,7 @@ class Socks5Handler(socketserver.BaseRequestHandler):
             if atyp == 1:
                 host = socket.inet_ntoa(c.recv(4))
             elif atyp == 3:
-                host = c.recv(c.recv(1)[0]).decode()
+                host = c.recv(c.recv(1)[0]).decode("utf-8")
             else:
                 host = socket.inet_ntop(socket.AF_INET6, c.recv(16))
             port = int.from_bytes(c.recv(2), "big")
@@ -226,22 +238,22 @@ def main():
     core = subprocess.Popen([EXE, "serve", "--listen-socket", "127.0.0.1:0", "--data", DATA],
                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                             stderr=open(os.path.join(OUT, "core-stderr.log"), "wb"))
-    core.stdin.write((main_tok + "\n" + agent_tok + "\n").encode())
+    core.stdin.write((main_tok + "\n" + agent_tok + "\n").encode("utf-8"))
     core.stdin.flush()
-    ready = core.stdout.readline().decode().strip()
+    ready = core.stdout.readline().decode("utf-8").strip()
     check("core.ready", ready.startswith("LAVRAY_CORE_READY tcp://127.0.0.1:"), ready)
     transport = ready.split()[1]
     base = "http://" + transport.replace("tcp://", "")
 
     def rpc(svc, method, body, token):
-        req = urllib.request.Request(f"{base}/lavray.v1.{svc}/{method}", data=json.dumps(body).encode(),
+        req = urllib.request.Request(f"{base}/lavray.v1.{svc}/{method}", data=json.dumps(body).encode("utf-8"),
                                      headers={"Authorization": "Bearer " + token, "Content-Type": "application/json"})
         try:
             with urllib.request.urlopen(req, timeout=60) as r:
                 raw = r.read()
                 return r.status, (json.loads(raw) if raw else {})
         except urllib.error.HTTPError as e:
-            raw = e.read().decode(errors="replace")
+            raw = e.read().decode("utf-8", errors="replace")
             try:
                 return e.code, json.loads(raw)
             except ValueError:
@@ -249,7 +261,7 @@ def main():
 
     def rpc_stream(svc, method, body, token):
         """Server-stream вызов по connect+json: запрос в 5-байтном конверте; ответ читается целиком."""
-        raw = json.dumps(body).encode()
+        raw = json.dumps(body).encode("utf-8")
         env = b"\x00" + len(raw).to_bytes(4, "big") + raw
         req = urllib.request.Request(f"{base}/lavray.v1.{svc}/{method}", data=env,
                                      headers={"Authorization": "Bearer " + token, "Connect-Protocol-Version": "1",
@@ -268,7 +280,7 @@ def main():
             chunks.append(e.read())
         except (ConnectionError, http.client.HTTPException):
             pass  # сервер закрыл поток после ошибки: прочитанное уже в chunks
-        return status, b"".join(chunks).decode(errors="replace")
+        return status, b"".join(chunks).decode("utf-8", errors="replace")
 
     def setting(key, value):
         return rpc("SettingsService", "SetSettings", {"values": {key: value}}, main_tok)
@@ -331,9 +343,9 @@ def main():
             if not notify:
                 nid[0] += 1
                 msg["id"] = nid[0]
-            mcp.stdin.write((json.dumps(msg) + "\n").encode())
+            mcp.stdin.write((json.dumps(msg) + "\n").encode("utf-8"))
             mcp.stdin.flush()
-            return None if notify else json.loads(mcp.stdout.readline().decode())
+            return None if notify else json.loads(mcp.stdout.readline().decode("utf-8"))
 
         def tool(name, args=None):
             res = send("tools/call", {"name": name, "arguments": args or {}})

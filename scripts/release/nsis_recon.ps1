@@ -4,7 +4,8 @@
 .SYNOPSIS
   Ф3.0 «разведка NSIS» (docs/UPDATE-SYSTEM.md §12.7): как ведёт себя НАСТОЯЩИЙ опубликованный
   установщик LAVRay при тихой установке, обновлении поверх работающего приложения, понижении,
-  флаге /R, запуске под дескриптором с запретом записи, голом запуске exe и удалении.
+  флаге /R, запуске под дескриптором с запретом записи, голом запуске exe, удалении и удалении
+  работающего приложения (D-2 прогона 0.9.0).
 
 .DESCRIPTION
   Скрипт СТАВИТ и УДАЛЯЕТ LAVRay, пишет в реестр и планировщик. Запускать его можно только на
@@ -44,7 +45,7 @@ if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hoste
     exit 3
 }
 
-foreach ($lib in 'common', 'probe', 'proc', 'app', 'environment', 'scenarios_install', 'scenarios_running', 'scenarios_lock', 'scenarios_bare', 'scenarios_uninstall') {
+foreach ($lib in 'common', 'probe', 'proc', 'app', 'environment', 'scenarios_install', 'scenarios_running', 'scenarios_lock', 'scenarios_bare', 'scenarios_uninstall', 'scenarios_cleanup') {
     . (Join-Path $PSScriptRoot "nsis_recon/$lib.ps1")
 }
 
@@ -77,6 +78,7 @@ Invoke-Scenario 's4_relaunch_flag_R' 480 { param($f) Invoke-RelaunchFlag $f }
 Invoke-Scenario 's5_deny_write_handle' 1200 { param($f) Invoke-DenyWriteHandle $f }
 Invoke-Scenario 's6_bare_old_exe' 540 { param($f) Invoke-BareExe $f }
 Invoke-Scenario 's7_silent_uninstall' 600 { param($f) Invoke-SilentUninstall $f }
+Invoke-Scenario 's8_uninstall_while_running' 900 { param($f) Invoke-UninstallWhileRunning $f }
 
 $script:Report['finishedUtc'] = [datetime]::UtcNow.ToString('o')
 Save-Report

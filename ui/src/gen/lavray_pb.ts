@@ -137,7 +137,7 @@ export type ConnectResponse = Message<"lavray.v1.ConnectResponse"> & {
 
   /**
    * Предупреждения сборки конфига: systemd-resolved+TUN (FR-UI-154),
-   * устаревший custom DNS (LNB-08), отключение mixed-слушателя в TUN
+   * устаревший custom DNS (LNB-08), mixed-слушатель в TUN остаётся
    * (FR-UI-279), DROP-поля пресета (domain_strategy и пр.) и т.п.
    *
    * @generated from field: repeated string warnings = 2;
@@ -8168,8 +8168,8 @@ export const CoreService: GenService<{
    *
    * Валидаторы (FR-UI-279, LNB-33): inbound-адрес не loopback при пустой
    * авторизации → INVALID_ARGUMENT («пароль обязателен при доступе из LAN»);
-   * режим TUN требует отключения mixed-слушателя (в TUN слушателей на
-   * loopback нет вообще) — ядро делает это само и сообщает в warnings.
+   * в режиме TUN mixed-слушатель остаётся (паритет с NekoBox: системный
+   * прокси и приложения пользуются им без TUN) — warnings: tun_mixed_enabled.
    *
    * @generated from rpc lavray.v1.CoreService.Connect
    */

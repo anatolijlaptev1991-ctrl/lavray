@@ -141,3 +141,24 @@ export function buttonByText(root: ParentNode, text: string): HTMLButtonElement 
   if (found === undefined) throw new Error(`кнопка «${text}» не найдена`);
   return found;
 }
+
+/**
+ * D-3: экраны и диалог импорта грузятся лениво (React.lazy + import()). Первый
+ * import в vitest занимает дольше фиксированных задержек тестов, поэтому тесты,
+ * монтирующие App целиком, греют модули заранее: затем lazy берёт их из кэша.
+ */
+export async function warmViews(): Promise<void> {
+  await Promise.all([
+    import('./screens/screen_connection'),
+    import('./screens/screen_servers'),
+    import('./screens/screen_subscriptions'),
+    import('./screens/rules/RulesScreen'),
+    import('./screens/screen_dns'),
+    import('./screens/screen_diag'),
+    import('./screens/conns/ConnsScreen'),
+    import('./screens/screen_log'),
+    import('./screens/screen_settings'),
+    import('./screens/updates/UpdatesScreen'),
+    import('./components/ImportDialog'),
+  ]);
+}

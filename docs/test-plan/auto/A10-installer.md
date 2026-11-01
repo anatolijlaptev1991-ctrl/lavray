@@ -6,7 +6,7 @@
 | Слой | авто |
 | Время | 12–18 минут |
 | Зависимости | A06 (ассеты скачаны и сверены: `assets\0.9.0` и `assets\0.3.0`), `01-ENVIRONMENT.md`, разделы 3–7; Python 3.12 (модуль `sqlite3`) для проверки базы данных. Выполняется **последовательно**, после A04 и A11 (группа S в `00-README.md`) |
-| Опасность | **установка**: пишет в `C:\Program Files\LAVRay`, `HKLM\...\Uninstall`, меню «Пуск», `HKCU\...\Run` (имитация автозапуска). Только тестовый ПК |
+| Опасность | **установка**: пишет в `C:\Program Files\LAVRay`, `HKLM\...\Uninstall`, меню «Пуск», общий рабочий стол (`C:\Users\Public\Desktop\LAVRay.lnk`), `HKCU\...\Run` (имитация автозапуска). Только тестовый ПК |
 
 ## Цель
 
@@ -24,9 +24,11 @@
 
 ## Безопасность
 
-Меняется: каталог `C:\Program Files\LAVRay`, ветка `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall` (запись установщика), ярлык в меню «Пуск», значение `LAVRay` в `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (создаётся тестом, чтобы проверить сохранение автозапуска), файл `%APPDATA%\LAVRay\a10-marker.txt`. Системный прокси, TUN и порты не затрагиваются, приложение в основной части не запускается. Откат — шаг 10 и раздел «Откат»; в конце установленной программы быть не должно.
+Меняется: каталог `C:\Program Files\LAVRay`, ветка `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall` (запись установщика), ярлык в меню «Пуск», ярлык `C:\Users\Public\Desktop\LAVRay.lnk` на общем рабочем столе (его создаёт установщик, убирает удалитель), значение `LAVRay` в `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (создаётся тестом, чтобы проверить сохранение автозапуска), файл `%APPDATA%\LAVRay\a10-marker.txt`. Системный прокси, TUN и порты не затрагиваются, приложение в основной части не запускается. Откат — шаг 10 и раздел «Откат»; в конце установленной программы быть не должно.
 
 ## Шаги
+
+Имена файлов. Продукт называется LAVRay, но исполняемый файл оболочки в **установке** называется `lavray-shell.exe`; ядро лежит в `binaries\lavray-core.exe`. Имя `LAVRay.exe` носит только оболочка внутри **portable ZIP** (её переименовывает release-workflow). Ярлыки называются `LAVRay.lnk`. Процесс установленной оболочки — `lavray-shell`, оболочки из portable ZIP — `LAVRay`; везде ниже, где нужно убедиться, что программа не запущена, перечислены оба имени.
 
 1. Права, маркер, исходное состояние.
 
@@ -35,7 +37,8 @@
 if (-not (Test-TestPc)) { 'BLOCKED: нет маркера TESTPC_OK (или он создан на другом ПК, или старше 30 суток)'; return }
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 "администратор: $isAdmin"
-$pf = Join-Path $env:ProgramFiles 'LAVRay'
+$pf = Join-Path $env:ProgramFiles 'LAVRay'      # только каталог LAVRay, не весь Program Files
+$desk = 'C:\Users\Public\Desktop\LAVRay.lnk'     # ярлык на общем рабочем столе: создаёт установщик, убирает удалитель
 $setupNew = Join-Path $env:LAVRAY_ASSETS    ('LAVRay-' + $env:LAVRAY_VERSION      + '-x64-setup.exe')
 $setupOld = Join-Path $env:LAVRAY_ASSETS_OLD ('LAVRay-' + $env:LAVRAY_FROM_VERSION + '-x64-setup.exe')
 "новый установщик есть: " + (Test-Path $setupNew)
@@ -55,7 +58,8 @@ function Get-LavrayUninstall {
 }
 "запись об установке до теста: " + [bool](Get-LavrayUninstall)
 "каталог программы до теста:   " + (Test-Path $pf)
-"процессы LAVRay:              " + [bool](Get-Process LAVRay, lavray-core -ErrorAction SilentlyContinue)
+"ярлык на рабочем столе до теста: " + (Test-Path $desk)
+"процессы LAVRay:              " + [bool](Get-Process LAVRay, lavray-shell, lavray-core -ErrorAction SilentlyContinue)
 $dataDir = Join-Path $env:APPDATA 'LAVRay'
 $dataExisted = Test-Path $dataDir
 $webv = @((Join-Path $env:APPDATA 'io.github.anatolijlaptev1991-ctrl.lavray'), (Join-Path $env:LOCALAPPDATA 'io.github.anatolijlaptev1991-ctrl.lavray'))
@@ -67,7 +71,7 @@ $runBefore = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\
 "значение автозапуска до теста: " + $(if ($runBefore) { $runBefore } else { '(нет)' })
 ```
 
-   Ожидается: `администратор: True`, оба установщика есть, «запись об установке до теста: False», «каталог программы до теста: False», «процессы LAVRay: False», автозапуск `(нет)`. Иначе итог `BLOCKED` с названием причины.
+   Ожидается: `администратор: True`, оба установщика есть, «запись об установке до теста: False», «каталог программы до теста: False», «ярлык на рабочем столе до теста: False», «процессы LAVRay: False», автозапуск `(нет)`. Иначе итог `BLOCKED` с названием причины.
 
 2. Тихая установка прежней версии 0.3.0 (в этом файле `-Wait` ждёт завершения; сам NSIS при `/S` не показывает окон).
 
@@ -75,27 +79,28 @@ $runBefore = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\
 $p = Start-Process -FilePath $setupOld -ArgumentList '/S' -Wait -PassThru
 "установка 0.3.0: код $($p.ExitCode)"
 Get-LavrayUninstall | Format-List
-Get-ChildItem $pf -Recurse | Select-Object FullName, Length | Format-Table -AutoSize | Out-String -Width 200
+# Только каталог LAVRay; -ErrorAction SilentlyContinue обязателен, иначе обход вширь упирается в защищённые каталоги (например, Windows Defender).
+Get-ChildItem -LiteralPath $pf -Recurse -ErrorAction SilentlyContinue | Select-Object FullName, Length | Format-Table -AutoSize | Out-String -Width 200
 ```
 
-   Ожидается: код `0`; запись об установке с `Version = 0.3.0`; файлы `LAVRay.exe`, `binaries\lavray-core.exe`, `uninstall.exe` в `C:\Program Files\LAVRay`. Запомните точное имя ключа реестра и значение `Uninstall` (путь к удалителю): они нужны для шага 9.
+   Ожидается: код `0`; запись об установке с `Version = 0.3.0`; файлы `lavray-shell.exe`, `binaries\lavray-core.exe`, `uninstall.exe` в `C:\Program Files\LAVRay`. Запомните точное имя ключа реестра и значение `Uninstall` (путь к удалителю): они нужны для шага 9.
 
-3. Состав установки: файлы, ярлык в меню «Пуск».
+3. Состав установки: файлы, ярлык в меню «Пуск», ярлык на общем рабочем столе.
 
 ```powershell
-foreach ($f in 'LAVRay.exe', 'binaries\lavray-core.exe', 'uninstall.exe') {
+foreach ($f in 'lavray-shell.exe', 'binaries\lavray-core.exe', 'uninstall.exe') {
   $path = Join-Path $pf $f
   '{0,-28} {1,10} байт  {2}' -f $f, $(if (Test-Path $path) { (Get-Item $path).Length } else { -1 }), $(if (Test-Path $path) { (Get-FileHash $path -Algorithm SHA256).Hash.Substring(0, 16) } else { '' })
 }
 $lnk = Get-ChildItem "$env:ProgramData\Microsoft\Windows\Start Menu\Programs", "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter 'LAVRay*.lnk' -ErrorAction SilentlyContinue
 $lnk | Select-Object FullName
-if ($lnk) {
-  $sh = New-Object -ComObject WScript.Shell
-  "цель ярлыка: " + $sh.CreateShortcut($lnk[0].FullName).TargetPath
-}
+$sh = New-Object -ComObject WScript.Shell
+if ($lnk) { "цель ярлыка меню «Пуск»: " + $sh.CreateShortcut($lnk[0].FullName).TargetPath }
+"ярлык на общем рабочем столе ($desk): " + (Test-Path $desk)
+if (Test-Path $desk) { "цель ярлыка рабочего стола: " + $sh.CreateShortcut($desk).TargetPath }
 ```
 
-   Ожидается: три файла размером больше нуля (отрицательный размер — файла нет); найден хотя бы один ярлык `LAVRay*.lnk`, цель — `C:\Program Files\LAVRay\LAVRay.exe`. Точный путь ярлыка (общее меню «Пуск» или меню пользователя) запишите в отчёт: он зависит от настроек сборки установщика и в коде репозитория не зафиксирован.
+   Ожидается: три файла размером больше нуля (отрицательный размер — файла нет); найден хотя бы один ярлык `LAVRay*.lnk`, цель — `C:\Program Files\LAVRay\lavray-shell.exe`; ярлык рабочего стола `C:\Users\Public\Desktop\LAVRay.lnk` существует (`True`) и ведёт на тот же файл. Точный путь ярлыка (общее меню «Пуск» или меню пользователя) запишите в отчёт: он зависит от настроек сборки установщика и в коде репозитория не зафиксирован.
 
 4. Подготовка данных и автозапуска (имитация пользователя 0.3.0).
 
@@ -104,12 +109,12 @@ New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
 $marker = Join-Path $dataDir 'a10-marker.txt'
 Set-Content -LiteralPath $marker -Value ('a10-' + [guid]::NewGuid().ToString()) -Encoding utf8
 $markerHash = (Get-FileHash $marker -Algorithm SHA256).Hash
-$runValue = '"' + (Join-Path $pf 'LAVRay.exe') + '" --tray'
+$runValue = '"' + (Join-Path $pf 'lavray-shell.exe') + '" --tray'
 Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'LAVRay' -Value $runValue
 (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run').LAVRay
 ```
 
-   Ожидается: значение автозапуска вида `"C:\Program Files\LAVRay\LAVRay.exe" --tray` (так же его пишет сама программа, см. `shell/src/autostart.rs`).
+   Ожидается: значение автозапуска вида `"C:\Program Files\LAVRay\lavray-shell.exe" --tray` (так же его пишет сама программа, см. `shell/src/autostart.rs`).
 
    Настоящая база прежней версии. Установленное ядро 0.3.0 само создаёт каталог данных (отдельный, не `%APPDATA%\LAVRay`, чтобы не трогать данные пользователя): профили `a10-keep-1` и `a10-keep-2` (у второго задан `customOutboundJson`), настройка `inbound.port = 2091`. Сохраните скрипт из раздела «Скрипт `a10_data.py`» как `C:\lavray-test\tmp\A10\a10_data.py`.
 
@@ -140,7 +145,8 @@ $u | Format-List
 
 ```powershell
 $portable = $env:LAVRAY_PORTABLE
-foreach ($pair in @(@('LAVRay.exe', 'LAVRay.exe'), @('binaries\lavray-core.exe', 'binaries\lavray-core.exe'))) {
+# установленная оболочка lavray-shell.exe = LAVRay.exe из portable ZIP (release-workflow лишь переименовывает файл)
+foreach ($pair in @(@('lavray-shell.exe', 'LAVRay.exe'), @('binaries\lavray-core.exe', 'binaries\lavray-core.exe'))) {
   $a = (Get-FileHash (Join-Path $pf $pair[0]) -Algorithm SHA256).Hash
   $b = (Get-FileHash (Join-Path $portable $pair[1]) -Algorithm SHA256).Hash
   '{0,-26} совпадает с portable: {1}' -f $pair[0], ($a -eq $b)
@@ -149,10 +155,11 @@ foreach ($pair in @(@('LAVRay.exe', 'LAVRay.exe'), @('binaries\lavray-core.exe',
 $runAfter = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).LAVRay
 "автозапуск сохранён: " + ($runAfter -eq $runValue)
 "ярлык на месте: " + [bool](Get-ChildItem "$env:ProgramData\Microsoft\Windows\Start Menu\Programs", "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter 'LAVRay*.lnk' -ErrorAction SilentlyContinue)
+"ярлык на рабочем столе на месте: " + (Test-Path $desk)
 "установщик NSIS не оставил задач планировщика: " + (-not [bool](Get-ScheduledTask -TaskName 'LAVRay*' -ErrorAction SilentlyContinue))
 ```
 
-   Ожидается: обе строки «совпадает с portable: True» (установщик и ZIP собираются из одних и тех же файлов; расхождение хэшей — `WARN`, запишите оба хэша), маркер на месте и не изменён, автозапуск сохранён (заметки 0.9.0: «Установка поверх 0.3.0 сохраняет серверы, подписки, настройки и автозапуск»; хук удаления не должен срабатывать при обновлении), ярлык на месте, задач планировщика нет (мы их не создавали).
+   Ожидается: обе строки «совпадает с portable: True» (установщик и ZIP собираются из одних и тех же файлов; расхождение хэшей — `WARN`, запишите оба хэша), маркер на месте и не изменён, автозапуск сохранён (заметки 0.9.0: «Установка поверх 0.3.0 сохраняет серверы, подписки, настройки и автозапуск»; хук удаления не должен срабатывать при обновлении), ярлык в меню «Пуск» и ярлык рабочего стола `C:\Users\Public\Desktop\LAVRay.lnk` на месте, задач планировщика нет (мы их не создавали).
 
    База данных после обновления. Ядро 0.9.0 из установки открывает **ту же** базу, проверяются версия схемы, таблицы, данные и экспорт копии `.lavbk`:
 
@@ -177,15 +184,15 @@ python -I "$t\a10_data.py" state $dbData
 8. Наблюдение: повторный запуск `/S` при **запущенном** приложении (план Ф3.0). Запись результата, не критерий.
 
 ```powershell
-$app = Start-Process -FilePath (Join-Path $pf 'LAVRay.exe') -ArgumentList '--tray' -PassThru
+$app = Start-Process -FilePath (Join-Path $pf 'lavray-shell.exe') -ArgumentList '--tray' -PassThru
 Start-Sleep -Seconds 15
 "приложение работает до установки: " + [bool](Get-Process -Id $app.Id -ErrorAction SilentlyContinue)
 $p = Start-Process -FilePath $setupNew -ArgumentList '/S' -Wait -PassThru
 "повторная установка при запущенном приложении: код $($p.ExitCode)"
 Start-Sleep -Seconds 10
-"процесс LAVRay жив после установки: " + [bool](Get-Process LAVRay -ErrorAction SilentlyContinue)
+"процесс lavray-shell жив после установки: " + [bool](Get-Process lavray-shell -ErrorAction SilentlyContinue)
 "процессов lavray-core: " + @(Get-Process lavray-core -ErrorAction SilentlyContinue).Count
-Get-Process LAVRay, lavray-core -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process LAVRay, lavray-shell, lavray-core -ErrorAction SilentlyContinue | Stop-Process -Force
 ```
 
    Запишите все четыре значения в таблицу «Наблюдения» отчёта (установщик остановил приложение, оставил его, завершился с ошибкой, перезапустил его). Любой исход допустим для этого шага. Если приложение в `--tray` не стартовало (процесса нет уже до установки), запишите это отдельным наблюдением: нужна диагностика запуска.
@@ -224,16 +231,17 @@ $un = Join-Path $pf 'uninstall.exe'
 $p = Start-Process -FilePath $un -ArgumentList '/S' -PassThru
 # удалитель NSIS может перезапустить себя из временного каталога и вернуть управление сразу: ждём результат опросом
 $sw = [Diagnostics.Stopwatch]::StartNew()
-while ($sw.Elapsed.TotalSeconds -lt 90 -and ((Test-Path (Join-Path $pf 'LAVRay.exe')) -or @(Get-LavrayUninstall).Count -gt 0)) { Start-Sleep -Seconds 2 }
+while ($sw.Elapsed.TotalSeconds -lt 90 -and ((Test-Path (Join-Path $pf 'lavray-shell.exe')) -or @(Get-LavrayUninstall).Count -gt 0)) { Start-Sleep -Seconds 2 }
 "удаление завершено за: $([int]$sw.Elapsed.TotalSeconds) с"
-"LAVRay.exe удалён:            " + (-not (Test-Path (Join-Path $pf 'LAVRay.exe')))
+"lavray-shell.exe удалён:      " + (-not (Test-Path (Join-Path $pf 'lavray-shell.exe')))
 "binaries\lavray-core.exe удалён: " + (-not (Test-Path (Join-Path $pf 'binaries\lavray-core.exe')))
 "каталог программы удалён:     " + (-not (Test-Path $pf))
 "запись об установке удалена:  " + (-not [bool](Get-LavrayUninstall))
 "ярлыков нет:                  " + (-not [bool](Get-ChildItem "$env:ProgramData\Microsoft\Windows\Start Menu\Programs", "$env:APPDATA\Microsoft\Windows\Start Menu\Programs" -Recurse -Filter 'LAVRay*.lnk' -ErrorAction SilentlyContinue))
+"ярлык рабочего стола удалён:  " + (-not (Test-Path $desk))
 "автозапуск Run снят:          " + (-not [bool]((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).LAVRay))
 "задач планировщика нет:       " + (-not [bool](Get-ScheduledTask -TaskName 'LAVRay', 'LAVRay-*' -ErrorAction SilentlyContinue))
-"процессов нет:                " + (-not [bool](Get-Process LAVRay, lavray-core -ErrorAction SilentlyContinue))
+"процессов нет:                " + (-not [bool](Get-Process LAVRay, lavray-shell, lavray-core -ErrorAction SilentlyContinue))
 "данные пользователя сохранены (политика): " + ((Test-Path $marker) -and ((Get-FileHash $marker -Algorithm SHA256).Hash -eq $markerHash))
 ```
 
@@ -242,7 +250,7 @@ while ($sw.Elapsed.TotalSeconds -lt 90 -and ((Test-Path (Join-Path $pf 'LAVRay.e
     | Что | После удаления |
     |---|---|
     | Файлы в `C:\Program Files\LAVRay`, сам каталог | удалены |
-    | Запись в `Uninstall`, ярлык «Пуск» | удалены |
+    | Запись в `Uninstall`, ярлык «Пуск», ярлык `C:\Users\Public\Desktop\LAVRay.lnk` на общем рабочем столе | удалены |
     | Значение `HKCU\...\Run\LAVRay`, задачи планировщика `LAVRay`, `LAVRay-<SID>` | удалены (хук `NSIS_HOOK_POSTUNINSTALL`, не при обновлении) |
     | `%APPDATA%\LAVRay` (серверы, подписки, настройки, `ui-state.json`) | **сохраняются**: удалитель их не знает и пользователь не должен терять данные |
     | `%APPDATA%\io.github.anatolijlaptev1991-ctrl.lavray`, `%LOCALAPPDATA%\io.github.anatolijlaptev1991-ctrl.lavray` (профиль WebView2) | допустимы; удалитель Tauri стирает их только по явной галочке «Удалить данные приложения»; поведение `/S` для этой галочки запишите в «Наблюдения» |
@@ -253,10 +261,11 @@ while ($sw.Elapsed.TotalSeconds -lt 90 -and ((Test-Path (Join-Path $pf 'LAVRay.e
 
 ```powershell
 Get-ChildItem $env:ProgramFiles -Filter 'LAVRay*' -ErrorAction SilentlyContinue
+Get-ChildItem 'C:\Users\Public\Desktop' -Filter 'LAVRay*.lnk' -ErrorAction SilentlyContinue
 Get-ChildItem $dataDir, $webv[0], $webv[1] -ErrorAction SilentlyContinue | Select-Object FullName, Length -First 20
 ```
 
-    Ожидается: в `Program Files` ничего; из пользовательских данных — только каталоги из таблицы политики.
+    Ожидается: в `Program Files` и на общем рабочем столе (`C:\Users\Public\Desktop`) ничего; из пользовательских данных — только каталоги из таблицы политики.
 
 ## Критерии PASS/FAIL
 
@@ -264,10 +273,10 @@ Get-ChildItem $dataDir, $webv[0], $webv[1] -ErrorAction SilentlyContinue | Selec
 |---|---|---|
 | К1 | Шаг 1: права администратора, маркер, чистое исходное состояние | значения |
 | К2 | Шаг 2: тихая установка 0.3.0, код 0, запись `Version = 0.3.0`, три файла | вывод |
-| К3 | Шаг 3: найден ярлык «Пуск» с целью `LAVRay.exe` | вывод |
+| К3 | Шаг 3: найден ярлык «Пуск» с целью `lavray-shell.exe` и ярлык рабочего стола `C:\Users\Public\Desktop\LAVRay.lnk` | вывод |
 | К4 | Шаг 5: обновление, код 0, **одна** запись, `Version = 0.9.0` | вывод |
-| К5 | Шаг 6: установленные `LAVRay.exe` и `lavray-core.exe` совпадают с portable (при расхождении `WARN`) | `True` |
-| К6 | Шаг 6: данные (маркер) и автозапуск сохранены, ярлык на месте | `True` |
+| К5 | Шаг 6: установленные `lavray-shell.exe` и `lavray-core.exe` совпадают с `LAVRay.exe` и `binaries\lavray-core.exe` из portable (при расхождении `WARN`) | `True` |
+| К6 | Шаг 6: данные (маркер) и автозапуск сохранены, ярлыки («Пуск» и рабочий стол) на месте | `True` |
 | К7 | Шаг 7: установщик не больше 25 МБ | значение |
 | К8 | Шаг 9: после возврата одна запись и `Version = 0.9.0` | вывод |
 | К9 | Шаг 10: все строки удаления `True`, включая сохранение данных пользователя | вывод |
@@ -285,7 +294,7 @@ Get-ChildItem $dataDir, $webv[0], $webv[1] -ErrorAction SilentlyContinue | Selec
 Обязателен. Выполняется всегда, даже если шаги прошли или тест остановлен на середине.
 
 ```powershell
-Get-Process LAVRay, lavray-core -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-Process LAVRay, lavray-shell, lavray-core -ErrorAction SilentlyContinue | Stop-Process -Force
 $u = @(Get-LavrayUninstall)
 if ($u.Count -gt 0) {
   $un = Join-Path $pf 'uninstall.exe'
@@ -297,6 +306,7 @@ if ($u.Count -gt 0) {
 }
 Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'LAVRay' -ErrorAction SilentlyContinue
 Get-ScheduledTask -TaskName 'LAVRay', 'LAVRay-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
+Remove-Item -LiteralPath 'C:\Users\Public\Desktop\LAVRay.lnk' -Force -ErrorAction SilentlyContinue
 Remove-Item -Recurse -Force 'C:\lavray-test\tmp\A10' -ErrorAction SilentlyContinue
 if (-not $dataExisted -and (Test-Path $dataDir)) { Remove-Item -Recurse -Force $dataDir }
 else { Remove-Item -LiteralPath (Join-Path $dataDir 'a10-marker.txt') -Force -ErrorAction SilentlyContinue }
@@ -304,9 +314,10 @@ foreach ($d in $webv) { if (-not $webvBefore[$d] -and (Test-Path $d)) { Remove-I
 "запись об установке: " + [bool](Get-LavrayUninstall)
 "каталог программы:   " + (Test-Path $pf)
 "автозапуск Run:      " + [bool]((Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -ErrorAction SilentlyContinue).LAVRay)
+"ярлык рабочего стола: " + (Test-Path 'C:\Users\Public\Desktop\LAVRay.lnk')
 ```
 
-Ожидается: три строки `False`. Если запись или каталог остались, а удалитель не отработал, удалите вручную `C:\Program Files\LAVRay` и ключ `Uninstall`, найденный `Get-LavrayUninstall` (`Remove-Item -Recurse -Force <Key>`), и запишите это как дефект `major` (удалитель не убрал установку). Если машина виртуальная, откат снимка надёжнее.
+Ожидается: четыре строки `False`. Если запись или каталог остались, а удалитель не отработал, удалите вручную `C:\Program Files\LAVRay` и ключ `Uninstall`, найденный `Get-LavrayUninstall` (`Remove-Item -Recurse -Force <Key>`), и запишите это как дефект `major` (удалитель не убрал установку). Если машина виртуальная, откат снимка надёжнее.
 
 Каталоги данных и профиля WebView2 удаляются только если их не было до теста (значения сохранены в шаге 1).
 

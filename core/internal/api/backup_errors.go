@@ -51,9 +51,11 @@ func backupError(code connect.Code, reason, format string, args ...any) error {
 	return ce
 }
 
-// checkBackupPassword — длина пароля: от 8 символов до 1024 байт. Пароль нигде
-// не повторяется в тексте ошибки.
+// checkBackupPassword — длина пароля: от 8 символов до 1024 байт, считая по
+// нормализованной (NFC) форме — той, из которой выводится ключ и которую
+// проверяет интерфейс. Пароль нигде не повторяется в тексте ошибки.
 func checkBackupPassword(password string) error {
+	password = backup.NormalizePassword(password)
 	if len(password) > maxPasswordBytes {
 		return backupError(connect.CodeInvalidArgument, reasonPasswordLong,
 			"пароль длиннее %d байт", maxPasswordBytes)

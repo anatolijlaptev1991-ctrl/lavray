@@ -39,7 +39,8 @@ type Options struct {
 	Rand   io.Reader // источник соли и nonce; nil → crypto/rand
 }
 
-// Seal шифрует payload паролем и возвращает файл LAVBK1.
+// Seal шифрует payload паролем и возвращает файл LAVBK1. Пароль берётся как
+// есть (байты UTF-8, без нормализации); приложению нужен SealPassword.
 func Seal(password string, payload []byte, opts Options) ([]byte, error) {
 	if password == "" {
 		return nil, ErrEmptyPassword
@@ -78,6 +79,7 @@ func Seal(password string, payload []byte, opts Options) ([]byte, error) {
 }
 
 // Open проверяет пароль и подлинность файла и возвращает открытое тело.
+// Пароль берётся как есть (без нормализации); приложению нужен OpenPassword.
 // Порядок ошибок: размер → заголовок (ErrCorrupt) → пароль (ErrWrongPassword)
 // → подлинность (ErrTampered). Дорогой Argon2id запускается только после
 // того, как заголовок прошёл строгую проверку границ.

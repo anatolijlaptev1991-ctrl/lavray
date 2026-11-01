@@ -9,6 +9,7 @@ import type { JSX } from 'react';
 import { BrandMark, Icon, type IconName } from './components/Icon';
 import { SECTIONS, type Section, type SectionTab } from './app/sections';
 import { initialRoute } from './app/initialRoute';
+import { screenIdOf } from './app/lazyViews';
 import { CoreContext, useCore, useCoreClients, useCoreStatus } from './hooks/useCore';
 import { ConnectMode, CoreState } from './gen/lavray_pb';
 import { useI18n, useStartupLanguage } from './hooks/useI18n';
@@ -24,18 +25,9 @@ import { loadModes, toggleConnection } from './lib/connection';
 import type { TrayAction } from './lib/tray';
 import { onTablistKeyDown } from './lib/tabs';
 import { getPlatformAdapter } from './platform/adapter';
-import { ConnectionScreen } from './screens/screen_connection';
-import { ConnsScreen } from './screens/conns/ConnsScreen';
-import { DiagScreen } from './screens/screen_diag';
-import { DnsScreen } from './screens/screen_dns';
-import { LogScreen } from './screens/screen_log';
-import { RulesScreen } from './screens/rules/RulesScreen';
-import { ServersScreen } from './screens/screen_servers';
-import { SubscriptionsScreen } from './screens/screen_subscriptions';
-import { SettingsScreen } from './screens/screen_settings';
-import { UpdatesScreen } from './screens/updates/UpdatesScreen';
 import { AppNotices } from './components/AppNotices';
-import { ImportDialog } from './components/ImportDialog';
+import { LazyImportDialog } from './components/LazyImportDialog';
+import { ScreenHost } from './components/ScreenHost';
 import { HotkeysDialog, LicensesDialog, OnboardingDialog } from './components/dialogs';
 import { TitlebarMenu } from './components/TitlebarMenu';
 import { WindowChrome } from './components/WindowChrome';
@@ -113,6 +105,8 @@ function AppInner(): JSX.Element {
     () => section?.tabs.find((x) => x.id === tabId) ?? section?.tabs[0],
     [section, tabId],
   );
+
+  const screenId = screenIdOf(sectionId, tab?.id);
 
   useEffect(() => {
     applyDocumentLanguage(document, lang);
@@ -493,16 +487,7 @@ function AppInner(): JSX.Element {
                 : undefined
             }
           >
-            {/* T-73: после мастера экран перечитывает режимы из localStorage (key). */}
-            {sectionId === 'connection' && <ConnectionScreen key={onboarding ? 'onboarding' : 'ready'} />}
-            {sectionId === 'servers' &&
-              (tab?.id === 'subscriptions' ? <SubscriptionsScreen /> : <ServersScreen />)}
-            {sectionId === 'rules' && (tab?.id === 'dns' ? <DnsScreen /> : <RulesScreen />)}
-            {sectionId === 'diag' && tab?.id === 'conns' && <ConnsScreen active={connOn} />}
-            {sectionId === 'diag' && tab?.id === 'log' && <LogScreen />}
-            {sectionId === 'diag' && tab?.id !== 'conns' && tab?.id !== 'log' && <DiagScreen />}
-            {sectionId === 'settings' &&
-              (tab?.id === 'updates' ? <UpdatesScreen /> : <SettingsScreen />)}
+            <ScreenHost screenId={screenId} onboarding={onboarding} connOn={connOn} />
           </div>
         </main>
       </div>
@@ -543,7 +528,7 @@ function AppInner(): JSX.Element {
       )}
       {/* Настройки → «Лицензии и компоненты» открывают диалог событием. */}
       {quickImport !== null && (
-        <ImportDialog
+        <LazyImportDialog
           initialTab={quickImport}
           onClose={() => { setQuickImport(null); }}
           onImported={() => {

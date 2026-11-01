@@ -1,11 +1,15 @@
 # nsis-recon.yml — Ф3.0 «разведка NSIS» (docs/UPDATE-SYSTEM.md §12.7, §12.9 п. 4) на одноразовом
 # раннере GitHub вместо виртуальной машины. Берёт НАСТОЯЩИЕ опубликованные установщики LAVRay
-# (релизы этого репозитория — те же файлы, что в lavray-windows), проверяет SHA256SUMS и прогоняет семь сценариев
+# (релизы этого репозитория — те же файлы, что в lavray-windows), проверяет SHA256SUMS и прогоняет восемь сценариев
 # scripts/release/nsis_recon.ps1: чистая тихая установка, обновление поверх работающего
 # приложения, понижение, флаг /R, установщик под дескриптором с запретом записи, голый
-# exe watchdog, тихое удаление. Результат — артефакт nsis-recon (JSON + журнал).
+# exe watchdog, тихое удаление, удаление работающего приложения. Результат — артефакт
+# nsis-recon (JSON + журнал).
 #
 # Запуск: gh workflow run nsis-recon.yml -f old=0.3.0 -f new=0.9.0
+# Непубликованная сборка ветки: сначала gh workflow run release-windows.yml --ref <ветка>,
+# затем тот же запуск с -f new_run=<id запуска release-windows> (новый установщик берётся
+# из его артефакта LAVRay-windows, его SHA256SUMS.txt проверяется так же).
 # Раннер уже повышен: окна запроса UAC здесь не будет (записано в JSON, environment.limitations);
 # есть ли рабочий стол и WebView2, покажет сценарий 2. Секретов нет, права — только чтение.
 name: nsis-recon
@@ -20,6 +24,10 @@ on:
         description: "Новая версия установщика (без v), обновление и понижение идут относительно неё"
         default: "0.9.0"
         required: true
+      new_run:
+        description: "ID запуска release-windows, из артефакта которого брать новый установщик (пусто — из релиза)"
+        default: ""
+        required: false
 
 permissions:
   contents: read
@@ -38,12 +46,14 @@ jobs:
     outputs:
       old: ${{ steps.versions.outputs.old }}
       new: ${{ steps.versions.outputs.new }}
+      new_run: ${{ steps.versions.outputs.new_run }}
     steps:
       - name: "Проверка версий"
         id: versions
         env:
           OLD: ${{ inputs.old }}
           NEW: ${{ inputs.new }}
+          NEW_RUN: ${{ inputs.new_run }}
         run: |
           re='^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$'
           for v in "$OLD" "$NEW"; do
@@ -57,7 +67,12 @@ jobs:
             exit 1
           fi
           echo "old=$OLD" >> "$GITHUB_OUTPUT"
+          if [ -n "$NEW_RUN" ] && ! [[ "$NEW_RUN" =~ ^[0-9]{1,20}$ ]]; then
+            echo "::error title=Неверный new_run::new_run — числовой ID запуска release-windows или пусто"
+            exit 1
+          fi
           echo "new=$NEW" >> "$GITHUB_OUTPUT"
+          echo "new_run=$NEW_RUN" >> "$GITHUB_OUTPUT"
 
   recon:
     name: "Разведка NSIS (windows-2025)"
@@ -66,9 +81,11 @@ jobs:
     timeout-minutes: 80
     permissions:
       contents: read
+      actions: read # артефакт запуска release-windows (new_run)
     env:
       OLD_VERSION: ${{ needs.validate.outputs.old }}
       NEW_VERSION: ${{ needs.validate.outputs.new }}
+      NEW_RUN: ${{ needs.validate.outputs.new_run }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -85,8 +102,13 @@ jobs:
           foreach ($side in $sides) {
             $dest = New-Item -ItemType Directory -Force -Path (Join-Path 'dl' $side.dir)
             $name = "LAVRay-$($side.version)-x64-setup.exe"
-            gh release download "v$($side.version)" --repo $env:SOURCE_REPO --dir $dest.FullName --pattern $name --pattern 'SHA256SUMS.txt' --clobber
-            if ($LASTEXITCODE -ne 0) { throw "gh release download v$($side.version): код $LASTEXITCODE" }
+            if ($side.dir -eq 'new' -and $env:NEW_RUN) {
+              gh run download $env:NEW_RUN --repo $env:SOURCE_REPO --name LAVRay-windows --dir $dest.FullName
+              if ($LASTEXITCODE -ne 0) { throw "gh run download $($env:NEW_RUN): код $LASTEXITCODE" }
+            } else {
+              gh release download "v$($side.version)" --repo $env:SOURCE_REPO --dir $dest.FullName --pattern $name --pattern 'SHA256SUMS.txt' --clobber
+              if ($LASTEXITCODE -ne 0) { throw "gh release download v$($side.version): код $LASTEXITCODE" }
+            }
             $want = $null
             foreach ($line in (Get-Content -LiteralPath (Join-Path $dest.FullName 'SHA256SUMS.txt'))) {
               if ($line.TrimStart([char]0xFEFF) -match '^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$' -and $Matches[2] -eq $name) { $want = $Matches[1].ToLowerInvariant() }
@@ -99,7 +121,7 @@ jobs:
             "$($side.var)=$path" | Add-Content -LiteralPath $env:GITHUB_ENV
           }
 
-      - name: "Разведка NSIS (семь сценариев)"
+      - name: "Разведка NSIS (восемь сценариев)"
         shell: pwsh
         timeout-minutes: 75
         run: |

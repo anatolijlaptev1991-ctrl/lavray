@@ -4,11 +4,12 @@
 // кнопкой «Готово» (не «Далее»), выбранные режимы сохраняются. T-78: «Перенести
 // из NekoBox» — настоящая кнопка, показывает найденное с числами и открывает
 // диалог переноса.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode, act } from 'react';
 import type { ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
+import { warmViews } from '../test-harness';
 import App from '../App';
 import { CoreContext } from '../hooks/useCore';
 import { createCoreClients } from '../lib/core';
@@ -45,6 +46,8 @@ function click(el: Element | null | undefined): void {
 const NEXT = t('common.next', 'en');
 const DONE = t('onb.finish', 'en');
 const SKIP = t('onb.skip', 'en');
+
+beforeAll(warmViews, 60_000);
 
 describe('T-73: онбординг — «Готово», режимы, NekoBox', () => {
   let container: HTMLDivElement;

@@ -71,7 +71,7 @@ func (b *backupService) buildBackup(ctx context.Context, password string) ([]byt
 	if err != nil {
 		return nil, summaryDoc{}, err
 	}
-	file, err := backup.Seal(password, body, b.sealOpts)
+	file, err := backup.SealPassword(password, body, b.sealOpts)
 	if errors.Is(err, backup.ErrTooLarge) {
 		return nil, summaryDoc{}, tooLarge("копия получилась больше %d МиБ", backup.MaxFileBytes>>20)
 	}
@@ -105,7 +105,7 @@ type openedBackup struct {
 // временный файл и проверяет его (целостность, версия схемы). Данные
 // хранилища не меняются.
 func (b *backupService) openBackup(ctx context.Context, data []byte, password string) (*openedBackup, func(), error) {
-	body, err := backup.Open(password, data)
+	body, err := backup.OpenPassword(password, data)
 	if err != nil {
 		return nil, nil, openBackupError(err)
 	}

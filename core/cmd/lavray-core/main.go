@@ -228,7 +228,7 @@ func authMiddlewareAgent(next http.Handler, token string, agent agentAuthorizer,
 				}
 			}
 		}
-		http.Error(w, `{"code":"unauthenticated"}`, http.StatusUnauthorized)
+		rejectUnauthenticated(w, r)
 	})
 }
 

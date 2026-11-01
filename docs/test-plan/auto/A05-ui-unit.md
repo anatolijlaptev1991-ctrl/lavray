@@ -131,17 +131,41 @@ Get-ChildItem dist\assets | Where-Object { $_.Extension -in '.js','.css' } | Sor
 Get-ChildItem dist -Recurse -Filter '*.map' | Measure-Object | Select-Object -ExpandProperty Count
 ```
 
-   Ожидается: `build exit=0`, `True`, число файлов `.map` равно `0` (карты исходников не должны попадать в установщик, T-62). Вывод vite содержит предупреждение о размере чанка: на `97624d6` главный чанк `index-*.js` около 951 КБ (gzip около 305 КБ). Это наблюдение, не провал: в `docs/TEST-PLAN.md` (раздел 2) целью названо «бандл ≤ 250 КБ gzip». Запишите фактический gzip-размер в отчёт со статусом `WARN` (дефект `minor`, если вырос относительно эталона 304,87 КБ более чем на 10 %).
+   Ожидается: `build exit=0`, `True`, число файлов `.map` равно `0` (карты исходников не должны попадать в установщик, T-62).
+
+   Бюджет бандла: загружаемый сразу JS (входной чанк `index-*.js` плюс все чанки из `modulepreload` в `dist\index.html`) не больше 250 КБ gzip (`docs/TEST-PLAN.md`, раздел 2: «бандл ≤ 250 КБ gzip»; деградация бюджета блокирует merge). Проверка:
+
+```powershell
+Set-Location $wt
+if (Test-Path scripts\check_bundle_budget.py) {
+  python scripts\check_bundle_budget.py
+  "bundle-budget exit=$LASTEXITCODE"
+} else {
+  'в теге нет scripts/check_bundle_budget.py: бюджет меряем по строкам vite'
+  $line = Select-String -Path C:\lavray-test\results\A05-build.txt -Pattern 'assets/index-\S+\.js' | Select-Object -First 1
+  $line.Line
+  if ($line.Line -match 'gzip:\s*([\d.,]+)\s*kB') {
+    $gz = [double]($Matches[1] -replace ',', '')
+    "входной чанк: $gz КБ gzip; бюджет 250; в бюджете: " + ($gz -le 250)
+  }
+  Select-String -Path ui\dist\index.html -Pattern 'modulepreload' | ForEach-Object { $_.Line.Trim() }
+}
+Set-Location (Join-Path $wt 'ui')
+```
+
+   Если в теге есть `scripts/check_bundle_budget.py`, запустите его (`python scripts\check_bundle_budget.py --help` покажет аргументы): код выхода `0` означает «в бюджете». Иначе меряйте по строке vite для `assets/index-*.js` (`gzip: <N> kB`) и прибавьте gzip-размеры чанков, перечисленных в `modulepreload` (их строки vite печатает там же; если `modulepreload` в `index.html` нет, считается только входной чанк).
+
+   Вердикт К9 зависит от тега. Для `v0.9.0` (коммит `8093656`) превышение известно: входной чанк `index-*.js` 360,33 КБ gzip, это известный дефект D-3 (исправлен в 0.9.1 разделением кода), записывается как `FAIL-known` (серьёзность `minor`, новым дефектом не заводится). Для более поздних тегов бюджет обязан выполняться: превышение 250 КБ gzip — `FAIL`. Вывод vite о слишком большом чанке (`Some chunks are larger than 500 kB`) сам по себе вердикта не определяет: решает измеренный gzip.
 
 10. Обязательные запреты репозитория на уровне исходников UI.
 
 ```powershell
 Set-Location $wt
-git grep -n "customFieldsConfirmed: true" -- ui/src
+git grep -n "customFieldsConfirmed: true" -- ui/src ':!*.test.ts' ':!*.test.tsx'
 "customFieldsConfirmed: true => код $LASTEXITCODE (1 значит не найдено)"
 ```
 
-    Ожидается: команда ничего не печатает и возвращает `1`. Проверка видимых текстов на запрещённое слово выполняется в шаге 8 (словари).
+    Ожидается: команда ничего не печатает и возвращает `1`. Исключения `':!*.test.ts' ':!*.test.tsx'` обязательны: тестовые файлы (фикстуры охранных тестов) содержат эту строку намеренно (на теге v0.9.0 без исключений `git grep` находит 11 строк только в `*.test.ts` и `*.test.tsx`), запрет касается кода продукта. Найденное вне тестовых файлов — `FAIL` К8. Проверка видимых текстов на запрещённое слово выполняется в шаге 8 (словари).
 
 ## Критерии PASS/FAIL
 
@@ -155,7 +179,7 @@ git grep -n "customFieldsConfirmed: true" -- ui/src
 | К6 | Тесты словарей `passed`; запрещённого слова в словарях нет | шаг 8 |
 | К7 | `npm run build` вернул 0, файлов `.map` нет | шаг 9 |
 | К8 | В `ui/src` нет `customFieldsConfirmed: true` | шаг 10 |
-| К9 | Размер главного чанка не вырос более чем на 10 % от эталона (305 КБ gzip) | шаг 9, `WARN` вместо `FAIL` |
+| К9 | Загружаемый сразу JS (входной чанк + `modulepreload`) не больше 250 КБ gzip. На `v0.9.0` — известное превышение D-3 (360,33 КБ gzip): `FAIL-known`; на более поздних тегах обязано проходить | шаг 9 |
 
 ## Что собрать
 
@@ -174,4 +198,4 @@ Test-Path C:\lavray-test\wt\A05
 
 ## Отчёт
 
-`results/A05.md` по `templates/REPORT.md`: статусы 10 шагов, К1–К9, итоговые числа vitest, фактический размер чанка. Провал К2–К5 — `major`; К6 — `major` (расхождение переводов); К7 — `major`; К8 — `critical` (клиент может выставить подтверждение custom-полей).
+`results/A05.md` по `templates/REPORT.md`: статусы 10 шагов, К1–К9, итоговые числа vitest, фактический gzip-размер входного чанка и чанков `modulepreload`. Провал К2–К5 — `major`; К6 — `major` (расхождение переводов); К7 — `major`; К8 — `critical` (клиент может выставить подтверждение custom-полей); К9 — `minor` (на `v0.9.0` это известный D-3).

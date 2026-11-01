@@ -43,7 +43,7 @@ import { ConnRight } from '../components/ConnRight';
 import { TrafficWarning } from '../components/TrafficWarning';
 import { TunAdminNotice } from '../components/TunAdminNotice';
 import { TunDialog } from '../components/TunDialog';
-import { ImportDialog } from '../components/ImportDialog';
+import { LazyImportDialog } from '../components/LazyImportDialog';
 import { ProfileMenu } from '../components/ProfileMenu';
 import type { ProfileMenuAnchor } from '../components/ProfileMenu';
 import { geoName } from '../lib/geo';
@@ -712,7 +712,7 @@ export function ConnectionScreen(): JSX.Element {
         />
       )}
       {importOpen && (
-        <ImportDialog
+        <LazyImportDialog
           onClose={() => { setImportOpen(false); }}
           onImported={() => {
             setImportOpen(false);

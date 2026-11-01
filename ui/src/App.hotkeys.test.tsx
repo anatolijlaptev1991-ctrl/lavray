@@ -2,9 +2,10 @@
 
 // App.hotkeys.test.tsx — T-63: горячие клавиши на любой раскладке, подписи
 // сочетаний с модификатором, Ctrl+K фокусирует поиск, подсказки у иконок рельса.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { warmViews } from './test-harness';
 import App from './App';
 import { setLanguage } from './lib/i18n';
 
@@ -72,6 +73,8 @@ afterEach(() => {
   setLanguage('en');
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
+
+beforeAll(warmViews, 60_000);
 
 describe('T-63: горячие клавиши на русской раскладке (ЙЦУКЕН)', () => {
   it('Ctrl+К (физическая K) открывает «Серверы» и ставит фокус в поиск', async () => {

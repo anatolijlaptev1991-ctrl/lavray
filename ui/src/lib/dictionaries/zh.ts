@@ -1283,4 +1283,7 @@ export const zhDict: Record<string, string> = {
   "diag.cfg.copy": "复制",
   "diag.cfg.copied": "已复制",
   "diag.cfg.none": "暂无配置：请先连接服务器。",
+  "lazy.loading": "正在加载…",
+  "lazy.failed": "无法加载此部分",
+  "lazy.failedHint": "请检查网络连接后重试。",
 }

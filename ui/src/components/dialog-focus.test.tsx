@@ -4,12 +4,13 @@
 // открытии. Родители передают onClose новой стрелкой на каждый рендер, а
 // AppInner перерисовывается раз в секунду; раньше эффект зависел от onClose
 // и каждый раз возвращал фокус в корень диалога / первое поле.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode, act, createRef } from 'react';
 import type { ReactElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { create } from '@bufbuild/protobuf';
+import { warmViews } from '../test-harness';
 import App from '../App';
 import { ImportContentResponse_ContentKind, ImportContentResponseSchema } from '../gen/lavray_pb';
 import { CoreContext } from '../hooks/useCore';
@@ -34,6 +35,8 @@ function pressKey(key: string): void {
     document.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
   });
 }
+
+beforeAll(warmViews, 60_000);
 
 describe('T-05: фокус в диалогах ставится один раз', () => {
   let container: HTMLDivElement;

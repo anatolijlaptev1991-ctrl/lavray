@@ -147,9 +147,9 @@ class Script(unittest.TestCase):
             self.assertTrue((LIB_DIR / f"{lib}.ps1").is_file(), lib)
         self.assertEqual(sorted(libs), sorted(p.stem for p in LIB_DIR.glob("*.ps1")), "модуль не подключён или лишний")
 
-    def test_seven_scenarios_run_through_the_guarded_runner(self):
+    def test_eight_scenarios_run_through_the_guarded_runner(self):
         found = re.findall(r"^Invoke-Scenario 's(\d)_(\w+)' (\d+) \{", self.text, re.M)
-        self.assertEqual([n for n, _, _ in found], list("1234567"))
+        self.assertEqual([n for n, _, _ in found], list("12345678"))
         for _, _, timeout in found:
             self.assertLessEqual(int(timeout), 1800)
         common = (LIB_DIR / "common.ps1").read_text(encoding="utf-8")

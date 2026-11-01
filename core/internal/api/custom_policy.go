@@ -29,6 +29,9 @@ func profileFromClient(in *lavrayv1.Profile, old *model.Profile) (*model.Profile
 	if err := checkCustomJSON(m, old); err != nil {
 		return nil, err
 	}
+	if err := checkEndpoint(m, old); err != nil {
+		return nil, err
+	}
 	return m, nil
 }
 

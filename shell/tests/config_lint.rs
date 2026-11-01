@@ -89,6 +89,52 @@ fn main_window_is_created_by_code_hidden_and_shown_unless_tray() {
 /// (значение `Run` и задачи планировщика `LAVRay*` всех пользователей), но не
 /// при обновлении. Хук стоит в POSTUNINSTALL: к тому моменту деинсталлятор уже
 /// проверил, что приложение не запущено. Службы и отдельного `wintun.dll` нет:
+/// Тело макроса `name` из .nsh: от `!macro name` до ближайшего `!macroend`.
+fn macro_body<'a>(text: &'a str, name: &str) -> &'a str {
+    let start = text
+        .find(&format!("!macro {name}"))
+        .unwrap_or_else(|| panic!("нет макроса {name}"));
+    let rest = &text[start..];
+    &rest[..rest.find("!macroend").expect("!macroend")]
+}
+
+/// D-2 прогона 0.9.0: удаление и установка поверх работающего приложения.
+/// Хуки PRE останавливают оболочку тем же макросом шаблона и ждут ядро; после
+/// удаления (не обновления) забывается каталог установки.
+#[test]
+fn nsis_hooks_stop_the_core_and_forget_the_install_dir() {
+    let text = read("windows/hooks.nsh");
+    for hook in ["NSIS_HOOK_PREINSTALL", "NSIS_HOOK_PREUNINSTALL"] {
+        assert!(
+            macro_body(&text, hook).contains("!insertmacro LAVRAY_STOP_APP"),
+            "{hook}"
+        );
+    }
+    let stop = macro_body(&text, "LAVRAY_STOP_APP");
+    assert!(stop.contains("!insertmacro CheckIfAppIsRunning"));
+    assert!(stop.contains("!insertmacro LAVRAY_WAIT_CORE"));
+    let wait = macro_body(&text, "LAVRAY_WAIT_CORE");
+    assert!(wait.contains("FileOpen") && wait.contains("Sleep 250"));
+    assert!(wait.contains("$1 >= 40"), "ждём ядро не дольше 10 с");
+    let post = macro_body(&text, "NSIS_HOOK_POSTUNINSTALL");
+    let forget = post
+        .find("DeleteRegKey SHCTX")
+        .expect("ключ каталога установки");
+    let guard = post
+        .find("${If} $UpdateMode <> 1")
+        .expect("не при обновлении");
+    assert!(
+        guard < forget,
+        "каталог забывается только при удалении, не при обновлении"
+    );
+    let conf = read_json("tauri.conf.json");
+    let resources = conf["bundle"]["resources"].to_string();
+    assert!(
+        resources.contains("binaries/lavray-core.exe"),
+        "путь ядра в хуках совпадает с ресурсом"
+    );
+}
+
 /// wintun встроен в sing-tun. Выпускается только NSIS (у MSI хука нет).
 #[test]
 fn nsis_uninstall_hook_removes_autostart_but_not_on_update() {
@@ -97,8 +143,11 @@ fn nsis_uninstall_hook_removes_autostart_but_not_on_update() {
     let hooks = nsis["installerHooks"].as_str().expect("installerHooks");
     let text = read(hooks);
     assert!(text.contains("!macro NSIS_HOOK_POSTUNINSTALL"));
+    // D-2: PREUNINSTALL только останавливает приложение; автозапуск — после
+    // проверки запущенного приложения, в POSTUNINSTALL.
+    let pre = macro_body(&text, "NSIS_HOOK_PREUNINSTALL");
     assert!(
-        !text.contains("!macro NSIS_HOOK_PREUNINSTALL"),
+        !pre.contains("Run") && !pre.contains("ScheduledTask"),
         "до проверки запущенного приложения автозапуск не трогаем"
     );
     assert!(text.contains(

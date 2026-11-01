@@ -29,6 +29,7 @@
 ## Предусловия
 
 - Тестовый ПК подтверждён (`Test-TestPc` = `True`: маркер `C:\lavray-test\TESTPC_OK` есть, создан на этом ПК и не старше 30 суток), ZIP релиза 0.9.0 распакован (`$env:LAVRAY_PORTABLE\LAVRay.exe`, `binaries\lavray-core.exe`), Python 3.12, PowerShell 7 с модулем `VpnClient` (есть в Windows 10/11).
+- Снимок системы `baseline\` создан (`01-ENVIRONMENT.md`, раздел 8): `internet-settings.reg` непустой; файл `vpn.json` есть всегда, а при отсутствии VPN-подключений в нём пустой массив `[]` (это норма, не ошибка). Проверка в шаге 0.1.
 - Права обычного пользователя достаточны для частей А–Г. Для части Д — PowerShell от администратора и `LAVRAY_ALLOW_TUN=1`.
 - Процессов `LAVRay`, `lavray-core` нет. Порт 2080 не используется: порт входящего подключения выбирается случайно.
 - В настройках Windows желательно включено «Определять параметры автоматически» (Параметры → Сеть и Интернет → Прокси): по умолчанию это так. Если выключено, шаги про возврат WPAD получают `SKIPPED` (не `FAIL`).
@@ -105,10 +106,12 @@ function Wait-Until {
 }
 
 # Что видит приложение, читающее настройки WinINET: свежий процесс, чтобы не было кэша.
+# Запускается именно Windows PowerShell 5.1 (powershell.exe, .NET Framework): без прокси GetProxy там возвращает сам адрес запроса.
+# В pwsh 7 (.NET) тот же вызов без прокси возвращает $null, и помощник печатает пустую строку; поэтому pwsh здесь не использовать.
 function Get-WinInetEffective {
   param([string]$Url = 'http://example.com/')
   $cmd = "([System.Net.WebRequest]::GetSystemWebProxy()).GetProxy([uri]'$Url').AbsoluteUri"
-  ((& pwsh -NoProfile -Command $cmd) | Out-String).Trim()
+  ((& powershell.exe -NoProfile -NonInteractive -Command $cmd) | Out-String).Trim()
 }
 
 # Строка обхода, которую пишет программа (shell/src/sysproxy/values.rs, константа BYPASS).
@@ -124,6 +127,10 @@ function Test-Check {
 # Один вызов инструмента MCP; результат - объект с isError, text, structured.
 function Invoke-A11Mcp {
   param([string]$Tool, [string[]]$Pairs = @())
+  # Скрипт печатает UTF-8 (sys.stdout.reconfigure); без этого pwsh читает вывод в OEM-кодировке консоли и ломает кириллицу в $c.text.
+  $env:PYTHONIOENCODING = 'utf-8'
+  [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
+  $OutputEncoding = [Text.UTF8Encoding]::new()
   $out = & python -I (Join-Path $script:T 'a11_mcp.py') $script:Core $script:DataDir $Tool @Pairs
   $out | ConvertFrom-Json
 }
@@ -175,9 +182,13 @@ $SavedAppData = $env:APPDATA
 "оболочка: " + (Test-Path $ShellExe) + "; ядро: " + (Test-Path $Core)
 "процессы LAVRay/lavray-core: " + [bool](Get-Process LAVRay, lavray-core -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "$($env:LAVRAY_PORTABLE)\*" })
 Get-Module -ListAvailable VpnClient | Select-Object -First 1 Name, Version
+$bl = $env:LAVRAY_BASELINE
+"baseline: internet-settings.reg непустой: " + ((Get-Item (Join-Path $bl 'internet-settings.reg') -ErrorAction SilentlyContinue).Length -gt 0)
+$vpnJson = Join-Path $bl 'vpn.json'
+"baseline: vpn.json есть и это массив (пустой допустим): " + ((Test-Path $vpnJson) -and ((Get-Content $vpnJson -Raw -Encoding utf8).Trim().StartsWith('[')))
 ```
 
-Ожидается: маркер найден; `оболочка: True; ядро: True`; `процессы ...: False`; модуль `VpnClient` есть. Иначе `BLOCKED`.
+Ожидается: маркер найден; `оболочка: True; ядро: True`; `процессы ...: False`; модуль `VpnClient` есть; обе строки `baseline:` — `True`. Иначе `BLOCKED`. Если `vpn.json` нет (снимок сделан прежней версией команды, которая не создавала файл при отсутствии VPN-подключений), выполните команду `vpn.json` из `01-ENVIRONMENT.md`, раздел 8, ещё раз: она всегда создаёт файл, `[]` допустим. Пустой массив в `vpn.json` не является причиной для `BLOCKED`.
 
 **0.2 Помощники на диск.** Сохраните пять Python-файлов из раздела «Скрипты» в `$T` и проверьте синтаксис:
 
@@ -232,7 +243,7 @@ $BEff = Get-WinInetEffective
 $BEff
 ```
 
-Ожидается: `http://example.com/` (прокси не задан: адрес возвращается как есть).
+Ожидается: `http://example.com/` (прокси не задан: адрес возвращается как есть). Помощник сам запускает `powershell.exe` (Windows PowerShell 5.1); пустая строка означает, что выполнен не помощник из `a11-lib.ps1`, а такой же вызов в `pwsh` 7 (там без прокси результат `$null`): ожидание верно только для 5.1, это не дефект продукта.
 
 ### Часть 2. Данные, запуск окна
 
@@ -298,12 +309,17 @@ $ep = Get-Content (Join-Path $DataDir 'agent-endpoint.json') -Raw | ConvertFrom-
 **2.5 Файл доступа защищён** (`docs/MCP.md`: доступ только у текущего пользователя и SYSTEM, наследование отключено).
 
 ```powershell
+# Сравнение по SID, а не по именам: на русской Windows SYSTEM называется «NT AUTHORITY\СИСТЕМА», Administrators - «BUILTIN\Администраторы».
 $acl = Get-Acl (Join-Path $DataDir 'agent-endpoint.json')
 $acl.AreAccessRulesProtected
-$acl.Access | Select-Object -ExpandProperty IdentityReference | ForEach-Object Value | Sort-Object -Unique
+$sids = @($acl.Access | ForEach-Object { $_.IdentityReference.Translate([System.Security.Principal.SecurityIdentifier]).Value } | Sort-Object -Unique)
+$sids
+$meSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+$extra = @($sids | Where-Object { $_ -notin @($meSid, 'S-1-5-18') })
+Test-Check 'ACL: наследование выключено, только текущий пользователь и SYSTEM' ($acl.AreAccessRulesProtected -and $extra.Count -eq 0) ('лишние SID: ' + ($extra -join ', '))
 ```
 
-Ожидается: `True` (наследование выключено); в списке только учётная запись текущего пользователя (`<ПК>\<пользователь>`) и `NT AUTHORITY\SYSTEM`. Любая другая запись (`BUILTIN\Users`, `Everyone`, `Администраторы`) — `FAIL`, дефект `critical`.
+Ожидается: первая строка `True` (наследование выключено); в списке SID только SID текущего пользователя (`S-1-5-21-…`) и `S-1-5-18` (SYSTEM); `PASS ACL: …`. Любой другой SID — `FAIL`, дефект `critical`: `S-1-5-32-544` (Администраторы), `S-1-5-32-545` (Пользователи), `S-1-1-0` (Все), `S-1-5-11` (прошедшие проверку). Имена учётных записей в отчёте указывайте как есть в вашей локализации, но решение принимается по SID.
 
 **2.6 Окно не вмешивалось в систему само по себе.**
 
@@ -313,21 +329,27 @@ Test-Check 'ничего не включено до подключения' ((N 
 Test-Check 'WinINET без прокси' ((Get-WinInetEffective) -eq $BEff) (Get-WinInetEffective)
 ```
 
-Ожидается: две строки `PASS`.
+Ожидается: две строки `PASS` (`Get-WinInetEffective` выполняется в `powershell.exe` 5.1, см. комментарий в библиотеке; сравнение идёт с `$BEff` шага 1.3, поэтому обе величины получены одним и тем же способом).
 
 ### Часть 3. Подключение из MCP и состояние «во время»
 
-**3.1 Сервер виден агенту.**
+**3.1 Сервер виден агенту.** Кодировки Python и консоли задаются явно (ответы MCP содержат кириллицу). Скрипты запускаются как `python -I`, а этот режим игнорирует `PYTHONIOENCODING`, поэтому вывод в UTF-8 обеспечивает `sys.stdout.reconfigure` внутри скриптов, а строки `[Console]::OutputEncoding` и `$OutputEncoding` задают, как pwsh читает вывод и передаёт ввод. Эти же три строки выполняет `Invoke-A11Mcp`; повторять их в каждом шаге не нужно, но в новой сессии выполните их до шага 3.1.
 
 ```powershell
+$env:PYTHONIOENCODING = 'utf-8'
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new()
+$OutputEncoding = [Text.UTF8Encoding]::new()
 $srv = Invoke-A11Mcp 'list_servers'
 $srv.text
 Test-Check 'list_servers: один сервер с ожидаемым id' (($srv.structured.servers).Count -eq 1 -and "$($srv.structured.servers[0].id)" -eq $ProfileId) $srv.text
 ```
 
-**3.2 Подключение.** Режим берётся из настроек приложения (системный прокси); прокси ставит окно.
+**3.2 Подключение.** Режим берётся из настроек приложения (системный прокси); прокси ставит окно. Кодировка задаётся так же, как в 3.1 (если шаг 3.1 выполнялся в другой сессии).
 
 ```powershell
+$env:PYTHONIOENCODING = 'utf-8'
+[Console]::OutputEncoding = [Text.UTF8Encoding]::new()
+$OutputEncoding = [Text.UTF8Encoding]::new()
 $c = Invoke-A11Mcp 'connect' @("server_id=$ProfileId")
 $c.text
 Test-Check 'connect: подключено в режиме системного прокси' ($c.structured.connected -eq $true -and $c.structured.connection_mode -eq 'system_proxy') $c.text
@@ -389,6 +411,8 @@ $eff = Get-WinInetEffective
 $eff
 Test-Check 'WinINET отдаёт прокси программы' ($eff -eq "http://127.0.0.1:$Mixed/") $eff
 ```
+
+Ожидается: `PASS`, `$eff` равен `http://127.0.0.1:<порт входа>/`. Помощник выполняется в `powershell.exe` (Windows PowerShell 5.1); в `pwsh` 7 результат пустой, и это не дефект продукта.
 
 **3.8 Снимок для отката лежит рядом с данными.**
 
@@ -456,7 +480,7 @@ Test-Check 'WinINET снова без прокси' ((Get-WinInetEffective) -eq 
 Test-Check 'файл снимка удалён' (-not (Test-Path (Join-Path $DataDir 'sysproxy.snapshot.json'))) 'снимок остался'
 ```
 
-Если до теста WPAD был выключен (`$BLan.AutoDetect = False`), проверка про WPAD проходит тривиально; в отчёте отметьте `SKIPPED (WPAD не был включён)` для содержательной части.
+Если до теста WPAD был выключен (`$BLan.AutoDetect = False`), проверка про WPAD проходит тривиально; в отчёте отметьте `SKIPPED (WPAD не был включён)` для содержательной части. Проверка `WinINET снова без прокси` сравнивает с `$BEff` из шага 1.3; обе величины даёт `powershell.exe` (5.1), в `pwsh` 7 они были бы пустыми и равными друг другу, то есть проверка ничего бы не доказывала.
 
 **4.4 Вернуть правку пользователя (чтобы дальше сравнивать с исходным).**
 

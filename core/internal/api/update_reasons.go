@@ -16,7 +16,9 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
 )
 
-// Причины FAILED_PRECONDITION у CheckUpdates (контракт с UI).
+// Причины FAILED_PRECONDITION у CheckUpdates (контракт с UI). Причина, которой
+// нет в ui/src/lib/updates/errors.ts (сейчас metadata_invalid), показывается
+// общим текстом «Обновление не прошло проверку» вместе с деталью из ядра.
 const (
 	ReasonNotConfigured       = "not_configured"
 	ReasonBadSignature        = "bad_signature"
@@ -29,6 +31,7 @@ const (
 	ReasonMirrorUnreachable   = "mirror_unreachable" // зеркало метаданных молчит (проверка не удалась, а не «нет обновлений»)
 	ReasonManifestMismatch    = "manifest_mismatch"  // манифест подменён: не тот документ, что пиннит timestamp
 	ReasonClockSkew           = "clock_skew"         // timestamp «из будущего»: часы компьютера отстают
+	ReasonMetadataInvalid     = "metadata_invalid"   // документ метаданных подписан верно, но устроен неверно (нет поля, лишнее поле, недопустимое значение)
 	ReasonActiveSession       = "active_session"
 	ReasonNotStaged           = "not_staged"
 	ReasonNoUpdate            = "no_update"
@@ -62,6 +65,10 @@ func updateReason(err error) string {
 		errors.Is(err, updates.ErrBadRole), errors.Is(err, updates.ErrMinisigFormat),
 		errors.Is(err, updates.ErrMinisigKeyID), errors.Is(err, updates.ErrMinisigTrustedComment):
 		return ReasonBadSignature
+	case errors.Is(err, updates.ErrMissingField), errors.Is(err, updates.ErrBadJSON),
+		errors.Is(err, updates.ErrBadValue), errors.Is(err, updates.ErrWrongType):
+		// Последними: более конкретные причины выше (подпись, срок, serial) важнее.
+		return ReasonMetadataInvalid
 	}
 	return ""
 }

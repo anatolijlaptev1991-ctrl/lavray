@@ -5,10 +5,11 @@
 // Раньше App.tsx читал `lavray.lang` только чтобы проверить на null: ветки
 // «язык сохранён» не было, интерфейс стартовал на английском (lib/i18n.ts:
 // `let current: Language = 'en'`), пока язык не выбирали заново.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode, act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
+import { warmViews } from './test-harness';
 import App from './App';
 import { getLanguage, setLanguage } from './lib/i18n';
 
@@ -32,6 +33,8 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 function sidebarLabels(): (string | null)[] {
   return Array.from(document.querySelectorAll<HTMLElement>('.sb-item')).map((b) => b.textContent);
 }
+
+beforeAll(warmViews, 60_000);
 
 describe('T-37: язык при запуске', () => {
   let root: Root | null = null;

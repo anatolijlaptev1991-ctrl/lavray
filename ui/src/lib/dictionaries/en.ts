@@ -1026,6 +1026,7 @@ export const enDict: Record<string, string> = {
   "upd.err.stage_failed": "The file couldn’t be copied to the updates folder.",
   "upd.reason.mirror_unreachable": "Couldn’t reach an update mirror. Checks go through the tunnel first: connect to the VPN and try again.",
   "upd.reason.clock_skew": "The clock on this computer is behind: the update data looks as if it is from the future. Check the date and time and try again.",
+  "upd.reason.manifest_mismatch": "The update data does not match its checksum record, so the update was rejected. Try again later.",
   "upd.err.signature_invalid": "The installer’s signature couldn’t be verified, so the installation was refused.",
   "upd.err.version_mismatch": "The signed installer’s version doesn’t match the expected one, so the installation was refused.",
   "upd.err.core_unavailable": "The built-in core needed to verify the signature wasn’t found. Reinstall LAVRay.",

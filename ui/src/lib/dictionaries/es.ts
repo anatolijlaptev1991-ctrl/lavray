@@ -1026,6 +1026,7 @@ export const esDict: Record<string, string> = {
   "upd.err.stage_failed": "No se pudo copiar el archivo a la carpeta de actualizaciones.",
   "upd.reason.mirror_unreachable": "No se pudo contactar con un espejo de actualizaciones. La comprobación va primero por el túnel: conéctate a la VPN y vuelve a intentarlo.",
   "upd.reason.clock_skew": "El reloj de este equipo va atrasado: los datos de la actualización parecen venir del futuro. Revisa la fecha y la hora e inténtalo de nuevo.",
+  "upd.reason.manifest_mismatch": "Los datos de la actualización no coinciden con sus valores de control, por eso se rechazó. Inténtalo de nuevo más tarde.",
   "upd.err.signature_invalid": "No se pudo confirmar la firma del instalador, así que se rechazó la instalación.",
   "upd.err.version_mismatch": "La versión del instalador firmado no coincide con la esperada, así que se rechazó la instalación.",
   "upd.err.core_unavailable": "No se encontró el núcleo integrado necesario para verificar la firma. Reinstala LAVRay.",

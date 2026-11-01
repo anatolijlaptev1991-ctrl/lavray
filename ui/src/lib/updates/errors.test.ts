@@ -21,6 +21,7 @@ describe('parseReason', () => {
     'artifact_role_missing',
     'clock_skew',
     'mirror_unreachable',
+    'manifest_mismatch',
     'active_session',
   ])('%s: текст — известная причина и остаток', (reason) => {
     expect(parseReason(`${reason}: что-то пошло не так`)).toEqual({ reason, detail: 'что-то пошло не так' });
@@ -72,6 +73,7 @@ describe('classifyCoreError', () => {
     ['wrong_channel', 'upd.reason.wrong_channel'],
     ['root_rotation', 'upd.reason.root_rotation'],
     ['artifact_role_missing', 'upd.reason.artifact_role_missing'],
+    ['manifest_mismatch', 'upd.reason.manifest_mismatch'],
   ])('причина %s → отдельное сообщение %s', (reason, key) => {
     const f = classifyCoreError(precondition(`${reason}: подробности`));
     expect(f).toMatchObject({ kind: 'error', key, detail: 'подробности' });

@@ -1019,6 +1019,7 @@ export const zhDict: Record<string, string> = {
   "upd.err.stage_failed": "无法将文件复制到更新文件夹。",
   "upd.reason.mirror_unreachable": "无法连接到更新镜像。检查会先经由隧道进行：请先连接 VPN 后重试。",
   "upd.reason.clock_skew": "此电脑的时钟偏慢：更新数据看起来来自“未来”。请检查日期和时间后重试。",
+  "upd.reason.manifest_mismatch": "更新数据与校验记录不一致，更新已被拒绝。请稍后重试。",
   "upd.err.signature_invalid": "无法确认安装程序的签名，已拒绝安装。",
   "upd.err.version_mismatch": "已签名安装程序的版本与预期不符，已拒绝安装。",
   "upd.err.core_unavailable": "未找到用于验证签名的内置核心。请重新安装 LAVRay。",

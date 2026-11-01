@@ -18,6 +18,7 @@ const REASONS = [
   'artifact_role_missing',
   'clock_skew',
   'mirror_unreachable',
+  'manifest_mismatch', // манифест подменён: не тот документ, что пиннит timestamp
   'active_session',
   // Пресеты и гео-данные (T-75/7.5): состояния применения и отката.
   'no_update',
@@ -56,6 +57,7 @@ const REASON_KEYS: Readonly<Record<string, MessageKey>> = {
   artifact_role_missing: 'upd.reason.artifact_role_missing',
   clock_skew: 'upd.reason.clock_skew',
   mirror_unreachable: 'upd.reason.mirror_unreachable',
+  manifest_mismatch: 'upd.reason.manifest_mismatch',
   sha256_mismatch: 'upd.reason.sha256_mismatch',
   truncated: 'upd.reason.truncated',
   too_large: 'upd.reason.too_large',

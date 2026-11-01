@@ -36,7 +36,6 @@
   "core/internal/presets/geoassets.go": 217,
   "core/internal/presets/preset.go": 341,
   "core/internal/store/groups.go": 378,
-  "core/internal/store/nekoimport/nekoimport.go": 759,
   "core/internal/store/profiles.go": 383,
   "core/internal/subs/apply.go": 467,
   "core/internal/subs/happ/happdecrypt.go": 326,

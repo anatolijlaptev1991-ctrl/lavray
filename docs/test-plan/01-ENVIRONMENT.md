@@ -27,12 +27,12 @@ C:\lavray-test\
   env.ps1            переменные окружения (создаёт оркестратор, раздел 4)
   guard.ps1          страж «тестовый ПК» (раздел 3)
   TESTPC_OK          маркер: страж пройден и владелец подтвердил (создаёт guard.ps1)
-  plan\              клон ветки main с документами docs\test-plan
+  plan\              клон тега v0.9.0 (или ветки main, если тега нет) с документами docs\test-plan
   src\               клон продукта на нужной версии, ТОЛЬКО ЧТЕНИЕ
   wt\<ID>\           рабочая копия (git worktree) для файла <ID>; создаёт сам файл
-  assets\0.4.0\      скачанные ассеты релиза под тестом
+  assets\0.9.0\      скачанные ассеты релиза под тестом (семь файлов, раздел 7)
   assets\0.3.0\      ассеты предыдущего релиза (для проверки обновления в A10, M01)
-  portable\0.4.0\    распакованный ZIP (LAVRay.exe и binaries\lavray-core.exe)
+  portable\0.9.0\    распакованный ZIP (LAVRay.exe и binaries\lavray-core.exe)
   baseline\          снимки состояния системы до тестов (раздел 8)
   tmp\<ID>\          временные данные файла <ID>
   results\           отчёты <ID>.md и вложения <ID>\ ; итоговая SUMMARY.md
@@ -129,11 +129,12 @@ PASS: код выхода `0` и существует файл `C:\lavray-test\T
 # env.ps1: переменные плана. Секреты здесь НЕ хранятся.
 $env:LAVRAY_TP_ROOT   = 'C:\lavray-test'
 $env:LAVRAY_REPO      = 'anatolijlaptev1991-ctrl/lavray'
-$env:LAVRAY_VERSION   = '0.4.0'
+$env:LAVRAY_VERSION   = '0.9.0'
 $env:LAVRAY_FROM_VERSION = '0.3.0'
-# Версия под тестом: тег v0.4.0, если он опубликован, иначе коммит main, на котором написан план.
-$env:LAVRAY_REF       = 'v0.4.0'
-$env:LAVRAY_REF_FALLBACK = '97624d61c28f875b295505afa607cc605e880ac9'
+# Версия под тестом: тег v0.9.0, если он опубликован, иначе коммит main (владелец называет его перед прогоном).
+# <TAG> в документах плана = v0.9.0.
+$env:LAVRAY_REF       = 'v0.9.0'
+$env:LAVRAY_REF_FALLBACK = '4722632281fc03f6810e23bbfe701d044fa930ad'   # main на момент написания пакета 5a; сверьте с gh api repos/$env:LAVRAY_REPO/commits/main
 $env:LAVRAY_SRC       = Join-Path $env:LAVRAY_TP_ROOT 'src'
 $env:LAVRAY_PLAN      = Join-Path $env:LAVRAY_TP_ROOT 'plan'
 $env:LAVRAY_ASSETS    = Join-Path $env:LAVRAY_TP_ROOT ('assets\' + $env:LAVRAY_VERSION)
@@ -205,6 +206,7 @@ go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.21.1
 | PowerShell | `pwsh --version` | 7.4 | 7.6.9 | нужен для `Add-VpnConnection` и `Parser` |
 | protoc-gen-go | `protoc-gen-go --version` | v1.36.12 | `protoc-gen-go.exe v1.36.12` | заголовок `core/internal/gen/lavrayv1/lavray.pb.go` |
 | protoc-gen-connect-go | `protoc-gen-connect-go --version` | 1.21.1 | 1.21.1 (печатает без буквы `v`) | версия `connectrpc.com/connect` в `core/go.mod` |
+| WSL2 (Ubuntu) | `wsl -l -v` | WSL2 с любым дистрибутивом | Ubuntu 24.04 | только A06, шаг 16: запуск `lavray-core-linux-amd64`; без него этот шаг `BLOCKED` |
 
 Проверка одним блоком (PASS: каждая строка печатает версию, код выхода каждой команды 0):
 
@@ -243,16 +245,16 @@ git -C $env:LAVRAY_SRC rev-parse HEAD
 git -C $env:LAVRAY_SRC status --short
 ```
 
-PASS: `rev-parse HEAD` печатает 40 шестнадцатеричных символов, `status --short` пуст. Если тега `v0.4.0` нет, в `env.ps1` замените строку `LAVRAY_REF` на значение `LAVRAY_REF_FALLBACK` и запишите это в отчёт (отклонение).
+PASS: `rev-parse HEAD` печатает 40 шестнадцатеричных символов, `status --short` пуст. Если тега `v0.9.0` нет, в `env.ps1` замените строку `LAVRAY_REF` на значение `LAVRAY_REF_FALLBACK` и запишите это в отчёт (отклонение); тогда ассеты релиза недоступны, и файлы с установщиком и ZIP получают `BLOCKED`.
 
-Документы плана берутся из ветки `main` отдельным клоном, потому что тег продукта может быть старше плана:
+Документы плана берутся отдельным клоном, чтобы продукт в `src\` оставался только для чтения. В быстром старте (`00-README.md`, раздел 9) владелец клонирует план сразу на тег `v0.9.0`; если команда ниже выполняется заново, берите тот же тег:
 
 ```powershell
-gh repo clone $env:LAVRAY_REPO $env:LAVRAY_PLAN -- --branch main
+gh repo clone $env:LAVRAY_REPO $env:LAVRAY_PLAN -- --branch $env:LAVRAY_REF
 Test-Path (Join-Path $env:LAVRAY_PLAN 'docs\test-plan\00-README.md')
 ```
 
-PASS: `True`. До слияния плана в `main` владелец указывает ветку в промпте (`--branch docs/test-plan`).
+PASS: `True`. Если тега ещё нет или план не вошёл в него, владелец указывает ветку в промпте (`--branch main`, до слияния плана `--branch docs/test-plan`), и это отклонение записывается в отчёт.
 
 Рабочая копия для файла `<ID>` создаётся так (каждый файл повторяет это в своём первом шаге):
 
@@ -262,13 +264,18 @@ git -C $env:LAVRAY_SRC worktree add --detach (Join-Path $env:LAVRAY_TP_ROOT 'wt\
 
 ## 7. Ассеты релиза
 
-Имена задаёт `.github/workflows/release-windows.yml` (шаг «Версия и имена ассетов») и подтверждает тест `core/internal/buildtags`:
+Имена Windows-файлов задаёт `.github/workflows/release-windows.yml` (шаг «Версия и имена ассетов») и подтверждает тест `core/internal/buildtags`; Linux-файлы — `.github/workflows/release-linux.yml`:
 
 | Файл | Что это |
 |---|---|
 | `LAVRay-<версия>-x64-setup.exe` | установщик NSIS, на уровне компьютера (`C:\Program Files\LAVRay`) |
 | `LAVRay-<версия>-portable-x64.zip` | `LAVRay.exe`, `binaries\lavray-core.exe`, `LICENSE` |
 | `SHA256SUMS.txt` | суммы SHA-256 двух файлов выше, строки `<хэш>  <имя>`, окончания строк CRLF (файл написан `Set-Content` в Windows) |
+| `lavray-core-linux-amd64`, `lavray-core-linux-arm64` | ядро для Linux (ELF), собрано с тегом `with_webui` (веб-панель внутри) workflow `release-linux.yml` |
+| `ui-dist.tar.gz` | собранный интерфейс (`tar -C ui/dist -czf ui-dist.tar.gz .`), в корне архива `index.html` |
+| `SHA256SUMS-linux.txt` | суммы трёх Linux-файлов, окончания строк LF (`sha256sum`) |
+
+Всего **семь** файлов. Каталога `meta/` (подписанные метаданные центра обновлений) в релизе пока нет: ключей подписи не создано, задание `sign` пропускает себя. Для проверки обновления через `meta/` нужен тестовый корень (A13, M12); отсутствие `meta/` в релизе не дефект.
 
 ```powershell
 . C:\lavray-test\env.ps1
@@ -280,10 +287,9 @@ gh release download "v$($env:LAVRAY_FROM_VERSION)" -R $env:LAVRAY_REPO -D $env:L
 Get-ChildItem $env:LAVRAY_ASSETS, $env:LAVRAY_ASSETS_OLD | Select-Object Directory, Name, Length
 ```
 
-Состояние на момент написания плана: опубликованы релизы `v0.1.0`, `v0.2.0`, `v0.2.1`, `v0.3.0`; релиз `v0.4.0` ещё не опубликован. Поэтому:
+Состояние: финальный релиз — **v0.9.0** (семь файлов выше). Прежние релизы `v0.1.0`, `v0.2.0`, `v0.2.1`, `v0.3.0` опубликованы; `v0.3.0` нужен как «прежняя версия» для проверки обновления поверх (установщик 16 518 811 байт, ZIP 22 911 985 байт, `SHA256SUMS.txt` 191 байт; реальная база этой версии — схема SQLite 4). Поэтому:
 
-- скачивание `v0.4.0` может завершиться ошибкой `release not found`. Это `BLOCKED` для A06, A10, A11, M01 (шаги с установщиком и ZIP версии 0.4.0), а не `FAIL`. Кто снимает: владелец (тег `v0.4.0`, запуск `release-windows`);
-- ассеты `v0.3.0` нужны как «прежняя версия» для проверки обновления поверх; они опубликованы (установщик 16 518 811 байт, ZIP 22 911 985 байт, `SHA256SUMS.txt` 191 байт);
+- если скачивание `v0.9.0` завершилось ошибкой `release not found`, это `BLOCKED` для A06, A10, A11, M01 (шаги с установщиком и ZIP версии 0.9.0), а не `FAIL`. Кто снимает: владелец (тег `v0.9.0`, запуск `release-windows` и `release-linux`);
 - пока релиза нет, оркестратор может запускать файлы A01–A05, A07, A08, а A06, A10, A11, M-файлы с установщиком отмечать `BLOCKED`.
 
 Распаковка portable (после проверки сумм в A06; допустимо и до неё, если файл не меняется):

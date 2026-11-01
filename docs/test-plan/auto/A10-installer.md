@@ -1,16 +1,16 @@
-# A10. Установщик NSIS: тихая установка, обновление поверх, удаление
+# A10. Установщик NSIS: тихая установка, обновление 0.3.0 → 0.9.0 поверх, миграция базы, удаление
 
 | Поле | Значение |
 |---|---|
 | ID | A10 |
 | Слой | авто |
-| Время | 10–15 минут |
-| Зависимости | A06 (ассеты скачаны и сверены: `assets\0.4.0` и `assets\0.3.0`), `01-ENVIRONMENT.md`, разделы 3–7. Выполняется **последовательно**, после A04 и A11 (группа S в `00-README.md`) |
+| Время | 12–18 минут |
+| Зависимости | A06 (ассеты скачаны и сверены: `assets\0.9.0` и `assets\0.3.0`), `01-ENVIRONMENT.md`, разделы 3–7; Python 3.12 (модуль `sqlite3`) для проверки базы данных. Выполняется **последовательно**, после A04 и A11 (группа S в `00-README.md`) |
 | Опасность | **установка**: пишет в `C:\Program Files\LAVRay`, `HKLM\...\Uninstall`, меню «Пуск», `HKCU\...\Run` (имитация автозапуска). Только тестовый ПК |
 
 ## Цель
 
-Проверить жизненный цикл установленной версии без окна: тихая установка прежней версии 0.3.0, обновление поверх неё версией 0.4.0 с сохранением данных и автозапуска, удаление с проверкой «хвостов». Покрывает: «Установка поверх 0.3.0 сохраняет серверы, подписки, настройки и автозапуск» (заметки к выпуску 0.4.0), хук удаления `shell/windows/hooks.nsh` (автозапуск снимается при удалении, но не при обновлении), раздел «Установка» требований плана Ф3.0 (поведение `/S`, per-machine установка, установка более старой версии), бюджет размера установщика.
+Проверить жизненный цикл установленной версии без окна: тихая установка прежней версии 0.3.0, обновление поверх неё версией 0.9.0 с сохранением данных и автозапуска, удаление с проверкой «хвостов». Покрывает: «Установка поверх 0.3.0 сохраняет серверы, подписки, настройки и автозапуск» (заметки к выпуску 0.9.0), хук удаления `shell/windows/hooks.nsh` (автозапуск снимается при удалении, но не при обновлении), раздел «Установка» требований плана Ф3.0 (поведение `/S`, per-machine установка, установка более старой версии), бюджет размера установщика. **Миграция базы данных**: на данных, созданных настоящим ядром 0.3.0 (схема SQLite 4; у более ранних прежних версий 2 или 3), ядро 0.9.0 доводит схему до **6** (добавляются таблицы `web_users` и `import_map`; таблица `sessions` есть с схемы 4), не теряя серверов и настроек; повторный запуск ничего не меняет; ядро 0.3.0 на базе новой схемы отказывается стартовать (защита от «базы из будущего»). Версия схемы хранится в таблице `schema_version` (`SELECT MAX(version) FROM schema_version`), а не в `PRAGMA user_version`.
 
 Внимание: поведение тихого NSIS-установщика Tauri при запущенном приложении и при понижении версии в плане помечено как неисследованное (риск «Поведение тихой установки NSIS неизвестно»). Шаги 8 и 9 поэтому только **фиксируют** наблюдение и не влияют на итог файла.
 
@@ -18,7 +18,7 @@
 
 - **Тестовый ПК подтверждён**: `C:\lavray-test\TESTPC_OK` существует; иначе итог `BLOCKED`.
 - PowerShell запущен **от имени администратора** (установщик на уровне компьютера). Проверка в шаге 1; без прав итог `BLOCKED` (тихая установка не может показать запрос UAC).
-- Скачаны `assets\0.3.0` и `assets\0.4.0` с проверенными суммами (A06). Без релиза 0.4.0 — `BLOCKED`.
+- Скачаны `assets\0.3.0` и `assets\0.9.0` с проверенными суммами (A06). Без релиза 0.9.0 — `BLOCKED`.
 - LAVRay и `lavray-core` не запущены (страж из `01-ENVIRONMENT.md`).
 - Программа не установлена до теста. Если установлена, итог `BLOCKED`: тест не должен затирать чужую установку.
 
@@ -111,17 +111,30 @@ Set-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Na
 
    Ожидается: значение автозапуска вида `"C:\Program Files\LAVRay\LAVRay.exe" --tray` (так же его пишет сама программа, см. `shell/src/autostart.rs`).
 
-5. Обновление: установка 0.4.0 поверх 0.3.0.
+   Настоящая база прежней версии. Установленное ядро 0.3.0 само создаёт каталог данных (отдельный, не `%APPDATA%\LAVRay`, чтобы не трогать данные пользователя): профили `a10-keep-1` и `a10-keep-2` (у второго задан `customOutboundJson`), настройка `inbound.port = 2091`. Сохраните скрипт из раздела «Скрипт `a10_data.py`» как `C:\lavray-test\tmp\A10\a10_data.py`.
+
+```powershell
+$t = 'C:\lavray-test\tmp\A10'
+New-Item -ItemType Directory -Force -Path $t, C:\lavray-test\results\A10 | Out-Null
+$dbData = Join-Path $t 'data'
+$coreOld = Join-Path $pf 'binaries\lavray-core.exe'    # ядро 0.3.0 из установки
+python -I "$t\a10_data.py" seed $coreOld $dbData 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A10\seed.txt
+"seed exit=$LASTEXITCODE"
+```
+
+   Ожидается: четыре строки `PASS` (`seed.profiles_created`, `seed.old_schema_is_2_3_or_4`, `seed.new_tables_absent`, `seed.port_saved`), `схема прежней версии: 4 (0.3.0: 4)`, `seed exit=0`.
+
+5. Обновление: установка 0.9.0 поверх 0.3.0.
 
 ```powershell
 $p = Start-Process -FilePath $setupNew -ArgumentList '/S' -Wait -PassThru
-"обновление до 0.4.0: код $($p.ExitCode)"
+"обновление до 0.9.0: код $($p.ExitCode)"
 $u = @(Get-LavrayUninstall)
 "записей об установке: $($u.Count)"
 $u | Format-List
 ```
 
-   Ожидается: код `0`; ровно **одна** запись об установке, `Version = 0.4.0` (две записи — прежняя не заменена, `FAIL`).
+   Ожидается: код `0`; ровно **одна** запись об установке, `Version = 0.9.0` (две записи — прежняя не заменена, `FAIL`).
 
 6. После обновления: файлы той же версии, что в portable; данные и автозапуск сохранены.
 
@@ -139,7 +152,18 @@ $runAfter = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\R
 "установщик NSIS не оставил задач планировщика: " + (-not [bool](Get-ScheduledTask -TaskName 'LAVRay*' -ErrorAction SilentlyContinue))
 ```
 
-   Ожидается: обе строки «совпадает с portable: True» (установщик и ZIP собираются из одних и тех же файлов; расхождение хэшей — `WARN`, запишите оба хэша), маркер на месте и не изменён, автозапуск сохранён (заметки 0.4.0: «Установка поверх 0.3.0 сохраняет серверы, подписки, настройки и автозапуск»; хук удаления не должен срабатывать при обновлении), ярлык на месте, задач планировщика нет (мы их не создавали).
+   Ожидается: обе строки «совпадает с portable: True» (установщик и ZIP собираются из одних и тех же файлов; расхождение хэшей — `WARN`, запишите оба хэша), маркер на месте и не изменён, автозапуск сохранён (заметки 0.9.0: «Установка поверх 0.3.0 сохраняет серверы, подписки, настройки и автозапуск»; хук удаления не должен срабатывать при обновлении), ярлык на месте, задач планировщика нет (мы их не создавали).
+
+   База данных после обновления. Ядро 0.9.0 из установки открывает **ту же** базу, проверяются версия схемы, таблицы, данные и экспорт копии `.lavbk`:
+
+```powershell
+$coreNew = Join-Path $pf 'binaries\lavray-core.exe'    # ядро 0.9.0 после обновления поверх
+python -I "$t\a10_data.py" verify $coreNew $dbData $env:LAVRAY_VERSION 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A10\verify.txt
+"verify exit=$LASTEXITCODE"
+python -I "$t\a10_data.py" state $dbData
+```
+
+   Ожидается: двенадцать строк `PASS` (`verify.core_version`, `verify.profiles_kept`, `verify.fields_kept`, `verify.custom_fields_stay_unconfirmed`, `verify.setting_kept`, `verify.backup_export_works`, `verify.schema_is_6`, `verify.new_tables_created`, `verify.old_tables_kept`, `verify.rows_kept`, `verify.integrity_ok`, `verify.second_start_idempotent`) и `verify exit=0`; `state` печатает `"schema": 6`, `"versions": [1, 2, 3, 4, 5, 6]`, таблицы `web_users` и `import_map` и `"integrity": "ok"`. Таблица `schema_version` сохраняет строки прежних миграций (миграции только добавляются). Экспорт зашифрованной копии (`BackupService`) работает на мигрированной базе; старого открытого экспорта настроек в JSON в 0.9.0 нет (это интерфейс, M01 и M11)
 
 7. Размер установщика и подпись (справочно, повторяет A06).
 
@@ -166,18 +190,30 @@ Get-Process LAVRay, lavray-core -ErrorAction SilentlyContinue | Stop-Process -Fo
 
    Запишите все четыре значения в таблицу «Наблюдения» отчёта (установщик остановил приложение, оставил его, завершился с ошибкой, перезапустил его). Любой исход допустим для этого шага. Если приложение в `--tray` не стартовало (процесса нет уже до установки), запишите это отдельным наблюдением: нужна диагностика запуска.
 
-9. Наблюдение: установка прежней версии поверх новой (понижение, нужно для отката в плане Ф3.0), затем возврат к 0.4.0 для чистого удаления.
+9. Наблюдение: установка прежней версии поверх новой (понижение, нужно для отката в плане Ф3.0), затем возврат к 0.9.0 для чистого удаления.
 
 ```powershell
 $p = Start-Process -FilePath $setupOld -ArgumentList '/S' -Wait -PassThru
 $v = (@(Get-LavrayUninstall) | ForEach-Object Version) -join ','
 "понижение до 0.3.0: код $($p.ExitCode); версия в реестре: $v"
-$p = Start-Process -FilePath $setupNew -ArgumentList '/S' -Wait -PassThru
-$v = (@(Get-LavrayUninstall) | ForEach-Object Version) -join ','
-"возврат к 0.4.0: код $($p.ExitCode); версия в реестре: $v"
 ```
 
-   Запишите коды и версии в «Наблюдения». Критерий только один: после возврата ровно одна запись об установке и `Version = 0.4.0`.
+   База при понижении (на **копии** базы схемы 6; боевой каталог не трогается). Пока установлено ядро 0.3.0, до возврата к 0.9.0:
+
+```powershell
+python -I "$t\a10_data.py" probe (Join-Path $pf 'binaries\lavray-core.exe') $dbData 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A10\probe.txt
+"probe exit=$LASTEXITCODE"
+```
+
+   Ожидается: строка `OBSERVATION старое ядро на базе схемы 6 не стартовало: …`, `PASS probe.old_core_refuses_newer_schema` и `probe exit=0` (ядро 0.3.0 не принимает базу «из будущего» и не портит её). Если старое ядро стартовало, скрипт печатает `OBSERVATION … стартовало` и проверяет `probe.old_core_did_not_downgrade_schema` (схема не должна измениться); запишите это; потеря данных при понижении — `major`.
+
+```powershell
+$p = Start-Process -FilePath $setupNew -ArgumentList '/S' -Wait -PassThru
+$v = (@(Get-LavrayUninstall) | ForEach-Object Version) -join ','
+"возврат к 0.9.0: код $($p.ExitCode); версия в реестре: $v"
+```
+
+   Запишите коды и версии в «Наблюдения». Критерии: после возврата ровно одна запись об установке и `Version = 0.9.0` (К8); проверка базы выше (К11).
 
 10. Удаление и «хвосты».
 
@@ -229,18 +265,20 @@ Get-ChildItem $dataDir, $webv[0], $webv[1] -ErrorAction SilentlyContinue | Selec
 | К1 | Шаг 1: права администратора, маркер, чистое исходное состояние | значения |
 | К2 | Шаг 2: тихая установка 0.3.0, код 0, запись `Version = 0.3.0`, три файла | вывод |
 | К3 | Шаг 3: найден ярлык «Пуск» с целью `LAVRay.exe` | вывод |
-| К4 | Шаг 5: обновление, код 0, **одна** запись, `Version = 0.4.0` | вывод |
+| К4 | Шаг 5: обновление, код 0, **одна** запись, `Version = 0.9.0` | вывод |
 | К5 | Шаг 6: установленные `LAVRay.exe` и `lavray-core.exe` совпадают с portable (при расхождении `WARN`) | `True` |
 | К6 | Шаг 6: данные (маркер) и автозапуск сохранены, ярлык на месте | `True` |
 | К7 | Шаг 7: установщик не больше 25 МБ | значение |
-| К8 | Шаг 9: после возврата одна запись и `Version = 0.4.0` | вывод |
+| К8 | Шаг 9: после возврата одна запись и `Version = 0.9.0` | вывод |
 | К9 | Шаг 10: все строки удаления `True`, включая сохранение данных пользователя | вывод |
+| К10 | Шаги 4 и 6: база прежней версии (схема 4) после обновления имеет схему **6**, данные и настройки целы, второй запуск ничего не меняет, экспорт `.lavbk` работает | `seed exit=0`, `verify exit=0`, 12 строк `PASS` |
+| К11 | Шаг 9 (наблюдение с проверкой): ядро 0.3.0 не принимает базу схемы 6 или, приняв, не меняет её | `probe exit=0` |
 
-Шаги 8 и 9 (кроме К8) — наблюдения, их исход не меняет итог.
+Шаги 8 и 9 (кроме К8 и К11) — наблюдения, их исход не меняет итог.
 
 ## Что собрать
 
-`results\A10\`: вывод шагов 2, 3, 5, 6, 10 целиком; таблица «Наблюдения» (шаги 8–9: коды установщика, был ли убит процесс, версия после понижения, судьба каталогов WebView2); путь ярлыка; имя ключа `Uninstall`.
+`results\A10\`: вывод шагов 2, 3, 5, 6, 10 целиком; `seed.txt`, `verify.txt`, `probe.txt` и вывод `state`; таблица «Наблюдения» (шаги 8–9: коды установщика, был ли убит процесс, версия после понижения, судьба каталогов WebView2); путь ярлыка; имя ключа `Uninstall`.
 
 ## Откат / уборка
 
@@ -259,6 +297,7 @@ if ($u.Count -gt 0) {
 }
 Remove-ItemProperty -Path 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run' -Name 'LAVRay' -ErrorAction SilentlyContinue
 Get-ScheduledTask -TaskName 'LAVRay', 'LAVRay-*' -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
+Remove-Item -Recurse -Force 'C:\lavray-test\tmp\A10' -ErrorAction SilentlyContinue
 if (-not $dataExisted -and (Test-Path $dataDir)) { Remove-Item -Recurse -Force $dataDir }
 else { Remove-Item -LiteralPath (Join-Path $dataDir 'a10-marker.txt') -Force -ErrorAction SilentlyContinue }
 foreach ($d in $webv) { if (-not $webvBefore[$d] -and (Test-Path $d)) { Remove-Item -Recurse -Force $d } }
@@ -273,4 +312,195 @@ foreach ($d in $webv) { if (-not $webvBefore[$d] -and (Test-Path $d)) { Remove-I
 
 ## Отчёт
 
-`results/A10.md` по `templates/REPORT.md`: статусы 11 шагов, К1–К9, таблица «Наблюдения». Провал К4 (две записи) и К6 (потеря данных или автозапуска при обновлении) — `critical`; К9 (оставленные файлы, запись, автозапуск, задачи) — `major`; остальные — `major`/`minor` по вашей оценке.
+`results/A10.md` по `templates/REPORT.md`: статусы 11 шагов, К1–К11, таблица «Наблюдения». Провал К4 (две записи), К6 (потеря данных или автозапуска при обновлении) и К10 (потеря серверов или настроек, схема не дошла до 6, повреждение базы) — `critical`; К9 (оставленные файлы, запись, автозапуск, задачи) — `major`; остальные — `major`/`minor` по вашей оценке.
+
+## Скрипт `a10_data.py`
+
+```python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""A10 (часть «данные при обновлении»): настоящая база SQLite прежней версии 0.3.0 переживает обновление до 0.9.0.
+
+  python -I a10_data.py seed    <core 0.3.0> <каталог данных>             создать данные прежней версии (схема 2-4; у 0.3.0 - 4)
+  python -I a10_data.py state   <каталог данных>                          схема, таблицы, число записей (только чтение)
+  python -I a10_data.py verify  <core 0.9.0> <каталог данных> <версия>    проверки после обновления (схема 6, данные целы)
+  python -I a10_data.py probe   <core 0.3.0> <каталог данных>             наблюдение: старое ядро на копии базы новой схемы
+
+Код выхода 0 - все проверки PASS. Секреты не используются: пароль копии тестовый, копия в памяти и на диск не пишется.
+"""
+import json
+import os
+import pathlib
+import secrets
+import shutil
+import sqlite3
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.request
+
+sys.stdout.reconfigure(encoding="utf-8")
+FAILED = []
+NL = chr(10)
+WANT_TABLES = {"web_users", "import_map"}  # появились после 0.3.0 (схемы 5 и 6); таблица sessions (схема 4) есть уже в 0.3.0
+
+
+def check(cid, ok, detail=""):
+    print(("PASS " if ok else "FAIL ") + cid + ("" if ok else " :: " + str(detail)[:200]), flush=True)
+    if not ok:
+        FAILED.append(cid)
+
+
+class Core:
+    def __init__(self, exe, data):
+        self.tok = secrets.token_urlsafe(32)
+        self.p = subprocess.Popen([exe, "serve", "--listen-socket", "127.0.0.1:0", "--data", data], stdin=subprocess.PIPE,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.p.stdin.write((self.tok + NL).encode())
+        self.p.stdin.flush()
+        line = self.p.stdout.readline().decode().strip()
+        if "LAVRAY_CORE_READY" not in line:
+            self.p.kill()
+            raise RuntimeError("ядро не стартовало: " + (self.p.stderr.read().decode("utf-8", "replace")[:300] or line))
+        self.base = "http://" + line.split()[1].replace("tcp://", "")
+
+    def rpc(self, svc, method, body=None):
+        req = urllib.request.Request(f"{self.base}/lavray.v1.{svc}/{method}", data=json.dumps(body or {}).encode(),
+                                     headers={"Authorization": "Bearer " + self.tok, "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                return r.status, json.loads(r.read() or b"{}")
+        except urllib.error.HTTPError as e:
+            raw = e.read().decode(errors="replace")
+            try:
+                return e.code, json.loads(raw)
+            except ValueError:
+                return e.code, raw
+
+    def stop(self):
+        try:
+            self.p.stdin.close()
+            self.p.wait(timeout=30)
+        except Exception:  # noqa: BLE001
+            self.p.kill()
+            self.p.wait()
+
+
+def db(data):
+    p = os.path.join(data, "lavray.db")
+    return sqlite3.connect(pathlib.Path(p).resolve().as_uri() + "?mode=ro", uri=True)
+
+
+def state(data):
+    con = db(data)
+    try:
+        out = {"schema": con.execute("SELECT MAX(version) FROM schema_version").fetchone()[0],
+               "versions": [r[0] for r in con.execute("SELECT version FROM schema_version ORDER BY version")],
+               "tables": sorted(r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")),
+               "profiles": con.execute("SELECT COUNT(*) FROM profiles").fetchone()[0],
+               "groups": con.execute("SELECT COUNT(*) FROM groups").fetchone()[0],
+               "port": (con.execute("SELECT value FROM settings WHERE key='inbound.port'").fetchone() or [None])[0],
+               "integrity": con.execute("PRAGMA integrity_check").fetchone()[0]}
+    finally:
+        con.close()
+    return out
+
+
+def seed(exe, data):
+    os.makedirs(data, exist_ok=True)
+    c = Core(exe, data)
+    try:
+        gid = c.rpc("ProfileService", "ListGroups", {})[1]["groups"][0]["id"]
+        c.rpc("ProfileService", "CreateProfile", {"profile": {"groupId": gid, "type": "PROFILE_TYPE_SOCKS", "name": "a10-keep-1", "address": "127.0.0.1", "port": 1081,
+                                                              "socksHttp": {"proto": "PROTO_SOCKS5"}}})
+        c.rpc("ProfileService", "CreateProfile", {"profile": {"groupId": gid, "type": "PROFILE_TYPE_SOCKS", "name": "a10-keep-2", "address": "127.0.0.1", "port": 1082,
+                                                              "socksHttp": {"proto": "PROTO_SOCKS5"}, "customOutboundJson": '{"connect_timeout": "7s"}'}})
+        c.rpc("SettingsService", "SetSettings", {"values": {"inbound.port": {"intValue": "2091"}}})
+        names = sorted(p["name"] for p in c.rpc("ProfileService", "ListProfiles", {})[1].get("profiles", []))
+    finally:
+        c.stop()
+    st = state(data)
+    check("seed.profiles_created", names == ["a10-keep-1", "a10-keep-2"], names)
+    check("seed.old_schema_is_2_3_or_4", st["schema"] in (2, 3, 4) and st["versions"] == list(range(1, st["schema"] + 1)), st)
+    print("схема прежней версии:", st["schema"], "(0.3.0: 4)")
+    check("seed.new_tables_absent", not (WANT_TABLES & set(st["tables"])), st["tables"])
+    check("seed.port_saved", st["port"] == "2091", st["port"])
+    print("состояние прежней версии:", json.dumps(st, ensure_ascii=False))
+
+
+def verify(exe, data, version):
+    before = state(data)
+    c = Core(exe, data)
+    try:
+        st, status = c.rpc("CoreService", "GetStatus", {})
+        check("verify.core_version", st == 200 and status.get("coreVersion") == version, status.get("coreVersion") if isinstance(status, dict) else status)
+        profs = {p["name"]: p for p in c.rpc("ProfileService", "ListProfiles", {})[1].get("profiles", [])}
+        check("verify.profiles_kept", set(profs) == {"a10-keep-1", "a10-keep-2"}, sorted(profs))
+        p2 = profs.get("a10-keep-2", {})
+        check("verify.fields_kept", profs.get("a10-keep-1", {}).get("port") == 1081 and p2.get("port") == 1082 and p2.get("customOutboundJson") == '{"connect_timeout": "7s"}', p2)
+        check("verify.custom_fields_stay_unconfirmed", not p2.get("customFieldsConfirmed"), p2.get("customFieldsConfirmed"))
+        st, sv = c.rpc("SettingsService", "GetSettings", {"keys": ["inbound.port"]})
+        check("verify.setting_kept", st == 200 and sv.get("values", {}).get("inbound.port", {}).get("intValue") == "2091", sv)
+        st, bk = c.rpc("BackupService", "ExportBackup", {"password": "a10-test-password-1"})
+        summ = bk.get("summary", {}) if st == 200 else {}
+        check("verify.backup_export_works", st == 200 and bk.get("suggestedName", "").endswith(".lavbk") and summ.get("profiles") == 2 and str(summ.get("schemaVersion")) == "6", (st, summ))
+    finally:
+        c.stop()
+    after = state(data)
+    check("verify.schema_is_6", after["schema"] == 6 and after["versions"] == [1, 2, 3, 4, 5, 6], after)
+    check("verify.new_tables_created", WANT_TABLES <= set(after["tables"]), after["tables"])
+    check("verify.old_tables_kept", set(before["tables"]) <= set(after["tables"]), sorted(set(before["tables"]) - set(after["tables"])))
+    check("verify.rows_kept", after["profiles"] == before["profiles"] and after["groups"] == before["groups"] and after["port"] == before["port"], (before, after))
+    check("verify.integrity_ok", after["integrity"] == "ok", after["integrity"])
+    # второй запуск не меняет схему и не плодит записи
+    c = Core(exe, data)
+    c.stop()
+    again = state(data)
+    check("verify.second_start_idempotent", again["schema"] == 6 and again["profiles"] == after["profiles"] and again["versions"] == after["versions"], again)
+    print("состояние после обновления:", json.dumps(after, ensure_ascii=False))
+
+
+def probe(exe, data):
+    tmp = tempfile.mkdtemp(prefix="a10-probe-")
+    dst = os.path.join(tmp, "data")
+    shutil.copytree(data, dst, ignore=shutil.ignore_patterns("geo"))
+    before = state(dst)
+    try:
+        c = Core(exe, dst)
+    except RuntimeError as e:
+        print("OBSERVATION старое ядро на базе схемы", before["schema"], "не стартовало:", str(e)[:200])
+        check("probe.old_core_refuses_newer_schema", True)
+        shutil.rmtree(tmp, ignore_errors=True)
+        return
+    try:
+        st, sv = c.rpc("SettingsService", "GetSettings", {"keys": ["inbound.port"]})
+    finally:
+        c.stop()
+    after = state(dst)
+    print("OBSERVATION старое ядро стартовало на базе схемы", before["schema"], "; после: ", json.dumps(after, ensure_ascii=False))
+    check("probe.old_core_did_not_downgrade_schema", after["schema"] == before["schema"], after)
+    shutil.rmtree(tmp, ignore_errors=True)
+
+
+def main():
+    cmd = sys.argv[1] if len(sys.argv) > 1 else ""
+    if cmd == "seed" and len(sys.argv) == 4:
+        seed(os.path.abspath(sys.argv[2]), os.path.abspath(sys.argv[3]))
+    elif cmd == "state" and len(sys.argv) == 3:
+        print(json.dumps(state(os.path.abspath(sys.argv[2])), ensure_ascii=False))
+    elif cmd == "verify" and len(sys.argv) == 5:
+        verify(os.path.abspath(sys.argv[2]), os.path.abspath(sys.argv[3]), sys.argv[4])
+    elif cmd == "probe" and len(sys.argv) == 4:
+        probe(os.path.abspath(sys.argv[2]), os.path.abspath(sys.argv[3]))
+    else:
+        print(__doc__)
+        return 2
+    print(f"a10_data {cmd}: провалов {len(FAILED)}")
+    return 1 if FAILED else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+```

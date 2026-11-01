@@ -88,7 +88,7 @@ bash /c/lavray-test/tmp/A07/ci_smoke.sh > /c/lavray-test/results/A07/ci-smoke.tx
 cut -c1-200 /c/lavray-test/results/A07/ci-smoke.txt
 ```
 
-   Ожидается: `ci-smoke exit=0`, в выводе `healthz=200 no-auth=401 bad-auth=401`, строка `status={...}` с полем `coreVersion`, последняя строка `CI-SMOKE-OK`. Если `LAVRAY_CORE_EXE` не задана в сессии Git Bash, передайте путь вручную в формате `/c/lavray-test/portable/0.4.0/binaries/lavray-core.exe`.
+   Ожидается: `ci-smoke exit=0`, в выводе `healthz=200 no-auth=401 bad-auth=401`, строка `status={...}` с полем `coreVersion`, последняя строка `CI-SMOKE-OK`. Если `LAVRAY_CORE_EXE` не задана в сессии Git Bash, передайте путь вручную в формате `/c/lavray-test/portable/0.9.0/binaries/lavray-core.exe`.
 
 5. Часть В: T-08B и T-79 на настоящем ядре. Сохраните скрипт «Скрипт части В» как `C:\lavray-test\tmp\A07\a07_extra.py` и запустите:
 

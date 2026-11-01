@@ -176,3 +176,5 @@ impl LockedOpener for MemOpener {
         }))
     }
 }
+
+pub use super::testkit_sig::FakeSignature;

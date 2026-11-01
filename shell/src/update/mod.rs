@@ -17,6 +17,7 @@
 //! - [`hash`] — потоковый SHA-256, hex, сравнение за постоянное время;
 //! - [`paths`] — путь только внутри каталога после канонизации;
 //! - [`verify`] — `verify_locked`: открытие с запретом записи и хэш того же дескриптора;
+//! - [`core_verify`] — проверка подписи установщика встроенным ядром (`verify-artifact`);
 //! - [`install`] — трейт `Elevator` и запуск установщика с `/S`;
 //! - [`previous`] — один прошлый установщик для отката и `previous.json`;
 //! - [`heartbeat`] — `health.json` и вердикт «здоровье отмечено»;
@@ -29,12 +30,14 @@
 //! - [`wiring`] — Tauri-команды и общее состояние; [`watchdog_entry`] — вход режима watchdog.
 
 pub mod clock;
+pub mod core_verify;
 pub mod error;
 pub mod gate;
 pub mod hash;
 pub mod heartbeat;
 pub mod install;
 pub mod layout;
+pub mod open_real;
 pub mod paths;
 pub mod pick;
 pub mod ports;
@@ -57,3 +60,5 @@ mod runas_win;
 
 #[cfg(test)]
 mod testkit;
+#[cfg(test)]
+mod testkit_sig;

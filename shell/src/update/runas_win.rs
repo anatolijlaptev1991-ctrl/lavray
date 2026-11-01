@@ -5,7 +5,7 @@
 //! pid запущенного процесса (`SEE_MASK_NOCLOSEPROCESS`): по нему watchdog ждёт
 //! конца установки. Настоящий UAC тесты не вызывают; файл только собирается.
 
-use super::install::{join_args, ElevateError, ElevatedHandle, Elevator};
+use super::install::{join_args, system32_dir, ElevateError, ElevatedHandle, Elevator};
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
@@ -31,7 +31,8 @@ impl Elevator for Runas {
         let verb = wide(OsStr::new("runas"));
         let file = wide(exe.as_os_str());
         let params = wide(OsStr::new(&join_args(args)));
-        let dir = exe.parent().map(|dir| wide(dir.as_os_str()));
+        // рабочий каталог — System32, а не staging, куда пользователь может писать
+        let dir = wide(system32_dir(std::env::var_os("SystemRoot")).as_os_str());
 
         // SAFETY: структура из нулей — допустимое начальное состояние
         // SHELLEXECUTEINFOW; обязательные поля заполняются ниже.
@@ -41,7 +42,7 @@ impl Elevator for Runas {
         info.lpVerb = verb.as_ptr();
         info.lpFile = file.as_ptr();
         info.lpParameters = params.as_ptr();
-        info.lpDirectory = dir.as_ref().map_or(std::ptr::null(), |dir| dir.as_ptr());
+        info.lpDirectory = dir.as_ptr();
         info.nShow = SW_SHOWNORMAL;
         execute(&mut info)
     }

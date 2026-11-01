@@ -108,7 +108,7 @@ mod real_windows {
         std::fs::write(&path, b"installer bytes").unwrap();
         let sum = sum_of(b"installer bytes");
 
-        let guard = verify_locked(&RealOpener, &path, &sum).unwrap();
+        let guard = verify_locked(&RealOpener::any(), &path, &sum).unwrap();
 
         let write = std::fs::OpenOptions::new().write(true).open(&path);
         assert!(write.is_err(), "запись при удержанной блокировке");
@@ -120,4 +120,65 @@ mod real_windows {
         drop(guard);
         std::fs::write(&path, b"replaced").expect("после снятия блокировки запись возможна");
     }
+
+    /// Реальная проверка по дескриптору: файл обязан лежать прямо в каталоге.
+    #[test]
+    fn the_opened_file_must_physically_live_in_the_expected_directory() {
+        let tmp = TempDir::new("verify-root");
+        let here = tmp.path().join("staging");
+        let elsewhere = tmp.path().join("elsewhere");
+        std::fs::create_dir_all(&here).unwrap();
+        std::fs::create_dir_all(&elsewhere).unwrap();
+        let file = here.join("setup.exe");
+        std::fs::write(&file, b"x").unwrap();
+        assert!(RealOpener::within(&here).open_locked(&file).is_ok());
+        assert!(
+            RealOpener::within(&elsewhere).open_locked(&file).is_err(),
+            "файл из другого каталога отвергается"
+        );
+    }
+
+    /// Ссылка вместо файла не разыменовывается: открывается сама точка повторной обработки.
+    #[test]
+    fn a_symlink_in_place_of_the_installer_is_refused() {
+        let tmp = TempDir::new("verify-link");
+        let dir = tmp.path().join("staging");
+        std::fs::create_dir_all(&dir).unwrap();
+        let target = tmp.path().join("evil.exe");
+        std::fs::write(&target, b"x").unwrap();
+        let link = dir.join("setup.exe");
+        if std::os::windows::fs::symlink_file(&target, &link).is_err() {
+            return; // без привилегии создания симлинков проверять нечем
+        }
+        assert!(RealOpener::within(&dir).open_locked(&link).is_err());
+        assert!(RealOpener::any().open_locked(&link).is_err());
+    }
+}
+
+#[cfg(windows)]
+#[test]
+fn directly_in_understands_windows_verbatim_paths() {
+    let root = Path::new(r"C:\data\updates\staging");
+    assert!(directly_in(
+        Path::new(r"\\?\C:\data\updates\staging\x.exe"),
+        root
+    ));
+    assert!(
+        !directly_in(&root.join("sub").join("x.exe"), root),
+        "вложенный каталог"
+    );
+    assert!(!directly_in(Path::new(r"C:\other\x.exe"), root));
+    assert!(!directly_in(Path::new("x.exe"), root));
+}
+
+#[test]
+fn directly_in_accepts_only_a_direct_child() {
+    let root = std::env::temp_dir().join("lavray-directly-in");
+    assert!(directly_in(&root.join("x.exe"), &root));
+    assert!(
+        !directly_in(&root.join("sub").join("x.exe"), &root),
+        "вложенный каталог"
+    );
+    assert!(!directly_in(&root, &root), "сам каталог не файл в нём");
+    assert!(!directly_in(Path::new("x.exe"), &root));
 }

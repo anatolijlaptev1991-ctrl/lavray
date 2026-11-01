@@ -438,11 +438,22 @@ fn update_commands_are_registered_and_the_watchdog_mode_runs_first() {
         "update_apply",
         "update_rollback",
         "update_health_ok",
-        "update_stage_local",
         "update_previous_info",
         "update_pick_installer",
     ] {
         assert!(registered(name), "нет в generate_handler!: {name}");
+    }
+    // HIGH-1: копировать в staging произвольный путь от страницы нельзя — только
+    // `update_pick_installer` (нативный диалог выбирает пользователь, не страница)
+    assert!(
+        !registered("update_stage_local"),
+        "update_stage_local не должен быть зарегистрирован"
+    );
+    for file in ["update/wiring.rs", "update/pick.rs", "update/stage.rs"] {
+        assert!(
+            !source(file).contains("fn update_stage_local"),
+            "команда update_stage_local объявлена в {file}"
+        );
     }
     assert!(
         source("os_integration.rs").contains("update::wiring::new_gate()"),

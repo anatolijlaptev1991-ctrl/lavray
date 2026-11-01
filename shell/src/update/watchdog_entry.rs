@@ -5,9 +5,11 @@
 //! не создаются, процесс только доводит обновление до конца и выходит.
 
 use super::clock::{Clock, SystemClock};
+use super::core_verify::{CoreVerifier, MissingCore};
 use super::heartbeat::HealthStore;
 use super::layout::Layout;
 use super::paths::RealFs;
+use super::ports::SignatureVerifier;
 use super::previous::PreviousStore;
 use super::real::{ProcessWaiter, Runas, ShellLauncher};
 use super::rollback::PreviousRollback;
@@ -37,12 +39,21 @@ pub fn run_if_requested() {
 fn watch(args: &WatchdogArgs) -> Outcome {
     let layout = Layout::new(&args.data_dir);
     let store = PreviousStore::new(layout.clone());
+    // watchdog — копия СТАРОГО exe: встроенное ядро в каталоге установки уже новое,
+    // его хэш вшитому не равен, поэтому оно запускается без сверки суммы
+    let signature: Box<dyn SignatureVerifier> =
+        match CoreVerifier::bundled(&args.app_exe, None, &args.data_dir) {
+            Ok(verifier) => Box::new(verifier),
+            Err(_) => Box::new(MissingCore),
+        };
+    let opener = RealOpener::within(&layout.previous_dir());
     let rollback = PreviousRollback {
         layout: &layout,
         store: &store,
         fs: &RealFs,
-        opener: &RealOpener,
+        opener: &opener,
         elevator: &Runas,
+        signature: signature.as_ref(),
     };
     let health = HealthStore::new(&layout);
     let deps = WatchdogDeps {

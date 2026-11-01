@@ -9,8 +9,10 @@ use super::prepare::{WatchdogCopy, WatchdogLauncher};
 use super::verify::{LockedOpener, RealOpener};
 use super::watchdog::Launcher;
 use super::watchdog_args::WatchdogArgs;
+use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 #[cfg(windows)]
 pub use super::proc_win::ProcessWaiter;
@@ -110,7 +112,7 @@ impl WatchdogLauncher for CopyWatchdog {
         target.sync_all()?;
         drop(target);
         // запрет записи до запуска: копию, которую исполнит, не подменить
-        let hold = RealOpener.open_locked(&path)?;
+        let hold = RealOpener::any().open_locked(&path)?;
         Ok(WatchdogCopy { path, hold })
     }
 
@@ -133,5 +135,43 @@ impl WatchdogLauncher for CopyWatchdog {
             command.creation_flags(DETACHED_FLAGS);
         }
         command.spawn().map(|_| ())
+    }
+}
+
+/// Настоящий запуск: процесс без окна консоли, с ожиданием не дольше [`super::core_verify::VERIFY_TIMEOUT`].
+pub struct ProcessRunner;
+
+impl super::core_verify::CoreRunner for ProcessRunner {
+    fn run(&self, exe: &Path, args: &[OsString]) -> io::Result<super::core_verify::RunOutput> {
+        use std::process::{Command, Stdio};
+        let mut command = Command::new(exe);
+        command
+            .args(args)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
+        }
+        let mut child = command.spawn()?;
+        let deadline = std::time::Instant::now() + super::core_verify::VERIFY_TIMEOUT;
+        loop {
+            if child.try_wait()?.is_some() {
+                break;
+            }
+            if std::time::Instant::now() >= deadline {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(io::Error::from(io::ErrorKind::TimedOut));
+            }
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        let output = child.wait_with_output()?;
+        Ok(super::core_verify::RunOutput {
+            success: output.status.success(),
+            stdout: output.stdout,
+        })
     }
 }

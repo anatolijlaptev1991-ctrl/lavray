@@ -25,6 +25,14 @@ impl ApplyGate {
     }
 }
 
+impl GateGuard<'_> {
+    /// Оставить замок занятым до выхода процесса: установщик уже запущен,
+    /// приложение вот-вот закроется, и вторая установка в это окно не нужна.
+    pub fn keep(self) {
+        std::mem::forget(self);
+    }
+}
+
 impl Drop for GateGuard<'_> {
     fn drop(&mut self) {
         self.0.store(false, Ordering::SeqCst);

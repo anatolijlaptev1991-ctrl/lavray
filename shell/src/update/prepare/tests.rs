@@ -3,7 +3,8 @@
 use super::*;
 use crate::update::hash::{sha256_reader, to_hex};
 use crate::update::install::{ElevateError, ElevatedHandle, Elevator};
-use crate::update::testkit::{staged_name, Log, MemFs, MemOpener};
+use crate::update::ports::SignedFacts;
+use crate::update::testkit::{staged_name, FakeSignature, Log, MemFs, MemOpener};
 use std::cell::RefCell;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -131,6 +132,7 @@ struct Rig {
     core: FakeCore,
     proxy: FakeProxy,
     elevator: FakeElevator,
+    signature: FakeSignature,
     archive: FakeArchive,
     watchdog: FakeWatchdog,
     gate: Rc<ApplyGate>,
@@ -154,6 +156,7 @@ impl Rig {
         };
         opener.put(&installer, BYTES);
         let gate = Rc::new(ApplyGate::default());
+        let sum = to_hex(&sha256_reader(&mut &BYTES[..]).unwrap());
         Self {
             fs: MemFs::with_file(&dir, &name),
             core: FakeCore {
@@ -171,6 +174,7 @@ impl Rig {
                 gate: Rc::clone(&gate),
                 busy_inside: RefCell::default(),
             },
+            signature: FakeSignature::ok("0.5.1", &sum, Some(log.clone())),
             archive: FakeArchive {
                 log: log.clone(),
                 stage_fails: false,
@@ -181,7 +185,7 @@ impl Rig {
                 spawn_fails: false,
                 spawned: RefCell::default(),
             },
-            sum: to_hex(&sha256_reader(&mut &BYTES[..]).unwrap()),
+            sum,
             log,
             layout,
             opener,
@@ -197,6 +201,7 @@ impl Rig {
             core: &self.core,
             proxy: &self.proxy,
             elevator: &self.elevator,
+            signature: &self.signature,
             archive: &self.archive,
             watchdog: &self.watchdog,
         };
@@ -219,6 +224,7 @@ fn apply_order_stop_core_release_proxy_then_launch() {
         rig.log.events(),
         [
             "verify_open",
+            "signature.verify",
             "watchdog.copy",
             "archive.stage",
             "core.stop",
@@ -282,6 +288,7 @@ fn an_unusable_version_is_refused_before_anything_happens() {
             core: &rig.core,
             proxy: &rig.proxy,
             elevator: &rig.elevator,
+            signature: &rig.signature,
             archive: &rig.archive,
             watchdog: &rig.watchdog,
         };
@@ -310,7 +317,11 @@ fn apply_twice_busy() {
         Some(ApplyError::Busy),
         "вторая установка во время первой отвергается"
     );
-    assert!(rig.gate.try_enter().is_ok(), "замок снят после установки");
+    assert_eq!(
+        rig.gate.try_enter().err(),
+        Some(ApplyError::Busy),
+        "замок остаётся занятым после запуска: приложение вот-вот закроется"
+    );
 }
 
 #[test]
@@ -406,6 +417,7 @@ fn rollback_runs_the_previous_installer_and_commits_the_rollback() {
         rig.log.events(),
         [
             "verify_open",
+            "signature.verify",
             "watchdog.copy",
             "core.stop",
             "proxy.release",
@@ -423,4 +435,126 @@ fn rollback_refuses_an_installer_from_staging() {
     let mut rig = Rig::new(Mode::Rollback);
     rig.installer = rig.layout.staging().join(staged_name('d', "setup.exe"));
     assert_eq!(rig.run(Mode::Rollback), Err(ApplyError::PathOutsideStaging));
+}
+
+// ---- подпись: оболочка не доверяет ни сумме, ни версии от страницы ----
+
+#[test]
+fn apply_rejects_an_unsigned_file() {
+    let mut rig = Rig::new(Mode::Update);
+    rig.signature =
+        FakeSignature::answering(Err(ApplyError::SignatureInvalid), Some(rig.log.clone()));
+    assert_eq!(rig.run(Mode::Update), Err(ApplyError::SignatureInvalid));
+    assert!(
+        rig.elevator.launched.borrow().is_empty(),
+        "UAC не запрашивался"
+    );
+    assert_eq!(rig.log.count("core.stop"), 0, "ядро не остановлено");
+    assert_eq!(rig.log.count("watchdog.copy"), 0);
+}
+
+#[test]
+fn apply_rejects_a_wrong_key_signature_and_a_missing_core() {
+    for error in [ApplyError::SignatureInvalid, ApplyError::CoreUnavailable] {
+        let mut rig = Rig::new(Mode::Update);
+        rig.signature = FakeSignature::answering(Err(error), Some(rig.log.clone()));
+        assert_eq!(rig.run(Mode::Update), Err(error));
+        assert!(rig.elevator.launched.borrow().is_empty());
+    }
+}
+
+#[test]
+fn apply_rejects_a_version_mismatch() {
+    let mut rig = Rig::new(Mode::Update);
+    // страница просит поставить 0.5.1, а подписан установщик версии 0.4.0
+    rig.signature = FakeSignature::ok("0.4.0", &rig.sum, Some(rig.log.clone()));
+    assert_eq!(rig.run(Mode::Update), Err(ApplyError::VersionMismatch));
+    assert!(rig.elevator.launched.borrow().is_empty());
+    assert_eq!(rig.log.count("core.stop"), 0);
+}
+
+#[test]
+fn apply_rejects_a_sum_the_core_did_not_confirm() {
+    let mut rig = Rig::new(Mode::Update);
+    // страница угадала сумму файла, но ядро подписало другие байты
+    rig.signature = FakeSignature::ok("0.5.1", &"a".repeat(64), Some(rig.log.clone()));
+    assert_eq!(rig.run(Mode::Update), Err(ApplyError::Sha256Mismatch));
+    assert!(rig.elevator.launched.borrow().is_empty());
+    rig.signature = FakeSignature::answering(
+        Ok(SignedFacts {
+            version: "0.5.1".into(),
+            sha256: "не hex".into(),
+        }),
+        None,
+    );
+    assert_eq!(rig.run(Mode::Update), Err(ApplyError::SignatureInvalid));
+}
+
+#[test]
+fn the_signature_is_checked_on_the_locked_file_next_to_its_minisig() {
+    let rig = Rig::new(Mode::Update);
+    assert_eq!(rig.run(Mode::Update), Ok(ApplyOutcome::Installing));
+    let calls = rig.signature.calls.borrow();
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0].0, rig.installer);
+    assert_eq!(
+        calls[0].1.file_name().unwrap().to_string_lossy(),
+        format!(
+            "{}.minisig",
+            rig.installer.file_name().unwrap().to_string_lossy()
+        )
+    );
+    assert!(!calls[0].2, "обновление не принимает старую версию");
+    // дескриптор отпущен только после запуска: подпись проверена под замком
+    assert!(rig.log.pos("signature.verify") < rig.log.pos("handle.drop"));
+}
+
+#[test]
+fn rollback_allows_an_older_signed_version_but_still_needs_the_signature() {
+    let rig = Rig::new(Mode::Rollback);
+    assert_eq!(rig.run(Mode::Rollback), Ok(ApplyOutcome::Installing));
+    assert!(
+        rig.signature.calls.borrow()[0].2,
+        "--allow-older только для отката"
+    );
+
+    let mut bad = Rig::new(Mode::Rollback);
+    bad.signature = FakeSignature::answering(Err(ApplyError::SignatureInvalid), None);
+    assert_eq!(bad.run(Mode::Rollback), Err(ApplyError::SignatureInvalid));
+    assert!(bad.elevator.launched.borrow().is_empty());
+}
+
+// ---- замок удерживается до выхода процесса ----
+
+#[test]
+fn the_gate_stays_held_after_the_installer_started() {
+    let rig = Rig::new(Mode::Update);
+    assert_eq!(rig.run(Mode::Update), Ok(ApplyOutcome::Installing));
+    assert_eq!(
+        rig.gate.try_enter().err(),
+        Some(ApplyError::Busy),
+        "до выхода приложения вторая установка получает busy"
+    );
+    assert_eq!(rig.run(Mode::Update), Err(ApplyError::Busy));
+    assert_eq!(
+        rig.elevator.launched.borrow().len(),
+        1,
+        "установщик запущен один раз"
+    );
+}
+
+#[test]
+fn the_gate_is_released_when_nothing_was_started() {
+    let mut cancelled = Rig::new(Mode::Update);
+    cancelled.elevator.answer = Err(ElevateError::UacCancelled);
+    assert_eq!(cancelled.run(Mode::Update), Ok(ApplyOutcome::UacCancelled));
+    assert!(
+        cancelled.gate.try_enter().is_ok(),
+        "после отказа в UAC можно повторить"
+    );
+
+    let mut rejected = Rig::new(Mode::Update);
+    rejected.signature = FakeSignature::answering(Err(ApplyError::SignatureInvalid), None);
+    assert!(rejected.run(Mode::Update).is_err());
+    assert!(rejected.gate.try_enter().is_ok());
 }

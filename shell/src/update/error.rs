@@ -30,6 +30,13 @@ pub enum ApplyError {
     InvalidVersion,
     /// Прошлого установщика нет.
     RollbackUnavailable,
+    /// Подпись установщика не подтверждена ядром: нет файла `.minisig`, чужой
+    /// ключ, подмена содержимого, продукт или платформа не те.
+    SignatureInvalid,
+    /// Подписанная версия не совпала с ожидаемой.
+    VersionMismatch,
+    /// Встроенное ядро для проверки подписи не найдено или не запустилось.
+    CoreUnavailable,
 }
 
 impl ApplyError {
@@ -47,6 +54,9 @@ impl ApplyError {
             Self::InvalidSha256 => "invalid_sha256",
             Self::InvalidVersion => "invalid_version",
             Self::RollbackUnavailable => "rollback_unavailable",
+            Self::SignatureInvalid => "signature_invalid",
+            Self::VersionMismatch => "version_mismatch",
+            Self::CoreUnavailable => "core_unavailable",
         }
     }
 }
@@ -79,6 +89,9 @@ mod tests {
             (ApplyError::ProxyReleaseFailed, "proxy_release_failed"),
             (ApplyError::PrepareFailed, "prepare_failed"),
             (ApplyError::RollbackUnavailable, "rollback_unavailable"),
+            (ApplyError::SignatureInvalid, "signature_invalid"),
+            (ApplyError::VersionMismatch, "version_mismatch"),
+            (ApplyError::CoreUnavailable, "core_unavailable"),
         ];
         for (error, code) in all {
             assert_eq!(error.code(), code);

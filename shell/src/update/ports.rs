@@ -4,9 +4,10 @@
 //! трейтами. Настоящие реализации — `app_adapters.rs` и `real.rs`, в тестах —
 //! подставки.
 
+use super::error::ApplyError;
 use super::verify::LockedFile;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// Остановка и повторный запуск ядра.
 pub trait CoreController {
@@ -33,4 +34,26 @@ pub trait WatchdogLauncher {
     fn stage_copy(&self) -> io::Result<WatchdogCopy>;
     /// Запустить копию: ждать установщик `installer_pid`, ожидать heartbeat `version`.
     fn spawn(&self, copy: &WatchdogCopy, installer_pid: u32, version: &str) -> io::Result<()>;
+}
+
+/// Что ядро подтвердило об установщике: версия из подписанных заявлений и
+/// SHA-256, посчитанный самим ядром.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SignedFacts {
+    pub version: String,
+    pub sha256: String,
+}
+
+/// Проверка подписи minisign. В продакшене это ВСТРОЕННОЕ ядро из каталога
+/// установки (`lavray-core verify-artifact`): оболочка подписи не разбирает и
+/// сумме или версии от страницы не верит. Вызывается, пока оболочка держит
+/// дескриптор файла с запретом записи.
+pub trait SignatureVerifier {
+    /// `allow_older` — откат: подписанная версия может быть не новее текущей.
+    fn verify(
+        &self,
+        installer: &Path,
+        signature: &Path,
+        allow_older: bool,
+    ) -> Result<SignedFacts, ApplyError>;
 }

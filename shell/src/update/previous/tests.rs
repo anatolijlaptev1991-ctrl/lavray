@@ -210,3 +210,56 @@ fn an_interrupted_rotation_never_reports_a_broken_previous() {
     .unwrap();
     assert_eq!(store.available(), None);
 }
+
+/// Подпись рядом с установщиком в staging (как её кладёт ядро).
+fn sign(path: &Path) {
+    let mut name = path.as_os_str().to_os_string();
+    name.push(".minisig");
+    std::fs::write(name, "untrusted comment: x\nsig").unwrap();
+}
+
+fn has_sig(dir: &Path, info: &PreviousInfo) -> bool {
+    dir.join(format!("{}.minisig", info.file)).is_file()
+}
+
+#[test]
+fn the_signature_travels_with_the_installer_through_rotation_and_rollback() {
+    let tmp = TempDir::new("prev-sig");
+    let store = store(&tmp);
+    let layout = Layout::new(tmp.path());
+    let (path_a, a) = staged(&tmp, 'a', "0.5.0");
+    sign(&path_a);
+    store.stage(&path_a, &a).unwrap();
+    store.commit_update(&a).unwrap();
+    assert!(has_sig(&layout.applied_dir(), &a), "подпись ушла в applied");
+
+    let (path_b, b) = staged(&tmp, 'b', "0.5.1");
+    sign(&path_b);
+    store.stage(&path_b, &b).unwrap();
+    store.commit_update(&b).unwrap();
+    assert!(
+        has_sig(&layout.previous_dir(), &a),
+        "подпись прошлого версии A рядом с ним"
+    );
+    assert!(has_sig(&layout.applied_dir(), &b));
+
+    store.commit_rollback().unwrap();
+    assert!(
+        has_sig(&layout.applied_dir(), &a),
+        "после отката A снова текущая, с подписью"
+    );
+}
+
+#[test]
+fn a_missing_signature_is_not_invented() {
+    let tmp = TempDir::new("prev-nosig");
+    let store = store(&tmp);
+    let layout = Layout::new(tmp.path());
+    let a = apply(&store, &tmp, 'a', "0.5.0");
+    apply(&store, &tmp, 'b', "0.5.1");
+    assert!(
+        !has_sig(&layout.previous_dir(), &a),
+        "подписи не было — её и нет"
+    );
+    assert!(store.available().is_some());
+}

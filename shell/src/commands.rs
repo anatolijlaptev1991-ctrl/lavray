@@ -42,7 +42,6 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         lavray_shell::update::wiring::update_apply,
         lavray_shell::update::wiring::update_rollback,
         lavray_shell::update::wiring::update_health_ok,
-        lavray_shell::update::wiring::update_stage_local,
         lavray_shell::update::wiring::update_previous_info,
         lavray_shell::update::pick::update_pick_installer,
     ]

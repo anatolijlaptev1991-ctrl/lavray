@@ -17,9 +17,11 @@ pub use super::gate::{ApplyGate, GateGuard};
 use super::install::{launch_installer, ElevateError, ElevatedHandle, Elevator};
 use super::layout::Layout;
 use super::paths::FsProbe;
-pub use super::ports::{CoreController, ProxyReleaser, WatchdogCopy, WatchdogLauncher};
+pub use super::ports::{
+    CoreController, ProxyReleaser, SignatureVerifier, WatchdogCopy, WatchdogLauncher,
+};
 use super::previous::{PreviousInfo, RollbackArchive};
-use super::verify::{open_verified, LockedOpener};
+use super::verify::{open_verified, verify_signed, LockedOpener};
 use super::watchdog_args::version_ok;
 use std::path::Path;
 
@@ -39,6 +41,7 @@ pub struct ApplyDeps<'a> {
     pub core: &'a dyn CoreController,
     pub proxy: &'a dyn ProxyReleaser,
     pub elevator: &'a dyn Elevator,
+    pub signature: &'a dyn SignatureVerifier,
     pub archive: &'a dyn RollbackArchive,
     pub watchdog: &'a dyn WatchdogLauncher,
 }
@@ -52,14 +55,21 @@ pub struct ApplyRequest<'a> {
     pub version: &'a str,
 }
 
-/// Установка под замком: вторая параллельная получает `busy`.
+/// Установка под замком: вторая параллельная получает `busy`. Установщик
+/// запущен — замок остаётся занятым до выхода процесса (приложение вот-вот
+/// закроется, второй `update_apply` в это окно не должен пройти); отказ в UAC и
+/// сбои замок отпускают.
 pub fn apply_guarded(
     gate: &ApplyGate,
     deps: &ApplyDeps<'_>,
     request: &ApplyRequest<'_>,
 ) -> Result<ApplyOutcome, ApplyError> {
-    let _held = gate.try_enter()?;
-    apply(deps, request)
+    let held = gate.try_enter()?;
+    let outcome = apply(deps, request)?;
+    if outcome == ApplyOutcome::Installing {
+        held.keep();
+    }
+    Ok(outcome)
 }
 
 /// Исход шагов «остановить, снять прокси, запустить».
@@ -77,6 +87,14 @@ fn apply(deps: &ApplyDeps<'_>, req: &ApplyRequest<'_>) -> Result<ApplyOutcome, A
         Mode::Rollback => req.layout.previous_dir(),
     };
     let locked = open_verified(deps.fs, deps.opener, &dir, req.candidate, req.sha256)?;
+    // подпись проверяется, пока дескриптор держит файл: между проверкой и
+    // запуском с повышением подменить его нельзя; откат принимает и старую версию
+    verify_signed(
+        deps.signature,
+        &locked,
+        req.version,
+        req.mode == Mode::Rollback,
+    )?;
     let meta = PreviousInfo {
         version: req.version.to_string(),
         sha256: locked.sha256().to_string(),

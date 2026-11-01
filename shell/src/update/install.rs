@@ -5,7 +5,8 @@
 //! `ShellExecuteExW("runas")` в `runas_win.rs`; здесь только трейт, аргументы
 //! и разбор исхода, чтобы порядок шагов проверялся подставкой.
 
-use std::path::Path;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 
 /// Тихая установка NSIS.
 pub const SILENT_ARG: &str = "/S";
@@ -31,6 +32,17 @@ pub struct ElevatedHandle {
 /// вызывать нельзя.
 pub trait Elevator {
     fn run_elevated(&self, exe: &Path, args: &[&str]) -> Result<ElevatedHandle, ElevateError>;
+}
+
+/// Рабочий каталог повышенного запуска: `%SystemRoot%\\System32`, а не каталог
+/// установщика. Каталог staging доступен пользователю на запись, и процесс с
+/// правами администратора не должен искать в нём DLL по текущему каталогу.
+/// Остаётся риск поиска DLL рядом с самим exe (см. docs/UPDATE-SYSTEM.md §12.7).
+pub fn system32_dir(system_root: Option<OsString>) -> PathBuf {
+    let root = system_root
+        .filter(|v| !v.is_empty())
+        .map_or_else(|| PathBuf::from("C:\\Windows"), PathBuf::from);
+    root.join("System32")
 }
 
 /// Запустить установщик тихо.
@@ -97,6 +109,18 @@ mod tests {
         let handle = launch_installer(&rec, &exe).unwrap();
         assert_eq!(handle.pid, 4242);
         assert_eq!(rec.0.borrow().as_slice(), [(exe, vec!["/S".to_string()])]);
+    }
+
+    #[test]
+    fn the_elevated_working_directory_is_system32_not_staging() {
+        let dir = system32_dir(Some("D:\\WinNT".into()));
+        assert_eq!(dir, PathBuf::from("D:\\WinNT").join("System32"));
+        for unset in [None, Some(OsString::new())] {
+            assert_eq!(
+                system32_dir(unset),
+                PathBuf::from("C:\\Windows").join("System32")
+            );
+        }
     }
 
     #[test]

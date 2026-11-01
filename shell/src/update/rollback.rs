@@ -9,8 +9,9 @@ use super::error::ApplyError;
 use super::install::{launch_installer, ElevateError, Elevator};
 use super::layout::Layout;
 use super::paths::FsProbe;
+use super::ports::SignatureVerifier;
 use super::previous::{installer_path, PreviousStore, RollbackArchive};
-use super::verify::{open_verified, LockedOpener};
+use super::verify::{open_verified, verify_signed, LockedOpener};
 use super::watchdog::{RollbackResult, RollbackStep};
 
 /// Откат поверх хранилища прошлого установщика.
@@ -18,8 +19,9 @@ pub struct PreviousRollback<'a> {
     pub layout: &'a Layout,
     pub store: &'a PreviousStore,
     pub fs: &'a dyn FsProbe,
-    pub opener: &'a dyn LockedOpener,
+    pub opener: &'a dyn LockedOpener, // RealOpener::within(previous): файл физически в каталоге
     pub elevator: &'a dyn Elevator,
+    pub signature: &'a dyn SignatureVerifier,
 }
 
 impl RollbackStep for PreviousRollback<'_> {
@@ -33,6 +35,11 @@ impl RollbackStep for PreviousRollback<'_> {
             Ok(locked) => locked,
             Err(error) => return RollbackResult::Failed(error.code().to_string()),
         };
+        // описание отката лежит в каталоге, доступном пользователю: верить можно
+        // только подписи прошлого установщика (проверка под тем же дескриптором)
+        if let Err(error) = verify_signed(self.signature, &locked, &info.version, true) {
+            return RollbackResult::Failed(error.code().to_string());
+        }
         let launched = launch_installer(self.elevator, locked.path());
         drop(locked);
         match launched {

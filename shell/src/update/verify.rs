@@ -9,6 +9,7 @@
 use super::error::ApplyError;
 use super::hash::{ct_eq, parse_sha256_hex, sha256_reader, to_hex};
 use super::paths::{validate_in, FsProbe};
+use super::ports::SignatureVerifier;
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 
@@ -74,31 +75,36 @@ pub fn open_verified(
     verify_locked(opener, &path, expected_hex)
 }
 
-/// Настоящее открытие: на Windows — с `FILE_SHARE_READ`, остальные ОС не
-/// умеют обязательных блокировок, там обычное чтение.
-pub struct RealOpener;
+/// Файл подписи рядом с установщиком: `<установщик>.minisig`.
+pub fn signature_path(installer: &Path) -> PathBuf {
+    let mut name = installer.as_os_str().to_os_string();
+    name.push(".minisig");
+    PathBuf::from(name)
+}
 
-impl LockedOpener for RealOpener {
-    fn open_locked(&self, path: &Path) -> io::Result<Box<dyn LockedFile>> {
-        open_shared_read(path).map(|file| Box::new(file) as Box<dyn LockedFile>)
+/// Подпись установщика, пока дескриптор `locked` держит файл неизменным. Верить
+/// можно только ответу ядра: оно подтверждает подпись по ключу роли `artifact`
+/// корня сборки; версия и сумма от страницы — лишь подсказки, которые обязаны
+/// совпасть с подписанными и с суммой, посчитанной самой оболочкой.
+pub fn verify_signed(
+    verifier: &dyn SignatureVerifier,
+    locked: &LockedInstaller,
+    expected_version: &str,
+    allow_older: bool,
+) -> Result<(), ApplyError> {
+    let facts = verifier.verify(locked.path(), &signature_path(locked.path()), allow_older)?;
+    let theirs = parse_sha256_hex(&facts.sha256).ok_or(ApplyError::SignatureInvalid)?;
+    let ours = parse_sha256_hex(locked.sha256()).ok_or(ApplyError::SignatureInvalid)?;
+    if !ct_eq(&theirs, &ours) {
+        return Err(ApplyError::Sha256Mismatch);
     }
+    if facts.version != expected_version {
+        return Err(ApplyError::VersionMismatch);
+    }
+    Ok(())
 }
 
-#[cfg(windows)]
-fn open_shared_read(path: &Path) -> io::Result<std::fs::File> {
-    use std::os::windows::fs::OpenOptionsExt;
-    /// `FILE_SHARE_READ`: другим можно читать, писать и удалять — нельзя.
-    const FILE_SHARE_READ: u32 = 0x1;
-    std::fs::OpenOptions::new()
-        .read(true)
-        .share_mode(FILE_SHARE_READ)
-        .open(path)
-}
-
-#[cfg(not(windows))]
-fn open_shared_read(path: &Path) -> io::Result<std::fs::File> {
-    std::fs::File::open(path)
-}
+pub use super::open_real::{directly_in, RealOpener};
 
 #[cfg(test)]
 mod tests;

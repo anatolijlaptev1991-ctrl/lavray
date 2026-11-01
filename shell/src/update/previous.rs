@@ -73,6 +73,21 @@ fn copy_synced(from: &Path, to_dir: &Path, name: &str) -> io::Result<()> {
     target.sync_all()
 }
 
+/// Имя файла подписи рядом с установщиком.
+fn signature_name(installer: &str) -> String {
+    format!("{installer}.minisig")
+}
+
+/// Подпись установщика едет вместе с ним: откат проверяет её перед запуском с
+/// повышением. Подписи нет — копировать нечего (откат тогда не пройдёт проверку).
+fn copy_signature(from_dir: &Path, to_dir: &Path, installer: &str) -> io::Result<()> {
+    let name = signature_name(installer);
+    if from_dir.join(&name).is_file() {
+        copy_synced(&from_dir.join(&name), to_dir, &name)?;
+    }
+    Ok(())
+}
+
 fn remove_dir(dir: &Path) {
     let _ = std::fs::remove_dir_all(dir);
 }
@@ -100,7 +115,13 @@ impl RollbackArchive for PreviousStore {
     fn stage(&self, installer: &Path, meta: &PreviousInfo) -> io::Result<()> {
         let pending = self.layout.pending_dir();
         remove_dir(&pending);
-        let copied = copy_synced(installer, &pending, &meta.file);
+        let copied = copy_synced(installer, &pending, &meta.file).and_then(|()| {
+            copy_signature(
+                installer.parent().unwrap_or(Path::new("")),
+                &pending,
+                &meta.file,
+            )
+        });
         if copied.is_err() {
             remove_dir(&pending);
         }
@@ -126,6 +147,7 @@ impl RollbackArchive for PreviousStore {
         let applied = self.layout.applied_dir();
         remove_dir(&applied);
         copy_synced(&previous_dir.join(&info.file), &applied, &info.file)?;
+        copy_signature(&previous_dir, &applied, &info.file)?;
         write_info(&applied, APPLIED_FILE, &info)?;
         // установщик ещё может работать и держать свой файл: описание убираем
         // первым (откат тут же «недоступен»), остальное — по возможности

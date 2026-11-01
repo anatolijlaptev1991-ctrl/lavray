@@ -15,6 +15,7 @@ import {
 } from '../gen/lavray_pb';
 import type { Profile } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
+import { useActivePreset } from '../hooks/useActivePreset';
 import { useElevated } from '../hooks/useElevated';
 import { useI18n } from '../hooks/useI18n';
 import { CORE_UNAVAILABLE, showCoreError } from '../lib/core';
@@ -46,7 +47,7 @@ import { ImportDialog } from '../components/ImportDialog';
 import { ProfileMenu } from '../components/ProfileMenu';
 import type { ProfileMenuAnchor } from '../components/ProfileMenu';
 import { geoName } from '../lib/geo';
-import { presetRuleCount, presetTitle } from '../lib/presets';
+import { presetTitle } from '../lib/presets';
 
 
 
@@ -81,10 +82,7 @@ export function ConnectionScreen(): JSX.Element {
   const [actionMsg, setActionMsg] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [subs, setSubs] = useState<readonly { id: bigint; name: string }[]>([]);
-  // Активный пресет маршрутов — для карточки «Качество связи».
-  const [preset, setPreset] = useState<{ id: string; displayName: string; rules: number } | null>(
-    null,
-  );
+  const preset = useActivePreset(); // активный набор правил для карточки «Качество связи»
 
   const ready = status.state === CoreState.CONNECTED;
   const connecting =
@@ -142,25 +140,6 @@ export function ConnectionScreen(): JSX.Element {
         setSubs(res.groups.map((s) => ({ id: s.id, name: s.name })));
       } catch {
         /* ядро недоступно — кнопка будет disabled */
-      }
-    })();
-  }, [core]);
-
-  // Активный пресет маршрутов: имя и число правил для карточки «Качество
-  // связи» (прототип: hlPreset + hlRules).
-  useEffect(() => {
-    void (async (): Promise<void> => {
-      try {
-        const res = await core.routing.listPresets({});
-        const active0 = res.presets.find((p) => p.id === res.activePresetId);
-        if (active0 === undefined) return;
-        setPreset({
-          id: active0.id,
-          displayName: active0.displayName,
-          rules: presetRuleCount(active0),
-        });
-      } catch {
-        /* пресеты недоступны — карточка покажет «—» */
       }
     })();
   }, [core]);
@@ -704,6 +683,8 @@ export function ConnectionScreen(): JSX.Element {
       </div>
       <ConnRight
         connected={ready}
+        session={`${String(active?.id ?? 0n)}:${String(status.startedAtMs ?? 0n)}`}
+        presetId={preset?.id ?? ''}
         latencyMs={active?.testResult?.latencyMs}
         presetName={preset === null ? '—' : presetTitle(preset.id, preset.displayName, t)}
         presetRules={preset?.rules ?? 0}

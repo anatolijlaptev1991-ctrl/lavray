@@ -4,7 +4,7 @@
 // неизмеренное — «не проверено»/«—», измеренное — из CheckLeaks ядра.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createElement } from 'react';
-import { setLanguage } from '../lib/i18n';
+import { DICTIONARIES, LANGUAGES, setLanguage } from '../lib/i18n';
 import { mount, stubCore, unmountAll } from '../test-utils/coreStub';
 import type { Json } from '../test-utils/coreStub';
 import { ConnRight } from './ConnRight';
@@ -96,11 +96,15 @@ describe('карточка «Проверка утечек»', () => {
 });
 
 describe('карточка «Качество связи»', () => {
-  it('потери и DNS не измеряются: «—», без зашитых «0 %» и «12 ms»', async () => {
+  it('loss_row_absent: строки «Потери» нет (надёжного источника данных нет), зашитых «0 %» и «12 ms» тоже', async () => {
     const { health } = await render({}, { latencyMs: 43 });
 
-    expect(health.slice(0, 3)).toEqual(['Latency=43 ms', 'Packet loss=—', 'DNS resolution=—']);
+    expect(health[0]).toBe('Latency=43 ms');
+    expect(health.map((cell) => cell.split('=')[0])).not.toContain('Packet loss');
     expect(health.join('|')).not.toMatch(/0 %|12/);
+    for (const lang of LANGUAGES) {
+      expect(DICTIONARIES[lang]['health.loss'], lang).toBeUndefined();
+    }
   });
 
   it('задержка 0 (не измерялась), отрицательная (недоступен) и неизвестная — «—»', async () => {

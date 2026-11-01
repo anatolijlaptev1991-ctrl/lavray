@@ -14,7 +14,9 @@ import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
+import { importLogWarnings } from '../lib/importWarnings';
 import { onTablistKeyDown } from '../lib/tabs';
+import { ImportPreview } from './import/ImportPreview';
 import { QrTab } from './import/QrTab';
 
 type Tab = 'link' | 'qr' | 'file';
@@ -49,7 +51,7 @@ function maskLink(raw: string): string {
 }
 
 export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported }: Props): JSX.Element {
-  const { t, tf, plural } = useI18n();
+  const { t, tf } = useI18n();
   const core = useCore();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [link, setLink] = useState('');
@@ -100,11 +102,12 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
         setPreview(res.parsedProfiles);
         // Предупреждения — отброшенные опасные custom-поля (LNB-25):
         // показываем, какие поля и у каких профилей вырезаны.
-        setWarnings(
-          res.customFieldWarnings.map(
+        setWarnings([
+          ...res.customFieldWarnings.map(
             (w) => `#${String(w.profileIndex + 1)}: ${w.droppedFields.join(', ')}`,
           ),
-        );
+          ...importLogWarnings(res.log, tf), // например, XHTTP: импорт есть, подключения нет
+        ]);
         setHint(res.hint ?? '');
         // Подписку определяет ядро (в том числе Happ-ссылку и URL с портом).
         setIsSubscription(res.kind === ImportContentResponse_ContentKind.SUBSCRIPTION_URL);
@@ -121,7 +124,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
         setBusy(false);
       }
     },
-    [core],
+    [core, tf],
   );
 
   const copyHappDetails = useCallback(async (): Promise<void> => {
@@ -384,29 +387,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
             </div>
           )}
 
-          {preview !== null && (
-            <div className="card" style={{ background: 'var(--surface2)', marginTop: 12 }}>
-              <div className="card-h" style={{ marginBottom: 8 }}>
-                <span className="ic"><Icon name="search" /></span>
-                <h3 style={{ fontSize: '.875rem', fontWeight: 600 }}>
-                  {isSubscription ? t('imp.prev.subUrl') : plural('pl.p', preview.length)}
-                </h3>
-              </div>
-              {!isSubscription && (
-                <ul className="imp-prev-list">
-                  {preview.slice(0, 8).map((p, i) => (
-                    <li key={`${String(p.type)}-${String(i)}`}>
-                      <span className="mono">{p.name}</span>
-                      <span className="muted mono">
-                        {p.address}:{String(p.port)}
-                      </span>
-                    </li>
-                  ))}
-                  {preview.length > 8 && <li className="muted">…</li>}
-                </ul>
-              )}
-            </div>
-          )}
+          {preview !== null && <ImportPreview profiles={preview} isSubscription={isSubscription} />}
         </div>
 
         <div className="dlg-f">

@@ -22,6 +22,7 @@ use lavray_shell::endpoint::{
     EndpointEvent, EndpointHub, HostObserver, SupervisorHost, CORE_ENDPOINT_EVENT, ENDPOINT_WAIT,
 };
 use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
+use lavray_shell::killswitch::{self, Exit, ProxyFlags};
 use lavray_shell::launch::{wait_for_exit, LaunchArgs, WAIT_PID_TIMEOUT};
 use lavray_shell::prefs::ShellPrefs;
 use lavray_shell::profile;
@@ -255,6 +256,7 @@ fn restart_core(supervisor: tauri::State<'_, Arc<SupervisorHandle>>) {
 #[tauri::command]
 async fn set_system_proxy(
     shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>,
+    flags: tauri::State<'_, ProxyFlags>,
     enabled: bool,
     port: i64,
 ) -> Result<SetOutcome, String> {
@@ -266,7 +268,9 @@ async fn set_system_proxy(
         }
         data_dir()
     };
-    set_blocking(data, enabled, port).await
+    let done = set_blocking(data, enabled, port).await;
+    done.iter().for_each(|_| flags.on_proxy_set(enabled)); // только при успехе
+    done
 }
 
 /// request_quit — попросить надзирателя остановить ядро перед выходом (D2).
@@ -303,7 +307,7 @@ fn begin_quit(app: &tauri::AppHandle) {
             }
         }
         // Прокси снимаем до выхода: иначе в ОС остаётся прокси на мёртвый порт.
-        let _ = SysProxy::new(&data_dir()).release_on_quit();
+        let _ = killswitch::apply_exit(&data_dir(), Exit::Quit, false);
         let stopped = || supervisor.as_ref().is_none_or(|s| s.is_stopped());
         let deadline = std::time::Instant::now() + QUIT_CORE_WAIT;
         while !stopped() && std::time::Instant::now() < deadline {
@@ -502,15 +506,10 @@ impl SupervisorHost for ShellHost {
             s.core_alive = false;
             s.last_error = reason.to_string();
         }
-        self.emit_endpoint(&EndpointEvent::down());
-        // T-45: ядро умерло — значок «ошибка» (или «не подключено»).
-        tray_ui::refresh(&self.app);
-        // T-03: системный прокси, который ставили мы, смотрит на порт
-        // умершего ядра. Возвращаем снимок (shell-lifecycle §6); у нового
-        // ядра режимы выключены, пользователь включит подключение сам.
-        if let Err(e) = SysProxy::new(&data_dir()).release_on_quit() {
-            eprintln!("LAVRay: не удалось снять системный прокси после падения ядра: {e}");
-        }
+        // T-03: прокси смотрит на порт умершего ядра: вернуть снимок или, при kill
+        // switch, оставить; флаг раньше событий, «адреса нет» последним (killswitch.rs).
+        os_integration::on_core_crash(&self.app, &data_dir());
+        tray_ui::refresh(&self.app); // T-45: значок «ошибка»
     }
 
     fn spawn_failed(&self, reason: &str) {
@@ -687,7 +686,7 @@ fn main() {
         })
         .run(|app, event| {
             on_run_event(&event, || {
-                let _ = SysProxy::new(&data_dir()).release_on_quit();
+                let _ = killswitch::apply_exit(&data_dir(), Exit::Quit, false);
                 // Выход сеанса Windows тоже сюда: файл с агентским токеном не
                 // должен пережить приложение.
                 if let Some(agent) = app.try_state::<Arc<AgentAccess>>() {

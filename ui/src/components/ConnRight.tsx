@@ -6,6 +6,8 @@
 // полупустым, хотя стили (.leak-list/.hl-grid) уже были в CSS.
 import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
+import { DnsRow } from './conn-right/DnsRow';
+import { PublicIpRow } from './conn-right/PublicIpRow';
 import { Icon } from './Icon';
 import { TrafficGraph } from './TrafficGraph';
 import type { LeakReport } from '../gen/lavray_pb';
@@ -17,6 +19,10 @@ import { leakRows } from '../lib/leaks';
 
 export interface ConnRightProps {
   readonly connected: boolean;
+  /** Сеанс соединения (сервер + запуск): по нему внешний IP кэшируется на 5 минут. */
+  readonly session?: string;
+  /** Id активного набора правил: смена перечитывает подпись DNS. */
+  readonly presetId?: string;
   /** Задержка активного профиля, мс (undefined — ещё не измерялась). */
   readonly latencyMs?: number | undefined;
   /** Имя активного пресета маршрутов и число правил. */
@@ -26,6 +32,8 @@ export interface ConnRightProps {
 
 export function ConnRight({
   connected,
+  session = '',
+  presetId = '',
   latencyMs,
   presetName,
   presetRules,
@@ -66,7 +74,7 @@ export function ConnRight({
   const relTime = (ms: number): string => formatSince(ms, lang);
 
   // latency_ms ядра: 0 — не измерялась, <0 — сервер недоступен; показываем
-  // только реальный замер. Потери и время DNS ядро не измеряет: «—».
+  // только реальный замер. Потери ядро не измеряет (надёжного источника нет) — строки нет.
   const latency =
     connected && latencyMs !== undefined && latencyMs > 0
       ? `${String(latencyMs)} ${t('unit.ms')}`
@@ -134,18 +142,8 @@ export function ConnRight({
               <span className="mono">{latency}</span>
             </span>
           </div>
-          <div className="hl-cell">
-            <span className="cap">{t('health.loss')}</span>
-            <span className="val" title={t('st.na')}>
-              <span className="mono">—</span>
-            </span>
-          </div>
-          <div className="hl-cell">
-            <span className="cap">{t('health.dns')}</span>
-            <span className="val" title={t('st.na')}>
-              —
-            </span>
-          </div>
+          <PublicIpRow connected={connected} session={session} />
+          <DnsRow presetId={presetId} />
           <div className="hl-cell">
             <span className="cap">{t('health.lastCheck')}</span>
             <span className="val">

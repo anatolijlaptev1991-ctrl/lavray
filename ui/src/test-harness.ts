@@ -12,6 +12,7 @@ import { vi } from 'vitest';
 import { create } from '@bufbuild/protobuf';
 import {
   CoreStatusSchema,
+  GetTrafficSummaryResponseSchema,
   GroupSchema,
   Group_Kind,
   ListGroupsResponseSchema,
@@ -78,6 +79,7 @@ export function makeClients(opts: FakeCoreOptions = {}): CoreClients {
   );
   vi.spyOn(c.routing, 'listPresets').mockResolvedValue(create(ListPresetsResponseSchema, {}));
   vi.spyOn(c.stats, 'subscribe').mockImplementation(() => emptyStream());
+  vi.spyOn(c.stats, 'getTrafficSummary').mockResolvedValue(create(GetTrafficSummaryResponseSchema, {}));
   vi.spyOn(c.diagnostics, 'getPublicIp').mockRejectedValue(new Error('Failed to fetch'));
   return c;
 }

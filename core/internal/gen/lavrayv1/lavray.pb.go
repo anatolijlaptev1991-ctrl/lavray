@@ -707,6 +707,8 @@ const (
 	StreamSettings_NETWORK_GRPC         StreamSettings_Network = 4
 	StreamSettings_NETWORK_HTTP_UPGRADE StreamSettings_Network = 5
 	StreamSettings_NETWORK_QUIC         StreamSettings_Network = 6 // FR-UI-267 (SHOULD): поле зарезервировано контрактом;
+	// реализация транспорта — после решения о доп-протоколах
+	StreamSettings_NETWORK_XHTTP StreamSettings_Network = 7 // Xray XHTTP (бывший splithttp): ссылка импортируется, но
 )
 
 // Enum value maps for StreamSettings_Network.
@@ -719,6 +721,7 @@ var (
 		4: "NETWORK_GRPC",
 		5: "NETWORK_HTTP_UPGRADE",
 		6: "NETWORK_QUIC",
+		7: "NETWORK_XHTTP",
 	}
 	StreamSettings_Network_value = map[string]int32{
 		"NETWORK_UNSPECIFIED":  0,
@@ -728,6 +731,7 @@ var (
 		"NETWORK_GRPC":         4,
 		"NETWORK_HTTP_UPGRADE": 5,
 		"NETWORK_QUIC":         6,
+		"NETWORK_XHTTP":        7,
 	}
 )
 
@@ -3383,9 +3387,14 @@ type Profile struct {
 	// Страна/регион сервера: ISO 3166-1 alpha-2 в нижнем регистре ("jp", "nl"),
 	// пусто = неизвестна. Заполняется ядром при импорте (эмодзи-флаг, код в
 	// имени, название, TLD) — UI группирует ключи подписки по странам.
-	Geo           string `protobuf:"bytes,29,opt,name=geo,proto3" json:"geo,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Geo string `protobuf:"bytes,29,opt,name=geo,proto3" json:"geo,omitempty"`
+	// ТОЛЬКО ЧТЕНИЕ, вычисляется ядром, не хранится: непусто, если ядро не умеет
+	// собрать этот профиль. Сейчас единственная причина — "xhttp_unsupported"
+	// (транспорт XHTTP); Connect такого профиля → FAILED_PRECONDITION с
+	// ErrorInfo.reason = "transport_unsupported". Значение от клиента игнорируется.
+	UnsupportedReason string `protobuf:"bytes,30,opt,name=unsupported_reason,json=unsupportedReason,proto3" json:"unsupported_reason,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *Profile) Reset() {
@@ -3632,6 +3641,13 @@ func (x *Profile) GetGeo() string {
 	return ""
 }
 
+func (x *Profile) GetUnsupportedReason() string {
+	if x != nil {
+		return x.UnsupportedReason
+	}
+	return ""
+}
+
 type isProfile_Detail interface {
 	isProfile_Detail()
 }
@@ -3713,8 +3729,14 @@ type StreamSettings struct {
 	RealitySpx     *string                        `protobuf:"bytes,18,opt,name=reality_spx,json=realitySpx,proto3,oneof" json:"reality_spx,omitempty"`
 	PacketEncoding StreamSettings_PacketEncoding  `protobuf:"varint,15,opt,name=packet_encoding,json=packetEncoding,proto3,enum=lavray.v1.StreamSettings_PacketEncoding" json:"packet_encoding,omitempty"`
 	Multiplex      StreamSettings_MultiplexStatus `protobuf:"varint,16,opt,name=multiplex,proto3,enum=lavray.v1.StreamSettings_MultiplexStatus" json:"multiplex,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// XHTTP (Xray; network = NETWORK_XHTTP): режим ("auto", "packet-up", "stream-up",
+	// "stream-one") и дополнительные параметры (сырой JSON, параметр extra ссылки). Ядро
+	// их не использует (транспорта нет), но хранит, чтобы импорт и экспорт ссылки не
+	// теряли настройки сервера и UpdateProfile их не стирал.
+	XhttpMode     string `protobuf:"bytes,19,opt,name=xhttp_mode,json=xhttpMode,proto3" json:"xhttp_mode,omitempty"`
+	XhttpExtra    string `protobuf:"bytes,20,opt,name=xhttp_extra,json=xhttpExtra,proto3" json:"xhttp_extra,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StreamSettings) Reset() {
@@ -3864,6 +3886,20 @@ func (x *StreamSettings) GetMultiplex() StreamSettings_MultiplexStatus {
 		return x.Multiplex
 	}
 	return StreamSettings_MULTIPLEX_DEFAULT
+}
+
+func (x *StreamSettings) GetXhttpMode() string {
+	if x != nil {
+		return x.XhttpMode
+	}
+	return ""
+}
+
+func (x *StreamSettings) GetXhttpExtra() string {
+	if x != nil {
+		return x.XhttpExtra
+	}
+	return ""
 }
 
 type SocksHttpDetail struct {
@@ -15279,7 +15315,8 @@ const file_lavray_proto_rawDesc = "" +
 	"\fuplink_bytes\x18\x01 \x01(\x03R\vuplinkBytes\x12%\n" +
 	"\x0edownlink_bytes\x18\x02 \x01(\x03R\rdownlinkBytes\x12)\n" +
 	"\x0elast_update_ms\x18\x03 \x01(\x03H\x00R\flastUpdateMs\x88\x01\x01B\x11\n" +
-	"\x0f_last_update_ms\"\xfa\t\n" +
+	"\x0f_last_update_ms\"\xa9\n" +
+	"\n" +
 	"\aProfile\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\x03R\x02id\x12\x19\n" +
 	"\bgroup_id\x18\x02 \x01(\x03R\agroupId\x12*\n" +
@@ -15310,14 +15347,15 @@ const file_lavray_proto_rawDesc = "" +
 	"\x04tuic\x18\x1a \x01(\v2\x15.lavray.v1.TuicDetailH\x00R\x04tuic\x121\n" +
 	"\x06custom\x18\x1b \x01(\v2\x17.lavray.v1.CustomDetailH\x00R\x06custom\x12.\n" +
 	"\x05chain\x18\x1c \x01(\v2\x16.lavray.v1.ChainDetailH\x00R\x05chain\x12\x10\n" +
-	"\x03geo\x18\x1d \x01(\tR\x03geoB\b\n" +
+	"\x03geo\x18\x1d \x01(\tR\x03geo\x12-\n" +
+	"\x12unsupported_reason\x18\x1e \x01(\tR\x11unsupportedReasonB\b\n" +
 	"\x06detailB\b\n" +
 	"\x06_notesB\x10\n" +
 	"\x0e_created_at_msB\x10\n" +
 	"\x0e_updated_at_msB\x17\n" +
 	"\x15_custom_outbound_jsonB\x15\n" +
 	"\x13_custom_config_jsonB\t\n" +
-	"\a_stream\"\xa5\n" +
+	"\a_stream\"\xf8\n" +
 	"\n" +
 	"\x0eStreamSettings\x12;\n" +
 	"\anetwork\x18\x01 \x01(\x0e2!.lavray.v1.StreamSettings.NetworkR\anetwork\x12$\n" +
@@ -15339,7 +15377,11 @@ const file_lavray_proto_rawDesc = "" +
 	"\vreality_spx\x18\x12 \x01(\tH\x06R\n" +
 	"realitySpx\x88\x01\x01\x12Q\n" +
 	"\x0fpacket_encoding\x18\x0f \x01(\x0e2(.lavray.v1.StreamSettings.PacketEncodingR\x0epacketEncoding\x12G\n" +
-	"\tmultiplex\x18\x10 \x01(\x0e2).lavray.v1.StreamSettings.MultiplexStatusR\tmultiplex\"\x93\x01\n" +
+	"\tmultiplex\x18\x10 \x01(\x0e2).lavray.v1.StreamSettings.MultiplexStatusR\tmultiplex\x12\x1d\n" +
+	"\n" +
+	"xhttp_mode\x18\x13 \x01(\tR\txhttpMode\x12\x1f\n" +
+	"\vxhttp_extra\x18\x14 \x01(\tR\n" +
+	"xhttpExtra\"\xa6\x01\n" +
 	"\aNetwork\x12\x17\n" +
 	"\x13NETWORK_UNSPECIFIED\x10\x00\x12\x0f\n" +
 	"\vNETWORK_TCP\x10\x01\x12\x10\n" +
@@ -15348,7 +15390,8 @@ const file_lavray_proto_rawDesc = "" +
 	"NETWORK_WS\x10\x03\x12\x10\n" +
 	"\fNETWORK_GRPC\x10\x04\x12\x18\n" +
 	"\x14NETWORK_HTTP_UPGRADE\x10\x05\x12\x10\n" +
-	"\fNETWORK_QUIC\x10\x06\"E\n" +
+	"\fNETWORK_QUIC\x10\x06\x12\x11\n" +
+	"\rNETWORK_XHTTP\x10\a\"E\n" +
 	"\bSecurity\x12\x11\n" +
 	"\rSECURITY_NONE\x10\x00\x12\x10\n" +
 	"\fSECURITY_TLS\x10\x01\x12\x14\n" +

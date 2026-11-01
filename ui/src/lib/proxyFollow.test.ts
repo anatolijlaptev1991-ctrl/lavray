@@ -66,6 +66,13 @@ describe('followAction', () => {
     expect(followAction({ ...base, prev: null, next: CoreState.IDLE, applied: true })).toBeNull();
   });
 
+  it('kill switch: после падения ядра прокси остаётся, пока его не снимет пользователь', () => {
+    const crashed = { ...base, prev: CoreState.CONNECTED, next: CoreState.IDLE, applied: true };
+    expect(followAction({ ...crashed, kept: true })).toBeNull();
+    expect(followAction({ ...crashed, kept: false })).toBe('release');
+    expect(followAction({ ...crashed, next: CoreState.ERROR, kept: true })).toBeNull();
+  });
+
   it('пока идёт собственное подключение окна, не вмешивается', () => {
     expect(followAction({ ...base, busy: true })).toBeNull();
     expect(followAction({ ...base, prev: CoreState.CONNECTED, next: CoreState.IDLE, applied: true, busy: true })).toBeNull();

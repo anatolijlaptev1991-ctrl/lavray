@@ -7,7 +7,8 @@
 //     (shell/src/main.rs: закрытие в трей безусловно, окно при старте всегда);
 //   - tun.enabled ядро не читает (TUN берётся из режима Connect);
 //   - ui.conn_stat — всегда true (FR-UI-274), читателя нет;
-//   - tun.kill_switch был подписан «Строгий маршрут», как tun.strict_route.
+//   - tun.kill_switch был подписан «Строгий маршрут», как tun.strict_route; теперь
+//     «Строгая маршрутизация (strict_route)» без обещания блокировки при падении ядра.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act } from 'react';
 import { setLanguage } from '../lib/i18n';
@@ -75,14 +76,23 @@ describe('T-35: переключатели настроек', () => {
     }
   });
 
-  it('kill switch подписан как kill switch и честно описан', async () => {
+  it('tun.kill_switch подписан «Строгая маршрутизация» и не обещает блокировку при падении ядра', async () => {
     current = await mountSettings();
-    const kill = switches(current.container).find((el) => /kill switch/i.test(el.getAttribute('aria-label') ?? ''));
-    expect(kill, 'переключатель kill switch (tun.kill_switch) должен остаться, но под своим именем').toBeDefined();
-    const row = kill!.closest('.set-row');
-    expect(row?.querySelector('.set-d')?.textContent ?? '').toMatch(/not implemented/i);
-    await click(kill!);
+    const strict = switches(current.container).find((el) => /strict_route/i.test(el.getAttribute('aria-label') ?? ''));
+    expect(strict, 'переключатель tun.kill_switch должен остаться, но под честным именем').toBeDefined();
+    const text = strict!.closest('.set-row')?.querySelector('.set-d')?.textContent ?? '';
+    expect(text).not.toMatch(/not implemented/i);
+    expect(text).toMatch(/nothing is blocked/i);
+    await click(strict!);
     expect(Object.keys(current.setSettings.mock.calls[0]![0].values)).toEqual(['tun.kill_switch']);
+  });
+
+  it('connect.kill_switch_proxy: переключатель пишет собственный ключ', async () => {
+    current = await mountSettings();
+    const proxy = switches(current.container).find((el) => /keep the proxy/i.test(el.getAttribute('aria-label') ?? ''));
+    expect(proxy, 'переключатель kill switch прокси').toBeDefined();
+    await click(proxy!);
+    expect(Object.keys(current.setSettings.mock.calls[0]![0].values)).toEqual(['connect.kill_switch_proxy']);
   });
 
   it('пустых разделов «Поведение» и «Системная интеграция» в оглавлении нет', async () => {

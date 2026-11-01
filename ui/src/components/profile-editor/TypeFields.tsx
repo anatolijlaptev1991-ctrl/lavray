@@ -9,7 +9,6 @@ import {
   ProfileType,
   ShadowsocksDetail_Uot,
   SocksHttpDetail_Proto,
-  StreamSettings_Network,
   StreamSettings_Security,
   TuicDetail_CongestionControl,
   TuicDetail_UdpRelayMode,
@@ -19,6 +18,7 @@ import { ChainField } from './ChainField';
 import { SelectField, SwitchField, TextAreaField, TextField } from './fields';
 import type { Option } from './fields';
 import { isV2rayType } from './form';
+import { networkHasPath, networkOptions } from './networks';
 import type { Form, FormErrors } from './form';
 
 export type SetField = <K extends keyof Form>(key: K, value: Form[K]) => void;
@@ -64,14 +64,6 @@ const VMESS_CIPHERS = plain(['auto', 'none', 'zero', 'aes-128-gcm', 'chacha20-po
 const SOCKS_VERSIONS: readonly Option<SocksHttpDetail_Proto>[] = [
   { value: SocksHttpDetail_Proto.SOCKS4, label: 'SOCKS4' },
   { value: SocksHttpDetail_Proto.SOCKS5, label: 'SOCKS5' },
-];
-
-const NETWORKS: readonly Option<StreamSettings_Network>[] = [
-  { value: StreamSettings_Network.TCP, label: 'TCP' },
-  { value: StreamSettings_Network.WS, label: 'WebSocket' },
-  { value: StreamSettings_Network.GRPC, label: 'gRPC' },
-  { value: StreamSettings_Network.HTTP, label: 'HTTP/2' },
-  { value: StreamSettings_Network.HTTP_UPGRADE, label: 'HTTPUpgrade' },
 ];
 
 const SECURITIES: readonly Option<StreamSettings_Security>[] = [
@@ -299,10 +291,7 @@ function JsonFields({ f, set, errors }: BlockProps & { readonly errors: FormErro
 
 function TransportFold({ f, set }: BlockProps): JSX.Element {
   const { t } = useI18n();
-  const hasPath =
-    f.network === StreamSettings_Network.WS ||
-    f.network === StreamSettings_Network.HTTP ||
-    f.network === StreamSettings_Network.HTTP_UPGRADE;
+  const hasPath = networkHasPath(f.network);
   return (
     <details className="fold" open>
       <summary>
@@ -313,7 +302,7 @@ function TransportFold({ f, set }: BlockProps): JSX.Element {
           id="edf-network"
           label={t('ed.transport')}
           value={f.network}
-          options={NETWORKS}
+          options={networkOptions(f.network)}
           onChange={(v) => {
             set('network', v);
           }}

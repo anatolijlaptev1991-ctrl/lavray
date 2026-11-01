@@ -23,6 +23,8 @@ export const UI_STATE_KEYS: readonly string[] = [
   'lavray.startMinimized',
   'lavray.notify',
   'lavray.hotkeyConnect',
+  // Хвосты B: копия настройки ядра connect.kill_switch_proxy для оболочки (lib/killSwitch.ts).
+  'lavray.killSwitchProxy',
 ];
 
 function inShell(): boolean {

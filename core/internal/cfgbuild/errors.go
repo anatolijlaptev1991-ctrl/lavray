@@ -9,14 +9,21 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 )
+
+// errorDomain — домен ErrorInfo во всех ошибках ядра (proto/lavray.proto).
+const errorDomain = "lavray.core"
 
 // Error — типизированная ошибка сборки конфига: Connect-код + путь к ключу,
 // из-за которого ошибка (для INVALID_ARGUMENT allowlist-мержа).
 type Error struct {
 	Code connect.Code
 	Key  string // ключ/секция конфига, напр. "inbounds" или "experimental.clash_api"
-	msg  string
+	// Reason — стабильный код причины для ErrorInfo.reason ("" — без детали);
+	// UI выбирает по нему текст, а не по сообщению.
+	Reason string
+	msg    string
 }
 
 func (e *Error) Error() string {
@@ -28,7 +35,13 @@ func (e *Error) Error() string {
 
 // ConnectError оборачивает ошибку в connect.Error для API-слоя (W6).
 func (e *Error) ConnectError() *connect.Error {
-	return connect.NewError(e.Code, e)
+	ce := connect.NewError(e.Code, e)
+	if e.Reason != "" {
+		if d, err := connect.NewErrorDetail(&errdetails.ErrorInfo{Reason: e.Reason, Domain: errorDomain}); err == nil {
+			ce.AddDetail(d)
+		}
+	}
+	return ce
 }
 
 // invalidArgument — INVALID_ARGUMENT с именем ключа (формат msg повторно

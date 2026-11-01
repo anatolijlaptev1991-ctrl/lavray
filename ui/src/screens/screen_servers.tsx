@@ -11,20 +11,24 @@ import type { Profile } from '../gen/lavray_pb';
 import { useCore, useCoreStatus, useProfiles } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useKbdLabel } from '../hooks/useKbdLabel';
+import { useProfileActions } from '../hooks/useProfileActions';
 import { useQrHotkey } from '../hooks/useQrHotkey';
 import { showCoreError } from '../lib/core';
 import { groupByGeo } from '../lib/geo';
 import { MANUAL_FILTER, groupDisplayName, importGroupId, newServerGroupId } from '../lib/groups';
-import { formatMs, type MessageKey } from '../lib/i18n';
+import type { MessageKey } from '../lib/i18n';
 import { testRequest } from '../lib/testRequest';
 import type { TestRun } from '../lib/testRequest';
-import { formatFullReport, isTestDown, isTestNotApplicable, resultLabel } from '../lib/testResult';
+import { formatFullReport, isTestDown, resultLabel } from '../lib/testResult';
 import { ProfileEditor } from '../components/ProfileEditor';
-import { CustomBadge } from '../components/servers/CustomBadge';
+import { ProfileRow } from '../components/servers/ProfileRow';
+import type { RowProps } from '../components/servers/ProfileRow';
 import { typeBadge } from '../components/servers/typeBadge';
 import { ImportDialog } from '../components/ImportDialog';
 import { QrDialog } from '../components/QrDialog';
+import { CleanupDialog } from '../components/servers/CleanupDialog';
 import { RowMenu } from '../components/servers/RowMenu';
+import { GroupTrafficSummary } from '../components/GroupTrafficSummary';
 import { FullTestDialog } from '../components/FullTestDialog';
 import { ContextMenu } from '../components/ContextMenu';
 import type { MenuAnchor } from '../components/ContextMenu';
@@ -99,6 +103,9 @@ export function ServersScreen(): JSX.Element {
   // Профиль, чей QR-код показан (пункт меню строки или Ctrl+Q).
   const [qrFor, setQrFor] = useState<Profile | null>(null);
   const [groupsOpen, setGroupsOpen] = useState(false);
+  const [cleanupOpen, setCleanupOpen] = useState(false);
+  // Дублирование, сброс трафика, разрешение доменов, экспорт и перенос из меню строки.
+  const rowActions = useProfileActions({ groups, refresh, onMessage: setMsg, onError: setErr });
   const testAbort = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -413,6 +420,10 @@ export function ServersScreen(): JSX.Element {
         </div>
       )}
 
+      {groupFilter !== MANUAL_FILTER && (
+        <GroupTrafficSummary groupId={groupFilter === 'all' ? null : BigInt(groupFilter)} />
+      )}
+
       <div className="prof-toolbar">
         <div className="searchwrap">
           <span className="ic">
@@ -606,6 +617,16 @@ export function ServersScreen(): JSX.Element {
         >
           <Icon name="plus" />
           <span>{t('prof.add')}</span>
+        </button>
+        <button
+          className="btn btn-ghost btn-sm"
+          disabled={groups.length === 0}
+          onClick={() => {
+            setCleanupOpen(true);
+          }}
+        >
+          <Icon name="trash" />
+          <span>{t('clean.btn')}</span>
         </button>
         <span className="flex1" />
         <button
@@ -865,6 +886,24 @@ export function ServersScreen(): JSX.Element {
           onDelete={() => {
             setConfirmDelete({ ids: [rowMenu.profile.id], count: 1 });
           }}
+          onAction={(action) => {
+            rowActions.run(action, rowMenu.profile);
+          }}
+        />
+      )}
+      {rowActions.dialog}
+      {cleanupOpen && (
+        <CleanupDialog
+          groups={groups}
+          profiles={allProfiles}
+          initialGroupId={/^\d+$/.test(groupFilter) ? BigInt(groupFilter) : undefined}
+          onClose={() => {
+            setCleanupOpen(false);
+          }}
+          onDone={(removed) => {
+            refresh();
+            setMsg(tf('clean.done', { n: removed }));
+          }}
         />
       )}
 
@@ -885,148 +924,5 @@ export function ServersScreen(): JSX.Element {
         />
       )}
     </div>
-  );
-}
-
-interface RowProps {
-  readonly p: Profile;
-  readonly compact: boolean;
-  readonly checked: boolean;
-  readonly latencyLabel: string | undefined;
-  /** Строка отчёта полного теста из текущего прогона; undefined — брать из профиля. */
-  readonly reportLabel: string | undefined;
-  readonly onCheck: (on: boolean) => void;
-  readonly onEdit: () => void;
-  readonly onFav: () => void;
-  readonly onDelete: () => void;
-  /** Custom-поля подтверждены: список перечитывается, бейдж «не подтверждено» уходит. */
-  readonly onCustomConfirmed: () => void;
-  /** Меню строки открыто: aria-expanded у кнопки «≡». */
-  readonly menuOpen: boolean;
-  /** Меню строки (копировать ссылку / тест / удалить): прототип profileMenu. */
-  readonly onRowMenu: (anchor: MenuAnchor) => void;
-  /** Бейдж типа: подпись и суффикс класса (.badge.bt-<cls>). */
-  readonly badge: { readonly cls: string; readonly label: string };
-  /** Сервер подключён/подключается прямо сейчас — бейдж «Активен». */
-  readonly active: boolean;
-  readonly activeDot: 'ok' | 'warn';
-}
-
-function ProfileRow({
-  p,
-  compact,
-  checked,
-  latencyLabel,
-  reportLabel,
-  onCheck,
-  onEdit,
-  onFav,
-  onDelete,
-  onCustomConfirmed,
-  menuOpen,
-  onRowMenu,
-  badge,
-  active,
-  activeDot,
-}: RowProps): JSX.Element {
-  const { t, tf, lang } = useI18n();
-  const moreRef = useRef<HTMLButtonElement | null>(null);
-  // Меню строки привязано к кнопке «≡» (прототип: row.querySelector('[data-menu-p]').click()).
-  const openMenu = (): void => {
-    const btn = moreRef.current;
-    if (btn === null) return;
-    const r = btn.getBoundingClientRect();
-    onRowMenu({ at: { x: r.left - 160, y: r.bottom + 4 }, trigger: btn });
-  };
-  const ms = p.testResult?.latencyMs;
-  const na = isTestNotApplicable(p.testResult);
-  const delay =
-    latencyLabel ?? (na ? t('test.na') : ms !== undefined && ms > 0 ? formatMs(ms, lang) : '—');
-  const down = isTestDown(p.testResult);
-  const report = reportLabel ?? formatFullReport(p.testResult?.fullReport, t, lang);
-  return (
-    <li
-      className={`prow${checked ? ' sel' : ''}${active ? ' active' : ''}`}
-      onKeyDown={(e) => {
-        // Shift+F10 и клавиша ContextMenu открывают меню строки.
-        if ((e.key === 'F10' && e.shiftKey) || e.key === 'ContextMenu') {
-          e.preventDefault();
-          openMenu();
-        }
-      }}
-      onContextMenu={(e) => {
-        e.preventDefault();
-        openMenu();
-      }}
-    >
-      <input
-        type="checkbox"
-        className="prow-chk"
-        checked={checked}
-        aria-label={tf('srv.select', { name: p.name })}
-        onChange={(e) => {
-          onCheck(e.target.checked);
-        }}
-      />
-      <button
-        className={`prow-fav${p.favorite ? ' on' : ''}`}
-        aria-label={p.favorite ? t('prof.favRm') : t('prof.favAdd')}
-        title={p.favorite ? t('prof.favRm') : t('prof.favAdd')}
-        onClick={onFav}
-      >
-        <Icon name="star" />
-      </button>
-      <button className="prow-main" onClick={onEdit} title={p.name}>
-        <span className="prow-title">
-          <span className="prow-name">{p.name}</span>
-          <span className={`badge bt-${badge.cls}`}>{badge.label}</span>
-          {!compact &&
-            p.tags.map((tag) => (
-              <span className="p-tag" key={tag}>
-                {tag}
-              </span>
-            ))}
-          {active && (
-            <span className="badge badge-ok">
-              <span className={`dot ${activeDot}`} />
-              {t('srv.active')}
-            </span>
-          )}
-        </span>
-        {!compact && p.address !== '' && (
-          <span className="prow-addr mono">
-            {p.address}:{String(p.port)}
-          </span>
-        )}
-      </button>
-      <CustomBadge profile={p} onConfirmed={onCustomConfirmed} />
-      <span className="prow-res">
-        <span className={`prow-lat mono${down ? ' err' : delay === '—' ? ' na' : ''}`}>{delay}</span>
-        {report !== '' && (
-          <span className="prow-rep mono" title={report}>
-            {report}
-          </span>
-        )}
-      </span>
-      <button
-        className="prow-more btn btn-ic btn-sm"
-        aria-label={t('aria.menu')}
-        title={t('aria.menu')}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        ref={moreRef}
-        onClick={openMenu}
-      >
-        <Icon name="dots" size={16} />
-      </button>
-      <button
-        className="prow-del btn btn-ic btn-sm"
-        aria-label={t('common.delete')}
-        title={t('common.delete')}
-        onClick={onDelete}
-      >
-        <Icon name="trash" />
-      </button>
-    </li>
   );
 }

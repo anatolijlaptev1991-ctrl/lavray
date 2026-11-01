@@ -12,6 +12,8 @@ import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import type { MessageKey } from '../lib/i18n';
 import { Icon } from '../components/Icon';
+import { fixTarget } from './diag/fixTarget';
+import { RuntimeConfigCard } from './diag/RuntimeConfigCard';
 
 type RunState = 'pending' | 'run' | 'ok' | 'warn' | 'err' | 'skip';
 
@@ -212,15 +214,7 @@ export function DiagScreen(): JSX.Element {
                 <button
                   className="btn btn-sec btn-sm chk-fix"
                   onClick={() => {
-                    const target =
-                      r.fixCode === 'open_dns'
-                        ? 'screen=rules&tab=dns'
-                        : r.fixCode === 'open_subscriptions' || r.fixCode === 'open_subscription'
-                          ? 'screen=servers&tab=subscriptions'
-                          : r.fixCode === 'change_port' || r.fixCode === 'restart_profile'
-                            ? 'screen=settings'
-                            : 'screen=connection';
-                    window.location.hash = target;
+                    window.location.hash = fixTarget(r.fixCode);
                   }}
                 >
                   {t(FIX_LABEL[r.fixCode] ?? 'err.retry')}
@@ -260,6 +254,8 @@ export function DiagScreen(): JSX.Element {
           </div>
         )}
       </div>
+
+      <RuntimeConfigCard />
 
       <p style={{ marginTop: 12 }}>
         <button

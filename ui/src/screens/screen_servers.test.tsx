@@ -179,21 +179,30 @@ describe('T-39: меню строки и режима теста с клавиа
     expect(menu(t.c)?.getAttribute('aria-label')).toBe('Menu');
     expect(trigger?.getAttribute('aria-expanded')).toBe('true');
     const list = items(t.c);
-    expect(list.map((i) => (i.textContent ?? '').trim())).toEqual(['Copy link', 'Show QR code', 'Latency test', 'Delete']);
+    expect(list.map((i) => (i.textContent ?? '').trim())).toEqual([
+      'Copy link',
+      'Show QR code',
+      'Latency test',
+      'Move to group…',
+      'Duplicate',
+      'Resolve domain to IP',
+      'Reset traffic',
+      'Export config…',
+      'Delete',
+    ]);
+    const last = list.length - 1;
     expect(document.activeElement).toBe(list[0]);
 
     press('ArrowDown');
     expect(document.activeElement).toBe(list[1]);
-    press('ArrowDown');
-    press('ArrowDown');
-    press('ArrowDown'); // по кругу
+    for (let i = 1; i < list.length; i += 1) press('ArrowDown'); // по кругу
     expect(document.activeElement).toBe(list[0]);
     press('ArrowUp');
-    expect(document.activeElement).toBe(list[3]);
+    expect(document.activeElement).toBe(list[last]);
     press('Home');
     expect(document.activeElement).toBe(list[0]);
     press('End');
-    expect(document.activeElement).toBe(list[3]);
+    expect(document.activeElement).toBe(list[last]);
     press('l'); // type-ahead: «Latency test»
     expect(document.activeElement).toBe(list[2]);
 

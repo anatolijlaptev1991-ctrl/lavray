@@ -170,7 +170,7 @@ func (s *Server) updateOne(ctx context.Context, groupID int64, stream *connect.S
 		if sendErr != nil {
 			return
 		}
-		if !emit && p.Phase != lavrayv1.SubscriptionProgress_PHASE_FAILED {
+		if !emit && !passesQuiet(p.Phase) {
 			return
 		}
 		p.GroupId = groupID

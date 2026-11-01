@@ -65,11 +65,24 @@ func NormalizeCustomRules(raw string) (string, error) {
 	if err != nil || len(items) == 0 {
 		return "", err
 	}
-	out, err := json.Marshal(items)
-	if err != nil {
-		return "", fmt.Errorf("custom_rules: %w", err)
+	// json.Compact, а не json.Marshal: Marshal экранирует <, > и & (< — 6 байт
+	// вместо 1), и сохранённое значение перерастало бы предел, который проверяет
+	// сборка конфига.
+	var buf bytes.Buffer
+	buf.WriteByte('[')
+	for i, it := range items {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		if err := json.Compact(&buf, it); err != nil {
+			return "", fmt.Errorf("custom_rules[%d]: %w", i, err)
+		}
 	}
-	return string(out), nil
+	buf.WriteByte(']')
+	if buf.Len() > MaxCustomRulesBytes {
+		return "", fmt.Errorf("custom_rules: %d байт после нормализации, предел %d", buf.Len(), MaxCustomRulesBytes)
+	}
+	return buf.String(), nil
 }
 
 // ParseCustomRules разбирает запись в список правил для сборки конфига

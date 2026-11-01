@@ -31,7 +31,7 @@ func validateNekoPath(path string) (string, error) {
 	fi, err := os.Stat(path)
 	switch {
 	case errors.Is(err, os.ErrNotExist):
-		return "", notFound("каталог %q", path)
+		return "", notFound("каталог %q не найден", path)
 	case err != nil:
 		return "", invalidArg("каталог %q недоступен: %v", path, err)
 	case !fi.IsDir():

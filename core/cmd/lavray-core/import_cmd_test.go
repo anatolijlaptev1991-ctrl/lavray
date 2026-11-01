@@ -203,3 +203,15 @@ func fileHash(t *testing.T, path string) string {
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
 }
+
+// Неверный --from отклоняется до открытия базы: пустой lavray.db не создаётся.
+func TestImportNekoBoxCmdBadFromCreatesNoDatabase(t *testing.T) {
+	data := filepath.Join(tempData(t), "fresh")
+	var out, errOut bytes.Buffer
+	if code := runImportNekoBox([]string{"--data", data, "--from", filepath.Join(data, "нет")}, &out, &errOut); code != 1 {
+		t.Fatalf("код %d, ожидался 1 (%s)", code, errOut.String())
+	}
+	if _, err := os.Stat(data); !os.IsNotExist(err) {
+		t.Fatalf("каталог данных создан до проверки --from: %v", err)
+	}
+}

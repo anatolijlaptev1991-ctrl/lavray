@@ -69,9 +69,17 @@ func commonColumns(live, backup []string) []string {
 	return out
 }
 
-// copyTable заменяет строки таблицы строками копии по общим колонкам, кроме
+// clearTable удаляет строки таблицы, кроме исключённых политикой.
+func clearTable(ctx context.Context, conn *sql.Conn, table string) error {
+	if _, err := conn.ExecContext(ctx, `DELETE FROM main.`+quoteIdent(table)+excludedWhere(table)); err != nil {
+		return fmt.Errorf("store: очистка %s: %w", table, err)
+	}
+	return nil
+}
+
+// fillTable вставляет в таблицу строки копии по общим колонкам, кроме
 // исключённых политикой.
-func copyTable(ctx context.Context, conn *sql.Conn, table string) error {
+func fillTable(ctx context.Context, conn *sql.Conn, table string) error {
 	live, err := tableColumns(ctx, conn, "main", table)
 	if err != nil {
 		return err
@@ -84,13 +92,9 @@ func copyTable(ctx context.Context, conn *sql.Conn, table string) error {
 	if len(cols) == 0 {
 		return fmt.Errorf("store: в копии нет таблицы %s", table)
 	}
-	name, where := quoteIdent(table), excludedWhere(table)
-	if _, err := conn.ExecContext(ctx, `DELETE FROM main.`+name+where); err != nil {
-		return fmt.Errorf("store: очистка %s: %w", table, err)
-	}
-	list := strings.Join(cols, ", ")
+	name, list := quoteIdent(table), strings.Join(cols, ", ")
 	if _, err := conn.ExecContext(ctx,
-		`INSERT INTO main.`+name+` (`+list+`) SELECT `+list+` FROM bk.`+name+where); err != nil {
+		`INSERT INTO main.`+name+` (`+list+`) SELECT `+list+` FROM bk.`+name+excludedWhere(table)); err != nil {
 		return fmt.Errorf("store: перенос %s: %w", table, err)
 	}
 	return nil

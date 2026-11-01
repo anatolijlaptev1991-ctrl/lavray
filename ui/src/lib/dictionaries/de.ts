@@ -1045,7 +1045,7 @@ export const deDict: Record<string, string> = {
   "bk.replaceWarn": "Alle aktuellen Server, Abos, Gruppen und Einstellungen werden durch die Daten der Sicherung ersetzt.",
   "bk.replaceBtn": "Daten ersetzen …",
   "bk.confirmTitle": "Alle Daten ersetzen?",
-  "bk.confirmText": "Die aktuellen Daten werden gelöscht und durch den Inhalt der Sicherung ersetzt. Das lässt sich nicht rückgängig machen. Prüfen Sie, ob es die gewünschte Sicherung ist.",
+  "bk.confirmText": "Die aktuellen Daten werden gelöscht und durch den Inhalt der Sicherung ersetzt. Dabei werden auch sicherheitsrelevante Einstellungen ersetzt: Zugriff für KI-Agenten, Adresse des Webpanels und Core-Geheimnisse entsprechen danach der Datei. Das lässt sich nicht rückgängig machen. Prüfen Sie, ob es die gewünschte Sicherung ist.",
   "bk.confirmOk": "Ersetzen",
   "bk.restoring": "Wird wiederhergestellt …",
   "bk.done": "Die Daten wurden aus der Sicherung wiederhergestellt.",
@@ -1063,4 +1063,5 @@ export const deDict: Record<string, string> = {
   "bk.err.busy": "Es läuft bereits ein anderer Vorgang mit der Sicherung – versuchen Sie es gleich noch einmal",
   "bk.err.read": "Die Datei konnte nicht gelesen werden",
   "bk.err.save": "Die Datei konnte nicht gespeichert werden",
+  "bk.err.failed": "Der Vorgang mit der Sicherung ist fehlgeschlagen. Einzelheiten stehen im Core-Protokoll",
 }

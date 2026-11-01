@@ -48,19 +48,31 @@ func (b *backupService) checkReplaceAllowed() error {
 	return nil
 }
 
-// replaceAll атомарно заменяет данные. Планировщик подписок останавливается на
-// время замены и запускается заново; результат записи события — подписчикам.
+// replaceAll атомарно заменяет данные. Замена держит guard на запись: пока она
+// идёт, запуск подключения (connect_guard.go) отказывает, а уже начавшийся
+// дожидается конца, и проверка «подключения нет» остаётся верной до самого
+// Restore. Планировщик подписок останавливается на время замены и запускается
+// заново. Ошибки возвращаются как есть: наружу их превращает b.failed.
 func (b *backupService) replaceAll(ctx context.Context, opened *openedBackup) (*lavrayv1.ImportBackupResponse, error) {
 	st := b.srv.st
+	if b.beforeLock != nil {
+		b.beforeLock()
+	}
+	b.guard.Lock()
+	defer b.guard.Unlock()
 	before, err := st.Settings()
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, err
 	}
 	resume := b.srv.sched.pause()
 	defer resume()
-	// между проверкой и остановкой планировщика мог начаться Connect
 	if err := b.checkReplaceAllowed(); err != nil {
 		return nil, err
+	}
+	if b.onReplacing != nil {
+		if err := b.onReplacing(); err != nil {
+			return nil, err
+		}
 	}
 	if err := st.Restore(ctx, opened.path); err != nil {
 		if cerr := contentBackupError(err); cerr != err {
@@ -71,18 +83,18 @@ func (b *backupService) replaceAll(ctx context.Context, opened *openedBackup) (*
 	b.resetAfterRestore()
 	after, err := st.Settings()
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, err
 	}
 	ev, needsRestart := settingsDiff(before, after)
 	b.srv.publishSettingsChanged(ev)
 
 	stats, err := st.Stats(ctx)
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, err
 	}
 	schema, err := st.SchemaVersion()
 	if err != nil {
-		return nil, mapErr(err)
+		return nil, err
 	}
 	return &lavrayv1.ImportBackupResponse{
 		Restored:        liveSummary(opened.doc, stats, schema),

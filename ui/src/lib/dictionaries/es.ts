@@ -1045,7 +1045,7 @@ export const esDict: Record<string, string> = {
   "bk.replaceWarn": "Todos los servidores, suscripciones, grupos y ajustes actuales se sustituirán por los datos de la copia.",
   "bk.replaceBtn": "Sustituir datos…",
   "bk.confirmTitle": "¿Sustituir todos los datos?",
-  "bk.confirmText": "Los datos actuales se borrarán y se sustituirán por el contenido de la copia. No se puede deshacer. Asegúrate de que es la copia que quieres.",
+  "bk.confirmText": "Los datos actuales se borrarán y se sustituirán por el contenido de la copia. También se sustituyen los ajustes de seguridad: el acceso para agentes de IA, la dirección del panel web y los secretos del núcleo serán los del archivo. No se puede deshacer. Asegúrate de que es la copia que quieres.",
   "bk.confirmOk": "Sustituir",
   "bk.restoring": "Restaurando…",
   "bk.done": "Datos restaurados desde la copia.",
@@ -1063,4 +1063,5 @@ export const esDict: Record<string, string> = {
   "bk.err.busy": "Ya hay otra operación con la copia en curso: inténtalo de nuevo en un momento",
   "bk.err.read": "No se pudo leer el archivo",
   "bk.err.save": "No se pudo guardar el archivo",
+  "bk.err.failed": "No se pudo completar la operación con la copia. Los detalles están en el registro del núcleo",
 }

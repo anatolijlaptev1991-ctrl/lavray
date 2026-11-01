@@ -36,7 +36,7 @@ export function onSessionExpired(listener: () => void): () => void {
 }
 
 // Вызовы самого входа сообщают об ошибках сами: неверный пароль — не «сессия истекла».
-const OWN_ERRORS_SERVICE = 'lavray.v1.WebSessionService';
+const OWN_ERRORS_SERVICE = `lavray.v1.WebSessionService`;
 
 /** Перехватчики транспорта по режиму авторизации. */
 export function authInterceptors(auth: CoreAuth | undefined): Interceptor[] {

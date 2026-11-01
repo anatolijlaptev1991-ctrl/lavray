@@ -70,20 +70,20 @@ func (g *Gate) serveRPC(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	if r.Method != http.MethodPost {
 		w.Header().Set("Allow", http.MethodPost)
-		writeRPCError(w, http.StatusMethodNotAllowed, "unimplemented", "RPC принимает только POST")
+		rejectRPC(w, r, http.StatusMethodNotAllowed, "unimplemented", "RPC принимает только POST")
 		return
 	}
 	info := RequestInfo{IP: clientIP(r), Secure: r.TLS != nil}
 	switch {
 	case publicProcedures[r.URL.Path]:
 		if CheckOrigin(r, false) != nil {
-			writeRPCError(w, http.StatusForbidden, "permission_denied", "Origin не совпадает с Host")
+			rejectRPC(w, r, http.StatusForbidden, "permission_denied", "Origin не совпадает с Host")
 			return
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, publicBodyLimit)
 	case r.Header.Get("Authorization") != "":
 		if !g.bearerOK(r) {
-			writeRPCError(w, http.StatusUnauthorized, "unauthenticated", "неверный токен")
+			rejectRPC(w, r, http.StatusUnauthorized, "unauthenticated", "неверный токен")
 			return
 		}
 		info.Bearer = true
@@ -100,15 +100,15 @@ func (g *Gate) cookieAuth(w http.ResponseWriter, r *http.Request, info *RequestI
 	token := CookieToken(r)
 	sess, ok := g.Sessions.Validate(token)
 	if !ok {
-		writeRPCError(w, http.StatusUnauthorized, "unauthenticated", "требуется вход")
+		rejectRPC(w, r, http.StatusUnauthorized, "unauthenticated", "требуется вход")
 		return false
 	}
 	if CheckOrigin(r, true) != nil {
-		writeRPCError(w, http.StatusForbidden, "permission_denied", "Origin не совпадает с Host")
+		rejectRPC(w, r, http.StatusForbidden, "permission_denied", "Origin не совпадает с Host")
 		return false
 	}
 	if r.URL.Path != ProcWhoAmI && !CSRFEqual(r.Header.Get(CSRFHeader), sess.CSRF) {
-		writeRPCError(w, http.StatusForbidden, "permission_denied", "неверный CSRF-токен")
+		rejectRPC(w, r, http.StatusForbidden, "permission_denied", "неверный CSRF-токен")
 		return false
 	}
 	info.Session, info.Token = &sess, token

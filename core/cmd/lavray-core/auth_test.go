@@ -5,6 +5,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
@@ -72,5 +73,24 @@ func TestAuthMiddlewareEmptyTokenRejectsEverything(t *testing.T) {
 		if rec.Code != http.StatusUnauthorized {
 			t.Errorf("Authorization=%q при пустом токене ядра: статус %d, ожидался 401", header, rec.Code)
 		}
+	}
+}
+
+// D-4: отказ 401 дочитывает тело запроса — иначе клиент с Connection: close
+// на Windows иногда получал RST вместо ответа.
+func TestAuthRejectionDrainsBody(t *testing.T) {
+	ok := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	h := authMiddleware(ok, "d4-secret-token-0123456789", logs.NewMux(10))
+	body := strings.NewReader(strings.Repeat("x", 64<<10))
+	req := httptest.NewRequest(http.MethodPost, "/lavray.v1.CoreService/GetStatus", body)
+	req.Header.Set("Authorization", "Bearer wrong")
+	req.Close = true
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("статус %d, ожидался 401", rec.Code)
+	}
+	if left := body.Len(); left != 0 {
+		t.Fatalf("тело не дочитано, осталось %d байт", left)
 	}
 }

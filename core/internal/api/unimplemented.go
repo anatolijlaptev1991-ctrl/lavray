@@ -34,26 +34,6 @@ func (s *Server) ResolveDomains(ctx context.Context, req *connect.Request[lavray
 	return nil, errNotYetW6
 }
 
-func (s *Server) CreatePreset(ctx context.Context, req *connect.Request[lavrayv1.CreatePresetRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) UpdatePreset(ctx context.Context, req *connect.Request[lavrayv1.UpdatePresetRequest]) (*connect.Response[lavrayv1.UpdatePresetResponse], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) DeletePreset(ctx context.Context, req *connect.Request[lavrayv1.DeletePresetRequest]) (*connect.Response[lavrayv1.Empty], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) ResetBuiltinPreset(ctx context.Context, req *connect.Request[lavrayv1.ResetBuiltinPresetRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) ImportNekoRayRoute(ctx context.Context, req *connect.Request[lavrayv1.ImportNekoRayRouteRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
-	return nil, errNotYetW6
-}
-
 func (s *Server) ResetSettings(ctx context.Context, req *connect.Request[lavrayv1.ResetSettingsRequest]) (*connect.Response[lavrayv1.SetSettingsResponse], error) {
 	return nil, errNotYetW6
 }

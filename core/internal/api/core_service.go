@@ -93,7 +93,7 @@ func (s *Server) startRunLocked(ctx context.Context, profile *model.Profile, mod
 	if err != nil {
 		return nil, nil, err
 	}
-	warnings = append(warnings, tunMixedWarning(result.Config, mode)...) // T-55: по факту конфига
+	warnings = append(warnings, s.buildWarnings(result, mode)...)
 	configJSON, err := cfgbuild.MarshalIndent(result.Config)
 	if err != nil {
 		return nil, nil, err
@@ -159,7 +159,7 @@ func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.Conn
 			return nil, err
 		}
 		warnings := append([]string{"validate_only: конфиг собран и валиден, инстанс не запущен"}, inlineWarns...)
-		warnings = append(warnings, tunMixedWarning(built.Config, in.GetMode())...) // T-55: по факту конфига
+		warnings = append(warnings, s.buildWarnings(built, in.GetMode())...)
 		return connect.NewResponse(&lavrayv1.ConnectResponse{
 			Status:   s.coreStatus(),
 			Warnings: warnings,

@@ -28,7 +28,7 @@ import { ConnsScreen } from './screens/conns/ConnsScreen';
 import { DiagScreen } from './screens/screen_diag';
 import { DnsScreen } from './screens/screen_dns';
 import { LogScreen } from './screens/screen_log';
-import { RulesScreen } from './screens/screen_rules';
+import { RulesScreen } from './screens/rules/RulesScreen';
 import { ServersScreen } from './screens/screen_servers';
 import { SubscriptionsScreen } from './screens/screen_subscriptions';
 import { SettingsScreen } from './screens/screen_settings';

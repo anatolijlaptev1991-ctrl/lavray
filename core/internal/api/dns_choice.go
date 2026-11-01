@@ -70,6 +70,21 @@ func (s *Server) saveDNSChoice(ov *dnsChoice) error {
 	return s.st.SetMeta(metaDNSOverride, string(b))
 }
 
+// dropDNSChoice забывает переопределение DNS набора id (набор удалён): иначе
+// новый набор, занявший тот же id, унаследовал бы чужой выбор.
+func (s *Server) dropDNSChoice(id string) error {
+	all := s.dnsOverrides()
+	if _, ok := all[id]; !ok {
+		return nil
+	}
+	delete(all, id)
+	b, err := json.Marshal(all)
+	if err != nil {
+		return err
+	}
+	return s.st.SetMeta(metaDNSOverride, string(b))
+}
+
 // choiceFromRequest проверяет SetDnsRequest и строит переопределение
 // (nil, nil — «Авто»). Запрос без choice: пустой remote_dns = «Авто»,
 // непустой = «custom» (совместимость со старыми клиентами).

@@ -82,6 +82,8 @@ var agentTable = map[string]agentDecision{
 	lavrayv1connect.RoutingServiceGetActivePresetProcedure:    agentDeny,
 	lavrayv1connect.RoutingServiceResetBuiltinPresetProcedure: agentDeny,
 	lavrayv1connect.RoutingServiceImportNekoRayRouteProcedure: agentDeny,
+	lavrayv1connect.RoutingServiceExportPresetProcedure:       agentDeny, // T-80: наборы агенту закрыты целиком
+	lavrayv1connect.RoutingServiceImportPresetProcedure:       agentDeny,
 
 	// DnsService.
 	lavrayv1connect.DnsServiceGetDnsProcedure:          agentDeny,

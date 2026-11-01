@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-// routing_settings_service.go — RoutingService (builtin-пресеты + активный),
-// DnsService и SettingsService (W6). Пользовательские пресеты,
-// подписочные стримы и SubscribeSettings — W7 (unimplemented.go).
+// routing_settings_service.go — DnsService и SettingsService (W6). Наборы
+// маршрутов (RoutingService) — routing_service.go и preset_service.go;
+// SubscribeSettings — W7 (unimplemented.go).
 package api
 
 import (
@@ -23,74 +23,6 @@ import (
 // instStateIdle — единственное состояние, когда настройки применяются
 // без перезапуска (FR-UI-062).
 const instStateIdle = inst.StateIdle
-
-func (s *Server) builtinPresets() ([]*presets.Preset, error) {
-	return presets.BuiltinPresets()
-}
-
-func (s *Server) ListPresets(ctx context.Context, req *connect.Request[lavrayv1.ListPresetsRequest]) (*connect.Response[lavrayv1.ListPresetsResponse], error) {
-	list, err := s.builtinPresets()
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	out := make([]*lavrayv1.RoutingPreset, 0, len(list))
-	for _, p := range list {
-		out = append(out, presetToProto(p))
-	}
-	active := s.activePresetID()
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	return connect.NewResponse(&lavrayv1.ListPresetsResponse{Presets: out, ActivePresetId: active}), nil
-}
-
-func (s *Server) GetPreset(ctx context.Context, req *connect.Request[lavrayv1.GetPresetRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
-	p, ok, err := s.findPreset(req.Msg.Id)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	if !ok {
-		return nil, notFound("пресет %q", req.Msg.Id)
-	}
-	return connect.NewResponse(presetToProto(p)), nil
-}
-
-func (s *Server) ActivatePreset(ctx context.Context, req *connect.Request[lavrayv1.ActivatePresetRequest]) (*connect.Response[lavrayv1.ActivatePresetResponse], error) {
-	p, ok, err := s.findPreset(req.Msg.Id)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	if !ok {
-		return nil, notFound("пресет %q", req.Msg.Id)
-	}
-	if err := p.Validate(); err != nil {
-		return nil, mapErr(err)
-	}
-	// F2 (аудит №7): активный пресет — в settings (единственный источник,
-	// который читает activePresetID при сборке конфига), не в meta.
-	// Значение — JSON-строка (геттер settingStr делает json.Unmarshal).
-	encoded, err := json.Marshal(p.ID)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	if err := s.st.SetSetting(settingActivePreset, string(encoded)); err != nil {
-		return nil, mapErr(err)
-	}
-	needsRestart := s.inst.Status().State != instStateIdle
-	return connect.NewResponse(&lavrayv1.ActivatePresetResponse{NeedsProfileRestart: needsRestart}), nil
-}
-
-func (s *Server) GetActivePreset(ctx context.Context, req *connect.Request[lavrayv1.GetActivePresetRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
-	active := s.activePresetID()
-	p, ok, err := s.findPreset(active)
-	if err != nil {
-		return nil, mapErr(err)
-	}
-	if !ok {
-		return nil, notFound("активный пресет %q", active)
-	}
-	return connect.NewResponse(presetToProto(p)), nil
-}
 
 // ---- DnsService --------------------------------------------------------------
 // DNS-настройки живут в settings-хранилище с ключами dns.* (модель W1);

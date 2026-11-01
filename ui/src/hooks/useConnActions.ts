@@ -20,6 +20,8 @@ export interface ConnNote {
 
 export interface ConnActions {
   readonly note: ConnNote | null;
+  /** Показать заметку (гаснет сама): итог «создать правило» и подобное. */
+  readonly notify: (note: ConnNote) => void;
   readonly copyAddress: (c: Connection) => Promise<void>;
   readonly closeConnection: (c: Connection) => Promise<void>;
 }
@@ -66,5 +68,5 @@ export function useConnActions(): ConnActions {
     [core, t],
   );
 
-  return { note, copyAddress, closeConnection };
+  return { note, notify: setNote, copyAddress, closeConnection };
 }

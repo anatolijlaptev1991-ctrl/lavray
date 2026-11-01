@@ -21,6 +21,7 @@ const ENTRY = new Set([
   './test-utils/coreStub.ts',
   './test-utils/coreError.ts',
   './test-utils/connsKit.ts',
+  './test-utils/presetKit.ts',
   './test-utils/settingsKit.tsx',
   './test-utils/tauriStub.ts',
   './test-utils/qrKit.ts',

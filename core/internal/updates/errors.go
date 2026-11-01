@@ -79,6 +79,9 @@ var (
 	ErrTooLarge = errors.New("updates: ответ источника превысил лимит размера")
 	// ErrNotFound — источник ответил 404.
 	ErrNotFound = errors.New("updates: не найдено на источнике")
+	// ErrMirrorUnreachable — часть зеркал не подтвердила конец цепочки корней
+	// (см. MirrorError: там названы зеркала).
+	ErrMirrorUnreachable = errors.New("updates: зеркало метаданных недоступно")
 	// ErrBadRedirect — редирект не на https или их больше пяти.
 	ErrBadRedirect = errors.New("updates: недопустимый редирект источника")
 )

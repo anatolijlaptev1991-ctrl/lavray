@@ -46,8 +46,8 @@ export type FlowState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'checking' }
   | { readonly kind: 'upToDate'; readonly versions: Versions }
-  /** Проверка не удалась: это НЕ «обновлений нет». */
-  | { readonly kind: 'checkFailed' }
+  /** Проверка не удалась: это НЕ «обновлений нет». `note` — уточнение ядра (молчащее зеркало). */
+  | { readonly kind: 'checkFailed'; readonly note: { readonly key: MessageKey; readonly detail: string } | null }
   /** В сборке нет корня доверия: проверять нечем. */
   | { readonly kind: 'notConfigured' }
   | { readonly kind: 'available'; readonly update: AvailableUpdate }

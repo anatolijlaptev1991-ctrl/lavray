@@ -26,7 +26,7 @@ export function UpdateStatusCard({ flow }: { readonly flow: UpdateFlowApi }): JS
     case 'upToDate':
       return <UpToDateCard versions={state.versions} />;
     case 'checkFailed':
-      return <CheckFailedBanner flow={flow} />;
+      return <CheckFailedBanner flow={flow} note={state.note} />;
     case 'notConfigured':
       return <NotConfiguredNotice />;
     case 'installing':

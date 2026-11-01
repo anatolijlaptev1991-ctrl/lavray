@@ -21,7 +21,10 @@ const nonNegative = (n: number): number => (Number.isFinite(n) && n > 0 ? n : 0)
 
 /** Результат неудачной проверки: сеть и «не настроено» — свои состояния, остальное — ошибка. */
 function afterCheckFailure(failure: Failure): FlowState {
-  if (failure.kind === 'network') return { kind: 'checkFailed' };
+  if (failure.kind === 'network') {
+    const specific = failure.key !== 'upd.checkFailed';
+    return { kind: 'checkFailed', note: specific ? { key: failure.key, detail: failure.detail } : null };
+  }
   if (failure.kind === 'notConfigured') return { kind: 'notConfigured' };
   return {
     kind: 'error',

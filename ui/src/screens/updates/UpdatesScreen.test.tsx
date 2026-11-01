@@ -265,6 +265,19 @@ describe('check_failed_is_not_no_updates (экран)', () => {
     expect(btn('Try again')).not.toBeNull();
   });
 
+  it('mirror_unreachable: плашка называет молчащее зеркало и советует подключиться', async () => {
+    core({ [CHECK]: new Failure('unavailable', 'mirror_unreachable: cdn.jsdelivr.net, источник №2') });
+    await show();
+    await click(btn('Check now'));
+    const alert = container().querySelector('[role="alert"]')!;
+    expect(alert.textContent).toContain('Couldn’t reach an update mirror');
+    expect(alert.textContent).toContain('connect to the VPN');
+    expect(alert.textContent).toContain('cdn.jsdelivr.net, источник №2');
+    expect(alert.textContent).not.toContain('The check failed.');
+    expect(text()).not.toContain('latest version');
+    expect(btn('Try again')).not.toBeNull();
+  });
+
   it('время последней проверки остаётся прежним', async () => {
     const old = Date.now() - 3 * DAY;
     core({ [STATE]: { lastCheckedAtMs: String(old) }, [CHECK]: new Failure('unavailable', 'x') });

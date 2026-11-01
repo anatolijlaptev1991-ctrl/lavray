@@ -1025,6 +1025,7 @@ export const esDict: Record<string, string> = {
   "upd.err.invalid_source": "El archivo seleccionado no sirve: se necesita un instalador .exe.",
   "upd.err.too_large": "El archivo es demasiado grande para ser un instalador.",
   "upd.err.stage_failed": "No se pudo copiar el archivo a la carpeta de actualizaciones.",
+  "upd.reason.mirror_unreachable": "No se pudo contactar con un espejo de actualizaciones. La comprobación va primero por el túnel: conéctate a la VPN y vuelve a intentarlo.",
   "upd.reason.clock_skew": "El reloj de este equipo va atrasado: los datos de la actualización parecen venir del futuro. Revisa la fecha y la hora e inténtalo de nuevo.",
   "upd.err.signature_invalid": "No se pudo confirmar la firma del instalador, así que se rechazó la instalación.",
   "upd.err.version_mismatch": "La versión del instalador firmado no coincide con la esperada, así que se rechazó la instalación.",

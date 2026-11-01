@@ -56,6 +56,14 @@ describe('пустой и неуспешный результат проверк
     expect(s.kind).not.toBe('upToDate');
   });
 
+  it('mirror_unreachable → checkFailed с названным зеркалом (текст и имя из ядра)', () => {
+    const failure = classifyCoreError(new ConnectError('mirror_unreachable: a.example', Code.Unavailable));
+    const s = run(checking(), { type: 'checkFailed', failure });
+    expect(s).toEqual({ kind: 'checkFailed', note: { key: 'upd.reason.mirror_unreachable', detail: 'a.example' } });
+    const plain = run(checking(), { type: 'checkFailed', failure: classifyCoreError(new ConnectError('x', Code.Unavailable)) });
+    expect(plain).toEqual({ kind: 'checkFailed', note: null });
+  });
+
   it('not_configured → notConfigured (честное состояние, без повторов)', () => {
     const failure = classifyCoreError(new ConnectError('not_configured: x', Code.FailedPrecondition));
     const s = run(checking(), { type: 'checkFailed', failure });

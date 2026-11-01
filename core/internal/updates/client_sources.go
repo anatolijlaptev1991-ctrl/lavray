@@ -34,7 +34,7 @@ func (c *Client) refreshRoot(ctx context.Context, now time.Time) error {
 }
 
 // resetCountersAfterRotation: если с корня, при котором сохранены счётчики
-// (State.RootVersion), сменился набор ключей timestamp или manifest, их версии
+// (State.RootVersion), из роли timestamp или manifest УДАЛЁН ключ, их версии
 // и serial обнуляются. Признак — версия корня в состоянии, а не факт ротации
 // в этом запуске: ротация могла пройти в прошлом запуске, не дошедшем до записи
 // состояния.
@@ -43,10 +43,10 @@ func (c *Client) resetCountersAfterRotation() {
 	if st.RootVersion <= 0 || c.Trust.Root().Version <= st.RootVersion {
 		return
 	}
-	if c.Trust.KeysChangedSince(st.RootVersion, RoleTimestamp) {
+	if c.Trust.KeysRemovedSince(st.RootVersion, RoleTimestamp) {
 		st.TimestampVersion, st.ResetTimestamp = 0, true
 	}
-	if c.Trust.KeysChangedSince(st.RootVersion, RoleManifest) {
+	if c.Trust.KeysRemovedSince(st.RootVersion, RoleManifest) {
 		st.SerialStable, st.SerialBeta, st.ResetSerials = 0, 0, true
 	}
 }

@@ -81,8 +81,28 @@ func nextRoot(ctx context.Context, srcs []Source, cur *Trust, p QueryPolicy) (*T
 		return nil, fmt.Errorf("%w: %v", ErrRootRotation, rejected)
 	}
 	if len(srcs) == 0 || notFound != len(srcs) {
-		return nil, fmt.Errorf("%w: не все источники подтвердили, что корня %d нет (ответили «нет файла»: %d из %d)",
-			ErrNetwork, cur.Root().Version+1, notFound, len(srcs))
+		return nil, &MirrorError{Hosts: silentMirrors(srcs, answers), Root: cur.Root().Version + 1}
 	}
 	return nil, nil
+}
+
+// silentMirrors — источники, не ответившие «нет файла» (недоступны, молчат, отдали
+// ошибку); их адреса попадают в сообщение для пользователя.
+func silentMirrors(srcs []Source, answers []answer) []string {
+	confirmed := map[Source]bool{}
+	for _, a := range answers {
+		if errors.Is(a.err, ErrNotFound) {
+			confirmed[a.src] = true
+		}
+	}
+	var hosts []string
+	for i, s := range srcs {
+		if !confirmed[s] {
+			hosts = append(hosts, sourceLabel(s, i))
+		}
+	}
+	if len(hosts) == 0 {
+		hosts = []string{"нет источников"}
+	}
+	return hosts
 }

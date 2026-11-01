@@ -8,6 +8,7 @@ import type { JSX, ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { useI18n } from '../../hooks/useI18n';
 import type { UpdateFlowApi } from '../../hooks/useUpdateFlow';
+import type { MessageKey } from '../../lib/i18n';
 import type { FlowState, Versions } from '../../lib/updates/types';
 
 export function CheckingNotice(): JSX.Element {
@@ -89,7 +90,13 @@ function AlertBanner({ children, actions }: { readonly children: ReactNode; read
 }
 
 /** Проверка не удалась (сеть): это НЕ «обновлений нет». */
-export function CheckFailedBanner({ flow }: { readonly flow: UpdateFlowApi }): JSX.Element {
+export function CheckFailedBanner({
+  flow,
+  note,
+}: {
+  readonly flow: UpdateFlowApi;
+  readonly note: { readonly key: MessageKey; readonly detail: string } | null;
+}): JSX.Element {
   const { t } = useI18n();
   return (
     <AlertBanner
@@ -99,7 +106,8 @@ export function CheckFailedBanner({ flow }: { readonly flow: UpdateFlowApi }): J
         </button>
       }
     >
-      {t('upd.checkFailed')}
+      {t(note?.key ?? 'upd.checkFailed')}
+      {note !== null && note.detail !== '' && <span className="cap" style={{ display: 'block' }}>{note.detail}</span>}
     </AlertBanner>
   );
 }

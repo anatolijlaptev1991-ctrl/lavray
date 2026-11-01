@@ -6,11 +6,7 @@
 // каждой загрузке, поэтому подделанный «принятый корень» в хранилище бесполезен.
 package updates
 
-import (
-	"fmt"
-	"sort"
-	"strings"
-)
+import "fmt"
 
 // Trust — текущий корень доверия: проверенный root.json (пин приложения или
 // результат ротации) + разобранная подписанная часть + путь от вшитого корня.
@@ -99,26 +95,34 @@ func (t *Trust) VerifyRootUpdate(raw []byte) (*Trust, error) {
 	return next, nil
 }
 
-// KeysChangedSince: набор ключей роли в текущем корне отличается от того, что
-// был в корне версии since. Корня такой версии нет в истории (например, сборка
-// получила новый вшитый корень) — считаем, что изменился: счётчики этой роли
-// безопаснее сбросить, чем навсегда застрять на устаревшем.
-func (t *Trust) KeysChangedSince(since int64, role string) bool {
+// KeysRemovedSince: из роли role исчез хотя бы один ключ, который был в ней в корне
+// версии since. Ключи сравниваются по значению (алгоритм и ключ), а не по имени:
+// добавление второго ключа или переименование того же ключа счётчики не сбрасывает,
+// пока старый ключ действует. Корня такой версии нет в истории (например, сборка
+// получила новый вшитый корень) — считаем, что ключ удалён: счётчики безопаснее
+// сбросить, чем навсегда застрять на устаревших.
+func (t *Trust) KeysRemovedSince(since int64, role string) bool {
 	for _, past := range t.history {
-		if past.Version == since {
-			return roleKeySet(past, role) != roleKeySet(t.root, role)
+		if past.Version != since {
+			continue
 		}
+		now := roleKeyValues(t.root, role)
+		for key := range roleKeyValues(past, role) {
+			if !now[key] {
+				return true
+			}
+		}
+		return false
 	}
 	return true
 }
 
-// roleKeySet — канонический вид набора ключей роли (keyid, алгоритм, ключ).
-func roleKeySet(r *Root, role string) string {
-	var parts []string
+// roleKeyValues — ключи роли как множество «алгоритм|ключ».
+func roleKeyValues(r *Root, role string) map[string]bool {
+	out := map[string]bool{}
 	for _, id := range r.Roles[role].Keyids {
 		k := r.Keys[id]
-		parts = append(parts, id+"|"+k.Alg+"|"+k.Pub)
+		out[k.Alg+"|"+k.Pub] = true
 	}
-	sort.Strings(parts)
-	return strings.Join(parts, ";")
+	return out
 }

@@ -60,14 +60,35 @@ func (s *Server) verifyLocalFile(ctx context.Context, c *updates.Client, install
 		return updates.ArtifactClaims{}, fmt.Errorf("installer_path: %w", err)
 	}
 	text, err := updates.ReadSignatureFile(sigPath)
-	if os.IsNotExist(err) {
+	fromManifest := os.IsNotExist(err)
+	if fromManifest {
 		text, err = s.signatureFromManifest(ctx, c, sha, size)
 	}
 	if err != nil {
 		return updates.ArtifactClaims{}, err
 	}
 	pol := updates.LocalPolicy{Product: c.Product, Platform: platformOf(c), AppVersion: s.upd.appVersion()}
-	return updates.VerifyInstallerSignature(c.Trust, text, digest, pol)
+	claims, err := updates.VerifyInstallerSignature(c.Trust, text, digest, pol)
+	if err == nil && (fromManifest || sigPath != installer+updates.MinisigSuffix) {
+		// Оболочка перед установкой сама проверит файл по .minisig рядом с ним: подпись из
+		// манифеста сохраняется, иначе принятый ядром файл она отвергла бы (signature_invalid).
+		err = writeSignatureSidecar(installer, text)
+	}
+	return claims, err
+}
+
+// writeSignatureSidecar кладёт «<установщик>.minisig» атомарно (временный файл и переименование).
+func writeSignatureSidecar(installer string, text []byte) error {
+	final := installer + updates.MinisigSuffix
+	tmp := final + ".tmp"
+	if err := os.WriteFile(tmp, text, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, final); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 func platformOf(c *updates.Client) string {

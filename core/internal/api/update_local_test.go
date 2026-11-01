@@ -144,3 +144,40 @@ func TestVerifyLocalOversizedSignatureRejected(t *testing.T) {
 		t.Fatalf("подпись больше 4 КиБ: %+v %v", got, err)
 	}
 }
+
+// Подпись взята из манифеста онлайн-проверки: после успешной проверки она кладётся
+// рядом с установщиком как .minisig, иначе оболочка (verify-artifact) отвергла бы
+// файл, который ядро только что приняло.
+func TestVerifyLocalPersistsManifestSignatureNextToInstaller(t *testing.T) {
+	f := newUpdFix(t, "0.5.0", nil)
+	data := []byte("installer-0.7.0")
+	f.release(updatesRelease("0.7.0", data))
+	p := f.stageLocal(t, data, claimsFor(f, "0.7.0"), false)
+	got, err := f.verifyLocal(p)
+	if err != nil || !got.Valid {
+		t.Fatalf("проверка по манифесту: %+v %v", got, err)
+	}
+	sig, err := os.ReadFile(p + updates.MinisigSuffix)
+	if err != nil {
+		t.Fatalf("подпись рядом с установщиком не сохранена: %v", err)
+	}
+	// ту же проверку выполнит оболочка через verify-artifact
+	trust, _ := updates.ResolveTrust(f.env.RootJSON, nil)
+	pol := updates.LocalPolicy{Product: f.env.Product, Platform: "windows-x64", AppVersion: "0.5.0"}
+	if _, err := updates.VerifyInstallerFile(trust, p, p+updates.MinisigSuffix, pol); err != nil {
+		t.Fatalf("сохранённая подпись не проходит проверку оболочки: %v (%q)", err, sig)
+	}
+}
+
+func TestVerifyLocalDoesNotPersistASignatureForARejectedFile(t *testing.T) {
+	f := newUpdFix(t, "0.5.0", nil)
+	f.release(updatesRelease("0.7.0", []byte("installer-0.7.0")))
+	p := f.stageLocal(t, []byte("другие байты"), claimsFor(f, "0.7.0"), false)
+	got, err := f.verifyLocal(p)
+	if err != nil || got.Valid {
+		t.Fatalf("файл, которого нет в манифесте: %+v %v", got, err)
+	}
+	if _, err := os.Stat(p + updates.MinisigSuffix); err == nil {
+		t.Fatal("для отвергнутого файла подпись не сохраняется")
+	}
+}

@@ -1025,6 +1025,7 @@ export const enDict: Record<string, string> = {
   "upd.err.invalid_source": "The selected file isn’t suitable: an .exe installer is required.",
   "upd.err.too_large": "The file is too large to be an installer.",
   "upd.err.stage_failed": "The file couldn’t be copied to the updates folder.",
+  "upd.reason.mirror_unreachable": "Couldn’t reach an update mirror. Checks go through the tunnel first: connect to the VPN and try again.",
   "upd.reason.clock_skew": "The clock on this computer is behind: the update data looks as if it is from the future. Check the date and time and try again.",
   "upd.err.signature_invalid": "The installer’s signature couldn’t be verified, so the installation was refused.",
   "upd.err.version_mismatch": "The signed installer’s version doesn’t match the expected one, so the installation was refused.",

@@ -5,6 +5,8 @@ package api
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -118,5 +120,29 @@ func TestAgentUpdateDecisions(t *testing.T) {
 		if agentTable[proc] != want {
 			t.Errorf("%s: решение для агентов %v, ожидалось %v", proc, agentTable[proc], want)
 		}
+	}
+}
+
+// Зеркало молчит: проверка не удалась (UNAVAILABLE), но причина названа и в
+// сообщении есть адрес зеркала — интерфейс подскажет подключиться и повторить.
+func TestCheckMirrorUnreachableNamesTheHost(t *testing.T) {
+	dead := httptest.NewServer(http.NotFoundHandler())
+	host := strings.TrimPrefix(dead.URL, "http://")
+	dead.Close()
+	f := newUpdFix(t, "0.5.0", func(c *UpdaterConf) { c.BootstrapMetadata = []string{dead.URL} })
+	f.release(updatestest.Release{Version: "0.6.0", Serial: 1, TSVersion: 1})
+	_, err := f.check()
+	var ce *connect.Error
+	if !errors.As(err, &ce) || ce.Code() != connect.CodeUnavailable {
+		t.Fatalf("ожидался UNAVAILABLE (проверка не удалась): %v", err)
+	}
+	if !strings.HasPrefix(ce.Message(), ReasonMirrorUnreachable+": ") || !strings.Contains(ce.Message(), host) {
+		t.Fatalf("сообщение без причины и адреса зеркала: %q", ce.Message())
+	}
+	if ce.Meta().Get(UpdateReasonHeader) != ReasonMirrorUnreachable {
+		t.Fatalf("заголовок причины: %q", ce.Meta().Get(UpdateReasonHeader))
+	}
+	if f.srv.loadUpdateState().LastCheckedAt != 0 {
+		t.Fatal("last_checked_at не меняется при неудачной проверке")
 	}
 }

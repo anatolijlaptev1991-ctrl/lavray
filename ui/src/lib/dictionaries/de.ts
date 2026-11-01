@@ -1025,6 +1025,7 @@ export const deDict: Record<string, string> = {
   "upd.err.invalid_source": "Die gewählte Datei ist ungeeignet: Es wird ein .exe-Installationspaket benötigt.",
   "upd.err.too_large": "Die Datei ist für ein Installationspaket zu groß.",
   "upd.err.stage_failed": "Die Datei konnte nicht in den Update-Ordner kopiert werden.",
+  "upd.reason.mirror_unreachable": "Ein Update-Spiegel war nicht erreichbar. Die Prüfung läuft zuerst über den Tunnel: Verbinde dich mit dem VPN und versuche es erneut.",
   "upd.reason.clock_skew": "Die Uhr dieses Computers geht nach: Die Update-Daten wirken, als stammten sie aus der Zukunft. Prüfe Datum und Uhrzeit und versuche es erneut.",
   "upd.err.signature_invalid": "Die Signatur des Installers konnte nicht bestätigt werden, die Installation wurde abgelehnt.",
   "upd.err.version_mismatch": "Die Version des signierten Installers stimmt nicht mit der erwarteten überein, die Installation wurde abgelehnt.",

@@ -20,6 +20,7 @@ describe('parseReason', () => {
     'root_rotation',
     'artifact_role_missing',
     'clock_skew',
+    'mirror_unreachable',
     'active_session',
   ])('%s: текст — известная причина и остаток', (reason) => {
     expect(parseReason(`${reason}: что-то пошло не так`)).toEqual({ reason, detail: 'что-то пошло не так' });
@@ -147,6 +148,22 @@ describe('shellErrorKey: коды оболочки update_apply / update_rollbac
     expect(shellErrorKey('')).toBe('upd.err.generic');
     expect(shellErrorKey(undefined)).toBe('upd.err.generic');
     expect(shellErrorKey({ code: 'busy' })).toBe('upd.err.generic');
+  });
+});
+
+describe('mirror_unreachable: зеркало метаданных молчит', () => {
+  it('UNAVAILABLE с причиной — это «проверка не удалась», но с понятным текстом и именем зеркала', () => {
+    const failure = classifyCoreError(
+      new ConnectError('mirror_unreachable: cdn.jsdelivr.net, источник №2', Code.Unavailable),
+    );
+    expect(failure.kind).toBe('network');
+    expect(failure.key).toBe('upd.reason.mirror_unreachable');
+    expect(failure.detail).toBe('cdn.jsdelivr.net, источник №2');
+  });
+
+  it('UNAVAILABLE без причины остаётся обычным «проверка не удалась»', () => {
+    const failure = classifyCoreError(new ConnectError('updates: все источники недоступны', Code.Unavailable));
+    expect(failure).toEqual({ kind: 'network', key: 'upd.checkFailed', detail: '' });
   });
 });
 

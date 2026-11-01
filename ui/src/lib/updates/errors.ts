@@ -17,6 +17,7 @@ const REASONS = [
   'root_rotation',
   'artifact_role_missing',
   'clock_skew',
+  'mirror_unreachable',
   'active_session',
 ] as const;
 
@@ -49,6 +50,7 @@ const REASON_KEYS: Readonly<Record<string, MessageKey>> = {
   root_rotation: 'upd.reason.root_rotation',
   artifact_role_missing: 'upd.reason.artifact_role_missing',
   clock_skew: 'upd.reason.clock_skew',
+  mirror_unreachable: 'upd.reason.mirror_unreachable',
   sha256_mismatch: 'upd.reason.sha256_mismatch',
   truncated: 'upd.reason.truncated',
 };
@@ -82,10 +84,17 @@ export function classifyCoreError(e: unknown): Failure {
     return { kind: 'error', key: 'upd.err.generic', detail: '' };
   }
   const err = ConnectError.from(e);
-  if (isNetwork(err)) return { kind: 'network', key: 'upd.checkFailed', detail: '' };
+  if (isNetwork(err)) return classifyNetwork(err);
   if (err.code === Code.Aborted) return { kind: 'running', key: 'upd.dlRunning', detail: '' };
   if (err.code === Code.FailedPrecondition) return classifyPrecondition(err.rawMessage);
   return { kind: 'error', key: 'upd.err.generic', detail: '' };
+}
+
+/** «Проверка не удалась»; если ядро назвало молчащее зеркало — с понятным текстом и его именем. */
+function classifyNetwork(err: ConnectError): Failure {
+  const { reason, detail } = parseReason(err.rawMessage);
+  if (reason === 'mirror_unreachable') return { kind: 'network', key: 'upd.reason.mirror_unreachable', detail };
+  return { kind: 'network', key: 'upd.checkFailed', detail: '' };
 }
 
 function classifyPrecondition(message: string): Failure {

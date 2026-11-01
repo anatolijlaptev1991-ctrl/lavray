@@ -9,6 +9,7 @@ package api
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -25,7 +26,8 @@ const (
 	ReasonWrongChannel        = "wrong_channel"
 	ReasonRootRotation        = "root_rotation"
 	ReasonArtifactRoleMissing = "artifact_role_missing"
-	ReasonClockSkew           = "clock_skew" // timestamp «из будущего»: часы компьютера отстают
+	ReasonMirrorUnreachable   = "mirror_unreachable" // зеркало метаданных молчит (проверка не удалась, а не «нет обновлений»)
+	ReasonClockSkew           = "clock_skew"         // timestamp «из будущего»: часы компьютера отстают
 	ReasonActiveSession       = "active_session"
 	ReasonNotStaged           = "not_staged"
 	ReasonNoUpdate            = "no_update"
@@ -82,10 +84,22 @@ func updateErr(err error) error {
 	if reason := updateReason(err); reason != "" {
 		return reasonError(reason, "%s", describeUpdateErr(reason, err))
 	}
+	var mirror *updates.MirrorError
+	if errors.As(err, &mirror) {
+		return unavailableWithReason(ReasonMirrorUnreachable, strings.Join(mirror.Hosts, ", "))
+	}
 	if errors.Is(err, updates.ErrNetwork) || errors.Is(err, updates.ErrTooLarge) {
 		return connect.NewError(connect.CodeUnavailable, err)
 	}
 	return mapErr(err)
+}
+
+// unavailableWithReason — UNAVAILABLE (проверка не удалась) с причиной в начале
+// сообщения и в заголовке: интерфейс показывает осмысленный текст.
+func unavailableWithReason(reason, detail string) error {
+	e := connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s: %s", reason, detail))
+	e.Meta().Set(UpdateReasonHeader, reason)
+	return e
 }
 
 func describeUpdateErr(reason string, err error) string {

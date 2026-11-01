@@ -15,7 +15,11 @@ import (
 // снимок списка процессов и право PROCESS_QUERY_LIMITED_INFORMATION (имя образа);
 // процесс не открывается на запись, не останавливается и не трогается иначе.
 // Процесс с повышением права на имя образа не даёт — для него ExeDir пустой.
-func listProcesses() ([]Process, error) {
+func listProcesses() ([]Process, error) { return listProcessesWhere(IsNekoProcess) }
+
+// listProcessesWhere — то же для процессов, имя образа которых подходит match
+// (тест ищет собственный процесс, не трогая чужие).
+func listProcessesWhere(match func(name string) bool) ([]Process, error) {
 	snap, err := windows.CreateToolhelp32Snapshot(windows.TH32CS_SNAPPROCESS, 0)
 	if err != nil {
 		return nil, err
@@ -26,7 +30,7 @@ func listProcesses() ([]Process, error) {
 	var out []Process
 	for err = windows.Process32First(snap, &entry); err == nil; err = windows.Process32Next(snap, &entry) {
 		name := windows.UTF16ToString(entry.ExeFile[:])
-		if IsNekoProcess(name) {
+		if match(name) {
 			out = append(out, Process{Name: name, ExeDir: exeDir(entry.ProcessID)})
 		}
 	}

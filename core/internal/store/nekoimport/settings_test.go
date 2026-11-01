@@ -34,7 +34,7 @@ func TestSettingsMappingTable(t *testing.T) {
 		"inbound_auth":{"user":"u","pass":"p"},
 		"sub_use_proxy":true,"mux_concurrency":-1,"vpn_strict_route":1,
 		"spmode2":["system_proxy","tun"],"hk_mw":"Ctrl+Alt+M",
-		"core_box_clash_api":-9090,"check_include_pre":true,
+		"core_box_clash_api":-9090,
 		"remember_id":3,"current_group":1,"active_routing":"Мой маршрут"}`)
 	got := settingMap(list)
 	want := map[string]string{
@@ -42,8 +42,8 @@ func TestSettingsMappingTable(t *testing.T) {
 		"inbound.auth.user": `"u"`, "inbound.auth.pass": `"p"`,
 		"sub.use_proxy": `true`, "mux.concurrency": `-1`, "tun.strict_route": `true`,
 		"remember.modes": `["system_proxy","tun"]`, "hotkeys.main_window": `"Ctrl+Alt+M"`,
-		"core.clash_api.enabled": `false`, "update.channel": `"beta"`,
-		"remember.id": `3`, "ui.current_group": `1`,
+		"core.clash_api.enabled": `false`,
+		"remember.id":            `3`, "ui.current_group": `1`,
 	}
 	for k, v := range want {
 		if got[k] != v {
@@ -84,7 +84,7 @@ func TestSettingRulesMatchDescriptors(t *testing.T) {
 			t.Errorf("%s: ключ %s служебный", r.neko, r.lavray)
 		}
 		switch r.neko {
-		case "check_include_pre", "core_box_clash_api", "theme", "language":
+		case "core_box_clash_api", "theme", "language":
 			continue // значение выводится из другого типа или из набора допустимых
 		}
 		in, out := probe[d.Type], ""

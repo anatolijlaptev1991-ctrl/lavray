@@ -86,24 +86,26 @@ func (sc *scanner) addFallbackGroup(groups map[int64]*PlanGroup, raw map[int64]*
 
 // orderProfiles — профили в порядке вставки: по группам, внутри группы сначала
 // порядок order группы, затем хвост по id; профили без группы — в первую группу.
+// Профиль попадает в план ровно один раз: запись order относится к группе только
+// если gid профиля совпадает с этой группой (в order чужой группы он игнорируется).
 func (sc *scanner) orderProfiles(order []int64, raw map[int64]*nekoGroup, items map[int64]*PlanProfile, groups map[int64]*PlanGroup) []PlanProfile {
 	var out []PlanProfile
+	placed := map[int64]bool{}
 	add := func(pp *PlanProfile, gid int64) {
+		placed[pp.NekoID] = true
 		cp := *pp
 		cp.NekoGroupID = gid
 		out = append(out, cp)
 	}
 	for _, gid := range order {
-		listed := map[int64]bool{}
 		for _, pid := range raw[gid].Order {
-			if it, ok := items[pid]; ok && !listed[pid] {
-				listed[pid] = true
+			if it, ok := items[pid]; ok && !placed[pid] && it.NekoGroupID == gid {
 				add(it, gid)
 			}
 		}
 		var tail []int64
 		for pid, it := range items {
-			if it.NekoGroupID == gid && !listed[pid] {
+			if it.NekoGroupID == gid && !placed[pid] {
 				tail = append(tail, pid)
 			}
 		}

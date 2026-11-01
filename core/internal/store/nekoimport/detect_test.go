@@ -128,3 +128,28 @@ func TestResolveConfigDir(t *testing.T) {
 		t.Error("несуществующий путь принят")
 	}
 }
+
+// Установка в %APPDATA% (режим -appdata): exe лежит в другом каталоге, и
+// сопоставить процесс с config по пути нельзя. Запущенный NekoBox всё равно
+// даёт предупреждение «закройте NekoBox» (P).
+func TestDetectAppdataLooksRunning(t *testing.T) {
+	roaming := mkTempDir(t)
+	other := mkTempDir(t)
+	makeConfig(t, filepath.Join(roaming, "nekoray", "config"))
+	portable := makeConfig(t, filepath.Join(other, "portable", "config"))
+	env := Env{AppData: roaming, Processes: func() ([]Process, error) {
+		return []Process{{Name: "nekobox.exe", ExeDir: filepath.Join(other, "Program Files", "nekoray")}}, nil
+	}}
+	got := bySource(Detect(env, []string{portable}))
+	if !got[SourceAppData].LooksRunning {
+		t.Errorf("appdata при запущенном NekoBox не помечен: %+v", got[SourceAppData])
+	}
+	if got[SourceManual].LooksRunning {
+		t.Errorf("переносимая установка из другого каталога помечена запущенной: %+v", got[SourceManual])
+	}
+	// Тот же каталог, названный вручную, остаётся каталогом профиля.
+	byManual := Detect(env, []string{filepath.Join(roaming, "nekoray", "config")})
+	if len(byManual) != 1 || !byManual[0].LooksRunning {
+		t.Errorf("каталог профиля, указанный вручную: %+v", byManual)
+	}
+}

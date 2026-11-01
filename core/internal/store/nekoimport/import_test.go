@@ -327,3 +327,34 @@ func TestEmptyDir(t *testing.T) {
 		t.Errorf("перенос пустого каталога: %+v %v", rep, err)
 	}
 }
+
+// Сбой в самом конце переноса (после записи профилей, настроек и наборов)
+// откатывает и настройки, и meta с наборами, а не только профили (R).
+func TestImportRollsBackSettingsAndMeta(t *testing.T) {
+	s := openStore(t)
+	plan, err := Scan(fixtureConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st, err := LoadState(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := Remap(plan, st)
+	res.Settings = []PlanSetting{{Key: "inbound.port", JSON: "3090"}}
+	// kind='bogus' нарушает CHECK таблицы import_map: запись падает последней.
+	res.PresetRows = []store.ImportMapRow{{Source: SourceNekoBox, Kind: "bogus", SourceKey: "k", LocalID: "custom:x"}}
+	before := dumpDB(t, s)
+	if err := Apply(s, res, `[{"id":"custom:x"}]`); err == nil {
+		t.Fatal("Apply принял строку import_map с неверным kind")
+	}
+	if v, ok, _ := s.GetSetting("inbound.port"); ok {
+		t.Errorf("настройка осталась после отката: %q", v)
+	}
+	if v, ok, _ := s.GetMeta(store.MetaCustomPresets); ok {
+		t.Errorf("наборы остались после отката: %q", v)
+	}
+	if !reflect.DeepEqual(dumpDB(t, s), before) {
+		t.Error("база изменилась после отката")
+	}
+}

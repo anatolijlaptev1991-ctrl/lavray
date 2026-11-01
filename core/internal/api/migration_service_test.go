@@ -48,9 +48,10 @@ func TestDetectNekoBoxFindsPortableAndAppdata(t *testing.T) {
 	if p.Groups != 2 || p.Profiles != 9 || p.Routes != 2 || !p.LooksRunning {
 		t.Errorf("переносимая установка: %v", p)
 	}
-	if a.LooksRunning {
-		// Процесс из другого каталога не делает остальные установки «запущенными».
-		t.Errorf("appdata помечен запущенным: %v", a)
+	if !a.LooksRunning {
+		// Режим -appdata: exe лежит в другом месте, путь процесса с config не
+		// сопоставить, поэтому запущенный NekoBox даёт предупреждение и здесь.
+		t.Errorf("appdata не помечен запущенным при работающем NekoBox: %v", a)
 	}
 	// Ручной путь с относительным именем игнорируется, абсолютный дубль не удваивает.
 	res, err = f.migrate.DetectNekoBox(context.Background(), connect.NewRequest(&lavrayv1.DetectNekoBoxRequest{

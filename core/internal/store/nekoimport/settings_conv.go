@@ -62,18 +62,6 @@ func portToEnabled(v json.RawMessage) (string, bool) {
 	return strconv.FormatBool(n > 0), true
 }
 
-// preToChannel: check_include_pre (проверять и предварительные версии) → канал.
-func preToChannel(v json.RawMessage) (string, bool) {
-	s, ok := asBool(v)
-	if !ok {
-		return "", false
-	}
-	if s == "true" {
-		return `"beta"`, true
-	}
-	return `"stable"`, true
-}
-
 // oneOf — строка из заданного набора. Темы и языки Qt (имя стиля, номер языка)
 // в LAVRay не имеют смысла: подходит только значение, которое LAVRay понимает.
 func oneOf(allowed ...string) func(json.RawMessage) (string, bool) {

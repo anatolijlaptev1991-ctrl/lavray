@@ -74,11 +74,11 @@ var settingRules = []settingRule{
 	{neko: "mux_padding", lavray: "mux.padding", conv: asBool},
 	{neko: "mux_default_on", lavray: "mux.default_on", conv: asBool},
 	{neko: "sp_format", lavray: "win.sp_format", conv: asString},
-	{neko: "check_include_pre", lavray: "update.channel", conv: preToChannel},
 	{neko: "traffic_loop_interval", lavray: "stats.interval_ms", conv: asInt},
 	{neko: "old_share_link_format", lavray: "share.vmess_old_format", conv: asBool},
 	// Не переносятся: у LAVRay своё значение или оно не имеет смысла.
 	{neko: "conn_stat", dropMsg: "всегда включено в LAVRay"},
+	{neko: "check_include_pre", dropMsg: "канал обновлений выбирается в LAVRay отдельно (состояние обновлений update.* не переносится)"},
 	{neko: "mw_size", dropMsg: "размер окна в формате Qt"},
 	{neko: "splitter_state", dropMsg: "положение разделителей в формате Qt"},
 	{neko: "extraCore", dropMsg: "внешние ядра за отдельным флагом, пути не переносятся"},

@@ -29,7 +29,7 @@ func runImportNekoBox(args []string, out, errOut io.Writer) int {
 	fs.SetOutput(errOut)
 	data := fs.String("data", defaultDataDir(), "каталог данных LAVRay")
 	from := fs.String("from", "", "каталог config NekoBox (или каталог установки с config)")
-	dry := fs.Bool("dry-run", false, "только посчитать: ничего не записывать")
+	dry := fs.Bool("dry-run", false, "только посчитать, ничего не записывать (работает с копией базы)")
 	noRoutes := fs.Bool("no-routes", false, "не переносить маршруты")
 	noSettings := fs.Bool("no-settings", false, "не переносить настройки")
 	if err := fs.Parse(args); err != nil || fs.NArg() != 0 {
@@ -70,20 +70,48 @@ func runImportNekoBox(args []string, out, errOut io.Writer) int {
 	return 0
 }
 
-// dataDirFor — каталог данных для переноса. Сухой прогон не должен создавать
-// чужой каталог данных: если базы ещё нет, считаем по пустой временной.
+// dataDirFor — каталог данных для переноса. Сухой прогон ничего не пишет в
+// настоящую базу, даже миграции и закрытие «висящих» сессий, которые делает
+// store.Open: он работает с копией базы (файл и -wal) во временном каталоге, а
+// если базы ещё нет — с пустой временной.
 func dataDirFor(data string, dry bool) (dir string, cleanup func(), err error) {
 	if !dry {
-		return data, func() {}, nil
-	}
-	if _, statErr := os.Stat(store.DBPath(data)); statErr == nil {
 		return data, func() {}, nil
 	}
 	tmp, err := os.MkdirTemp("", "lavray-import-dry-*")
 	if err != nil {
 		return "", nil, err
 	}
-	return tmp, func() { _ = os.RemoveAll(tmp) }, nil
+	cleanup = func() { _ = os.RemoveAll(tmp) }
+	src := store.DBPath(data)
+	for _, suffix := range []string{"", "-wal"} {
+		if err := copyIfExists(src+suffix, store.DBPath(tmp)+suffix); err != nil {
+			cleanup()
+			return "", nil, fmt.Errorf("копия базы для сухого прогона: %w", err)
+		}
+	}
+	return tmp, cleanup, nil
+}
+
+// copyIfExists копирует файл src в dst; нет src — не ошибка.
+func copyIfExists(src, dst string) error {
+	in, err := os.Open(src)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // importErrMessage — текст ошибки без кода Connect («invalid_argument: …»).

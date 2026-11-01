@@ -102,6 +102,7 @@ func pathKey(p string) string {
 // побеждает источник, названный раньше: ручной, процесс, appdata, localappdata.
 func Detect(env Env, extra []string) []Candidate {
 	procs := nekoProcesses(env)
+	profiles := profileConfigDirs(env)
 	var out []Candidate
 	seen := map[string]bool{}
 	add := func(path, source string) {
@@ -112,7 +113,7 @@ func Detect(env Env, extra []string) []Candidate {
 		seen[pathKey(dir)] = true
 		g, p, r := countEntries(dir)
 		out = append(out, Candidate{Path: dir, Source: source, Groups: g, Profiles: p, Routes: r,
-			LooksRunning: runningFor(dir, procs)})
+			LooksRunning: runningFor(dir, procs, profiles[pathKey(dir)])})
 	}
 	for _, p := range extra {
 		if filepath.IsAbs(p) {
@@ -124,10 +125,31 @@ func Detect(env Env, extra []string) []Candidate {
 			add(filepath.Join(pr.ExeDir, "config"), SourceProcess)
 		}
 	}
+	for _, c := range profileSources(env) {
+		add(c.dir, c.source)
+	}
+	return out
+}
+
+type profileSource struct{ dir, source string }
+
+// profileSources — каталоги config в профиле пользователя (режим -appdata).
+func profileSources(env Env) []profileSource {
+	var out []profileSource
 	for _, c := range []struct{ root, source string }{{env.AppData, SourceAppData}, {env.LocalAppData, SourceLocalAppData}} {
 		if c.root != "" {
-			add(filepath.Join(c.root, "nekoray", "config"), c.source)
+			out = append(out, profileSource{filepath.Join(c.root, "nekoray", "config"), c.source})
 		}
+	}
+	return out
+}
+
+// profileConfigDirs — ключи каталогов профиля: как бы их ни назвали, это
+// установки в режиме -appdata.
+func profileConfigDirs(env Env) map[string]bool {
+	out := map[string]bool{}
+	for _, c := range profileSources(env) {
+		out[pathKey(c.dir)] = true
 	}
 	return out
 }
@@ -149,9 +171,15 @@ func nekoProcesses(env Env) []Process {
 	return out
 }
 
-// runningFor: есть процесс NekoBox из каталога, в котором лежит config, либо
-// процесс с неизвестным путём (может быть любым — предупреждаем на всякий случай).
-func runningFor(configDir string, procs []Process) bool {
+// runningFor: NekoBox работает с этим config, если есть процесс из каталога, в
+// котором лежит config, либо процесс с неизвестным путём (может быть любым —
+// предупреждаем на всякий случай). Для каталога профиля (режим -appdata, exe
+// лежит в другом месте) путь процесса ничего не говорит, поэтому любой
+// запущенный NekoBox даёт предупреждение.
+func runningFor(configDir string, procs []Process, inProfile bool) bool {
+	if inProfile && len(procs) > 0 {
+		return true
+	}
 	parent := pathKey(filepath.Dir(configDir))
 	for _, p := range procs {
 		if p.ExeDir == "" || pathKey(p.ExeDir) == parent {

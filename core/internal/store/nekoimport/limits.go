@@ -52,23 +52,36 @@ func (r *reader) hasDir(sub string) bool {
 	return err == nil && fi.IsDir()
 }
 
+// readChunk — сколько записей каталога читается за раз. Каталог не загружается
+// целиком: чтение прекращается, как только превышен предел числа файлов.
+var readChunk = 1024
+
 // names — имена записей подкаталога sub по возрастанию; каждая запись входит в
-// бюджет числа файлов. Нет подкаталога или он ссылка — пусто.
+// бюджет числа файлов. Нет подкаталога или он ссылка — пусто. Каталог читается
+// порциями по readChunk записей и бросается на пределе, поэтому каталог с
+// миллионами записей не съедает память.
 func (r *reader) names(sub string) ([]string, error) {
 	if !r.hasDir(sub) {
 		return nil, nil
 	}
-	entries, err := os.ReadDir(filepath.Join(r.root, sub))
+	dir, err := os.Open(filepath.Join(r.root, sub))
 	if err != nil {
 		return nil, nil // нечитаемый каталог = пустой: ошибка попадёт в отчёт отсутствием данных
 	}
-	r.files += len(entries)
-	if r.files > r.lim.MaxFiles {
-		return nil, fmt.Errorf("%w: больше %d файлов", ErrLimits, r.lim.MaxFiles)
-	}
-	out := make([]string, 0, len(entries))
-	for _, e := range entries {
-		out = append(out, e.Name())
+	defer func() { _ = dir.Close() }()
+	var out []string
+	for {
+		entries, err := dir.ReadDir(readChunk)
+		r.files += len(entries)
+		if r.files > r.lim.MaxFiles {
+			return nil, fmt.Errorf("%w: больше %d файлов", ErrLimits, r.lim.MaxFiles)
+		}
+		for _, e := range entries {
+			out = append(out, e.Name())
+		}
+		if err != nil { // io.EOF — конец каталога; прочая ошибка — читаем что успели
+			break
+		}
 	}
 	sort.Strings(out)
 	return out, nil

@@ -39,6 +39,9 @@ func mapProfile(ent *nekoEntity) (*model.Profile, error) {
 		yc := *ent.Yc
 		p.TestResult.LatencyMs = &yc
 	}
+	// A17: страна нужна и перенесённым профилям, иначе группировка «по странам»
+	// работала бы только для новых.
+	p.Geo = model.DetectGeo(p.Name, p.Address)
 	p.TestResult.FullReport = ent.Report
 	p.Traffic = model.TrafficCounters{DownlinkBytes: ent.Traffic.DL, UplinkBytes: ent.Traffic.UL}
 	if err := fillDetail(p, ent.Type, b); err != nil {

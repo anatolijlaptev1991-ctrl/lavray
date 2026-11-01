@@ -15,6 +15,11 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store/nekoimport"
 )
 
+// nekoDefaultEnv — окружение поиска по умолчанию. Тесты пакета подменяют его на
+// пустое (migration_hermetic_test.go): настоящее смотрит процессы и профиль
+// пользователя.
+var nekoDefaultEnv = nekoimport.DefaultEnv
+
 // migrationService — реализация lavrayv1connect.MigrationServiceHandler.
 type migrationService struct {
 	*migrator
@@ -23,7 +28,7 @@ type migrationService struct {
 }
 
 func newMigrationService(s *Server) *migrationService {
-	return &migrationService{migrator: newMigrator(s.st, s.presetRepo), env: nekoimport.DefaultEnv()}
+	return &migrationService{migrator: newMigrator(s.st, s.presetRepo), env: nekoDefaultEnv()}
 }
 
 // DetectNekoBox ищет установки: переданные пути, config рядом с запущенным

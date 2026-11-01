@@ -25,9 +25,13 @@ func nekoLastupMs(sec int64) int64 {
 
 // toGroup конвертирует группу; вторым значением — front_proxy_id (-1 = нет).
 func toGroup(ng *nekoGroup) (*model.Group, int64) {
+	name := ng.Name
+	if name == "" { // хранилище отвергает группу без имени
+		name = fmt.Sprintf("Group %d", ng.ID)
+	}
 	g := &model.Group{
 		ID:              ng.ID,
-		Name:            ng.Name,
+		Name:            name,
 		Kind:            model.GroupBasic,
 		SubscriptionURL: ng.URL,
 		Archive:         ng.Archive,

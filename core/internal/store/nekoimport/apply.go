@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
 
@@ -40,9 +39,6 @@ func applyAll(tx *store.Store, res *Resolved, presetsJSON string) error {
 	if err := applyEntities(tx, res); err != nil {
 		return err
 	}
-	if err := applyMapRows(tx, res); err != nil {
-		return err
-	}
 	for _, s := range res.Settings {
 		if err := tx.SetSetting(s.Key, s.JSON); err != nil {
 			return fmt.Errorf("nekoimport: setting %s: %w", s.Key, err)
@@ -53,20 +49,19 @@ func applyAll(tx *store.Store, res *Resolved, presetsJSON string) error {
 			return fmt.Errorf("nekoimport: presets: %w", err)
 		}
 	}
-	return nil
+	// import_map — последним: сбой в любой записи откатывает всё выше.
+	return applyMapRows(tx, res)
 }
 
 // applyEntities: группы, профили, затем front_proxy_id (FK на profiles) и
 // отметки выданных id.
 func applyEntities(tx *store.Store, res *Resolved) error {
-	groups := map[int64]*model.Group{}
 	var maxGroup, maxProfile int64
 	for _, ng := range res.Groups {
 		g := *ng.Group
 		if err := tx.ImportGroup(&g); err != nil {
 			return fmt.Errorf("nekoimport: create group %d: %w", g.ID, err)
 		}
-		groups[g.ID] = &g
 		maxGroup = max(maxGroup, g.ID)
 	}
 	for _, np := range res.Profiles {
@@ -77,14 +72,9 @@ func applyEntities(tx *store.Store, res *Resolved) error {
 		maxProfile = max(maxProfile, p.ID)
 	}
 	for _, f := range res.Fronts {
-		g := groups[f.GroupID]
-		if g == nil {
-			continue
-		}
 		v := f.ProfileID
-		g.FrontProxyID = &v
-		if err := tx.UpdateGroup(g); err != nil {
-			return fmt.Errorf("nekoimport: set front proxy of group %d: %w", g.ID, err)
+		if err := tx.SetGroupFrontProxy(f.GroupID, &v); err != nil { // принимает и группу с id 0
+			return fmt.Errorf("nekoimport: set front proxy of group %d: %w", f.GroupID, err)
 		}
 	}
 	if len(res.Groups) > 0 {

@@ -140,8 +140,10 @@ type nekoGroup struct {
 	ColumnWidth         []int   `json:"column_width"`
 }
 
+// decodeNekoGroup разбирает groups/<id>.json. Отсутствующий front_proxy_id
+// означает «нет» (-1): без этого он читался бы как 0 — профиль с id 0.
 func decodeNekoGroup(b []byte) (*nekoGroup, error) {
-	var g nekoGroup
+	g := nekoGroup{FrontProxyID: -1}
 	if err := json.Unmarshal(b, &g); err != nil {
 		return nil, fmt.Errorf("invalid JSON: %w", err)
 	}

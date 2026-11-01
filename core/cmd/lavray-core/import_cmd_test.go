@@ -4,11 +4,14 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -148,4 +151,55 @@ func TestRunSubcommandDispatch(t *testing.T) {
 	if !strings.Contains(errOut.String(), "import-nekobox") {
 		t.Error("справка не упоминает import-nekobox")
 	}
+}
+
+// Сухой прогон на существующей базе не пишет в неё: ни миграций, ни закрытия
+// «висящих» сессий, ни файлов -wal/-shm рядом (читает копию).
+func TestImportNekoBoxCmdDryRunLeavesDatabaseUntouched(t *testing.T) {
+	data := tempData(t)
+	st, err := store.Open(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// База «старой сборки»: без последней миграции.
+	newest, err := st.SchemaVersion()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{`DROP TABLE import_map`, `DELETE FROM schema_version WHERE version = ` + strconv.FormatInt(newest, 10)} {
+		if _, err := st.DB().Exec(q); err != nil {
+			t.Fatalf("%s: %v", q, err)
+		}
+	}
+	if err := st.Close(); err != nil {
+		t.Fatal(err)
+	}
+	before := fileHash(t, store.DBPath(data))
+
+	var out, errOut bytes.Buffer
+	if code := runImportNekoBox([]string{"--data", data, "--from", nekoFixture, "--dry-run"}, &out, &errOut); code != 0 {
+		t.Fatalf("код %d: %s", code, errOut.String())
+	}
+	var rep cmdReport
+	if err := json.Unmarshal(out.Bytes(), &rep); err != nil || !rep.DryRun || rep.GroupsImported != 2 {
+		t.Fatalf("отчёт: %+v %v", rep, err)
+	}
+	if after := fileHash(t, store.DBPath(data)); after != before {
+		t.Error("сухой прогон изменил файл базы")
+	}
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if _, err := os.Stat(store.DBPath(data) + suffix); err == nil {
+			t.Errorf("рядом с базой появился файл %s", suffix)
+		}
+	}
+}
+
+func fileHash(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
 }

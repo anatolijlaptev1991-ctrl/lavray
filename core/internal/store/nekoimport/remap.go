@@ -57,7 +57,10 @@ func Remap(p *Plan, st State) *Resolved {
 }
 
 func (r *Resolved) resolveGroups(p *Plan, st State) {
-	alloc := newIDAlloc(st.GroupIDs, st.GroupFloor, groupIDsOf(p.Groups))
+	// Группы: отметка выданных id лежит в зарезервированном диапазоне Default, на
+	// id группы ссылается лишь настройка ui.current_group (Remap её переписывает),
+	// поэтому занятость определяется существованием, как раньше.
+	alloc := newIDAlloc(st.GroupIDs, st.GroupFloor, groupIDsOf(p.Groups), false)
 	for _, pg := range p.Groups {
 		if id, ok := st.localNumeric(KindGroup, pg.Key); ok && st.GroupIDs[id] {
 			r.GroupMap[pg.NekoID] = id
@@ -77,7 +80,7 @@ func (r *Resolved) resolveGroups(p *Plan, st State) {
 }
 
 func (r *Resolved) resolveProfiles(p *Plan, st State) {
-	alloc := newIDAlloc(st.ProfileIDs, st.ProfileFloor, profileIDsOf(p.Profiles))
+	alloc := newIDAlloc(st.ProfileIDs, st.ProfileFloor, profileIDsOf(p.Profiles), true)
 	for _, pp := range p.Profiles {
 		if id, ok := st.localNumeric(KindProfile, pp.Key); ok && st.ProfileIDs[id] {
 			r.ProfileMap[pp.NekoID] = id

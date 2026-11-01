@@ -8,14 +8,20 @@ package nekoimport
 // сохранит другая запись этого же переноса.
 
 type idAlloc struct {
-	taken map[int64]bool
-	next  int64
+	taken  map[int64]bool
+	next   int64
+	floor  int64
+	strict bool
 }
 
 // newIDAlloc: existing — занятые id, floor — наибольший выданный таблице id,
-// plan — id записей каталога.
-func newIDAlloc(existing map[int64]bool, floor int64, plan []int64) *idAlloc {
-	a := &idAlloc{taken: make(map[int64]bool, len(existing)+len(plan)), next: floor}
+// plan — id записей каталога, strict — id ≤ floor нельзя использовать повторно
+// (кроме свежей таблицы: ни строк, ни выданных id).
+func newIDAlloc(existing map[int64]bool, floor int64, plan []int64, strict bool) *idAlloc {
+	a := &idAlloc{
+		taken: make(map[int64]bool, len(existing)+len(plan)), next: floor, floor: floor,
+		strict: strict && (len(existing) > 0 || floor > 0),
+	}
 	for id := range existing {
 		a.taken[id] = true
 	}
@@ -30,7 +36,7 @@ func newIDAlloc(existing map[int64]bool, floor int64, plan []int64) *idAlloc {
 // assign выдаёт id записи: свой, если свободен и forceNew не задан, иначе новый.
 // Второе значение — id сменился.
 func (a *idAlloc) assign(want int64, forceNew bool) (int64, bool) {
-	if !forceNew && want >= 0 && !a.taken[want] {
+	if !forceNew && want >= 0 && !a.taken[want] && !(a.strict && want <= a.floor) {
 		a.taken[want] = true
 		return want, false
 	}

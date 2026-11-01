@@ -71,17 +71,40 @@ func (r *presetRepo) Modify(fn func(list []*presets.Preset) ([]*presets.Preset, 
 	if err != nil {
 		return err
 	}
-	if next == nil {
-		next = []*presets.Preset{}
-	}
-	b, err := json.Marshal(next)
+	b, err := encodePresets(next)
 	if err != nil {
 		return err
 	}
-	if len(b) > presets.MaxAllCustomBytes {
-		return fmt.Errorf("%w: наборы занимают %d байт, предел %d", presets.ErrLimit, len(b), presets.MaxAllCustomBytes)
+	return r.st.SetMeta(metaCustomPresets, b)
+}
+
+// encodePresets — значение meta для списка наборов; больше MaxAllCustomBytes
+// отвергается (RESOURCE_EXHAUSTED).
+func encodePresets(list []*presets.Preset) (string, error) {
+	if list == nil {
+		list = []*presets.Preset{}
 	}
-	return r.st.SetMeta(metaCustomPresets, string(b))
+	b, err := json.Marshal(list)
+	if err != nil {
+		return "", err
+	}
+	if len(b) > presets.MaxAllCustomBytes {
+		return "", fmt.Errorf("%w: наборы занимают %d байт, предел %d", presets.ErrLimit, len(b), presets.MaxAllCustomBytes)
+	}
+	return string(b), nil
+}
+
+// WithLock выполняет fn под мьютексом репозитория, отдав ей текущий список.
+// Запись fn делает сама (перенос из NekoBox пишет наборы в той же транзакции,
+// что профили и группы): пока fn работает, никто другой наборы не меняет.
+func (r *presetRepo) WithLock(fn func(current []*presets.Preset) error) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	cur, err := r.read()
+	if err != nil {
+		return err
+	}
+	return fn(cur)
 }
 
 // indexOfPreset — позиция набора с id в списке или -1.

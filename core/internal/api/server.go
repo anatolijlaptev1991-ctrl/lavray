@@ -4,7 +4,6 @@ package api
 
 import (
 	"context"
-	"encoding/json"
 	"net"
 	"net/http"
 	"net/netip"
@@ -20,7 +19,6 @@ import (
 	lavrayv1connect "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1connect"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
-	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/presets"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs"
@@ -91,7 +89,9 @@ type Server struct {
 	updMu sync.Mutex
 
 	backup *backupService // зашифрованная копия (backup_service.go)
-	sched  schedCtl       // жизненный цикл планировщика подписок (sched_ctl.go)
+	// migration — перенос из NekoBox (migration_service.go).
+	migration *migrationService
+	sched     schedCtl // жизненный цикл планировщика подписок (sched_ctl.go)
 
 	// ---- агентский доступ (MCP): токен этого запуска, режим — agent.mode ----
 	agentMu    sync.RWMutex
@@ -146,6 +146,7 @@ func NewServer(d Deps) *Server {
 		setSubs:          map[chan *lavrayv1.SettingsChanged]struct{}{},
 	}
 	s.backup = newBackupService(s)
+	s.migration = newMigrationService(s)
 	return s
 }
 
@@ -193,6 +194,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mount(path, h)
 	path, h = lavrayv1connect.NewBackupServiceHandler(s.backup, s.backup.handlerOptions(opts)...)
 	mount(path, h)
+	path, h = lavrayv1connect.NewMigrationServiceHandler(s.migration, opts...)
+	mount(path, h)
 }
 
 // NewHandler — готовый http.Handler со всеми сервисами (хелпер для cmd/тестов).
@@ -204,64 +207,6 @@ func (s *Server) NewHandler() http.Handler {
 
 // Close — очистка при завершении процесса (подписки стримов закрывает ctx).
 func (s *Server) Close() error { return nil }
-
-// ============================================================================
-// Хелперы настроек (таблица settings + дескрипторы model.SettingDescriptors)
-// ============================================================================
-
-// descriptorMap — каталог ключей (собирается один раз).
-var descriptorMap = func() map[string]model.SettingDescriptor {
-	m := map[string]model.SettingDescriptor{}
-	for _, d := range model.SettingDescriptors() {
-		m[d.Key] = d
-	}
-	return m
-}()
-
-// settingJSON — значение ключа из таблицы settings или дефолт дескриптора
-// ("" если ключа нет вообще — такого не бывает для известных ключей).
-func (s *Server) settingJSON(key string) string {
-	if v, ok, err := s.st.GetSetting(key); err == nil && ok {
-		return v
-	}
-	if d, found := descriptorMap[key]; found {
-		return d.DefaultValue
-	}
-	return ""
-}
-
-func (s *Server) settingStr(key string) string {
-	var v string
-	if json.Unmarshal([]byte(s.settingJSON(key)), &v) == nil {
-		return v
-	}
-	return ""
-}
-
-func (s *Server) settingInt(key string) int {
-	var v int
-	if json.Unmarshal([]byte(s.settingJSON(key)), &v) == nil {
-		return v
-	}
-	return 0
-}
-
-func (s *Server) settingBool(key string) bool {
-	var v bool
-	if json.Unmarshal([]byte(s.settingJSON(key)), &v) == nil {
-		return v
-	}
-	return false
-}
-
-// settingStringList — список строк (remember.modes, ui.log_ignore).
-func (s *Server) settingStringList(key string) []string {
-	var v []string
-	if json.Unmarshal([]byte(s.settingJSON(key)), &v) == nil {
-		return v
-	}
-	return nil
-}
 
 // ============================================================================
 // Сборка cfgbuild.BuildSettings из карты настроек

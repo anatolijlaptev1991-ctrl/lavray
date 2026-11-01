@@ -73,3 +73,21 @@ func preToChannel(v json.RawMessage) (string, bool) {
 	}
 	return `"stable"`, true
 }
+
+// oneOf — строка из заданного набора. Темы и языки Qt (имя стиля, номер языка)
+// в LAVRay не имеют смысла: подходит только значение, которое LAVRay понимает.
+func oneOf(allowed ...string) func(json.RawMessage) (string, bool) {
+	return func(v json.RawMessage) (string, bool) {
+		var s string
+		if json.Unmarshal(v, &s) != nil {
+			return "", false
+		}
+		for _, a := range allowed {
+			if s == a {
+				b, _ := json.Marshal(s)
+				return string(b), true
+			}
+		}
+		return "", false
+	}
+}

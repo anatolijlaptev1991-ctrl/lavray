@@ -68,6 +68,9 @@ func TestSettingRulesMatchDescriptors(t *testing.T) {
 		model.SettingString: `"x"`, model.SettingBool: `true`, model.SettingInt: `5`,
 		model.SettingStringList: `["a"]`,
 	}
+	if r := settingRules; len(r) == 0 {
+		t.Fatal("пустая таблица")
+	}
 	for _, r := range settingRules {
 		if r.lavray == "" {
 			continue
@@ -80,8 +83,9 @@ func TestSettingRulesMatchDescriptors(t *testing.T) {
 		if d.Internal {
 			t.Errorf("%s: ключ %s служебный", r.neko, r.lavray)
 		}
-		if r.neko == "check_include_pre" || r.neko == "core_box_clash_api" {
-			continue // значение выводится из другого типа
+		switch r.neko {
+		case "check_include_pre", "core_box_clash_api", "theme", "language":
+			continue // значение выводится из другого типа или из набора допустимых
 		}
 		in, out := probe[d.Type], ""
 		if got, ok := r.conv(json.RawMessage(in)); ok {
@@ -95,12 +99,12 @@ func TestSettingRulesMatchDescriptors(t *testing.T) {
 
 // Неизвестные ключи — одно предупреждение со списком; неверный тип — отдельное (I).
 func TestUnknownSettingsWarned(t *testing.T) {
-	list, _, warns := settingsOf(t, `{"inbound_socks_port":"abc","zzz_future":1,"aaa_other":2,"conn_stat":true,"extraCore":{"core_map":"{}"}}`)
+	list, _, warns := settingsOf(t, `{"inbound_socks_port":"abc","zzz_future":1,"aaa_other":2,"conn_stat":true,"extraCore":{"core_map":"{}"},"theme":"Fusion","language":2,"mw_size":"AAAA"}`)
 	if len(list) != 0 {
 		t.Errorf("перенесено лишнее: %v", list)
 	}
 	joined := strings.Join(warns, "\n")
-	for _, want := range []string{"inbound_socks_port не перенесена", "2 (aaa_other, zzz_future)", "conn_stat не переносится", "extraCore не переносится"} {
+	for _, want := range []string{"inbound_socks_port не перенесена", "2 (aaa_other, zzz_future)", "conn_stat не переносится", "extraCore не переносится", "theme не перенесена", "language не перенесена", "mw_size не переносится"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("нет предупреждения %q в\n%s", want, joined)
 		}

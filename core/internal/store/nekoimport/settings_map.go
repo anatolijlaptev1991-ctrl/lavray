@@ -43,10 +43,8 @@ var settingRules = []settingRule{
 	{neko: "remember_id", lavray: "remember.id", conv: asInt, ref: RefProfile},
 	{neko: "remember_enable", lavray: "remember.enable", conv: asBool},
 	{neko: "spmode2", lavray: "remember.modes", conv: asStringList},
-	{neko: "theme", lavray: "ui.theme", conv: asString},
-	{neko: "language", lavray: "ui.lang", conv: asString},
-	{neko: "mw_size", lavray: "ui.window_size", conv: asString},
-	{neko: "splitter_state", lavray: "ui.splitter", conv: asString},
+	{neko: "theme", lavray: "ui.theme", conv: oneOf("light", "dark", "system")},
+	{neko: "language", lavray: "ui.lang", conv: oneOf("ru", "en", "de", "es", "zh")},
 	{neko: "start_minimal", lavray: "ui.start_minimal", conv: asBool},
 	{neko: "max_log_line", lavray: "ui.max_log_lines", conv: asInt},
 	{neko: "log_ignore", lavray: "ui.log_ignore", conv: asStringList},
@@ -81,6 +79,8 @@ var settingRules = []settingRule{
 	{neko: "old_share_link_format", lavray: "share.vmess_old_format", conv: asBool},
 	// Не переносятся: у LAVRay своё значение или оно не имеет смысла.
 	{neko: "conn_stat", dropMsg: "всегда включено в LAVRay"},
+	{neko: "mw_size", dropMsg: "размер окна в формате Qt"},
+	{neko: "splitter_state", dropMsg: "положение разделителей в формате Qt"},
 	{neko: "extraCore", dropMsg: "внешние ядра за отдельным флагом, пути не переносятся"},
 	{neko: activeRoutingKey}, // имя маршрута: см. Plan.ActiveRoute
 }

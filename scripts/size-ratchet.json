@@ -8,7 +8,7 @@
   "core/internal/api/profile_service.go": 446,
   "core/internal/api/routing_settings_service.go": 405,
   "core/internal/api/selfcheck.go": 309,
-  "core/internal/api/server.go": 456,
+  "core/internal/api/server.go": 401,
   "core/internal/api/subscription_service.go": 350,
   "core/internal/api/test_instance.go": 410,
   "core/internal/api/test_probes.go": 239,

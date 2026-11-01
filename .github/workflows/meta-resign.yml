@@ -18,8 +18,35 @@ permissions:
   contents: read
 
 jobs:
+  # Ввод workflow_dispatch недоверенный (в том числе из-за арифметики bash:
+  # `$(( a[$(cmd)] ))` исполняет cmd). Поэтому он проверяется отдельным заданием
+  # БЕЗ секретов и без Environment, а дальше передаётся только готовым числом.
+  validate:
+    name: "Проверка ввода"
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    outputs:
+      hours: ${{ steps.days.outputs.hours }}
+    steps:
+      - name: "Проверка срока продления (суток)"
+        id: days
+        env:
+          DAYS: ${{ inputs.days }}
+        run: |
+          if ! [[ "$DAYS" =~ ^[0-9]{1,4}$ ]]; then
+            echo "::error title=Неверный срок::days — целое число суток от 1 до 365"
+            exit 1
+          fi
+          days=$((10#$DAYS))
+          if [ "$days" -lt 1 ] || [ "$days" -gt 365 ]; then
+            echo "::error title=Неверный срок::days — целое число суток от 1 до 365"
+            exit 1
+          fi
+          echo "hours=$((days * 24))" >> "$GITHUB_OUTPUT"
+
   resign:
     name: "Продление манифестов"
+    needs: validate
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: release-signing
@@ -67,12 +94,11 @@ jobs:
       - name: "Продление manifest и sources (ключ manifest)"
         env:
           LAVRAY_MANIFEST_KEY: ${{ secrets.LAVRAY_MANIFEST_KEY }}
-          DAYS: ${{ inputs.days }}
+          HOURS: ${{ needs.validate.outputs.hours }} # число, проверенное заданием validate
         run: |
-          hours=$(( DAYS * 24 ))
           for f in pages/meta/manifest-*.json pages/meta/sources.json; do
             [ -f "$f" ] || continue
-            ./updsign resign -key env:LAVRAY_MANIFEST_KEY -in "$f" -out "$f" -expires "${hours}h"
+            ./updsign resign -key env:LAVRAY_MANIFEST_KEY -in "$f" -out "$f" -expires "${HOURS}h"
           done
 
       - name: "Подпись timestamp.json (ключ timestamp)"

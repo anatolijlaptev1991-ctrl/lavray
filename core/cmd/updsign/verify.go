@@ -59,6 +59,7 @@ func (c *cli) verify(args []string) error {
 	assets, product := fs.String("assets", "", "каталог с установщиками"), fs.String("product", "", "ожидаемый продукт")
 	nowFlag := fs.String("now", "", "момент проверки RFC3339 (по умолчанию сейчас)")
 	only := fs.String("channel", "", "проверить только этот канал (выпускаемый)")
+	role := fs.String("role", "", "timestamp: проверить только роль timestamp и пины манифестов")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -78,6 +79,9 @@ func (c *cli) verify(args []string) error {
 		if now, err = time.Parse(time.RFC3339, *nowFlag); err != nil {
 			return fmt.Errorf("-now: %w", err)
 		}
+	}
+	if *role != "" {
+		return c.verifyRole(trust, *role, *only, *dir, now)
 	}
 	files, _ := filepath.Glob(filepath.Join(*dir, "manifest-*.json"))
 	if *only != "" { // просроченный манифест соседнего канала не мешает выпуску этого

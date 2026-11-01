@@ -400,3 +400,37 @@ func TestExpiryWarnsBeforeManifestExpires(t *testing.T) {
 		t.Fatal("нет каталога метаданных — ошибка")
 	}
 }
+
+// verify -role timestamp: роль timestamp и пины манифестов, без проверки самих
+// манифестов. Просроченный манифест одного канала не мешает продлить timestamp.
+func TestVerifyTimestampRoleIgnoresExpiredManifests(t *testing.T) {
+	h := newHarness(t)
+	h.must(h.manifestArgs("0.5.0-rc.1", "beta", "1h", "")...)
+	h.must(h.manifestArgs("0.5.1", "stable", "", "")...)
+	h.must("timestamp", "-key", "file:"+h.p("timestamp.sec"), "-dir", h.p("meta"), "-out", h.p("meta/timestamp.json"))
+	later := time.Now().Add(3 * time.Hour).UTC().Format(time.RFC3339)
+	if code, _, _ := h.run("verify", "-root", h.root, "-dir", h.p("meta"), "-now", later); code == 0 {
+		t.Fatal("полная проверка должна ловить просроченный beta")
+	}
+	out := h.must("verify", "-role", "timestamp", "-root", h.root, "-dir", h.p("meta"), "-now", later)
+	if !strings.Contains(out, "timestamp") || !strings.HasSuffix(strings.TrimSpace(out), "ok") {
+		t.Fatalf("проверка роли timestamp: %s", out)
+	}
+	// сам timestamp просрочен
+	veryLate := time.Now().Add(9 * 24 * time.Hour).UTC().Format(time.RFC3339)
+	if code, _, errw := h.run("verify", "-role", "timestamp", "-root", h.root, "-dir", h.p("meta"), "-now", veryLate); code == 0 || !strings.Contains(errw, "просрочен") {
+		t.Fatalf("просроченный timestamp: %d %s", code, errw)
+	}
+	// манифест подменили после подписи timestamp: пин не сходится
+	raw, _ := os.ReadFile(h.p("meta/manifest-stable.json"))
+	_ = os.WriteFile(h.p("meta/manifest-stable.json"), bytes.Replace(raw, []byte(`"mandatory":false`), []byte(`"mandatory":true`), 1), 0o644)
+	if code, _, errw := h.run("verify", "-role", "timestamp", "-root", h.root, "-dir", h.p("meta")); code == 0 || !strings.Contains(errw, "manifest-stable.json") {
+		t.Fatalf("подмена манифеста: %d %s", code, errw)
+	}
+	if code, _, _ := h.run("verify", "-role", "nonsense", "-root", h.root, "-dir", h.p("meta")); code == 0 {
+		t.Fatal("неизвестная роль — ошибка")
+	}
+	if code, _, _ := h.run("verify", "-role", "timestamp", "-channel", "stable", "-root", h.root, "-dir", h.p("meta")); code == 0 {
+		t.Fatal("-role и -channel вместе — ошибка")
+	}
+}

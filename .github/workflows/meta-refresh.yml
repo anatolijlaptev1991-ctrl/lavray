@@ -23,8 +23,9 @@ permissions:
 jobs:
   refresh:
     name: "Продление timestamp"
-    # только ветка по умолчанию: тег или чужая ветка ключ t1 не получит
-    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    # только main: тег или чужая ветка ключ t1 не получит (в событии schedule имя
+    # ветки по умолчанию из контекста события бывает пустым, поэтому ветка названа прямо)
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment: release-timestamp
     permissions:
@@ -85,14 +86,13 @@ jobs:
           LAVRAY_TIMESTAMP_KEY: ${{ secrets.LAVRAY_TIMESTAMP_KEY }}
         run: ./updsign timestamp -key env:LAVRAY_TIMESTAMP_KEY -dir pages/meta -out pages/meta/timestamp.json
 
-      # Проверка по корню из репозитория (а не из gh-pages) по каждому каналу отдельно.
-      - name: "updsign verify (до публикации)"
+      # До публикации проверяется только сам timestamp: корни, подпись, срок, а также что
+      # закреплённые им манифесты лежат без изменений. Просроченный манифест одного
+      # канала продлению timestamp не мешает: иначе свежесть остальных каналов
+      # зависела бы от самого слабого.
+      - name: "Проверка timestamp (до публикации)"
         if: steps.gate.outputs.enabled == 'true' && steps.pages.outputs.published == 'true'
-        run: |
-          for f in pages/meta/manifest-*.json; do
-            ch=$(basename "$f" .json); ch="${ch#manifest-}"
-            ./updsign verify -root core/cmd/lavray-core/root.json -dir pages/meta -channel "$ch" -product lavray-windows
-          done
+        run: ./updsign verify -role timestamp -root core/cmd/lavray-core/root.json -dir pages/meta
 
       - name: "Публикация timestamp.json в gh-pages"
         if: steps.gate.outputs.enabled == 'true' && steps.pages.outputs.published == 'true'
@@ -107,8 +107,20 @@ jobs:
           git -C pages commit -m "meta: продление timestamp" || { echo "timestamp не изменился"; exit 0; }
           git -C pages -c "http.extraheader=AUTHORIZATION: basic $auth" push origin gh-pages
 
-      # Последним шагом: timestamp уже продлён и опубликован, задание краснеет,
-      # пока владелец не выпустит релиз или не запустит meta-resign.
+      # После публикации timestamp: каждый канал отдельно. Просроченный или
+      # испорченный манифест краснит задание (владелец узнаёт), но свежий timestamp
+      # уже опубликован.
+      - name: "Манифесты по каналам (после публикации)"
+        if: steps.gate.outputs.enabled == 'true' && steps.pages.outputs.published == 'true'
+        run: |
+          failed=0
+          for f in pages/meta/manifest-*.json; do
+            ch=$(basename "$f" .json); ch="${ch#manifest-}"
+            ./updsign verify -root core/cmd/lavray-core/root.json -dir pages/meta -channel "$ch" -product lavray-windows || failed=1
+          done
+          exit $failed
+
+      # Последним шагом: за 14 суток до конца срока манифеста или sources.
       - name: "Манифесты и sources: срок (предупреждение за 14 суток)"
         if: steps.gate.outputs.enabled == 'true' && steps.pages.outputs.published == 'true'
         run: ./updsign expiry -dir pages/meta -within 336h

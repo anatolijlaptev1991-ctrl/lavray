@@ -17,6 +17,8 @@ import (
 )
 
 // downloadPresets качает наборы, чья ревизия выше действующей; false — нечего.
+// Набор принимается целиком: если файл любого из наборов не прошёл сверку или не
+// записался, уже уложенные в staging файлы этой попытки убираются (discardAttempt).
 func (s *Server) downloadPresets(ctx context.Context, res *updates.Result, send func(*lavrayv1.UpdateEvent) bool) (bool, error) {
 	installed, err := s.builtinList()
 	if err != nil {
@@ -32,10 +34,12 @@ func (s *Server) downloadPresets(ctx context.Context, res *updates.Result, send 
 		e := res.Manifest.Presets[o.ID]
 		data, err := updates.FetchBlob(ctx, res.Mirrors, updates.BlobSpec{Path: e.Path, Sha256: e.Sha256, Max: updates.MaxPresetBytes}, nil)
 		if err != nil {
+			s.discardAttempt(files)
 			return true, s.compDownloadFailed(ctx, compPresets, err, send)
 		}
 		f, err := s.stageBlob(o.ID+".json", e.Sha256, data)
 		if err != nil {
+			s.discardAttempt(files)
 			return true, s.dataFailure(compPresets, err)
 		}
 		f.id = o.ID
@@ -101,6 +105,7 @@ func (s *Server) stageBlob(name, sha string, data []byte) (stagedFile, error) {
 	}
 	tmp := final + updates.PartSuffix
 	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		_ = os.Remove(tmp)
 		return stagedFile{}, err
 	}
 	if err := os.Rename(tmp, final); err != nil {
@@ -108,6 +113,13 @@ func (s *Server) stageBlob(name, sha string, data []byte) (stagedFile, error) {
 		return stagedFile{}, err
 	}
 	return stagedFile{path: final, sha256: sha}, nil
+}
+
+// discardAttempt убирает из staging файлы, которые эта неудавшаяся попытка уже
+// уложила. Файлы действующих скачанных артефактов (тот же sha256 и имя — тот же
+// путь) и посторонние файлы остаются.
+func (s *Server) discardAttempt(files []stagedFile) {
+	s.cleanComponentStaging(&stagedComp{files: files})
 }
 
 // cleanComponentStaging удаляет файлы старого артефакта, не нужные текущим.

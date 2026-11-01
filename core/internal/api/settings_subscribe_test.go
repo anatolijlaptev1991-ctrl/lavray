@@ -65,12 +65,12 @@ func (r *settingsRig) subscribe(t *testing.T, ctx context.Context) *settingsSub 
 		}
 		sub.done <- stream.Err()
 	}()
-	waitFor(t, "регистрация подписчика", func() bool { return r.srv.settingsSubscribers() == before+1 })
+	waitForSettings(t, "регистрация подписчика", func() bool { return r.srv.settingsSubscribers() == before+1 })
 	return sub
 }
 
-// waitFor опрашивает условие до 3 с.
-func waitFor(t *testing.T, what string, cond func() bool) {
+// waitForSettings опрашивает условие до 3 с.
+func waitForSettings(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	deadline := time.Now().Add(3 * time.Second)
 	for !cond() {
@@ -141,7 +141,7 @@ func TestSubscribeSettingsCancelUnsubscribes(t *testing.T) {
 	_ = stream
 
 	cancel()
-	waitFor(t, "снятие подписки после отмены", func() bool { return r.srv.settingsSubscribers() == 0 })
+	waitForSettings(t, "снятие подписки после отмены", func() bool { return r.srv.settingsSubscribers() == 0 })
 	// Публикация после отписки безопасна.
 	r.srv.publishSettingsChanged(&lavrayv1.SettingsChanged{Removed: []string{"x"}})
 }
@@ -163,7 +163,7 @@ func TestSubscribeSettingsMultiClient(t *testing.T) {
 		}
 	}
 	leave()
-	waitFor(t, "уход третьего клиента", func() bool { return r.srv.settingsSubscribers() == 2 })
+	waitForSettings(t, "уход третьего клиента", func() bool { return r.srv.settingsSubscribers() == 2 })
 	r.setPort(t, 4001)
 	for i, s := range streams[:2] {
 		if v := s.next(t).Changed["inbound.port"].GetIntValue(); v != 4001 {
@@ -227,7 +227,7 @@ func TestSubscribeSettingsSlowSubscriberDropped(t *testing.T) {
 			return nil
 		})
 	}()
-	waitFor(t, "два подписчика", func() bool { return srv.settingsSubscribers() == 2 })
+	waitForSettings(t, "два подписчика", func() bool { return srv.settingsSubscribers() == 2 })
 
 	// publish отдаёт событие и ждёт, пока быстрый подписчик его заберёт: иначе
 	// его собственный буфер мог бы переполниться из-за планировщика.
@@ -240,7 +240,7 @@ func TestSubscribeSettingsSlowSubscriberDropped(t *testing.T) {
 	publish := func(ev *lavrayv1.SettingsChanged) {
 		srv.publishSettingsChanged(ev)
 		published++
-		waitFor(t, "быстрый забрал событие", func() bool { return fastCount() == published })
+		waitForSettings(t, "быстрый забрал событие", func() bool { return fastCount() == published })
 	}
 	// Первое событие забирает обработчик и застревает в send; ещё 16 лежат в
 	// буфере и подписчика не снимают.
@@ -292,11 +292,11 @@ func TestSubscribeSettingsSendErrorUnsubscribes(t *testing.T) {
 	go func() {
 		done <- r.srv.serveSettings(context.Background(), func(*lavrayv1.SettingsChanged) error { return boom })
 	}()
-	waitFor(t, "подписчик", func() bool { return r.srv.settingsSubscribers() == 1 })
+	waitForSettings(t, "подписчик", func() bool { return r.srv.settingsSubscribers() == 1 })
 
 	r.srv.publishSettingsChanged(eventN(0))
 	if err := <-done; !errors.Is(err, boom) {
 		t.Fatalf("err = %v", err)
 	}
-	waitFor(t, "снятие подписки", func() bool { return r.srv.settingsSubscribers() == 0 })
+	waitForSettings(t, "снятие подписки", func() bool { return r.srv.settingsSubscribers() == 0 })
 }

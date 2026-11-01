@@ -38,7 +38,9 @@ const CLIENT_BY_SERVICE: Readonly<Record<string, string>> = {
   ConnectionService: 'connections',
   DiagnosticsService: 'diagnostics',
   UpdateService: 'updates',
+  WebSessionService: 'web',
   BackupService: 'backup',
+  MigrationService: 'migration',
 };
 
 /** Все RPC proto в виде «Сервис/Метод». */

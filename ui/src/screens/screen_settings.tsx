@@ -14,11 +14,11 @@ import { parseInteger, toSettingValue, valuesOf } from '../lib/settingValues';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { AgentsSettings } from '../components/AgentsSettings';
-import { AutostartRow } from '../components/AutostartRow';
 import { HOTKEYS, HotkeysCard } from '../components/settings/HotkeysCard';
-import { ShellPrefRows } from '../components/settings/ShellPrefRows';
+import { PlatformRows } from '../components/settings/PlatformRows';
 import { ConfirmDialog } from '../components/dialogs';
 import { BackupRows } from '../components/settings/BackupRows';
+import { NekoBoxRow } from '../components/settings/NekoBoxRow';
 import { Icon, type IconName } from '../components/Icon';
 import { AGENT_MODE_KEY, parseAgentMode, type AgentMode } from '../lib/agents';
 import {
@@ -130,10 +130,7 @@ const SECTION_SEARCH: Readonly<Record<string, readonly SearchRow[]>> = {
     { labelKey: 'set.accent' },
     ...ACCENTS.map((ac) => ({ labelKey: `accent.${ac}` as MessageKey })),
   ],
-  backup: [
-    { labelKey: 'bk.export', descKey: 'bk.hint' },
-    { labelKey: 'bk.restore', descKey: 'bk.restoreD' },
-  ],
+  backup: [{ labelKey: 'bk.export', descKey: 'bk.hint' }, { labelKey: 'bk.restore', descKey: 'bk.restoreD' }, { labelKey: 'nb.row.l', descKey: 'nb.row.d' }],
   core: [{ labelKey: 'mux.title' }, { labelKey: 'set.appVersion' }, { labelKey: 'set.coreVersion' }, ...CORE_ROWS],
   agents: [
     { labelKey: 'agent.mode.l', descKey: 'agent.mode.d' },
@@ -160,6 +157,7 @@ export function SettingsScreen(): JSX.Element {
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
   const [coreVersion, setCoreVersion] = useState('');
+  const [reloadKey, setReloadKey] = useState(0); // растёт после переноса из NekoBox
   const [confirmInsecure, setConfirmInsecure] = useState(false);
   // Восстановление из файла ждёт подтверждения: null — диалога нет (U-02).
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -181,7 +179,7 @@ export function SettingsScreen(): JSX.Element {
         setErr(showCoreError(e, t));
       }
     })();
-  }, [core, t]);
+  }, [core, t, reloadKey]);
 
   /** Записывает настройку; true — ядро приняло значение. */
   const save = useCallback(
@@ -462,8 +460,7 @@ export function SettingsScreen(): JSX.Element {
                   </select>
                 </div>
               </div>
-              <AutostartRow />
-              <ShellPrefRows />
+              <PlatformRows />
             </div>
           )}
 
@@ -707,6 +704,7 @@ export function SettingsScreen(): JSX.Element {
                   }, 2500);
                 }}
               />
+              <NekoBoxRow onImported={() => { setReloadKey((k) => k + 1); }} />
             </div>
           )}
 

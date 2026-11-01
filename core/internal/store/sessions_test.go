@@ -70,7 +70,7 @@ func TestMigrationV4UpgradesVersion3Database(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, p := groupAndProfile(t, s)
-	for _, q := range []string{`DROP INDEX idx_sessions_group`, `DROP TABLE sessions`, `DELETE FROM schema_version WHERE version = 4`} {
+	for _, q := range []string{`DROP INDEX idx_sessions_group`, `DROP TABLE sessions`, `DROP TABLE web_users`, `DROP TABLE import_map`, `DELETE FROM schema_version WHERE version >= 4`} {
 		if _, err := s.db.Exec(q); err != nil {
 			t.Fatalf("%s: %v", q, err)
 		}

@@ -84,6 +84,8 @@ const (
 	WebSessionServiceName = "lavray.v1.WebSessionService"
 	// BackupServiceName is the fully-qualified name of the BackupService service.
 	BackupServiceName = "lavray.v1.BackupService"
+	// MigrationServiceName is the fully-qualified name of the MigrationService service.
+	MigrationServiceName = "lavray.v1.MigrationService"
 )
 
 // These constants are the fully-qualified names of the RPCs defined in this package. They're
@@ -359,6 +361,15 @@ const (
 	// BackupServiceImportBackupProcedure is the fully-qualified name of the BackupService's
 	// ImportBackup RPC.
 	BackupServiceImportBackupProcedure = "/lavray.v1.BackupService/ImportBackup"
+	// MigrationServiceDetectNekoBoxProcedure is the fully-qualified name of the MigrationService's
+	// DetectNekoBox RPC.
+	MigrationServiceDetectNekoBoxProcedure = "/lavray.v1.MigrationService/DetectNekoBox"
+	// MigrationServicePreviewNekoBoxImportProcedure is the fully-qualified name of the
+	// MigrationService's PreviewNekoBoxImport RPC.
+	MigrationServicePreviewNekoBoxImportProcedure = "/lavray.v1.MigrationService/PreviewNekoBoxImport"
+	// MigrationServiceImportNekoBoxProcedure is the fully-qualified name of the MigrationService's
+	// ImportNekoBox RPC.
+	MigrationServiceImportNekoBoxProcedure = "/lavray.v1.MigrationService/ImportNekoBox"
 )
 
 // CoreServiceClient is a client for the lavray.v1.CoreService service.
@@ -3831,4 +3842,136 @@ func (UnimplementedBackupServiceHandler) PreviewBackup(context.Context, *connect
 
 func (UnimplementedBackupServiceHandler) ImportBackup(context.Context, *connect.Request[lavrayv1.ImportBackupRequest]) (*connect.Response[lavrayv1.ImportBackupResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.BackupService.ImportBackup is not implemented"))
+}
+
+// MigrationServiceClient is a client for the lavray.v1.MigrationService service.
+type MigrationServiceClient interface {
+	// Найти установки NekoBox: %APPDATA% и %LOCALAPPDATA% (nekoray\config), каталог
+	// config рядом с запущенным nekobox.exe/nekoray.exe, а также переданные пути.
+	DetectNekoBox(context.Context, *connect.Request[lavrayv1.DetectNekoBoxRequest]) (*connect.Response[lavrayv1.DetectNekoBoxResponse], error)
+	// Сухой прогон: числа и причины пропусков те же, что даст ImportNekoBox.
+	PreviewNekoBoxImport(context.Context, *connect.Request[lavrayv1.NekoBoxImportRequest]) (*connect.Response[lavrayv1.NekoBoxReport], error)
+	// Перенести всё одной транзакцией: профили, группы, цепочки, по желанию
+	// маршруты и настройки. Повторный перенос не создаёт дублей.
+	ImportNekoBox(context.Context, *connect.Request[lavrayv1.NekoBoxImportRequest]) (*connect.Response[lavrayv1.NekoBoxReport], error)
+}
+
+// NewMigrationServiceClient constructs a client for the lavray.v1.MigrationService service. By
+// default, it uses the Connect protocol with the binary Protobuf Codec, asks for gzipped responses,
+// and sends uncompressed requests. To use the gRPC or gRPC-Web protocols, supply the
+// connect.WithGRPC() or connect.WithGRPCWeb() options.
+//
+// The URL supplied here should be the base URL for the Connect or gRPC server (for example,
+// http://api.acme.com or https://acme.com/grpc).
+func NewMigrationServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...connect.ClientOption) MigrationServiceClient {
+	baseURL = strings.TrimRight(baseURL, "/")
+	migrationServiceMethods := lavrayv1.File_lavray_proto.Services().ByName("MigrationService").Methods()
+	return &migrationServiceClient{
+		detectNekoBox: connect.NewClient[lavrayv1.DetectNekoBoxRequest, lavrayv1.DetectNekoBoxResponse](
+			httpClient,
+			baseURL+MigrationServiceDetectNekoBoxProcedure,
+			connect.WithSchema(migrationServiceMethods.ByName("DetectNekoBox")),
+			connect.WithClientOptions(opts...),
+		),
+		previewNekoBoxImport: connect.NewClient[lavrayv1.NekoBoxImportRequest, lavrayv1.NekoBoxReport](
+			httpClient,
+			baseURL+MigrationServicePreviewNekoBoxImportProcedure,
+			connect.WithSchema(migrationServiceMethods.ByName("PreviewNekoBoxImport")),
+			connect.WithClientOptions(opts...),
+		),
+		importNekoBox: connect.NewClient[lavrayv1.NekoBoxImportRequest, lavrayv1.NekoBoxReport](
+			httpClient,
+			baseURL+MigrationServiceImportNekoBoxProcedure,
+			connect.WithSchema(migrationServiceMethods.ByName("ImportNekoBox")),
+			connect.WithClientOptions(opts...),
+		),
+	}
+}
+
+// migrationServiceClient implements MigrationServiceClient.
+type migrationServiceClient struct {
+	detectNekoBox        *connect.Client[lavrayv1.DetectNekoBoxRequest, lavrayv1.DetectNekoBoxResponse]
+	previewNekoBoxImport *connect.Client[lavrayv1.NekoBoxImportRequest, lavrayv1.NekoBoxReport]
+	importNekoBox        *connect.Client[lavrayv1.NekoBoxImportRequest, lavrayv1.NekoBoxReport]
+}
+
+// DetectNekoBox calls lavray.v1.MigrationService.DetectNekoBox.
+func (c *migrationServiceClient) DetectNekoBox(ctx context.Context, req *connect.Request[lavrayv1.DetectNekoBoxRequest]) (*connect.Response[lavrayv1.DetectNekoBoxResponse], error) {
+	return c.detectNekoBox.CallUnary(ctx, req)
+}
+
+// PreviewNekoBoxImport calls lavray.v1.MigrationService.PreviewNekoBoxImport.
+func (c *migrationServiceClient) PreviewNekoBoxImport(ctx context.Context, req *connect.Request[lavrayv1.NekoBoxImportRequest]) (*connect.Response[lavrayv1.NekoBoxReport], error) {
+	return c.previewNekoBoxImport.CallUnary(ctx, req)
+}
+
+// ImportNekoBox calls lavray.v1.MigrationService.ImportNekoBox.
+func (c *migrationServiceClient) ImportNekoBox(ctx context.Context, req *connect.Request[lavrayv1.NekoBoxImportRequest]) (*connect.Response[lavrayv1.NekoBoxReport], error) {
+	return c.importNekoBox.CallUnary(ctx, req)
+}
+
+// MigrationServiceHandler is an implementation of the lavray.v1.MigrationService service.
+type MigrationServiceHandler interface {
+	// Найти установки NekoBox: %APPDATA% и %LOCALAPPDATA% (nekoray\config), каталог
+	// config рядом с запущенным nekobox.exe/nekoray.exe, а также переданные пути.
+	DetectNekoBox(context.Context, *connect.Request[lavrayv1.DetectNekoBoxRequest]) (*connect.Response[lavrayv1.DetectNekoBoxResponse], error)
+	// Сухой прогон: числа и причины пропусков те же, что даст ImportNekoBox.
+	PreviewNekoBoxImport(context.Context, *connect.Request[lavrayv1.NekoBoxImportRequest]) (*connect.Response[lavrayv1.NekoBoxReport], error)
+	// Перенести всё одной транзакцией: профили, группы, цепочки, по желанию
+	// маршруты и настройки. Повторный перенос не создаёт дублей.
+	ImportNekoBox(context.Context, *connect.Request[lavrayv1.NekoBoxImportRequest]) (*connect.Response[lavrayv1.NekoBoxReport], error)
+}
+
+// NewMigrationServiceHandler builds an HTTP handler from the service implementation. It returns the
+// path on which to mount the handler and the handler itself.
+//
+// By default, handlers support the Connect, gRPC, and gRPC-Web protocols with the binary Protobuf
+// and JSON codecs. They also support gzip compression.
+func NewMigrationServiceHandler(svc MigrationServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
+	migrationServiceMethods := lavrayv1.File_lavray_proto.Services().ByName("MigrationService").Methods()
+	migrationServiceDetectNekoBoxHandler := connect.NewUnaryHandler(
+		MigrationServiceDetectNekoBoxProcedure,
+		svc.DetectNekoBox,
+		connect.WithSchema(migrationServiceMethods.ByName("DetectNekoBox")),
+		connect.WithHandlerOptions(opts...),
+	)
+	migrationServicePreviewNekoBoxImportHandler := connect.NewUnaryHandler(
+		MigrationServicePreviewNekoBoxImportProcedure,
+		svc.PreviewNekoBoxImport,
+		connect.WithSchema(migrationServiceMethods.ByName("PreviewNekoBoxImport")),
+		connect.WithHandlerOptions(opts...),
+	)
+	migrationServiceImportNekoBoxHandler := connect.NewUnaryHandler(
+		MigrationServiceImportNekoBoxProcedure,
+		svc.ImportNekoBox,
+		connect.WithSchema(migrationServiceMethods.ByName("ImportNekoBox")),
+		connect.WithHandlerOptions(opts...),
+	)
+	return "/lavray.v1.MigrationService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case MigrationServiceDetectNekoBoxProcedure:
+			migrationServiceDetectNekoBoxHandler.ServeHTTP(w, r)
+		case MigrationServicePreviewNekoBoxImportProcedure:
+			migrationServicePreviewNekoBoxImportHandler.ServeHTTP(w, r)
+		case MigrationServiceImportNekoBoxProcedure:
+			migrationServiceImportNekoBoxHandler.ServeHTTP(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+	})
+}
+
+// UnimplementedMigrationServiceHandler returns CodeUnimplemented from all methods.
+type UnimplementedMigrationServiceHandler struct{}
+
+func (UnimplementedMigrationServiceHandler) DetectNekoBox(context.Context, *connect.Request[lavrayv1.DetectNekoBoxRequest]) (*connect.Response[lavrayv1.DetectNekoBoxResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.MigrationService.DetectNekoBox is not implemented"))
+}
+
+func (UnimplementedMigrationServiceHandler) PreviewNekoBoxImport(context.Context, *connect.Request[lavrayv1.NekoBoxImportRequest]) (*connect.Response[lavrayv1.NekoBoxReport], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.MigrationService.PreviewNekoBoxImport is not implemented"))
+}
+
+func (UnimplementedMigrationServiceHandler) ImportNekoBox(context.Context, *connect.Request[lavrayv1.NekoBoxImportRequest]) (*connect.Response[lavrayv1.NekoBoxReport], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("lavray.v1.MigrationService.ImportNekoBox is not implemented"))
 }

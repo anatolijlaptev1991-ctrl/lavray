@@ -19,6 +19,7 @@ func (s *Server) StopInstance(ctx context.Context) error {
 	stopCtx, cancel := context.WithTimeout(ctx, inst.StopTimeout)
 	defer cancel()
 	err := s.inst.Shutdown(stopCtx)
+	s.shutdownGateway() // правила nft шлюза снимаются до выхода процесса (gateway_mode.go)
 	s.endAccounting()
 	return err
 }

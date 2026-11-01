@@ -25,7 +25,7 @@ ALLOW = "ui/src/rpc-unused.allow.ts"
 SRC = "ui/src"
 
 # Сервис -> поле клиента в CoreClients (ui/src/lib/core.ts). Сервисы без клиента
-# (шлюз, веб-сессии) в интерфейсе окна не вызываются и стоят в списке разрешённых.
+# (шлюз) в интерфейсе окна не вызываются и стоят в списке разрешённых.
 CLIENT_BY_SERVICE = {
     "CoreService": "core",
     "ProfileService": "profiles",
@@ -38,7 +38,9 @@ CLIENT_BY_SERVICE = {
     "ConnectionService": "connections",
     "DiagnosticsService": "diagnostics",
     "UpdateService": "updates",
+    "WebSessionService": "web",
     "BackupService": "backup",
+    "MigrationService": "migration",
 }
 
 SERVICE_RE = re.compile(r"^service\s+(\w+)\s*\{", re.M)

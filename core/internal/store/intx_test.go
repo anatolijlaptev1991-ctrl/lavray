@@ -101,3 +101,60 @@ func TestInTxRollsBackOnPanic(t *testing.T) {
 		t.Fatalf("хранилище не пригодно после паники в InTx: %v", err)
 	}
 }
+
+// T-78: SetMeta и SetSetting идут через withTx, поэтому внутри InTx они пишут в
+// транзакцию серии: откат серии откатывает и их, а коммит сохраняет всё сразу.
+// Раньше оба метода писали через s.db: внутри InTx (db == nil) это была паника.
+func TestSetMetaInsideInTx(t *testing.T) {
+	s, g, _, _ := t51Seed(t)
+	if err := s.SetMeta("k", "before"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetSetting("s.k", `"before"`); err != nil {
+		t.Fatal(err)
+	}
+	boom := errors.New("boom")
+	err := s.InTx(func(tx *Store) error {
+		if err := tx.CreateProfile(newProfile(g.ID, model.TypeSOCKS, "C", "c.example", 1002)); err != nil {
+			return err
+		}
+		if err := tx.SetMeta("k", "inside"); err != nil {
+			return err
+		}
+		if err := tx.SetSetting("s.k", `"inside"`); err != nil {
+			return err
+		}
+		return boom
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("InTx вернул %v, ожидалась ошибка fn", err)
+	}
+	if v, _, _ := s.GetMeta("k"); v != "before" {
+		t.Errorf("meta после отката = %q, ожидалось \"before\"", v)
+	}
+	if v, _, _ := s.GetSetting("s.k"); v != `"before"` {
+		t.Errorf("настройка после отката = %q, ожидалось \"before\"", v)
+	}
+
+	// Успешная серия: профиль, meta и настройка видны вместе.
+	if err := s.InTx(func(tx *Store) error {
+		if err := tx.SetMeta("k", "after"); err != nil {
+			return err
+		}
+		if err := tx.SetSetting("s.k", `"after"`); err != nil {
+			return err
+		}
+		return tx.CreateProfile(newProfile(g.ID, model.TypeSOCKS, "D", "d.example", 1003))
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if v, _, _ := s.GetMeta("k"); v != "after" {
+		t.Errorf("meta после коммита = %q, ожидалось \"after\"", v)
+	}
+	if v, _, _ := s.GetSetting("s.k"); v != `"after"` {
+		t.Errorf("настройка после коммита = %q, ожидалось \"after\"", v)
+	}
+	if got := t51Names(t, s, g.ID); got != "A B D " {
+		t.Errorf("профили после коммита = %q, ожидалось \"A B D \"", got)
+	}
+}

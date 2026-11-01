@@ -33,10 +33,10 @@ describe('T-83: карточка «Резервная копия» в настр
     return el;
   }
 
-  it('две кнопки: создать копию и восстановить; текст говорит про шифрование и все данные', async () => {
+  it('кнопки: создать копию, восстановить и перенос из NekoBox; текст говорит про шифрование и все данные', async () => {
     h = await mountSettings();
     const buttons = Array.from(card().querySelectorAll('button')).map((b) => b.textContent);
-    expect(buttons).toEqual([t('bk.exportBtn'), t('bk.restore')]);
+    expect(buttons).toEqual([t('bk.exportBtn'), t('bk.restore'), t('nb.row.btn')]); // + строка переноса из NekoBox (T-78)
     expect(card().textContent).toMatch(/encrypted/i);
     expect(card().textContent).toMatch(/all your data/i);
     expect(card().querySelector('input[type="file"]')).toBeNull(); // выбор файла — внутри диалога

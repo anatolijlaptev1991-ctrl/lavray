@@ -16,7 +16,7 @@ import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
 import { importLogWarnings } from '../lib/importWarnings';
 import { onTablistKeyDown } from '../lib/tabs';
-import { UnsupportedBadge } from './servers/UnsupportedBadge';
+import { ImportPreview } from './import/ImportPreview';
 import { QrTab } from './import/QrTab';
 
 type Tab = 'link' | 'qr' | 'file';
@@ -51,7 +51,7 @@ function maskLink(raw: string): string {
 }
 
 export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported }: Props): JSX.Element {
-  const { t, tf, plural } = useI18n();
+  const { t, tf } = useI18n();
   const core = useCore();
   const [tab, setTab] = useState<Tab>(initialTab);
   const [link, setLink] = useState('');
@@ -387,30 +387,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
             </div>
           )}
 
-          {preview !== null && (
-            <div className="card" style={{ background: 'var(--surface2)', marginTop: 12 }}>
-              <div className="card-h" style={{ marginBottom: 8 }}>
-                <span className="ic"><Icon name="search" /></span>
-                <h3 style={{ fontSize: '.875rem', fontWeight: 600 }}>
-                  {isSubscription ? t('imp.prev.subUrl') : plural('pl.p', preview.length)}
-                </h3>
-              </div>
-              {!isSubscription && (
-                <ul className="imp-prev-list">
-                  {preview.slice(0, 8).map((p, i) => (
-                    <li key={`${String(p.type)}-${String(i)}`}>
-                      <span className="mono">{p.name}</span>
-                      <UnsupportedBadge reason={p.unsupportedReason} />
-                      <span className="muted mono">
-                        {p.address}:{String(p.port)}
-                      </span>
-                    </li>
-                  ))}
-                  {preview.length > 8 && <li className="muted">…</li>}
-                </ul>
-              )}
-            </div>
-          )}
+          {preview !== null && <ImportPreview profiles={preview} isSubscription={isSubscription} />}
         </div>
 
         <div className="dlg-f">

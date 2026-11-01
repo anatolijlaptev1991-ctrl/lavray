@@ -12,7 +12,6 @@ export const RPC_UNUSED_ALLOWED: Readonly<Record<string, string>> = {
   'ProfileService/GetProfile': 'профиль целиком приходит в ListProfiles; одиночное чтение нужно агентам (MCP) и headless',
   'RoutingService/GetPreset': 'наборы окно читает целиком через ListPresets; одиночное чтение нужно агентам',
   'RoutingService/GetActivePreset': 'активный набор окно берёт из ListPresets.active_preset_id; отдельный запрос нужен агентам',
-  'SettingsService/DescribeSettings': 'экран настроек построен по собственной таблице строк; каталог ключей нужен headless и веб-панели',
   'LogService/GetTail': 'окно получает журнал потоком Subscribe; хвост за раз нужен агентам и headless',
   'StatsService/GetTrafficTotals': 'накопленный трафик профилей окно берёт из ListProfiles (Profile.traffic); отдельный запрос нужен агентам',
   'ConnectionService/ListConnections': 'таблица соединений идёт потоком WatchConnections; одноразовый снимок нужен агентам',
@@ -31,17 +30,9 @@ export const RPC_UNUSED_ALLOWED: Readonly<Record<string, string>> = {
   'UpdateService/Rollback': 'откат компонента выполняет апдейтер оболочки (T-75, отдельная ветка)',
   'UpdateService/VerifyLocalUpdate': 'проверка локального пакета обновления входит в T-75 (отдельная ветка)',
 
-  // ---- Шлюз OpenWrt и веб-панель (Ф7, T-76) ----
+  // ---- Шлюз OpenWrt и веб-панель (T-76) ----
   'GatewayService/GetGatewayStatus': 'шлюз OpenWrt (T-76): на десктопе все методы шлюза отвечают INVALID_ARGUMENT',
   'GatewayService/ListDevicePolicies': 'шлюз OpenWrt (T-76): политики устройств есть только на роутере',
   'GatewayService/SetDevicePolicy': 'шлюз OpenWrt (T-76): политики устройств есть только на роутере',
-  'WebSessionService/GetWebModeStatus': 'вход в веб-панель (T-76): окно приложения работает по токену оболочки, а не по сессии',
-  'WebSessionService/SetupFirstAdmin': 'вход в веб-панель (T-76): окно приложения работает по токену оболочки, а не по сессии',
-  'WebSessionService/Login': 'вход в веб-панель (T-76): окно приложения работает по токену оболочки, а не по сессии',
-  'WebSessionService/Logout': 'вход в веб-панель (T-76): окно приложения работает по токену оболочки, а не по сессии',
-  'WebSessionService/RenewSession': 'вход в веб-панель (T-76): окно приложения работает по токену оболочки, а не по сессии',
-  'WebSessionService/WhoAmI': 'вход в веб-панель (T-76): окно приложения работает по токену оболочки, а не по сессии',
-  'WebSessionService/ChangePassword': 'вход в веб-панель (T-76): окно приложения работает по токену оболочки, а не по сессии',
-  'WebSessionService/ListSessions': 'вход в веб-панель (T-76): окно приложения работает по токену оболочки, а не по сессии',
-  'WebSessionService/RevokeSession': 'вход в веб-панель (T-76): окно приложения работает по токену оболочки, а не по сессии',
+  'WebSessionService/RenewSession': 'веб-панель (T-76) пока не вызывает RenewSession: простой сессии 12 ч, предел 7 суток, при истечении страница просит войти заново',
 };

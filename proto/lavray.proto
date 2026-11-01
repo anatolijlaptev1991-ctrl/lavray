@@ -2086,21 +2086,28 @@ message UpdateFailed {
 // Сервис 13: WebSessionService — вход/сессии веб-панели (OpenWrt)
 // ============================================================================
 
-// На десктопе сервис присутствует, но Login отвечает UNIMPLEMENTED: локальный
-// UI аутентифицируется локальным токеном (stdin/UDS), экрана входа нет.
-// В веб-режиме экран входа обязателен (fix-plan 00-README §4).
+// Сервис работает только при `--web-bind` (веб-режим, роутер). На десктопе без
+// этого флага все 9 методов отвечают UNIMPLEMENTED — постоянная запись в
+// allowUnimplemented: локальный UI аутентифицируется локальным токеном
+// (stdin/UDS), экрана входа нет. UI, получив UNIMPLEMENTED от
+// GetWebModeStatus, считает, что вход не нужен.
 //
-// Аутентификация (FR-UI-278, OPENWRT-GATEWAY §6, THREAT-MODEL §3):
-// - браузерные клиенты: cookie `HttpOnly; SameSite=Strict; Secure` (после
-//   Login) + CSRF-токен в каждом mutating-запросе (заголовок X-Lavray-CSRF);
-//   Bearer — только для headless-клиентов (curl/скрипты);
-// - WS (/api/v1/ws): аутентификация cookie ИЛИ первым сообщением AUTH;
-//   токен в query-строке ЗАПРЕЩЕН (LNB-18.2);
+// Аутентификация веб-слушателя (FR-UI-278, OPENWRT-GATEWAY §6, THREAT-MODEL §3):
+// - браузерные клиенты: cookie `HttpOnly; SameSite=Strict` (Secure — на HTTPS)
+//   после Login + CSRF-токен в каждом изменяющем запросе (заголовок
+//   X-Lavray-CSRF, значение — WebSession.csrf_token) + проверка Origin/Host;
+//   Bearer (токен ядра) — только для headless-клиентов (curl/скрипты);
+// - до входа открыты только GetWebModeStatus, SetupFirstAdmin и Login;
+// - токен в query-строке запрещён (LNB-18.2);
 // - перебор: per-ACCOUNT backoff с блокировкой (IP-лимит за NAT бесполезен):
-//   5 неудач → экспоненциальная задержка, 10 → блок на 15 мин;
-// - пароли — Argon2id (LNB-04); смена пароля отзывает все сессии, кроме
-//   текущей; сетап первого админа открывается в отдельном окне/странице
-//   (не в основной сессии) и гаснет навсегда после создания.
+//   5 неудач — экспоненциальная задержка, 10 — блок на 15 мин; сверх того
+//   лимиты по адресу и общий. Отказ — RESOURCE_EXHAUSTED с заголовком
+//   Retry-After;
+// - пароли — Argon2id (LNB-04), не короче 10 символов; смена пароля отзывает
+//   все сессии, кроме текущей; SetupFirstAdmin работает один раз (повтор —
+//   FAILED_PRECONDITION);
+// - сессий не более 64 на пользователя (старейшая по активности вытесняется),
+//   простой 12 ч, абсолютный предел 7 суток.
 service WebSessionService {
   rpc GetWebModeStatus(GetWebModeStatusRequest) returns (WebModeStatus);
   rpc SetupFirstAdmin(SetupFirstAdminRequest) returns (WebSession);
@@ -2119,22 +2126,29 @@ service WebSessionService {
 message GetWebModeStatusRequest {}
 
 message WebModeStatus {
-  bool web_mode_enabled = 1; // false на десктопе
-  bool first_run_setup_required = 2;
-  // Конкретный LAN-адрес из UCI (OPENWRT-GATEWAY §6); слушать 0.0.0.0 ядро
-  // ОТКАЗЫВАЕТСЯ без явного флага web.allow_all_interfaces (THREAT-MODEL).
+  bool web_mode_enabled = 1; // всегда true: на десктопе сервис UNIMPLEMENTED
+  bool first_run_setup_required = 2; // нет ни одного администратора
+  // Фактический адрес веб-слушателя (OPENWRT-GATEWAY §6). Не-loopback адрес
+  // ядро принимает только с `--web-allow-remote`, 0.0.0.0 — тоже только с ним.
   string bind_address = 3;
   bool tls_enabled = 4;
   // Отпечаток self-signed сертификата (TLS-бутстрап: показывается в LuCI
   // при первой установке соединения — OPENWRT-GATEWAY §6).
   optional string tls_fingerprint_sha256 = 5;
-  int32 session_ttl_minutes = 6;
+  int32 session_ttl_minutes = 6; // простой (сессия гаснет без запросов)
   int32 active_sessions = 7;
+  int32 session_absolute_ttl_minutes = 8; // предел жизни сессии (7 суток)
+  // Первичная настройка требует код (SetupFirstAdminRequest.setup_code): панель
+  // слушает не loopback, и без кода администратора создал бы первый, кто её открыл.
+  // Код лежит в файле web-setup-code каталога данных (права 0600) и в журнале ядра
+  // указан только путь к нему.
+  bool setup_code_required = 9;
 }
 
 message SetupFirstAdminRequest {
   string username = 1;
   string password = 2; // политика минимальной длины — в валидаторе ядра
+  optional string setup_code = 3; // обязателен при WebModeStatus.setup_code_required
 }
 
 message LoginRequest {
@@ -2144,11 +2158,15 @@ message LoginRequest {
 }
 
 message WebSession {
-  string token = 1; // браузеру не отдаётся в теле (только cookie); headless — Bearer
+  // Всегда пусто: сессия живёт в cookie. Headless-клиенты ходят с Bearer-токеном
+  // ядра, сессию не создают. Поле зарезервировано под будущие токены сессий.
+  string token = 1;
   int64 expires_at_ms = 2;
   string username = 3;
   repeated string permissions = 4; // будущее RBAC; пока ["*"]
-  optional string csrf_token = 5; // для браузерных сессий (mutating-запросы)
+  // Значение для заголовка X-Lavray-CSRF изменяющих запросов. Отдают Login,
+  // SetupFirstAdmin, RenewSession и WhoAmI (последний — после перезагрузки страницы).
+  optional string csrf_token = 5;
 }
 
 message LogoutRequest {}
@@ -2174,6 +2192,9 @@ message SessionInfo {
   int64 created_at_ms = 3;
   int64 expires_at_ms = 4;
   optional string client_label = 5;
+  int64 last_seen_ms = 6;
+  bool current = 7; // сессия, из которой пришёл запрос
+  optional string remote_addr = 8; // адрес клиента при входе
 }
 
 message RevokeSessionRequest {
@@ -2252,6 +2273,78 @@ message BackupSummary {
 }
 
 // ============================================================================
+// MigrationService (T-78): перенос данных из NekoBox/nekoray
+// ============================================================================
+
+// MigrationService переносит каталог config NekoBox (groups/, profiles/,
+// routes_box/, groups/nekobox.json) в LAVRay. Источник только читается; NekoBox
+// не запускается и не останавливается. Агентам весь сервис закрыт.
+//
+// Коды ошибок Connect:
+//   INVALID_ARGUMENT   — путь пуст, не абсолютный, не каталог или в нём нет ни
+//                        groups, ни profiles
+//   NOT_FOUND          — пути нет
+//   RESOURCE_EXHAUSTED — превышены лимиты разбора (файлов, размера)
+//   ABORTED            — параллельный перенос или гонка с записью в базу
+service MigrationService {
+  // Найти установки NekoBox: %APPDATA% и %LOCALAPPDATA% (nekoray\config), каталог
+  // config рядом с запущенным nekobox.exe/nekoray.exe, а также переданные пути.
+  rpc DetectNekoBox(DetectNekoBoxRequest) returns (DetectNekoBoxResponse);
+  // Сухой прогон: числа и причины пропусков те же, что даст ImportNekoBox.
+  rpc PreviewNekoBoxImport(NekoBoxImportRequest) returns (NekoBoxReport);
+  // Перенести всё одной транзакцией: профили, группы, цепочки, по желанию
+  // маршруты и настройки. Повторный перенос не создаёт дублей.
+  rpc ImportNekoBox(NekoBoxImportRequest) returns (NekoBoxReport);
+}
+
+message DetectNekoBoxRequest {
+  repeated string extra_paths = 1; // дополнительные каталоги config (абсолютные)
+}
+
+message NekoBoxCandidate {
+  string path = 1; // каталог config
+  string source = 2; // manual | appdata | localappdata | process
+  int32 groups = 3;
+  int32 profiles = 4;
+  int32 routes = 5;
+  bool looks_running = 6; // NekoBox запущен: перед переносом его лучше закрыть
+}
+
+message DetectNekoBoxResponse {
+  repeated NekoBoxCandidate candidates = 1;
+}
+
+message NekoBoxImportRequest {
+  string path = 1; // каталог config (или каталог установки, в котором есть config)
+  bool include_routes = 2; // маршруты routes_box/ → пользовательские наборы
+  bool include_settings = 3; // groups/nekobox.json → настройки по таблице соответствия
+}
+
+message NekoBoxSkipped {
+  string file = 1; // относительный путь файла в каталоге config
+  int64 id = 2;
+  string type = 3;
+  string reason = 4;
+}
+
+message NekoBoxReport {
+  int32 groups_imported = 1;
+  map<string, int32> profiles_by_type = 2;
+  int32 already_present = 3; // уже перенесено раньше (группы, профили, наборы)
+  repeated NekoBoxSkipped skipped = 4;
+  repeated string warnings = 5;
+  int32 routes_found = 6;
+  int32 routes_imported = 7;
+  int32 renumbered = 8; // записей, чей id пришлось сменить из-за коллизии
+  repeated string settings_imported = 9; // ключи настроек LAVRay
+  bool dry_run = 10;
+  // id набора LAVRay, которым стал активный маршрут NekoBox (active_routing):
+  // клиент предлагает «Сделать активным». Нет значения — маршрут не найден или
+  // не переносится.
+  optional string nekobox_active_route = 11;
+}
+
+// ============================================================================
 // Reserved (эволюция). Удалённые/переименованные поля фиксируются здесь;
 // номера НЕ переиспользуются. История ведётся в proto/README.md §7.
 // ============================================================================
@@ -2281,3 +2374,13 @@ message BackupSummary {
 // ревизия 4 (0.7.0, T-83):
 //   + BackupService (ExportBackup, PreviewBackup, ImportBackup) и сообщения
 //   BackupSummary и др.: зашифрованная резервная копия, формат LAVBK1.
+// ревизия 5 (0.9.0, T-76): WebSessionService сверен с реализацией.
+//   WebModeStatus: + session_absolute_ttl_minutes=8. SessionInfo: + last_seen_ms=6,
+//   current=7, remote_addr=8. WebSession.token всегда пуст. Сервис UNIMPLEMENTED
+//   без `--web-bind`. GatewayService: на десктопе INVALID_ARGUMENT.
+//   Защита первичной настройки: WebModeStatus.setup_code_required=9,
+//   SetupFirstAdminRequest.setup_code=3 (PERMISSION_DENIED при неверном коде).
+//
+// ревизия 6 (0.6.0, T-78):
+//   + MigrationService (DetectNekoBox, PreviewNekoBoxImport, ImportNekoBox) и
+//   сообщения NekoBox*: перенос данных из NekoBox.

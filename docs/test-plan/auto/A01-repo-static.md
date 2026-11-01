@@ -39,7 +39,7 @@ $crlf = git -C $env:LAVRAY_SRC config core.autocrlf
 if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
 git -C $env:LAVRAY_SRC worktree add --detach C:\lavray-test\wt\A01 $env:LAVRAY_REF
 $head = git -C C:\lavray-test\wt\A01 rev-parse HEAD
-$tagCommit = Get-RefCommit        # git rev-parse "v0.9.0^{commit}": коммит тега, а не HEAD чего-либо
+$tagCommit = Get-RefCommit        # git rev-parse "v0.9.1^{commit}": коммит тега, а не HEAD чего-либо
 "HEAD рабочей копии: $head"
 "коммит $($env:LAVRAY_REF):  $tagCommit"
 "совпадают: " + ($head -eq $tagCommit)
@@ -116,7 +116,7 @@ cd ..
 python scripts/size_ratchet.py; echo "size exit=$?"
 ```
 
-   Ожидается: последняя содержательная строка `size_ratchet: проверено <N> файлов, нарушений: 0` (на `v0.9.0` — `проверено 734 файлов`) и `size exit=0`. Строки «можно снизить: …» — подсказки, не ошибки.
+   Ожидается: последняя содержательная строка `size_ratchet: проверено <N> файлов, нарушений: 0` (на `v0.9.0` было `проверено 734 файлов`, на `v0.9.1` не меньше) и `size exit=0`. Строки «можно снизить: …» — подсказки, не ошибки.
 
 9. SPDX-заголовки во всех файлах кода.
 
@@ -142,7 +142,7 @@ test -z "$bad"; echo "eol exit=$?"
 PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s scripts/tests 2>&1 | tail -4; echo "unittest exit=${PIPESTATUS[0]}"
 ```
 
-    Ожидается: строка `Ran <N> tests` (на `v0.9.0` — 51), строка `OK`, `unittest exit=0`. Набор не должен уменьшиться относительно эталона 51 без объяснения в отчёте. Ключ `-B` (и переменная `PYTHONDONTWRITEBYTECODE=1`) обязателен: без него Python создаёт каталоги `__pycache__` в `scripts/` и `scripts/tests/`, и шаг 16 увидел бы лишние неотслеживаемые файлы.
+    Ожидается: строка `Ran <N> tests` (на `v0.9.0` было 51, на `v0.9.1` не меньше: добавлены тесты бюджета бандла и nsis-recon), строка `OK`, `unittest exit=0`. Набор не должен уменьшиться относительно эталона 51 без объяснения в отчёте. Ключ `-B` (и переменная `PYTHONDONTWRITEBYTECODE=1`) обязателен: без него Python создаёт каталоги `__pycache__` в `scripts/` и `scripts/tests/`, и шаг 16 увидел бы лишние неотслеживаемые файлы.
 
 12. Запрещённые фразы и упоминания в документах.
 
@@ -191,7 +191,7 @@ python design/tools/i18n_check.py; echo "i18n exit=$?"
 python design/tools/token_contrast.py; echo "contrast exit=$?"
 ```
 
-    Ожидается: `i18n_check` печатает `languages: ['ru', 'en', 'zh', 'es', 'de']; keys in ru: <N>; errors: 0; warnings: 0` (на `v0.9.0` — 741 ключ), `token_contrast` печатает шесть строк `PASS <тема>/<акцент>: 38 pairs`, оба кода выхода `0`.
+    Ожидается: `i18n_check` печатает `languages: ['ru', 'en', 'zh', 'es', 'de']; keys in ru: <N>; errors: 0; warnings: 0` (на `v0.9.0` было 741 ключ, на `v0.9.1` не меньше), `token_contrast` печатает шесть строк `PASS <тема>/<акцент>: 38 pairs`, оба кода выхода `0`.
 
     Замечание: `i18n_check.py` проверяет словари прототипа `design/prototype.html`. Словари приложения (`ui/src/lib/dictionaries`) проверяет vitest в файле A05.
 

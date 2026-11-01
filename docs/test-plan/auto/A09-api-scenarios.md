@@ -8,7 +8,7 @@
 | Зависимости | `01-ENVIRONMENT.md`, разделы 4–7. Ядро с настоящим sing-box берётся из ZIP релиза `<TAG>` (A06, шаг 7) или собирается в A03. Выполняется в группе P |
 | Опасность | нет: ядро и тестовые серверы слушают loopback (и один тестовый HTTP-сервер на адресе основного сетевого интерфейса), системный прокси, TUN, реестр не затрагиваются |
 
-`<TAG>` в этом документе — тег выпуска под тестом; по умолчанию `v0.9.0` (единый итоговый тег плана доработки). В `env.ps1` это переменная `LAVRAY_REF`.
+`<TAG>` в этом документе — тег выпуска под тестом; по умолчанию `v0.9.1` (единый итоговый тег плана доработки). В `env.ps1` это переменная `LAVRAY_REF`.
 
 ## Цель
 
@@ -59,13 +59,13 @@
    $res.checks | Where-Object { -not $_.pass } | Select-Object id, warn, detail | Format-Table -AutoSize -Wrap
    ```
 
-   Ожидается: `a09 exit=0`, `провалов: 0`, список непройденных содержит только записи с `warn = True`. Эталон на теге v0.9.0 (коммит `8093656`): 222 проверки, 0 `FAIL` и 1 `WARN` (`1.create.port0.invalid_argument`, шаг 4). Это значение для тега; на более поздних тегах проверок может быть больше, меньше быть не должно. Если в ходе прогона соединение было сброшено (RST, известный дефект D-4: «известно в 0.9.0, исправлено в 0.9.1», см. шаг 4), в `run.txt` добавляется ещё одна строка `WARN transport.connection_reset` (223 проверки, 2 `WARN`); на 0.9.1 и позже сбросов быть не должно. Каждая проверка в `run.txt` — строка `PASS <id>` / `WARN <id>` / `FAIL <id> :: <подробности>`.
+   Ожидается: `a09 exit=0`, `провалов: 0`, список непройденных пуст. Эталон на теге v0.9.0 (коммит `8093656`) — 222 проверки; на `v0.9.1` и позже проверок не меньше 223 (добавлена `1.create.port65536.invalid_argument`), 0 `FAIL` и 0 `WARN`. Чтобы результат на v0.9.0 было понятно читать: на нём `1.create.port0.invalid_argument` и `1.create.port65536.invalid_argument` дают `FAIL` (известный D-5: порт вне 1–65535 принимался, исправлено в 0.9.1; при прогоне 0.9.0 первая из них была `WARN`), а при сбросе соединения (RST, известный дефект D-4: «известно в 0.9.0, исправлено в 0.9.1», см. шаг 4) в `run.txt` добавляется строка `WARN transport.connection_reset`. На `v0.9.1` и позже обе проверки порта обязаны быть `PASS` (`400 invalid_argument`), сбросов быть не должно: отказ 401 дочитывает тело запроса. Каждая проверка в `run.txt` — строка `PASS <id>` / `WARN <id>` / `FAIL <id> :: <подробности>`.
 
 3. Что и по каким кодам проверяет каждый раздел (для отчёта и поиска причины):
 
    | Раздел | Проверки | Коды и значения |
    |---|---|---|
-   | 1. Профили и группы | `GetProfile` существующий/неизвестный; `CreateProfile`; пустой адрес; `UpdateProfile` (переименование); `SetProfileMeta`; `ListProfiles` с `favoritesOnly`, `tagsAnyOf`, `search`; `CloneProfiles`; `MoveProfiles`; `DeleteProfile`; группы | неизвестный профиль `404 not_found`; пустой адрес `400 invalid_argument`; перенос в неизвестную группу `404`/`400` |
+   | 1. Профили и группы | `GetProfile` существующий/неизвестный; `CreateProfile`; пустой адрес; `UpdateProfile` (переименование); `SetProfileMeta`; `ListProfiles` с `favoritesOnly`, `tagsAnyOf`, `search`; `CloneProfiles`; `MoveProfiles`; `DeleteProfile`; группы | неизвестный профиль `404 not_found`; пустой адрес и порт вне 1–65535 (0 и 65536, с 0.9.1) `400 invalid_argument`; перенос в неизвестную группу `404`/`400` |
    | 1. Custom-поля (T-08B) | `PreviewCustomFields` без полей; клиентский флаг `customFieldsConfirmed: true` игнорируется; хэш из 64 hex, diff и ключи; `ConfirmCustomFields`: плохой хэш, устаревший, неизвестный профиль, верный; переименование и тот же JSON подтверждение сохраняют, правка снимает; JSON не объект, дубли ключей, больше 256 КиБ | `400 failed_precondition` (нет полей, устаревший хэш), `400 invalid_argument` (формат хэша, JSON), `404 not_found` |
    | 2. Соединения и трафик (T-79) | `ListConnections` без инстанса пуст (не ошибка); после трёх загрузок по 20 000 байт список содержит соединение (`downloadBytes ≥ 20000`, `network = tcp`); фильтры `destinationFilter`/`outboundFilter`; `CloseConnection`; `WatchConnections` и `StatsService/Subscribe` отдают кадры; `GetTrafficTotals`; `Disconnect` возвращает `finalStats`; `GetTrafficSummary` по группе | `CloseConnection`: не UUID и пусто `400`, неизвестный UUID `404`; отрицательный интервал `400`; `GetTrafficSummary`: отрицательный `sinceMs` `400`, неизвестная группа `404` |
    | 2. Адреса назначения в журнале | (а) собственные сообщения LAVRay (все источники, кроме `singbox`) не содержат адрес назначения и порт тестового сервера; журнал в виде агента (`GetTail` агентским токеном) тоже; сводка и итоги трафика не содержат адресов. (б) строки sing-box `inbound connection to <адрес>` при `log.level = info` (по умолчанию) ожидаемы, как в NekoBox (`WARN`, если их нет); после `SetSettings log.level = warn` и переподключения таких строк нет | (а) `FAIL`, если адрес найден; (б) `FAIL`, если после `warn` строки остались |
@@ -80,7 +80,7 @@
 4. Известные расхождения и наблюдения (сверьте с вашим `<TAG>`; если расхождение исчезло, это улучшение):
 
    - **Очистка недоступных не видела неудачных проверок (исправлено в `470d5f2`, в `main` с `80be1e9`).** До исправления `RemoveUnavailableProfiles` считала недоступным только профиль с `latency_ms < 0`, а `TestLatency` при неудаче записывает только `lastError` (задержка пуста), поэтому пробный прогон возвращал пустой список: проверки `5.cleanup.dry_run_lists_only_failed`, `5.cleanup.apply_removes_only_failed_untested_kept`, `5.cleanup.remaining_two` давали `FAIL` (серьёзность `major`). Теперь недоступным считается профиль с отрицательной задержкой либо с неудачной проверкой (время есть, задержки нет, есть ошибка); непроверенные и прерванные проверки не считаются. Если на вашем `<TAG>` эти три проверки снова `FAIL` — это регресс `major`.
-   - **`CreateProfile` принимает порт 0** (`WARN 1.create.port0.invalid_argument`, серьёзность `minor`): профиль создаётся и не подключится.
+   - **Порт профиля вне 1–65535** (дефект D-5, известно в 0.9.0, исправлено в 0.9.1). На `v0.9.0` `CreateProfile` принимал порт 0 и 65536: профиль создавался и не подключался (`FAIL` проверок `1.create.port0.invalid_argument` и `1.create.port65536.invalid_argument`, серьёзность `minor`). С 0.9.1 при сохранении профиля (`CreateProfile`, `UpdateProfile`) порт вне 1–65535 даёт `400 invalid_argument`; профиль, сохранённый до этого правила, можно переименовать, не меняя порт. Типы без своего адреса (свои конфигурации и цепочки) не проверяются.
    - **Сброс соединения на пути 401** (дефект D-4, известно в 0.9.0, исправлено в 0.9.1). На Windows запрос с неверным токеном (проверка `5.cors.origin_is_not_authentication`) иногда получает не `401`, а RST: `ConnectionResetError` вместо ответа. Скрипт перехватывает `ConnectionError` и `URLError` в `Core.rpc`, не обрывая раздел: сбой записывается в список сбросов, запрос с неверным токеном повторяется один раз (без побочных эффектов), а в конце добавляется `WARN transport.connection_reset` с перечнем затронутых вызовов. Если повтор тоже сброшен, проверка получает статус `0` и `FAIL` с текстом `transport_reset`: на `v0.9.0` запишите его как известный D-4, на более поздних тегах это дефект `major`. Сброс на другом вызове (не на пути 401) — тоже `FAIL` соответствующей проверки: опишите вызов в отчёте и приложите `run.txt`.
    - Нормализация Unicode в пароле копии (NFC/NFD): на `v0.9.0` её выполняет только интерфейс (`lib/password.ts`), ядро — нет (D-6); с 0.9.1 ядро выводит ключ из NFC, а старые копии с «сырым» NFD по-прежнему открываются. Это проверяет A14.
 
@@ -105,7 +105,7 @@
 
 | № | Критерий | Как проверить |
 |---|---|---|
-| К1 | Шаг 2: `a09 exit=0`, провалов 0, проверок не меньше 222 (значение для тега v0.9.0, коммит `8093656`) | вывод |
+| К1 | Шаг 2: `a09 exit=0`, провалов 0, проверок не меньше 223 на `v0.9.1` (на `v0.9.0` было 222, коммит `8093656`), `WARN` нет | вывод |
 | К2 | Все коды ошибок раздела 3 совпали с таблицей (проверки `*.invalid_argument`, `*.not_found`, `*.failed_precondition`, `*.aborted`, `*.resource_exhausted`, `*.permission_denied`, `*.data_loss`) | `a09-result.json` |
 | К3 | Адреса назначения не встречаются в собственных сообщениях LAVRay, в журнале агента и в сводке (`2.log.own_messages_have_no_destinations`, `2.log.agent_view_has_no_destinations`, `2.summary.has_no_destinations`) | `PASS` |
 | К4 | После `log.level = warn` и переподключения строк sing-box о соединениях нет (`2.log.level_warn.no_inbound_connection_lines`) | `PASS` |
@@ -383,7 +383,11 @@ def sec1_profiles(c, X):
     check("1.create.ok", st == 200 and r.get("name") == "a09-created" and created, (st, r))
     bad = socks_profile("a09-bad", 0)
     st, r = c.rpc("ProfileService", "CreateProfile", bad)
-    check("1.create.port0.invalid_argument", st == 400 and code((st, r)) == "invalid_argument", "порт 0 принят: профиль, который не подключится", warn=True)
+    check("1.create.port0.invalid_argument", st == 400 and code((st, r)) == "invalid_argument", "порт 0 принят: профиль, который не подключится (D-5)")
+    if st == 200:
+        c.rpc("ProfileService", "DeleteProfile", {"ids": [r["id"]]})
+    st, r = c.rpc("ProfileService", "CreateProfile", socks_profile("a09-bad-hi", 65536))
+    check("1.create.port65536.invalid_argument", st == 400 and code((st, r)) == "invalid_argument", "порт 65536 принят: профиль, который не подключится (D-5)")
     if st == 200:
         c.rpc("ProfileService", "DeleteProfile", {"ids": [r["id"]]})
     st, r = c.rpc("ProfileService", "CreateProfile", {"profile": {"groupId": GID[0], "type": "PROFILE_TYPE_SOCKS", "name": "", "address": "", "port": 1}})

@@ -150,3 +150,22 @@ func TestSchedulerRespectsAutoCheck(t *testing.T) {
 	stop := g.srv.StartUpdateScheduler(ctx)
 	stop()
 }
+
+// Принятый корень хранится в служебной настройке и читается обратно без изменений.
+func TestSettingsRootStoreRoundTrip(t *testing.T) {
+	f := newUpdFix(t, "0.5.0", nil)
+	rs := settingsRootStore{f.st}
+	if raw, err := rs.LoadRoot(); raw != nil || err != nil {
+		t.Fatalf("пустое хранилище: %q %v", raw, err)
+	}
+	if err := rs.SaveRoot(f.env.RootJSON); err != nil {
+		t.Fatal(err)
+	}
+	if raw, err := rs.LoadRoot(); err != nil || string(raw) != string(f.env.RootJSON) {
+		t.Fatalf("корень после записи изменился: %v", err)
+	}
+	c, _, err := f.srv.updateClient(lavrayv1.UpdateChannel_UPDATE_CHANNEL_STABLE)
+	if err != nil || c.Trust.Root().Version != 1 {
+		t.Fatalf("клиент поверх сохранённого корня: %v", err)
+	}
+}

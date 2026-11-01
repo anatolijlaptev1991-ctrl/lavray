@@ -72,15 +72,11 @@ func (d *Downloader) Fetch(ctx context.Context, asset Asset) (string, error) {
 	return "", last
 }
 
-// reuse: файл уже в staging и проходит ту же проверку целиком.
+// reuse: файл уже в staging и проходит ту же проверку целиком. Файл не
+// прошёл проверку — удаляется (после закрытия: на Windows открытый файл не удалить).
 func (r *run) reuse(final string) bool {
-	f, err := os.Open(final)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
 	h := newDigests()
-	if n, err := io.Copy(h, f); err != nil || n != r.asset.Length {
+	if err := hashFile(final, h); err != nil || h.written != r.asset.Length {
 		return false
 	}
 	if h.check(r.asset.Sha256, r.d.Verify) != nil {

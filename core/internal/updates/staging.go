@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -64,7 +65,7 @@ func InsideStaging(dir, p string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrUnsafePath, err)
 	}
-	if !strings.EqualFold(filepath.Dir(abs), filepath.Clean(dir)) && !strings.EqualFold(filepath.Dir(abs), realDir) {
+	if parent := filepath.Dir(abs); !samePath(parent, filepath.Clean(dir)) && !samePath(parent, realDir) {
 		return "", fmt.Errorf("%w: %q вне каталога staging", ErrUnsafePath, p)
 	}
 	if !stagedName.MatchString(strings.TrimSuffix(filepath.Base(abs), MinisigSuffix)) {
@@ -108,6 +109,14 @@ func CleanStaging(dir, keep string, olderThan time.Duration, now time.Time) (int
 	return removed, nil
 }
 
+// samePath сравнивает пути: на Windows без учёта регистра, на остальных ОС точно.
 func samePath(a, b string) bool {
-	return b != "" && strings.EqualFold(filepath.Clean(a), filepath.Clean(b))
+	a, b = filepath.Clean(a), filepath.Clean(b)
+	if b == "" || b == "." {
+		return false
+	}
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(a, b)
+	}
+	return a == b
 }

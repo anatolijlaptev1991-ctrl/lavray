@@ -99,6 +99,7 @@ type Server struct {
 
 	// tunCheck — проверка прав на TUN перед стартом (nil — не проверять).
 	tunCheck func() error
+	ext      serverExt // веб-режим и шлюз (server_ext.go)
 
 	// health — итог проверки связи после подключения (connect_health.go).
 	health connHealth
@@ -157,8 +158,8 @@ func (s *Server) HandlerOptions() []connect.HandlerOption {
 	}
 }
 
-// Register монтирует все сервисы на mux; нереализованные (Gateway, WebSession)
-// отвечают UNIMPLEMENTED, чтобы сервер поднимался целиком.
+// Register монтирует все 13 сервисов на mux. WebSession и Gateway берутся из
+// server_ext.go: без включения обвязкой они UNIMPLEMENTED и INVALID_ARGUMENT.
 func (s *Server) Register(mux *http.ServeMux) {
 	opts := s.HandlerOptions()
 	mount := func(path string, h http.Handler) {
@@ -176,7 +177,6 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mount(path, h)
 	path, h = lavrayv1connect.NewSettingsServiceHandler(s, opts...)
 	mount(path, h)
-	// W7/W8: заглушки — контракт доступен, методы отвечают UNIMPLEMENTED.
 	path, h = lavrayv1connect.NewLogServiceHandler(s, opts...)
 	mount(path, h)
 	path, h = lavrayv1connect.NewStatsServiceHandler(statsSvc{s}, opts...)
@@ -185,11 +185,11 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mount(path, h)
 	path, h = lavrayv1connect.NewDiagnosticsServiceHandler(s, opts...)
 	mount(path, h)
-	path, h = lavrayv1connect.NewGatewayServiceHandler(lavrayv1connect.UnimplementedGatewayServiceHandler{}, opts...)
+	path, h = lavrayv1connect.NewGatewayServiceHandler(s.gatewayHandler(), opts...)
 	mount(path, h)
 	path, h = lavrayv1connect.NewUpdateServiceHandler(s, opts...)
 	mount(path, h)
-	path, h = lavrayv1connect.NewWebSessionServiceHandler(lavrayv1connect.UnimplementedWebSessionServiceHandler{}, opts...)
+	path, h = lavrayv1connect.NewWebSessionServiceHandler(s.webSessionHandler(), opts...)
 	mount(path, h)
 	path, h = lavrayv1connect.NewBackupServiceHandler(s.backup, s.backup.handlerOptions(opts)...)
 	mount(path, h)

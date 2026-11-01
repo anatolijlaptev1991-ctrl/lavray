@@ -159,3 +159,14 @@ kbd,
     scroll-behavior: auto !important;
   }
 }
+
+/* T-76: «Не защищено» — полоса над приложением в веб-панели по HTTP. */
+.web-insecure {
+  position: fixed;
+  top: 0;
+  inset-inline: 0;
+  z-index: 600;
+  margin: 0;
+  border-radius: 0;
+  padding-block: 6px;
+}

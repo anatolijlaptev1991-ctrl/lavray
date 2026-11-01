@@ -43,11 +43,11 @@ var allowUnimplemented = map[string]bool{
 	"/lavray.v1.SettingsService/SubscribeSettings":        true,
 	// Реализация в Ф3 (T-75).
 	"/lavray.v1.UpdateService/ApplyUpdates": true,
-	// GatewayService: встроенный UnimplementedGatewayServiceHandler (Ф7).
-	"/lavray.v1.GatewayService/GetGatewayStatus":   true,
-	"/lavray.v1.GatewayService/ListDevicePolicies": true,
-	"/lavray.v1.GatewayService/SetDevicePolicy":    true,
-	// WebSessionService: встроенный UnimplementedWebSessionServiceHandler (Ф7).
+	// WebSessionService: ПОСТОЯННАЯ запись (T-76). Сервис включается только при
+	// --web-bind (EnableWeb); десктоп без этого флага отвечает UNIMPLEMENTED
+	// намеренно, и ratchet-сервер флага не имеет. Работающие методы проверяют
+	// TestWebSessionServiceFlow и остальные websession_*_test.go с EnableWeb.
+	// GatewayService из списка убран: на десктопе он отвечает INVALID_ARGUMENT.
 	"/lavray.v1.WebSessionService/GetWebModeStatus": true,
 	"/lavray.v1.WebSessionService/SetupFirstAdmin":  true,
 	"/lavray.v1.WebSessionService/Login":            true,

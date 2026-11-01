@@ -71,8 +71,8 @@ impl WatchdogArgs {
             } else if let Some((key, value)) = arg.split_once('=') {
                 match key {
                     ARG_INSTALLER_PID => pid = value.parse::<u32>().ok().filter(|p| *p != 0),
-                    ARG_DATA_DIR => data = Some(PathBuf::from(value)).filter(|_| !value.is_empty()),
-                    ARG_APP_EXE => exe = Some(PathBuf::from(value)).filter(|_| !value.is_empty()),
+                    ARG_DATA_DIR => data = (!value.is_empty()).then(|| PathBuf::from(value)),
+                    ARG_APP_EXE => exe = (!value.is_empty()).then(|| PathBuf::from(value)),
                     ARG_VERSION => version = Some(value.to_string()).filter(|v| version_ok(v)),
                     _ => {}
                 }

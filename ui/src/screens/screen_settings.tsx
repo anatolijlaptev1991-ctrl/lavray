@@ -8,7 +8,7 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import type { JSX } from 'react';
 import { create } from '@bufbuild/protobuf';
 import { SettingType, SettingValueSchema } from '../gen/lavray_pb';
-import type { SettingDescriptor, SettingValue } from '../gen/lavray_pb';
+import type { SettingValue } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
@@ -16,9 +16,9 @@ import { AgentsSettings } from '../components/AgentsSettings';
 import { HOTKEYS, HotkeysCard } from '../components/settings/HotkeysCard';
 import { PlatformRows } from '../components/settings/PlatformRows';
 import { ConfirmDialog } from '../components/dialogs';
+import { BackupRows } from '../components/settings/BackupRows';
 import { Icon, type IconName } from '../components/Icon';
 import { AGENT_MODE_KEY, parseAgentMode, type AgentMode } from '../lib/agents';
-import { isAccessSettingKey, withoutSecrets } from '../lib/backup';
 import {
   ACCENTS,
   THEMES,
@@ -207,11 +207,10 @@ function toSettingValue(kind: SettingType, raw: string | boolean | number): Sett
 }
 
 export function SettingsScreen(): JSX.Element {
-  const { t, tf, lang, setLanguage } = useI18n();
+  const { t, lang, setLanguage } = useI18n();
   const core = useCore();
   const [theme, setTheme] = useState<ThemePreference>(() => loadPreferences(window.localStorage).theme);
   const [accent, setAccent] = useState<AccentPreference>(() => loadPreferences(window.localStorage).accent);
-  const [descriptors, setDescriptors] = useState<SettingDescriptor[]>([]);
   const [values, setValues] = useState<Record<string, string | boolean | number>>({});
   const [query, setQuery] = useState('');
   const [activeSec, setActiveSec] = useState('general');
@@ -220,7 +219,6 @@ export function SettingsScreen(): JSX.Element {
   const [coreVersion, setCoreVersion] = useState('');
   const [confirmInsecure, setConfirmInsecure] = useState(false);
   // Восстановление из файла ждёт подтверждения: null — диалога нет (U-02).
-  const [pendingRestore, setPendingRestore] = useState<Record<string, SettingValue> | null>(null);
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   // Последние значения, принятые ядром: поле откатывается к ним при невалидном вводе.
   const accepted = useRef<Record<string, string | boolean | number>>({});
@@ -228,12 +226,10 @@ export function SettingsScreen(): JSX.Element {
   useEffect(() => {
     void (async (): Promise<void> => {
       try {
-        const [desc, st, settings] = await Promise.all([
-          core.settings.describeSettings({}),
+        const [st, settings] = await Promise.all([
           core.core.getStatus({}),
           core.settings.getSettings({}),
         ]);
-        setDescriptors(desc.descriptors);
         setCoreVersion(st.coreVersion);
         const map = valuesOf(settings.values);
         accepted.current = map;
@@ -291,46 +287,6 @@ export function SettingsScreen(): JSX.Element {
     (next: AgentMode): Promise<boolean> => save(AGENT_MODE_KEY, SettingType.STRING, next),
     [save],
   );
-
-  /** Перечитывает значения из ядра: поля показывают то, что реально применилось. */
-  const reloadValues = useCallback(async (): Promise<void> => {
-    const settings = await core.settings.getSettings({});
-    const map = valuesOf(settings.values);
-    accepted.current = map;
-    setValues(map);
-  }, [core]);
-
-  /** U-02: применяет подтверждённое восстановление; непринятые ядром ключи — ошибка. */
-  const applyRestore = useCallback(
-    async (payload: Record<string, SettingValue>): Promise<void> => {
-      setErr('');
-      setOk('');
-      try {
-        const res = await core.settings.setSettings({ values: payload });
-        const rejected = Object.keys(payload).filter((k) => !res.acceptedKeys.includes(k));
-        await reloadValues();
-        if (rejected.length > 0) {
-          setErr(tf('bk.restorePartial', { keys: rejected.join(', ') }));
-        } else {
-          setOk(t('bk.restored'));
-        }
-      } catch (e) {
-        setErr(showCoreError(e, t));
-      }
-    },
-    [core, reloadValues, t, tf],
-  );
-
-  // T-11: стабильные колбэки — иначе перерисовка раз в секунду (опрос
-  // статуса) заново вешала бы обработчики диалога подтверждения.
-  const closeRestore = useCallback((): void => {
-    setPendingRestore(null);
-  }, []);
-  const confirmRestore = useCallback((): void => {
-    if (pendingRestore === null) return;
-    setPendingRestore(null);
-    void applyRestore(pendingRestore);
-  }, [pendingRestore, applyRestore]);
 
   const closeInsecureConfirm = useCallback((): void => {
     setConfirmInsecure(false);
@@ -798,87 +754,14 @@ export function SettingsScreen(): JSX.Element {
                 </span>
                 <span>{t('sec.backup')}</span>
               </h2>
-              <div className="set-row">
-                <div className="set-txt">
-                  <div className="set-l">{t('bk.export')}</div>
-                  <div className="set-d">{t('bk.hint')}</div>
-                </div>
-                <div className="set-ctl">
-                  <button
-                    className="btn btn-sec btn-sm"
-                    aria-label={t('bk.export')}
-                    onClick={() => {
-                      void (async (): Promise<void> => {
-                        try {
-                          const res = await core.settings.getSettings({});
-                          const all: Record<string, string | boolean | number> = {};
-                          for (const [k, v] of Object.entries(res.values)) all[k] = valueOf(v);
-                          // T-13: пароль локального прокси и другие секреты в файл не пишем.
-                          const blob = new Blob([JSON.stringify(withoutSecrets(all), null, 2)], {
-                            type: 'application/json',
-                          });
-                          const a = document.createElement('a');
-                          a.href = URL.createObjectURL(blob);
-                          a.download = `lavray-settings-${new Date().toISOString().slice(0, 10)}.json`;
-                          a.click();
-                          window.setTimeout(() => {
-                            URL.revokeObjectURL(a.href);
-                          }, 1000);
-                        } catch (e) {
-                          setErr(showCoreError(e, t));
-                        }
-                      })();
-                    }}
-                  >
-                    {t('bk.exportBtn')}
-                  </button>
-                </div>
-              </div>
-              <div className="set-row">
-                <div className="set-txt">
-                  <div className="set-l">{t('bk.restore')}</div>
-                  <div className="set-d">{t('bk.restoreD')}</div>
-                </div>
-                <div className="set-ctl">
-                  <label className="btn btn-ghost btn-sm set-file">
-                    {t('bk.restore')}
-                    <input
-                      type="file"
-                      accept="application/json,.json"
-                      onChange={(e) => {
-                        const input = e.target;
-                        const f = input.files?.[0];
-                        // Сброс поля: после отмены тот же файл можно выбрать снова.
-                        input.value = '';
-                        if (f === undefined) return;
-                        void (async (): Promise<void> => {
-                          try {
-                            const text = await f.text();
-                            const parsed = JSON.parse(text) as Record<string, string | boolean | number>;
-                            const byKey = new Map(descriptors.map((d) => [d.key, d]));
-                            const payload: Record<string, SettingValue> = {};
-                            for (const [k, v] of Object.entries(parsed)) {
-                              const d = byKey.get(k);
-                              // Доступ агентов файлом не включается: только вручную.
-                              if (d === undefined || isAccessSettingKey(k)) continue;
-                              payload[k] = toSettingValue(d.type, v);
-                            }
-                            // Файл без известных настроек не открывает пустое подтверждение.
-                            if (Object.keys(payload).length === 0) {
-                              setErr(t('bk.restoreEmpty'));
-                              return;
-                            }
-                            // Применяется только после подтверждения (см. диалог внизу экрана).
-                            setPendingRestore(payload);
-                          } catch (e2) {
-                            setErr(showCoreError(e2, t));
-                          }
-                        })();
-                      }}
-                    />
-                  </label>
-                </div>
-              </div>
+              <BackupRows
+                onOk={(text) => {
+                  setOk(text);
+                  window.setTimeout(() => {
+                    setOk('');
+                  }, 2500);
+                }}
+              />
             </div>
           )}
 
@@ -1057,15 +940,6 @@ export function SettingsScreen(): JSX.Element {
           danger
           onConfirm={confirmInsecureOn}
           onClose={closeInsecureConfirm}
-        />
-      )}
-      {pendingRestore !== null && (
-        <ConfirmDialog
-          title={t('bk.restoreTitle')}
-          text={tf('bk.restoreConfirm', { n: Object.keys(pendingRestore).length })}
-          confirmLabel={t('bk.restoreOk')}
-          onConfirm={confirmRestore}
-          onClose={closeRestore}
         />
       )}
     </div>

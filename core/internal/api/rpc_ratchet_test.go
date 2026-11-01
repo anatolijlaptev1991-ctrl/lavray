@@ -39,11 +39,6 @@ var allowUnimplemented = map[string]bool{
 	"/lavray.v1.ProfileService/DeduplicateProfiles":       true,
 	"/lavray.v1.ProfileService/ExportConfig":              true,
 	"/lavray.v1.ProfileService/ResolveDomains":            true,
-	"/lavray.v1.RoutingService/CreatePreset":              true,
-	"/lavray.v1.RoutingService/UpdatePreset":              true,
-	"/lavray.v1.RoutingService/DeletePreset":              true,
-	"/lavray.v1.RoutingService/ResetBuiltinPreset":        true,
-	"/lavray.v1.RoutingService/ImportNekoRayRoute":        true,
 	"/lavray.v1.SettingsService/ResetSettings":            true,
 	"/lavray.v1.SettingsService/SubscribeSettings":        true,
 	// Реализация в Ф3 (T-75).

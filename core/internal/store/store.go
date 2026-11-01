@@ -41,6 +41,8 @@ type Store struct {
 	// tx != nil только у транзакционного представления внутри InTx (intx.go):
 	// withTx тогда не открывает свою транзакцию, а работает в этой.
 	tx *sql.Tx
+	// warn — приёмник предупреждений (SetWarnLogger); nil — молча.
+	warn func(format string, args ...any)
 }
 
 // Open открывает (или создаёт) хранилище в dir, применяет права и миграции.

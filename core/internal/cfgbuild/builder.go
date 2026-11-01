@@ -117,21 +117,21 @@ type BuildResult struct {
 	// OutboundTag — тег «последней мили» цепочки, всегда "proxy".
 	OutboundTag string
 
-	// OutboundTags — все теги outbound'ов, созданных для профиля
-	// (для allowlist-мержа custom_config → outbounds).
+	// OutboundTags — теги outbound'ов профиля (для allowlist-мержа custom_config → outbounds).
 	OutboundTags []string
 
-	// IgnoreConnTags — теги промежуточных outbound'ов цепочки (index != 0),
-	// соединения с ними не считаются пользовательскими (оракул).
+	// IgnoreConnTags — теги промежуточных outbound'ов (index != 0): их соединения не пользовательские.
 	IgnoreConnTags []string
 
-	// ServerDomains — домены серверов цепочки («full:<домен>»), для
-	// dns-direct правил W5 (§3.1.4).
+	// ServerDomains — домены серверов цепочки («full:<домен>») для dns-direct правил (§3.1.4).
 	ServerDomains []string
 
 	// ExternalCores — записи о внешних ядрах (всегда пуст в W4: внешние
 	// ядра за флагом enable_external_cores, W6).
 	ExternalCores []ExternalCore
+
+	// Warnings — замечания сборки, не мешающие запуску (напр. проигнорированная настройка).
+	Warnings []string
 }
 
 // ExternalCore — описание внешнего ядра (заполняется только в W6 за флагом).

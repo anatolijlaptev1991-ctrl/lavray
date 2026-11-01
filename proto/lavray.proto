@@ -1096,7 +1096,9 @@ service RoutingService {
   // клонировать (Create с builtin_id источником) или Reset к ревизии.
   rpc CreatePreset(CreatePresetRequest) returns (RoutingPreset);
   rpc UpdatePreset(UpdatePresetRequest) returns (UpdatePresetResponse);
-  rpc DeletePreset(DeletePresetRequest) returns (Empty); // нельзя последний (FR-UI-140)
+  // Встроенный удалить нельзя; удаление активного переключает на «global»
+  // (T-80: DeletePresetResponse.new_active_id, needs_profile_restart).
+  rpc DeletePreset(DeletePresetRequest) returns (DeletePresetResponse);
 
   // Активация набора. Если соединение активно — ответ предлагает перезапуск
   // (needs_profile_restart, FR-UI-141/062); headless может применить сам
@@ -1113,7 +1115,14 @@ service RoutingService {
   // NekoBox — config/routes_box/<name> (поправка аудита 2026-10; каталог
   // routes/ старых форков тоже принимается). Эталон конвертации —
   // nekobox-ru-bypass-games «RU-bypass + Games» (PRESET-LAV-RU §3).
-  rpc ImportNekoRayRoute(ImportNekoRayRouteRequest) returns (RoutingPreset);
+  rpc ImportNekoRayRoute(ImportNekoRayRouteRequest) returns (ImportNekoRayRouteResponse);
+
+  // Обмен наборами файлом (T-80, формат presets/SCHEMA.md). Экспорт отдаёт
+  // JSON набора (встроенного тоже); импорт принимает JSON LAVRay или маршрут
+  // NekoRay (формат определяется сам) и ВСЕГДА создаёт новый пользовательский
+  // набор с новым id — id встроенного файл занять не может.
+  rpc ExportPreset(ExportPresetRequest) returns (ExportPresetResponse);
+  rpc ImportPreset(ImportPresetRequest) returns (ImportPresetResponse);
 }
 
 // ----------------------------------------------------------------------------
@@ -1155,6 +1164,15 @@ message RoutingPreset {
   // привязан к спискам маршрутов (FR-UI-150). Редактируется через DnsService,
   // но хранится здесь.
   DnsSettings dns = 22;
+
+  // Источник копии (T-80): id и ревизия встроенного набора, с которого она
+  // снята (пусто / 0 — набор создан с нуля или импортирован). Только чтение:
+  // ядро проставляет их само, значения от клиента игнорируются.
+  string builtin_source_id = 23;
+  int32 builtin_source_revision = 24;
+  // Встроенный источник обновился (его ревизия выше записанной): UI
+  // предлагает ResetBuiltinPreset. Вычисляется при чтении, не хранится.
+  bool source_updated = 25;
 }
 
 message ProcessRule {
@@ -1194,10 +1212,19 @@ message UpdatePresetRequest {
 message UpdatePresetResponse {
   RoutingPreset preset = 1;
   int32 new_revision = 2;
+  // Изменён активный набор при работающем соединении (T-80).
+  bool needs_profile_restart = 3;
 }
 
 message DeletePresetRequest {
   string id = 1;
+}
+
+message DeletePresetResponse {
+  // Удалён активный набор при работающем соединении (T-80).
+  bool needs_profile_restart = 1;
+  // Непусто, если активным стал другой набор ("global" после удаления активного).
+  string new_active_id = 2;
 }
 
 message ActivatePresetRequest {
@@ -1219,6 +1246,29 @@ message ResetBuiltinPresetRequest {
 message ImportNekoRayRouteRequest {
   string nekobox_json = 1; // содержимое файла routes_box/<name> (или routes/<name>)
   optional string name = 2;
+}
+
+message ImportNekoRayRouteResponse {
+  RoutingPreset preset = 1; // созданный пользовательский набор
+  repeated string warnings = 2; // что конвертер отбросил или заменил
+}
+
+message ExportPresetRequest {
+  string id = 1;
+}
+
+message ExportPresetResponse {
+  string json = 1; // файл набора (presets/SCHEMA.md), отступ в 2 пробела
+  string suggested_name = 2; // имя файла без расширения (латиница, цифры, «-»)
+}
+
+message ImportPresetRequest {
+  string json = 1; // файл набора LAVRay либо маршрут NekoRay, до 1 МиБ
+}
+
+message ImportPresetResponse {
+  RoutingPreset preset = 1;
+  repeated string warnings = 2;
 }
 
 // ============================================================================
@@ -2132,6 +2182,77 @@ message RevokeSessionRequest {
 }
 
 // ============================================================================
+// Сервис 14: BackupService — зашифрованная резервная копия всех данных (T-83)
+// ============================================================================
+
+// Формат LAVBK1: заголовок (он же AAD) + XChaCha20-Poly1305 над снимком БД;
+// ключ — Argon2id от пароля. В копию входят настройки, группы, профили (с
+// секретами), подписки (с их адресами) и пользовательские наборы; состояние
+// обновлений (update.*), кэши, гео-файлы и журнал не входят. Забытый пароль =
+// копию не открыть никак. Восстановление полностью ЗАМЕНЯЕТ данные, атомарно.
+//
+// Пароль приходит как UTF-8 (UI нормализует его в NFC), длина — от 8 символов
+// до 1024 байт, ядро его не хранит и не пишет в журнал. Размер копии — до
+// 64 МиБ (лимит тела этого сервиса выше общего, JSON считает base64).
+//
+// Ошибки: код ConnectRPC + деталь ErrorInfo { domain: "lavray.core", reason }.
+//   INVALID_ARGUMENT    — password_too_short | password_too_long | backup_not_recognized
+//   PERMISSION_DENIED   — backup_wrong_password
+//   DATA_LOSS           — backup_tampered (файл изменён или повреждён)
+//   FAILED_PRECONDITION — backup_from_newer_version | confirm_replace_required |
+//                         connection_active
+//   RESOURCE_EXHAUSTED  — backup_too_large
+//   ABORTED             — backup_busy (идёт другая операция с копией)
+//   INTERNAL            — backup_failed (прочий сбой; подробности только в журнале
+//                         ядра, в ответе пути и тексты ошибок ОС не передаются)
+service BackupService {
+  // Собрать и зашифровать копию. Файл сохраняет клиент (диалог «Сохранить как»).
+  rpc ExportBackup(ExportBackupRequest) returns (ExportBackupResponse);
+  // Расшифровать и показать сводку. Данные не меняются.
+  rpc PreviewBackup(PreviewBackupRequest) returns (BackupSummary);
+  // Заменить все данные содержимым копии. Требует confirm_replace и
+  // отсутствия активного подключения.
+  rpc ImportBackup(ImportBackupRequest) returns (ImportBackupResponse);
+}
+
+message ExportBackupRequest {
+  string password = 1;
+}
+
+message ExportBackupResponse {
+  bytes data = 1;
+  string suggested_name = 2; // lavray-backup-YYYYMMDD-HHMMSS.lavbk
+  BackupSummary summary = 3;
+}
+
+message PreviewBackupRequest {
+  bytes data = 1;
+  string password = 2;
+}
+
+message ImportBackupRequest {
+  bytes data = 1;
+  string password = 2;
+  bool confirm_replace = 3; // без true — FAILED_PRECONDITION
+}
+
+message ImportBackupResponse {
+  BackupSummary restored = 1;
+  bool needs_app_restart = 2;
+}
+
+message BackupSummary {
+  int32 groups = 1; // все группы, включая подписки
+  int32 profiles = 2;
+  int32 subscriptions = 3; // из groups: группы-подписки (kind=2)
+  int32 presets = 4; // пользовательские наборы маршрутов
+  int32 settings = 5; // без update.*
+  string app_version = 6;
+  int64 schema_version = 7;
+  int64 created_at_ms = 8;
+}
+
+// ============================================================================
 // Reserved (эволюция). Удалённые/переименованные поля фиксируются здесь;
 // номера НЕ переиспользуются. История ведётся в proto/README.md §7.
 // ============================================================================
@@ -2158,7 +2279,10 @@ message RevokeSessionRequest {
 //   ImportContentRequest: reserved 6 (allow_custom_fields).
 //   Profile.custom_fields_confirmed — только чтение, вычисляется ядром.
 //
-// ревизия 4 (0.9.0, T-76): WebSessionService сверен с реализацией.
+// ревизия 4 (0.7.0, T-83):
+//   + BackupService (ExportBackup, PreviewBackup, ImportBackup) и сообщения
+//   BackupSummary и др.: зашифрованная резервная копия, формат LAVBK1.
+// ревизия 5 (0.9.0, T-76): WebSessionService сверен с реализацией.
 //   WebModeStatus: + session_absolute_ttl_minutes=8. SessionInfo: + last_seen_ms=6,
 //   current=7, remote_addr=8. WebSession.token всегда пуст. Сервис UNIMPLEMENTED
 //   без `--web-bind`. GatewayService: на десктопе INVALID_ARGUMENT.

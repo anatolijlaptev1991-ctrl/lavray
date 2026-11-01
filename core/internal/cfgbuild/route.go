@@ -22,7 +22,6 @@
 package cfgbuild
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -168,7 +167,7 @@ func makeMatchRule(list []string, isIP bool, rs *ruleSetCollector) map[string]an
 // (lists[i]: "direct_domain", "process_rules[0]"...). ЕДИНСТВЕННОЕ место, где
 // задан порядок правил: его вызывают buildRoute (конфиг) и BuildRouteTable
 // (тестер маршрута), поэтому разойтись они не могут.
-func routeRules(preset *presets.Preset, st *BuildSettings, forTest bool, rs *ruleSetCollector) (rules []any, lists []string, _ error) {
+func routeRules(preset *presets.Preset, st *BuildSettings, forTest bool, rs *ruleSetCollector, warn func(string)) (rules []any, lists []string, _ error) {
 	// mark подписывает правила, добавленные с прошлого вызова, списком-источником.
 	mark := func(list string, indexed bool) {
 		for k := 0; len(lists) < len(rules); k++ {
@@ -211,11 +210,7 @@ func routeRules(preset *presets.Preset, st *BuildSettings, forTest bool, rs *rul
 		}
 		rules = append(rules, presetRules...)
 		mark("custom_rules", true)
-		globalRules, err := parseCustomRules(st.CustomRouteGlobalJSON, "routing.custom_global")
-		if err != nil {
-			return nil, nil, err
-		}
-		rules = append(rules, globalRules...)
+		rules = append(rules, globalCustomRules(st, warn)...)
 		mark("custom_global", true)
 	}
 
@@ -305,8 +300,8 @@ func routeRules(preset *presets.Preset, st *BuildSettings, forTest bool, rs *rul
 // buildRoute — route{} конфига (§3.4 шаг 6). kill-switch на уровне route —
 // см. deviations.yaml: v1 = форс strict_route (inbounds.go) + фаервол
 // оболочки (W8);DefOutbound final — только в рабочих конфигах (не forTest).
-func buildRoute(preset *presets.Preset, st *BuildSettings, _ *BuildResult, forTest, forExport bool, rs *ruleSetCollector) (map[string]any, error) {
-	rules, _, err := routeRules(preset, st, forTest, rs)
+func buildRoute(preset *presets.Preset, st *BuildSettings, res *BuildResult, forTest, forExport bool, rs *ruleSetCollector) (map[string]any, error) {
+	rules, _, err := routeRules(preset, st, forTest, rs, res.warn)
 	if err != nil {
 		return nil, err
 	}
@@ -347,22 +342,6 @@ func buildExperimental(st *BuildSettings) map[string]any {
 		cache["path"] = p
 	}
 	return map[string]any{"cache_file": cache}
-}
-
-// parseCustomRules — JSON-строка {"rules":[...]} (формат пресета/оракула)
-// → список rule-объектов. Пустая строка/"{}" — пусто.
-func parseCustomRules(raw, key string) ([]any, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" || raw == "{}" {
-		return nil, nil
-	}
-	var parsed struct {
-		Rules []any `json:"rules"`
-	}
-	if err := json.Unmarshal([]byte(raw), &parsed); err != nil {
-		return nil, invalidArgument(key, "invalid JSON (%s expected {\"rules\":[...]}): %v", key, err)
-	}
-	return parsed.Rules, nil
 }
 
 // splitLinesSkipSharp — многострочник → строки: пустые/пробельные и

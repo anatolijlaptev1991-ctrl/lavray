@@ -19,6 +19,7 @@ import {
   DiagnosticsService,
   UpdateService,
   WebSessionService,
+  BackupService,
 } from '../gen/lavray_pb';
 import { authInterceptors, cookieFetch, type CoreAuth } from './coreAuth';
 import { t as translate } from './i18n';
@@ -41,6 +42,7 @@ export interface CoreClients {
   updates: ReturnType<typeof createClient<typeof UpdateService>>;
   /** Вход и сессии веб-панели (UNIMPLEMENTED, если ядро запущено без --web-bind). */
   web: ReturnType<typeof createClient<typeof WebSessionService>>;
+  backup: ReturnType<typeof createClient<typeof BackupService>>;
 }
 
 export function createCoreClients(baseUrl: string, auth?: CoreAuth): CoreClients {
@@ -69,6 +71,7 @@ export function createCoreClients(baseUrl: string, auth?: CoreAuth): CoreClients
     diagnostics: c(DiagnosticsService),
     updates: c(UpdateService),
     web: c(WebSessionService),
+    backup: c(BackupService),
   };
 }
 

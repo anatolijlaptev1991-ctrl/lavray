@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-// screen_rules.test.tsx — регрессия T-69: повторный ввод существующей записи не
+// RulesScreen.lists.test.tsx — регрессия T-69: повторный ввод существующей записи не
 // удаляет её, ✕ на чипе удаляет, пустой набор показывает «Правил нет».
 // @testing-library в проекте не установлен — react-dom/client + act и обычный DOM.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,12 +10,12 @@ import { createRoot } from 'react-dom/client';
 import type { Root } from 'react-dom/client';
 import { create } from '@bufbuild/protobuf';
 import type { MessageInitShape } from '@bufbuild/protobuf';
-import { RoutingPresetSchema } from '../gen/lavray_pb';
-import type { RoutingPreset } from '../gen/lavray_pb';
-import { CoreContext } from '../hooks/useCore';
-import type { CoreClients } from '../lib/core';
-import { setLanguage, t } from '../lib/i18n';
-import { RulesScreen } from './screen_rules';
+import { RoutingPresetSchema } from '../../gen/lavray_pb';
+import type { RoutingPreset } from '../../gen/lavray_pb';
+import { CoreContext } from '../../hooks/useCore';
+import type { CoreClients } from '../../lib/core';
+import { setLanguage, t } from '../../lib/i18n';
+import { RulesScreen } from './RulesScreen';
 
 interface UpdateReq {
   readonly preset: RoutingPreset;

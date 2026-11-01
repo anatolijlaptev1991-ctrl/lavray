@@ -5,7 +5,6 @@ package api
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
@@ -66,6 +65,8 @@ type Server struct {
 	updater    *updates.Client
 	// acct — учёт трафика сессии (traffic_accountant.go, T-79).
 	acct trafficAccountant
+	// presetRepo — пользовательские наборы маршрутов (preset_repo.go, T-80).
+	presetRepo *presetRepo
 
 	// ---- подписки: прогресс-мультиплексирование по group_id ----
 	subsMu      sync.Mutex
@@ -88,6 +89,9 @@ type Server struct {
 
 	// ---- обновления: доступ к общему клиенту сериализуется ----
 	updMu sync.Mutex
+
+	backup *backupService // зашифрованная копия (backup_service.go)
+	sched  schedCtl       // жизненный цикл планировщика подписок (sched_ctl.go)
 
 	// ---- агентский доступ (MCP): токен этого запуска, режим — agent.mode ----
 	agentMu    sync.RWMutex
@@ -125,8 +129,9 @@ func NewServer(d Deps) *Server {
 			lg.Logf(level, logs.SourceSingBox, "%s", message)
 		})
 	}
-	return &Server{
+	s := &Server{
 		st:               d.Store,
+		presetRepo:       newPresetRepo(d.Store),
 		logs:             lg,
 		inst:             inst.NewManager(d.Runner),
 		http:             httpc,
@@ -141,6 +146,8 @@ func NewServer(d Deps) *Server {
 		subsSnap:         map[int64]*subs.Snapshot{},
 		setSubs:          map[chan *lavrayv1.SettingsChanged]struct{}{},
 	}
+	s.backup = newBackupService(s)
+	return s
 }
 
 // HandlerOptions — опции всех хендлеров (интерсептор recover+map).
@@ -183,6 +190,8 @@ func (s *Server) Register(mux *http.ServeMux) {
 	path, h = lavrayv1connect.NewUpdateServiceHandler(s, opts...)
 	mount(path, h)
 	path, h = lavrayv1connect.NewWebSessionServiceHandler(s.webSessionHandler(), opts...)
+	mount(path, h)
+	path, h = lavrayv1connect.NewBackupServiceHandler(s.backup, s.backup.handlerOptions(opts)...)
 	mount(path, h)
 }
 
@@ -339,8 +348,7 @@ func (s *Server) validateInboundLAN(inbound cfgbuild.InboundSettings) error {
 // ============================================================================
 
 const (
-	metaCustomPresets   = "routing.custom_presets" // JSON []presets.Preset
-	metaDNSOverride     = "routing.dns_override"   // JSON map[id пресета]dnsChoice (dns_choice.go)
+	metaDNSOverride     = "routing.dns_override" // JSON map[id пресета]dnsChoice (dns_choice.go)
 	settingActivePreset = "routing.active_preset"
 )
 
@@ -352,67 +360,11 @@ func (s *Server) activePresetID() string {
 	return "global"
 }
 
-// customPresets — пользовательские наборы (хранятся в meta одним JSON).
-func (s *Server) customPresets() ([]*presets.Preset, error) {
-	raw, ok, err := s.st.GetMeta(metaCustomPresets)
-	if err != nil {
-		return nil, err
-	}
-	if !ok || strings.TrimSpace(raw) == "" {
-		return nil, nil
-	}
-	var out []*presets.Preset
-	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return nil, fmt.Errorf("api: чтение пользовательских пресетов: %w", err)
-	}
-	return out, nil
-}
-
-func (s *Server) saveCustomPresets(list []*presets.Preset) error {
-	b, err := json.Marshal(list)
-	if err != nil {
-		return err
-	}
-	return s.st.SetMeta(metaCustomPresets, string(b))
-}
-
-// findPreset — builtin или пользовательский по id.
-func (s *Server) findPreset(id string) (*presets.Preset, bool, error) {
-	if id == "" {
-		return nil, false, nil
-	}
-	if builtin, err := presets.BuiltinPresets(); err == nil {
-		for _, p := range builtin {
-			if p.ID == id {
-				return p, true, nil
-			}
-		}
-	} else {
-		return nil, false, err
-	}
-	custom, err := s.customPresets()
-	if err != nil {
-		return nil, false, err
-	}
-	for _, p := range custom {
-		if p.ID == id {
-			return p, true, nil
-		}
-	}
-	return nil, false, nil
-}
-
 // activePreset — активный набор (builtin, пользовательский или нейтральный).
 func (s *Server) activePreset() (*presets.Preset, error) {
-	p, found, err := s.findPreset(s.activePresetID())
+	p, err := s.activeOrGlobal()
 	if err != nil {
 		return nil, err
-	}
-	if !found {
-		// настройка указывает на удалённый пресет — конфигбилдер подставит
-		// нейтральный (nil); но DNS-настройки пользователя обязаны применяться
-		// и в этом случае (A5 аудита round 1).
-		p = nil
 	}
 	return s.applyDNSOverride(p), nil
 }
@@ -420,32 +372,6 @@ func (s *Server) activePreset() (*presets.Preset, error) {
 // ============================================================================
 // CoreStatus
 // ============================================================================
-
-func coreStateOf(st inst.State) lavrayv1.CoreState {
-	switch st {
-	case inst.StateStarting:
-		return lavrayv1.CoreState_CORE_STATE_CONNECTING
-	case inst.StateReady:
-		return lavrayv1.CoreState_CORE_STATE_CONNECTED
-	case inst.StateStopping:
-		return lavrayv1.CoreState_CORE_STATE_DISCONNECTING
-	case inst.StateCrashed:
-		return lavrayv1.CoreState_CORE_STATE_ERROR
-	}
-	return lavrayv1.CoreState_CORE_STATE_IDLE
-}
-
-func connectModeOf(mode string) lavrayv1.ConnectMode {
-	switch mode {
-	case "tun":
-		return lavrayv1.ConnectMode_CONNECT_MODE_TUN
-	case "gateway_tproxy":
-		return lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TPROXY
-	case "gateway_tun":
-		return lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TUN
-	}
-	return lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY
-}
 
 // coreStatus — снимок CoreStatus (менеджер + настройки inbound/tun/пресет).
 func (s *Server) coreStatus() *lavrayv1.CoreStatus {
@@ -490,9 +416,6 @@ func (s *Server) coreStatus() *lavrayv1.CoreStatus {
 	}
 	return cs
 }
-
-// nowMs — время для стримов (выделено для будущих тест-инъекций).
-func nowMs() int64 { return time.Now().UnixMilli() }
 
 // corsWrap — CORS для Tauri-окна: webview отдаёт страницу с origin
 // tauri://localhost (или http://tauri.localhost на Windows), а ядро живёт на

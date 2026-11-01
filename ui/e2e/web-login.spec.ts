@@ -50,7 +50,7 @@ test('вход → список серверов → выход', async ({ page 
   await page.getByRole('button', { name: 'Create and sign in' }).click();
 
   // Приложение открылось; серверы — в разделе «Servers».
-  const nav = page.getByRole('navigation').first();
+  const nav = page.getByRole('navigation', { name: 'Sections' });
   await nav.getByRole('button', { name: 'Servers' }).click();
   await expect(page.getByText(SERVER_NAME).first()).toBeVisible();
 

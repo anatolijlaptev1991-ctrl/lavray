@@ -10,6 +10,8 @@
 //	timestamp  подписать timestamp.json по манифестам каталога
 //	artifact   подписать один файл minisign (<файл>.minisig)
 //	verify     проверить каталог meta/ тем же кодом, что и клиент
+//	resign     продлить срок manifest/sources, не меняя содержимого
+//	expiry     предупредить об истекающих manifest/sources
 //
 // Приватный ключ читается из файла (file:ПУТЬ) или переменной окружения
 // (env:ИМЯ), никогда не печатается и не принимается из файла внутри git-дерева.
@@ -33,6 +35,7 @@ func run(args []string, stdout, stderr io.Writer, getenv func(string) string) in
 	cmds := map[string]func([]string) error{
 		"genkey": c.genkey, "root": c.root, "sources": c.sources, "manifest": c.manifest,
 		"timestamp": c.timestamp, "artifact": c.artifact, "verify": c.verify,
+		"resign": c.resign, "expiry": c.expiry,
 	}
 	fn, ok := cmds[args[0]]
 	if !ok {
@@ -59,4 +62,6 @@ const usage = `использование: updsign <команда> [флаги]
   manifest  -key ... -artifact-key ... -product P -channel stable|beta -version V -asset ПЛАТФОРМА=ПУТЬ=ФАЙЛ -out ФАЙЛ
   timestamp -key ... -dir meta -out meta/timestamp.json [-keyid t1] [-expires 168h]
   artifact  -key ... -file ФАЙЛ -product P -platform PL -channel C -version V -serial N [-out ФАЙЛ.minisig]
-  verify    -root root.json -dir meta [-assets ДИР] [-product P]`
+  verify    -root root.json -dir meta [-assets ДИР] [-product P] [-channel stable|beta]
+  resign    -key ... -in manifest-X.json|sources.json -out ФАЙЛ [-expires 2160h]
+  expiry    -dir meta [-within 336h]`

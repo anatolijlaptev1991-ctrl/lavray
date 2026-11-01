@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -41,7 +42,8 @@ func (c *cli) manifest(args []string) error {
 	mandatory := fs.Bool("mandatory", false, "обязательное обновление")
 	notes := fs.String("notes", "", "JSON {локаль: текст}")
 	out := fs.String("out", "", "manifest-<канал>.json")
-	ttl := fs.Duration("expires", 30*24*time.Hour, "срок действия")
+	ttl := fs.Duration("expires", 90*24*time.Hour, "срок действия")
+	published := fs.String("published-dir", "", "каталог опубликованного meta/: версия обязана быть новее")
 	var assets multiFlag
 	fs.Var(&assets, "asset", "ПЛАТФОРМА=ПУТЬ=ФАЙЛ (повторяется)")
 	if err := fs.Parse(args); err != nil {
@@ -61,6 +63,9 @@ func (c *cli) manifest(args []string) error {
 	if *serial == 0 {
 		*serial = time.Now().Unix()
 	}
+	if err := refuseNotNewer(*published, *channel, *version, *serial); err != nil {
+		return err
+	}
 	app, err := buildApp(assets, ak, claimsBase{*product, *channel, *version, *serial})
 	if err != nil {
 		return err
@@ -77,7 +82,7 @@ func (c *cli) manifest(args []string) error {
 		}
 		doc["notes"] = n
 	}
-	raw, _ := json.Marshal(doc)
+	raw, _ := marshalPlain(doc)
 	env, err := signDoc(raw, map[string]secretKey{*keyid: rk})
 	if err != nil {
 		return err
@@ -127,4 +132,34 @@ func readNotes(p string) (map[string]string, error) {
 		return nil, fmt.Errorf("%s: ожидается JSON {локаль: текст}: %w", p, err)
 	}
 	return n, nil
+}
+
+// refuseNotNewer: версия (и serial) обязаны быть новее уже опубликованного
+// манифеста канала; нечитаемый опубликованный манифест — отказ, а не «можно».
+func refuseNotNewer(dir, channel, version string, serial int64) error {
+	if dir == "" {
+		return nil
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, updates.ManifestName(channel)))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	env, err := updates.ParseEnvelope(raw)
+	if err != nil {
+		return fmt.Errorf("опубликованный манифест %s нечитаем: %w", channel, err)
+	}
+	old, err := updates.ParseManifest(env.Signed)
+	if err != nil || old.App == nil {
+		return fmt.Errorf("опубликованный манифест %s нечитаем: %v", channel, err)
+	}
+	if updates.CompareVersions(version, old.App.Version) <= 0 {
+		return fmt.Errorf("версия %s не новее уже опубликованной %s в канале %s: подписывать откат нельзя", version, old.App.Version, channel)
+	}
+	if serial <= old.Serial {
+		return fmt.Errorf("serial %d не больше опубликованного %d в канале %s", serial, old.Serial, channel)
+	}
+	return nil
 }

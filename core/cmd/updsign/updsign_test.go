@@ -5,6 +5,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,10 +17,11 @@ import (
 
 // harness: временный каталог вне git, ключи четырёх ролей, подписанный root.
 type harness struct {
-	t    *testing.T
-	dir  string
-	env  map[string]string
-	root string
+	serial int
+	t      *testing.T
+	dir    string
+	env    map[string]string
+	root   string
 }
 
 func (h *harness) run(args ...string) (int, string, string) {
@@ -232,5 +234,169 @@ func TestArtifactSignatureFile(t *testing.T) {
 	}
 	if code, _, _ := h.run(); code != 2 {
 		t.Fatalf("без команды: код %d", code)
+	}
+}
+
+// Подписанные байты не должны зависеть от HTML-экранирования: заметки релиза
+// содержат «<файл>» и «&», а json.Marshal превращает их в < и &.
+func TestSignedBytesSurviveHTMLCharacters(t *testing.T) {
+	h := newHarness(t)
+	notes := `{"ru":"Файл <файл> & >","en":"a<b && c>d"}`
+	_ = os.WriteFile(h.p("notes.json"), []byte(notes), 0o644)
+	file := h.p("dist/setup.exe")
+	_ = os.MkdirAll(h.p("dist"), 0o755)
+	_ = os.WriteFile(file, []byte("installer"), 0o644)
+	h.must("manifest", "-key", "file:"+h.p("manifest.sec"), "-artifact-key", "file:"+h.p("artifact.sec"),
+		"-product", "lavray-windows", "-channel", "stable", "-version", "0.5.1", "-serial", "7", "-notes", h.p("notes.json"),
+		"-asset", "windows-x64=v0.5.1/setup.exe="+file, "-out", h.p("meta/manifest-stable.json"))
+	h.must("timestamp", "-key", "file:"+h.p("timestamp.sec"), "-dir", h.p("meta"), "-out", h.p("meta/timestamp.json"))
+	raw, _ := os.ReadFile(h.p("meta/manifest-stable.json"))
+	for _, esc := range []string{"\\u003c", "\\u003e", "\\u0026"} {
+		if bytes.Contains(raw, []byte(esc)) {
+			t.Fatalf("в подписанном документе остались HTML-экранирования %s", esc)
+		}
+	}
+	h.must("verify", "-root", h.root, "-dir", h.p("meta"), "-assets", h.p("dist"), "-product", "lavray-windows")
+	env, err := updates.ParseEnvelope(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mf, err := updates.ParseManifest(env.Signed)
+	if err != nil || mf.Notes["ru"] != "Файл <файл> & >" {
+		t.Fatalf("заметки после подписи: %v %v", mf, err)
+	}
+	// канонический вид стабилен: повторная каноникализация подписанных байт ничего не меняет
+	again, err := canonical(env.Signed)
+	if err != nil || !bytes.Equal(again, env.Signed) {
+		t.Fatalf("подписанные байты не канонические: %v", err)
+	}
+}
+
+func (h *harness) manifestArgs(version, channel, expires, extra string) []string {
+	file := h.p("dist/setup.exe")
+	_ = os.MkdirAll(h.p("dist"), 0o755)
+	_ = os.WriteFile(file, []byte("installer-"+version), 0o644)
+	h.serial++
+	args := []string{"manifest", "-key", "file:" + h.p("manifest.sec"), "-artifact-key", "file:" + h.p("artifact.sec"),
+		"-product", "lavray-windows", "-channel", channel, "-version", version, "-serial", fmt.Sprint(h.serial),
+		"-asset", "windows-x64=v" + version + "/setup.exe=" + file, "-out", h.p("meta/manifest-" + channel + ".json")}
+	if expires != "" {
+		args = append(args, "-expires", expires)
+	}
+	if extra != "" {
+		args = append(args, "-published-dir", extra)
+	}
+	return args
+}
+
+func expiresOf(t *testing.T, path string) time.Time {
+	t.Helper()
+	raw, _ := os.ReadFile(path)
+	env, err := updates.ParseEnvelope(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Expires time.Time `json:"expires"`
+	}
+	if err := json.Unmarshal(env.Signed, &doc); err != nil {
+		t.Fatal(err)
+	}
+	return doc.Expires
+}
+
+// Манифест и sources живут 90 суток (их подпись требует ревью), timestamp — 7.
+func TestManifestAndSourcesDefaultTo90Days(t *testing.T) {
+	h := newHarness(t)
+	h.must(h.manifestArgs("0.5.1", "stable", "", "")...)
+	_ = os.WriteFile(h.p("sources-draft.json"), []byte(`{"type":"sources","version":1,"artifacts":["https://a.example/dl"],"metadata":["https://m.example/meta"]}`), 0o644)
+	h.must("sources", "-key", "file:"+h.p("manifest.sec"), "-in", h.p("sources-draft.json"), "-out", h.p("meta/sources.json"))
+	for _, f := range []string{"meta/manifest-stable.json", "meta/sources.json"} {
+		if d := time.Until(expiresOf(t, h.p(f))) - 90*24*time.Hour; d > time.Minute || d < -time.Minute {
+			t.Errorf("%s: срок по умолчанию должен быть 90 суток, расхождение %v", f, d)
+		}
+	}
+}
+
+// verify проверяет только выпускаемый канал: просроченный beta не мешает stable.
+func TestVerifyChecksOnlyTheReleasedChannel(t *testing.T) {
+	h := newHarness(t)
+	h.must(h.manifestArgs("0.5.0-rc.1", "beta", "1h", "")...)
+	h.must(h.manifestArgs("0.5.1", "stable", "", "")...)
+	h.must("timestamp", "-key", "file:"+h.p("timestamp.sec"), "-dir", h.p("meta"), "-out", h.p("meta/timestamp.json"))
+	later := time.Now().Add(3 * time.Hour).UTC().Format(time.RFC3339)
+	if code, _, errw := h.run("verify", "-root", h.root, "-dir", h.p("meta"), "-now", later); code == 0 || !strings.Contains(errw, "beta") {
+		t.Fatalf("без -channel просроченный beta должен ломать проверку: код %d %s", code, errw)
+	}
+	out := h.must("verify", "-root", h.root, "-dir", h.p("meta"), "-now", later, "-channel", "stable")
+	if strings.Contains(out, "beta") || !strings.HasSuffix(strings.TrimSpace(out), "ok") {
+		t.Fatalf("-channel stable проверяет только stable: %s", out)
+	}
+	if code, _, _ := h.run("verify", "-root", h.root, "-dir", h.p("meta"), "-channel", "nightly"); code == 0 {
+		t.Fatal("канала без манифеста нет — это ошибка, а не молчаливый успех")
+	}
+}
+
+// S: подписывать версию не новее уже опубликованной нельзя (откат релиза).
+func TestManifestRefusesVersionNotNewerThanPublished(t *testing.T) {
+	h := newHarness(t)
+	h.must(h.manifestArgs("0.5.1", "stable", "", "")...)
+	published := h.p("meta")
+	for _, v := range []string{"0.5.1", "0.5.0", "0.4.9"} {
+		if code, _, errw := h.run(h.manifestArgs(v, "stable", "", published)...); code == 0 || !strings.Contains(errw, "не новее") {
+			t.Errorf("версия %s при опубликованной 0.5.1 должна отвергаться: код %d %s", v, code, errw)
+		}
+	}
+	h.must(h.manifestArgs("0.5.2", "stable", "", published)...)
+	// другой канал независим; пре-релиз старше релиза в своём канале допустим
+	h.must(h.manifestArgs("0.5.0-rc.1", "beta", "", published)...)
+	// повреждённый опубликованный манифест — отказ, а не молчаливое «можно»
+	_ = os.WriteFile(h.p("meta/manifest-beta.json"), []byte("мусор"), 0o644)
+	if code, _, _ := h.run(h.manifestArgs("0.5.0-rc.2", "beta", "", published)...); code == 0 {
+		t.Fatal("нечитаемый опубликованный манифест — fail-closed")
+	}
+}
+
+func TestResignRefreshesExpiryKeepingContent(t *testing.T) {
+	h := newHarness(t)
+	h.must(h.manifestArgs("0.5.1", "stable", "1h", "")...)
+	before, _ := os.ReadFile(h.p("meta/manifest-stable.json"))
+	h.must("resign", "-key", "file:"+h.p("manifest.sec"), "-in", h.p("meta/manifest-stable.json"),
+		"-out", h.p("meta/manifest-stable.json"), "-expires", "2160h")
+	if d := time.Until(expiresOf(t, h.p("meta/manifest-stable.json"))) - 90*24*time.Hour; d > time.Minute || d < -time.Minute {
+		t.Fatalf("срок после resign: %v", d)
+	}
+	var a, b struct {
+		Signed map[string]any `json:"signed"`
+	}
+	after, _ := os.ReadFile(h.p("meta/manifest-stable.json"))
+	_ = json.Unmarshal(before, &a)
+	_ = json.Unmarshal(after, &b)
+	delete(a.Signed, "expires")
+	delete(b.Signed, "expires")
+	x, _ := json.Marshal(a.Signed)
+	y, _ := json.Marshal(b.Signed)
+	if !bytes.Equal(x, y) {
+		t.Fatal("resign меняет только expires: версия, активы и подписи minisign остаются")
+	}
+	h.must("timestamp", "-key", "file:"+h.p("timestamp.sec"), "-dir", h.p("meta"), "-out", h.p("meta/timestamp.json"))
+	h.must("verify", "-root", h.root, "-dir", h.p("meta"), "-assets", h.p("dist"), "-product", "lavray-windows")
+	if code, _, _ := h.run("resign", "-key", "file:"+h.p("manifest.sec"), "-in", h.p("root-draft.json"), "-out", h.p("x.json")); code == 0 {
+		t.Fatal("resign принимает только документы с expires, но не корень")
+	}
+}
+
+// Оператор свежести: cron падает за 14 суток до истечения манифеста.
+func TestExpiryWarnsBeforeManifestExpires(t *testing.T) {
+	h := newHarness(t)
+	h.must(h.manifestArgs("0.5.1", "stable", "240h", "")...)
+	if code, _, errw := h.run("expiry", "-dir", h.p("meta"), "-within", "336h"); code == 0 || !strings.Contains(errw, "manifest-stable.json") {
+		t.Fatalf("манифест истекает через 10 суток (< 14): код %d %s", code, errw)
+	}
+	if code, out, _ := h.run("expiry", "-dir", h.p("meta"), "-within", "72h"); code != 0 {
+		t.Fatalf("запас больше окна — не ошибка: %d %s", code, out)
+	}
+	if code, _, _ := h.run("expiry", "-dir", h.p("nowhere"), "-within", "336h"); code == 0 {
+		t.Fatal("нет каталога метаданных — ошибка")
 	}
 }

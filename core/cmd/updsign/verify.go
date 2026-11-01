@@ -58,6 +58,7 @@ func (c *cli) verify(args []string) error {
 	rootPath, dir := fs.String("root", "", "root.json"), fs.String("dir", "", "каталог meta/")
 	assets, product := fs.String("assets", "", "каталог с установщиками"), fs.String("product", "", "ожидаемый продукт")
 	nowFlag := fs.String("now", "", "момент проверки RFC3339 (по умолчанию сейчас)")
+	only := fs.String("channel", "", "проверить только этот канал (выпускаемый)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -79,6 +80,12 @@ func (c *cli) verify(args []string) error {
 		}
 	}
 	files, _ := filepath.Glob(filepath.Join(*dir, "manifest-*.json"))
+	if *only != "" { // просроченный манифест соседнего канала не мешает выпуску этого
+		files = []string{filepath.Join(*dir, updates.ManifestName(*only))}
+		if _, err := os.Stat(files[0]); err != nil {
+			return fmt.Errorf("нет манифеста канала %q: %w", *only, err)
+		}
+	}
 	sort.Strings(files)
 	if len(files) == 0 {
 		return fmt.Errorf("в %s нет manifest-*.json", *dir)

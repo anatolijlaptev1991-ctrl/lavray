@@ -49,7 +49,21 @@ func signEnvelope(signed []byte, keys map[string]secretKey) ([]byte, error) {
 		sig := ed25519.Sign(keys[id].priv, signed)
 		sigs = append(sigs, map[string]string{"keyid": id, "sig": base64.StdEncoding.EncodeToString(sig)})
 	}
-	return json.Marshal(map[string]any{"signed": json.RawMessage(signed), "signatures": sigs})
+	return marshalPlain(map[string]any{"signed": json.RawMessage(signed), "signatures": sigs})
+}
+
+// marshalPlain — json.Marshal без HTML-экранирования: стандартный Marshal
+// превращает «<», «>» и «&» внутри json.RawMessage в экранированные последовательности (u003c, u003e, u0026) и
+// тем меняет подписанные байты (подпись перестаёт сходиться). Для всего, что
+// подписывается или каноникализируется, используется только эта функция.
+func marshalPlain(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
 // signDoc — каноникализация черновика и подпись одним или несколькими ключами.
@@ -96,5 +110,5 @@ func withDefault(doc []byte, key string, val any) ([]byte, error) {
 	if _, has := m[key]; !has {
 		m[key] = val
 	}
-	return json.Marshal(m)
+	return marshalPlain(m)
 }

@@ -5,7 +5,6 @@ package main
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -96,7 +95,7 @@ func (c *cli) sources(args []string) error {
 	fs.SetOutput(c.errw)
 	key, keyid := fs.String("key", "", "ключ r1"), fs.String("keyid", "r1", "keyid в root.json")
 	in, out := fs.String("in", "", "черновик"), fs.String("out", "", "sources.json")
-	ttl := fs.Duration("expires", 30*24*time.Hour, "срок действия, если не задан в черновике")
+	ttl := fs.Duration("expires", 90*24*time.Hour, "срок действия, если не задан в черновике")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -146,7 +145,7 @@ func (c *cli) timestamp(args []string) error {
 	if err != nil {
 		return err
 	}
-	doc, _ := json.Marshal(map[string]any{"type": "timestamp", "version": *ver, "expires": expiresAt(now, *ttl), "meta": meta})
+	doc, _ := marshalPlain(map[string]any{"type": "timestamp", "version": *ver, "expires": expiresAt(now, *ttl), "meta": meta})
 	env, err := signDoc(doc, map[string]secretKey{*keyid: k})
 	if err != nil {
 		return err

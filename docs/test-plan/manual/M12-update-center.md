@@ -4,8 +4,8 @@
 |---|---|
 | ID | M12 |
 | Слой | ручной (человек за виртуальной машиной; агент с computer-use выполняет таблицы по снимкам экрана, UAC подтверждает человек) |
-| Время | 3–4 часа: сборка четырёх тестовых установщиков 40–60 минут, части 2–6 около 50 минут, части 7–11 около 1,5 часа |
-| Зависимости | M01 (умеете ставить программу), A13 (логика цепочки доверия по API), для частей 1 и 7–11 — **виртуальная машина со снимком «до M12»**, Git, Go, Node, Rust с `cargo tauri`, Python 3.12. Версия `<TAG>` — по умолчанию `v0.9.0`; на момент написания код обновлений — `main` на `80be1e9` |
+| Время | 3,5–4,5 часа: сборка четырёх тестовых установщиков 40–60 минут, части 2–6 около 50 минут, части 7–11 около 1,5 часа, часть 13 (наборы и гео) около 40 минут |
+| Зависимости | M01 (умеете ставить программу), A13 (логика цепочки доверия по API), для частей 1 и 7–11 — **виртуальная машина со снимком «до M12»**, Git, Go, Node, Rust с `cargo tauri`, Python 3.12. Версия `<TAG>` — по умолчанию `v0.9.0`; на момент написания код обновлений вместе с T-75 §7.5 (наборы маршрутов и гео-данные) — PR #19, `dce8ba0`; ярлыки словаря сверены с `ru.ts` этой ветки |
 | Опасность | **установка**: части 7–9 запускают NSIS-установщик с повышением прав в `Program Files\LAVRay`, останавливают ядро и снимают системный прокси. Только на ВМ или тестовом ПК со снимком |
 
 > **Предупреждение.** Ничего из частей 7–11 нельзя выполнять на личном ПК. Не отключайте SmartScreen, Defender и UAC: тестовые установщики не подписаны Authenticode, и если система блокирует запуск, шаг получает `BLOCKED` (причина — в отчёт). Перед частью 7 сделайте снимок ВМ.
@@ -25,7 +25,7 @@
 
 ## Цель
 
-Проверить глазами пользователя то, что A13 проверяет по протоколу, и то, чего A13 проверить не может, потому что это оболочка и Windows: экран «Обновления» (состояние, «последняя проверка N дней назад» с предупреждением с 7-х суток и красным статусом с 30-х, канал beta с подтверждением, заметки к выпуску текстом, «Установить из файла…» с `.minisig` и без), установку через UAC и отказ в UAC (`uac_cancelled`), откат прошлым установщиком вручную и сторожем (watchdog) через 60 секунд без отметки здоровья, поведение `installer_locked` и **обязательный опыт на ВМ: принимает ли Windows установщик, удерживаемый оболочкой с запретом записи** (часть 10, результат записывается всегда).
+Проверить глазами пользователя то, что A13 проверяет по протоколу, и то, чего A13 проверить не может, потому что это оболочка и Windows: экран «Обновления» (состояние, «последняя проверка N дней назад» с предупреждением с 7-х суток и красным статусом с 30-х, канал beta с подтверждением, заметки к выпуску текстом, «Установить из файла…» с `.minisig` и без), установку через UAC и отказ в UAC (`uac_cancelled`), откат прошлым установщиком вручную и сторожем (watchdog) через 60 секунд без отметки здоровья, поведение `installer_locked` и **обязательный опыт на ВМ: принимает ли Windows установщик, удерживаемый оболочкой с запретом записи** (часть 10, результат записывается всегда). Отдельно (часть 13, T-75 §7.5): карточка «Наборы маршрутов и гео-данные» на экране «Обновления» — «было → стало», «Обновить» и «Откатить» для встроенных наборов и гео-файлов, отметка «Исходный набор обновился» у ваших копий и «Сбросить к исходному», отказ при подмене файла, поведение при работающем соединении.
 
 ## Часть 1. Стенд (Т, В)
 
@@ -266,6 +266,39 @@ try {
 | 12.2 | Р | `lavray-core verify-artifact --file <установщик релиза> --sig <установщик>.minisig --data "$env:TEMP\m12-roots"` на ассетах релиза | Код 0 и JSON с версией и sha256 | |
 | 12.3 | Р | Повторите части 3.4, 3.5, 7.1–7.5 на настоящем релизе предыдущей версии | Загрузка, проверка подписи, установка, отметка здоровья | |
 
+## Часть 13. Наборы маршрутов и гео-данные (Т; T-75 §7.5)
+
+Выполняется на тестовой сборке 0.9.0 из части 1 после частей 2–6 (до частей 7–9 или после возврата снимка ВМ): команда `publish-data` заменяет манифест на **манифест данных без приложения**, поэтому предложение обновить приложение исчезает; перед частями 7–11 заново опубликуйте нужную версию командой `publish`. Окно сервера из п. 1.4 открыто, подключения нет. Данные публикует `m12_stand.py publish-data` (он берёт встроенные наборы `lav-ru` и `lav-cn` из `LAVRAY_SRC`, повышает их ревизию на `--bump` и добавляет в список прямых доменов `m12-marker.example`; гео-набор собирается из встроенных файлов командой `updsign geo-pack`). Ярлыки — из `ru.ts`.
+
+Команды ниже запускаются из PowerShell (`. C:\lavray-test\env.ps1`; `$m = 'C:\lavray-test\tmp\M12'`):
+
+```powershell
+$pub = "python -I $m\m12_stand.py publish-data $m\stand $m\updsign.exe --src $env:LAVRAY_SRC"
+Invoke-Expression $pub        # наборы и гео; печатает «опубликованы данные (both)…»
+```
+
+| № | Нужно | Действие | Ожидаемо | Результат |
+|---|---|---|---|---|
+| 13.1 | Т | «Правила» (Ctrl+3) → вкладка «Маршрутизация» → у «LAV Preset RU» меню «Действия с пресетом» → «Дублировать» | Появилась копия «LAV Preset RU (копия)» с теми же правилами; бейджа «Исходный набор обновился» у неё ещё нет | |
+| 13.2 | Т | «Обновления» (после п. 2.5 или 3.1 стенд отвечает) → «Проверить сейчас» | Есть карточка «Наборы маршрутов и гео-данные» с подписью «Обновляются отдельно от приложения. Ваши копии наборов не меняются.»; две строки: «Встроенные наборы маршрутов» и «Гео-данные», у обеих «Актуально»; кнопок «Обновить» и «Откатить» нет (до проверки у строк вместо «Актуально» стоит «Проверьте обновления, чтобы узнать о новых данных.») | |
+| 13.3 | Т | `Invoke-Expression $pub`, затем «Проверить сейчас» | Команда печатает «опубликованы данные (both)». «Встроенные наборы маршрутов»: «с lav-cn:2, lav-ru:2 на lav-cn:3, lav-ru:3» и кнопка «Обновить»; «Гео-данные»: «с из поставки на <сегодняшняя дата>» и кнопка «Обновить». Кнопок «Откатить» нет. В окне сервера запросы `timestamp.json` и `manifest-stable.json` | |
+| 13.4 | Т | «Обновить» у «Гео-данные» | Ход «Загрузка…», затем «Обновление применено.»; строка «Актуально», ниже «Можно вернуться к данным из поставки» и кнопка «Откатить». В окне сервера запрос `data/geo-<дата>.zip`. Подсказки «переподключите профиль» нет (соединения нет). Кнопки на время действия недоступны | |
+| 13.5 | Т | `Get-Content "$env:APPDATA\LAVRay\geo\source.json"; Get-Content "$env:APPDATA\LAVRay\geo\revision.txt"` | В `source.json` поля `sha256`, `generated_at` (дата публикации) и `rev` (число — ревизия публикации); в `revision.txt` число больше 1 | |
+| 13.6 | Т | «Обновить» у «Встроенные наборы маршрутов» | «Загрузка…», «Обновление применено.»; «Актуально», «Можно вернуться к данным из поставки», «Откатить». Появился файл `%APPDATA%\LAVRay\presets\override\lav-ru.json` | |
+| 13.7 | Т | «Правила» → «Маршрутизация» | У встроенного «LAV Preset RU» (его править нельзя) в прямых доменах появился `m12-marker.example`. У **вашей копии** «LAV Preset RU (копия)» бейдж «Исходный набор обновился»; её правила прежние, `m12-marker.example` в них нет | |
+| 13.8 | Т | У копии меню «Действия с пресетом» → «Сбросить к исходному» | Подтверждение «Заменить правила пресета «LAV Preset RU (копия)» правилами исходного встроенного набора? Ваши правки будут потеряны.»; после подтверждения сообщение «Пресет сброшен к исходному», бейдж исчез, в правилах копии есть `m12-marker.example` | |
+| 13.9 | Т | «Обновления» → «Проверить сейчас» | Обе строки «Актуально» (опубликованное уже установлено) | |
+| 13.10 | Т | Ревизия не новее: `Invoke-Expression "$pub --what geo --marker-geo --geo-rev 1000"`, «Проверить сейчас» | У «Гео-данные» по-прежнему «Актуально», кнопки «Обновить» нет: набор с меньшей ревизией и другим содержимым не предлагается. Файл `geo\source.json` прежний | |
+| 13.11 | Т | Подмена файла: `Invoke-Expression "$pub --what geo --marker-geo"` (ревизия по умолчанию — текущее время, выше установленной); не нажимая «Обновить», измените байт: `$f = (Get-ChildItem "$m\stand\site\meta\data\geo-*.zip").FullName; $b = [IO.File]::ReadAllBytes($f); $b[300] = $b[300] -bxor 1; [IO.File]::WriteAllBytes($f, $b)`; «Проверить сейчас» → «Обновить» у «Гео-данные» | Сообщение «Контрольная сумма файла не совпала, файл удалён.»; `geo\source.json` и файлы набора прежние (применено ничего не было) | |
+| 13.12 | Т | Откат: восстановите публикацию (`Invoke-Expression $pub`), «Откатить» у «Гео-данные» | Окно «Откатить «Гео-данные»?» с текстом «Будет возвращена прошлая ревизия. Скачанное обновление придётся загрузить заново.» и кнопкой «Откатить»; после подтверждения «Возвращена прошлая ревизия.»; гео-файлы встроенные (`geo\source.json` пропал или не относится к публикации), кнопки «Откатить» у этой строки больше нет | |
+| 13.13 | Т | То же для «Встроенные наборы маршрутов»: «Откатить» | Окно «Откатить «Встроенные наборы маршрутов»?»; «Возвращена прошлая ревизия.»; `m12-marker.example` из встроенного «LAV Preset RU» исчез. Запишите, есть ли теперь бейдж у вашей копии (после п. 13.8 её исходная ревизия записана как 3) | |
+| 13.14 | Т, В | Соединение: подключитесь к рабочему серверу (M03) с активным набором «LAV Preset RU»; `Invoke-Expression "$pub --bump 2 --geo-rev 2000000000"` (набор ревизии 4; без `--marker-geo`: с пробным файлом подключаться нельзя), «Проверить сейчас», «Обновить» у «Встроенные наборы маршрутов» | «Обновление применено. Чтобы изменения вступили в силу, переподключите профиль.»; соединение не оборвалось; после «Отключить» и «Подключить» действуют новые правила | |
+| 13.15 | Т, В | В том же соединении «Обновить» у «Гео-данные» | На Windows ожидаем отказ «Папка данных занята работающим соединением. Отключитесь от VPN и повторите.» (`dir_busy`): прежние файлы целы. Запишите фактический исход (допустим и «Обновление применено.» с подсказкой о переподключении). После «Отключить» повторное «Обновить» → «Обновление применено.» | |
+| 13.16 | Т, В | Откат наборов при работающем соединении: «Откатить» у «Встроенные наборы маршрутов» | «Возвращена прошлая ревизия.» и подсказка «Чтобы изменения вступили в силу, переподключите профиль.» | |
+| 13.17 | Т | (необязательно) та же карточка в веб-панели: ядро с `--web-bind` по M16, часть 1, экран «Обновления» | Карточка и кнопки работают без оболочки; те же подписи | |
+
+Откат части 13: верните снимок ВМ либо удалите `%APPDATA%\LAVRay\presets\override`, `%APPDATA%\LAVRay\geo.prev`, а гео возвращается откатом (п. 13.12) или удалением `%APPDATA%\LAVRay\geo` (ядро соберёт встроенный набор при следующем запуске, приложение закрыто).
+
 ## Критерии PASS/FAIL
 
 | № | Критерий | Шаги |
@@ -281,10 +314,13 @@ try {
 | К9 | Сторож откатывает через 60 секунд без годной отметки | 9.2–9.6 |
 | К10 | **Результат опыта с запретом записи записан** (принимает или нет, номера сборок) и поведение `installer_locked` соответствует ему | 10.1–10.4, 11.2–11.3 |
 | К11 | Ошибки установки названы понятно, UAC при них не появляется | 11.1, 11.4, 11.5 |
+| К12 | Карточка «Наборы маршрутов и гео-данные»: «было → стало», «Обновить» применяет, «Откатить» с подтверждением возвращает прошлую ревизию, ревизия не новее не предлагается, подмена файла отвергается без изменений | 13.2–13.13 |
+| К13 | У копии набора после обновления встроенного бейдж «Исходный набор обновился», «Сбросить к исходному» берёт новые правила | 13.7–13.8 |
+| К14 | При работающем соединении наборы применяются с подсказкой о переподключении; исход для гео (`dir_busy` на Windows) записан, прежние файлы целы | 13.14–13.16 |
 
 ## Что собрать
 
-Скриншоты: пустой экран и «не настроены», найденное обновление, «Что нового» с разметкой, блок со значками давности (7, 30 дней), окно подтверждения бета-канала, «Установить из файла…» (проверен, не прошёл), запрос UAC, сообщение `uac_cancelled`, строка «Откатиться на 0.9.1», вывод части 10 с `winver`; файлы `health.json`, `last-update.json`, `previous.json` (без секретов); окно сервера обновлений с запросами.
+Скриншоты: пустой экран и «не настроены», найденное обновление, «Что нового» с разметкой, блок со значками давности (7, 30 дней), окно подтверждения бета-канала, «Установить из файла…» (проверен, не прошёл), запрос UAC, сообщение `uac_cancelled`, строка «Откатиться на 0.9.1», вывод части 10 с `winver`; карточка «Наборы маршрутов и гео-данные» до и после «Обновить», окно отката, бейдж «Исходный набор обновился», исход п. 13.15 (`dir_busy` или нет), `geo\source.json`; файлы `health.json`, `last-update.json`, `previous.json` (без секретов); окно сервера обновлений с запросами.
 
 ## Откат / уборка
 
@@ -292,7 +328,7 @@ try {
 
 ## Отчёт
 
-`results/M12.md` по `templates/REPORT.md`; шаги — номера таблиц; **обязательный раздел «Результат опыта с запретом записи»** (часть 10): исход, номер сборки Windows, дословный текст ошибки. Тестовые сборки частей 1 и 7–11 автор плана на момент написания не запускал: расхождения с таблицами — дефект плана (`doc`) либо продукта по оценке исполнителя. Серьёзность: установка без проверки подписи или с отказом UAC, всё же начатая, подмена файла, принятая в UAC-цепочке (К3, К6, К7) — `critical`; откат не сработал, сторож не откатил (К8, К9), давность не показана (К4) — `major`; расхождение подписи интерфейса со словарём — `minor` или `doc`.
+`results/M12.md` по `templates/REPORT.md`; шаги — номера таблиц; **обязательный раздел «Результат опыта с запретом записи»** (часть 10): исход, номер сборки Windows, дословный текст ошибки. Тестовые сборки частей 1 и 7–11 автор плана на момент написания не запускал: расхождения с таблицами — дефект плана (`doc`) либо продукта по оценке исполнителя. Серьёзность: установка без проверки подписи или с отказом UAC, всё же начатая, подмена файла, принятая в UAC-цепочке (К3, К6, К7) — `critical`; откат не сработал, сторож не откатил (К8, К9), давность не показана (К4), данные не применились или не откатились (К12), правила копии изменены обновлением (К13) — `major`; применённый подменённый файл данных (п. 13.11) — `critical`; расхождение подписи интерфейса со словарём — `minor` или `doc`.
 
 ## Для агента с computer-use
 
@@ -310,6 +346,9 @@ try {
   python -I m12_stand.py publish <каталог стенда> <updsign.exe> --version V --installer ФАЙЛ [--serial N] [--channel stable|beta]
                                  [--notes ФАЙЛ.json] [--ts-ttl 168h] [--manifest-ttl 720h] [--mandatory]
   python -I m12_stand.py sign    <каталог стенда> <updsign.exe> --file ФАЙЛ --version V [--serial N]   (создаёт ФАЙЛ.minisig)
+  python -I m12_stand.py publish-data <каталог стенда> <updsign.exe> --src <LAVRAY_SRC> [--what both|presets|geo] [--bump N] [--serial N]
+                                 [--geo-rev N] [--geo-date ГГГГ-ММ-ДД] [--marker-geo] [--ts-ttl 168h] [--manifest-ttl 720h]
+                                 (манифест ДАННЫХ без приложения: наборы lav-ru и lav-cn с ревизией выше встроенной и гео-набор)
   python -I m12_stand.py stale   <каталог данных LAVRay> --days N       (приложение закрыто: сдвигает «последнюю проверку»)
   python -I m12_stand.py serve   <каталог стенда> [--ports 28770,28771]  (Ctrl+C - остановить)
 """
@@ -325,6 +364,7 @@ import subprocess
 import sys
 import threading
 import time
+import zlib
 
 sys.stdout.reconfigure(encoding="utf-8")
 PRODUCT, ASSET = "lavray-windows", "windows-x64"
@@ -371,19 +411,25 @@ def cmd_keys(a):
     print("base64 для флага компоновщика (-X main.rootJSONB64=...):", os.path.join(p["keys"], "root.b64"))
 
 
-def cmd_publish(a):
+def prepare_site(a):
+    """Каталог meta: корень и подписанный sources.json (адреса недостижимые: проверка идёт по зеркалам, вшитым в ядро)."""
     p = paths(a.base)
     os.makedirs(p["meta"], exist_ok=True)
     shutil.copyfile(os.path.join(p["keys"], "root.json"), os.path.join(p["meta"], "root.json"))
+    draft = os.path.join(p["keys"], "sources.draft.json")
+    with open(draft, "w", encoding="utf-8") as f:
+        json.dump({"type": "sources", "version": 1, "artifacts": ["https://127.0.0.1:1/dl"], "metadata": ["https://127.0.0.1:1/meta"]}, f)
+    run(a.updsign, "sources", "-key", "file:" + kf(a.base, "r1"), "-keyid", "r1", "-in", draft, "-out", os.path.join(p["meta"], "sources.json"))
+
+
+def cmd_publish(a):
+    p = paths(a.base)
+    prepare_site(a)
     fname = f"v{a.version}/LAVRay-{a.version}-x64-setup.exe"
     dest = os.path.join(p["meta"], *fname.split("/"))
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     shutil.copyfile(a.installer, dest)
     serial = a.serial or int(time.time())
-    draft = os.path.join(p["keys"], "sources.draft.json")
-    with open(draft, "w", encoding="utf-8") as f:
-        json.dump({"type": "sources", "version": 1, "artifacts": ["https://127.0.0.1:1/dl"], "metadata": ["https://127.0.0.1:1/meta"]}, f)
-    run(a.updsign, "sources", "-key", "file:" + kf(a.base, "r1"), "-keyid", "r1", "-in", draft, "-out", os.path.join(p["meta"], "sources.json"))
     args = ["manifest", "-key", "file:" + kf(a.base, "r1"), "-keyid", "r1", "-artifact-key", "file:" + kf(a.base, "a1"), "-product", PRODUCT,
             "-channel", a.channel, "-version", a.version, "-serial", str(serial), "-asset", f"{ASSET}={fname}={dest}", f"-expires={a.manifest_ttl}",
             "-out", os.path.join(p["meta"], f"manifest-{a.channel}.json")]
@@ -396,6 +442,46 @@ def cmd_publish(a):
         "-version", str(int(time.time())), f"-expires={a.ts_ttl}")
     with open(dest, "rb") as f:
         print(f"опубликовано: канал {a.channel}, версия {a.version}, serial {serial}, sha256 {hashlib.sha256(f.read()).hexdigest()}")
+
+
+def cmd_publish_data(a):
+    """Манифест данных (без секции app): наборы lav-ru и lav-cn с ревизией выше встроенной и гео-набор из встроенных файлов."""
+    p = paths(a.base)
+    core = os.path.join(a.src, "core") if os.path.isdir(os.path.join(a.src, "core")) else a.src
+    work = os.path.join(a.base, "data-work")
+    shutil.rmtree(work, ignore_errors=True)
+    os.makedirs(work)
+    args = ["manifest", "-key", "file:" + kf(a.base, "r1"), "-keyid", "r1", "-product", PRODUCT, "-channel", "stable",
+            "-serial", str(a.serial or int(time.time())), f"-expires={a.manifest_ttl}", "-data-prefix", "data/",
+            "-data-out", os.path.join(p["meta"], "data"), "-out", os.path.join(p["meta"], "manifest-stable.json")]
+    if a.what in ("both", "presets"):
+        pdir = os.path.join(work, "presets")
+        os.makedirs(pdir)
+        for pid in ("lav-ru", "lav-cn"):
+            with open(os.path.join(core, "internal", "presets", "builtin", pid + ".json"), encoding="utf-8") as f:
+                doc = json.load(f)
+            doc["revision"] += a.bump
+            doc["routing"]["direct_domain"] = list(doc["routing"].get("direct_domain", [])) + ["m12-marker.example"]
+            with open(os.path.join(pdir, pid + ".json"), "w", encoding="utf-8") as f:
+                json.dump(doc, f, ensure_ascii=False)
+        args += ["-presets-dir", pdir]
+    if a.what in ("both", "geo"):
+        geo = os.path.join(work, "geo")
+        shutil.copytree(os.path.join(core, "internal", "presets", "geo"), geo)
+        if a.marker_geo:  # пробный файл другого содержимого: подключаться с таким набором нельзя
+            with open(os.path.join(geo, "geosite", "riot.srs"), "wb") as f:
+                f.write(b"SRS\x01" + zlib.compress(b"m12-marker"))
+        zpath = os.path.join(work, "geo.zip")
+        run(a.updsign, "geo-pack", "-in", geo, "-out", zpath)
+        args += ["-geo-zip", zpath, "-geo-generated-at", a.geo_date or time.strftime("%Y-%m-%d", time.gmtime())]
+        if a.geo_rev:
+            args += ["-geo-rev", str(a.geo_rev)]
+    prepare_site(a)
+    shutil.rmtree(os.path.join(p["meta"], "data"), ignore_errors=True)
+    run(a.updsign, *args)
+    run(a.updsign, "timestamp", "-key", "file:" + kf(a.base, "t1"), "-keyid", "t1", "-dir", p["meta"], "-out", os.path.join(p["meta"], "timestamp.json"),
+        "-version", str(int(time.time())), f"-expires={a.ts_ttl}")
+    print(f"опубликованы данные ({a.what}): файлы в {os.path.join(p['meta'], 'data')}; манифест без приложения, предложение обновить приложение исчезло")
 
 
 def cmd_sign(a):
@@ -443,10 +529,10 @@ def cmd_serve(a):
 def main():
     ap = argparse.ArgumentParser()
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("keys", "publish", "sign", "stale", "serve"):
+    for name in ("keys", "publish", "publish-data", "sign", "stale", "serve"):
         s = sub.add_parser(name)
         s.add_argument("base")
-        if name in ("keys", "publish", "sign"):
+        if name in ("keys", "publish", "publish-data", "sign"):
             s.add_argument("updsign")
     sub.choices["publish"].add_argument("--version", required=True)
     sub.choices["publish"].add_argument("--installer", required=True)
@@ -456,13 +542,23 @@ def main():
     sub.choices["publish"].add_argument("--ts-ttl", default="168h")
     sub.choices["publish"].add_argument("--manifest-ttl", default="720h")
     sub.choices["publish"].add_argument("--mandatory", action="store_true")
+    pd = sub.choices["publish-data"]
+    pd.add_argument("--src", required=True)
+    pd.add_argument("--what", default="both", choices=("both", "presets", "geo"))
+    pd.add_argument("--bump", type=int, default=1)
+    pd.add_argument("--serial", type=int, default=0)
+    pd.add_argument("--geo-rev", type=int, default=0)
+    pd.add_argument("--geo-date", default="")
+    pd.add_argument("--marker-geo", action="store_true")
+    pd.add_argument("--ts-ttl", default="168h")
+    pd.add_argument("--manifest-ttl", default="720h")
     sub.choices["sign"].add_argument("--file", required=True)
     sub.choices["sign"].add_argument("--version", required=True)
     sub.choices["sign"].add_argument("--serial", type=int, default=0)
     sub.choices["stale"].add_argument("--days", type=int, required=True)
     sub.choices["serve"].add_argument("--ports", default="28770,28771")
     a = ap.parse_args()
-    {"keys": cmd_keys, "publish": cmd_publish, "sign": cmd_sign, "stale": cmd_stale, "serve": cmd_serve}[a.cmd](a)
+    {"keys": cmd_keys, "publish": cmd_publish, "publish-data": cmd_publish_data, "sign": cmd_sign, "stale": cmd_stale, "serve": cmd_serve}[a.cmd](a)
 
 
 if __name__ == "__main__":

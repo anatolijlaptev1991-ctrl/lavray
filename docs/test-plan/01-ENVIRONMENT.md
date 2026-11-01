@@ -131,10 +131,10 @@ $env:LAVRAY_TP_ROOT   = 'C:\lavray-test'
 $env:LAVRAY_REPO      = 'anatolijlaptev1991-ctrl/lavray'
 $env:LAVRAY_VERSION   = '0.9.0'
 $env:LAVRAY_FROM_VERSION = '0.3.0'
-# Версия под тестом: тег v0.9.0, если он опубликован, иначе коммит main (владелец называет его перед прогоном).
-# <TAG> в документах плана = v0.9.0.
+# Версия под тестом по умолчанию: тег v0.9.0 (<TAG> в документах плана = v0.9.0).
+# main - только запасной вариант на случай, когда тег ещё не выпущен; тогда в отчёте указывайте фактический коммит (git rev-parse HEAD).
 $env:LAVRAY_REF       = 'v0.9.0'
-$env:LAVRAY_REF_FALLBACK = '4722632281fc03f6810e23bbfe701d044fa930ad'   # main на момент написания пакета 5a; сверьте с gh api repos/$env:LAVRAY_REPO/commits/main
+$env:LAVRAY_REF_FALLBACK = 'main'
 $env:LAVRAY_SRC       = Join-Path $env:LAVRAY_TP_ROOT 'src'
 $env:LAVRAY_PLAN      = Join-Path $env:LAVRAY_TP_ROOT 'plan'
 $env:LAVRAY_ASSETS    = Join-Path $env:LAVRAY_TP_ROOT ('assets\' + $env:LAVRAY_VERSION)
@@ -237,7 +237,7 @@ gh repo clone $env:LAVRAY_REPO $env:LAVRAY_SRC
 git -C $env:LAVRAY_SRC fetch --tags origin
 git -C $env:LAVRAY_SRC rev-parse --verify --quiet "refs/tags/$($env:LAVRAY_REF)^{commit}"
 if ($LASTEXITCODE -ne 0) {
-  Write-Host "тега $($env:LAVRAY_REF) нет: берём коммит $($env:LAVRAY_REF_FALLBACK)"
+  Write-Host "тега $($env:LAVRAY_REF) нет: берём запасной вариант $($env:LAVRAY_REF_FALLBACK) (отклонение, укажите коммит в отчёте)"
   $env:LAVRAY_REF = $env:LAVRAY_REF_FALLBACK
 }
 git -C $env:LAVRAY_SRC checkout --detach $env:LAVRAY_REF
@@ -245,7 +245,7 @@ git -C $env:LAVRAY_SRC rev-parse HEAD
 git -C $env:LAVRAY_SRC status --short
 ```
 
-PASS: `rev-parse HEAD` печатает 40 шестнадцатеричных символов, `status --short` пуст. Если тега `v0.9.0` нет, в `env.ps1` замените строку `LAVRAY_REF` на значение `LAVRAY_REF_FALLBACK` и запишите это в отчёт (отклонение); тогда ассеты релиза недоступны, и файлы с установщиком и ZIP получают `BLOCKED`.
+PASS: `rev-parse HEAD` печатает 40 шестнадцатеричных символов, `status --short` пуст. По умолчанию проверяется тег `v0.9.0`. Если его нет, блок выше берёт запасной вариант `main` (`LAVRAY_REF_FALLBACK`): это отклонение, его и фактический коммит (`rev-parse HEAD`) записывают в отчёт; ассеты релиза при этом недоступны, и файлы с установщиком и ZIP получают `BLOCKED`.
 
 Документы плана берутся отдельным клоном, чтобы продукт в `src\` оставался только для чтения. В быстром старте (`00-README.md`, раздел 9) владелец клонирует план сразу на тег `v0.9.0`; если команда ниже выполняется заново, берите тот же тег:
 

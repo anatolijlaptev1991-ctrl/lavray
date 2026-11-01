@@ -1,6 +1,6 @@
 # nsis-recon.yml — Ф3.0 «разведка NSIS» (docs/UPDATE-SYSTEM.md §12.7, §12.9 п. 4) на одноразовом
 # раннере GitHub вместо виртуальной машины. Берёт НАСТОЯЩИЕ опубликованные установщики LAVRay
-# (репозиторий выпусков lavray-windows), проверяет SHA256SUMS и прогоняет семь сценариев
+# (релизы этого репозитория — те же файлы, что в lavray-windows), проверяет SHA256SUMS и прогоняет семь сценариев
 # scripts/release/nsis_recon.ps1: чистая тихая установка, обновление поверх работающего
 # приложения, понижение, флаг /R, установщик под дескриптором с запретом записи, голый
 # exe watchdog, тихое удаление. Результат — артефакт nsis-recon (JSON + журнал).
@@ -78,7 +78,7 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_REPO: anatolijlaptev1991-ctrl/lavray-windows
+          SOURCE_REPO: ${{ github.repository }} # те же установщики, что в lavray-windows (тот приватный: github.token его не видит)
         run: |
           $ErrorActionPreference = 'Stop'
           $sides = @(@{ dir = 'old'; version = $env:OLD_VERSION; var = 'OLD_SETUP' }, @{ dir = 'new'; version = $env:NEW_VERSION; var = 'NEW_SETUP' })

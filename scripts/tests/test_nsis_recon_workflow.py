@@ -113,7 +113,8 @@ class Recon(unittest.TestCase):
     def test_downloads_real_releases_and_verifies_sha256sums(self):
         download = step_named(self.recon, "Скачивание")
         self.assertIn("gh release download", download)
-        self.assertIn("anatolijlaptev1991-ctrl/lavray-windows", download)
+        # Тот же репозиторий (github.repository): lavray-windows приватный, github.token его не видит.
+        self.assertIn("SOURCE_REPO: ${{ github.repository }}", download)
         self.assertIn("SHA256SUMS.txt", download)
         self.assertIn("Get-FileHash", download)
         self.assertRegex(download, r"if \(\$got -ne \$want\) \{ throw")

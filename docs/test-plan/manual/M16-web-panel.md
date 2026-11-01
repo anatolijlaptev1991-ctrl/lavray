@@ -16,6 +16,7 @@
 
 ## Предусловия
 
+- **Тестовый ПК подтверждён — для части 8.** Перед части 8 выполните `. C:\lavray-test\env.ps1; Test-TestPc`: должно напечатать `True` (маркер `C:\lavray-test\TESTPC_OK` есть, создан на этом ПК, не старше 30 суток). `False` — части 8 получает `BLOCKED`, остальные части выполняются.
 - Браузер Chromium/Edge/Firefox. Для проверки сессий — второй браузер или окно «InPrivate».
 - Ядро `C:\lavray-test\tmp\A12\lavray-core-web.exe` (собрано с `with_webui`; на коммите без `scripts/build-webui.sh` этот файл невозможен — `BLOCKED`).
 - Порт 8787 свободен.

@@ -14,7 +14,7 @@
 
 ## Предусловия
 
-- **Тестовый ПК подтверждён**: существует `C:\lavray-test\TESTPC_OK` (раздел 3 файла `01-ENVIRONMENT.md`). Без маркера файл завершается итогом `BLOCKED`.
+- **Тестовый ПК подтверждён**: `Test-TestPc` (из `env.ps1`) возвращает `True` — маркер `C:\lavray-test\TESTPC_OK` есть, создан на этом ПК и не старше 30 суток (раздел 3 файла `01-ENVIRONMENT.md`). Без маркера файл завершается итогом `BLOCKED`.
 - Rust stable с `rustfmt` и `clippy`, Visual Studio Build Tools с рабочей нагрузкой C++, Node 24, Git (`01-ENVIRONMENT.md`, раздел 5).
 - Сеть: `index.crates.io`, `static.crates.io`, `registry.npmjs.org`.
 - 6–10 ГБ свободного места под `target\`.
@@ -33,14 +33,16 @@
 
 ```powershell
 . C:\lavray-test\env.ps1
-if (-not (Test-Path C:\lavray-test\TESTPC_OK)) { 'BLOCKED: нет маркера TESTPC_OK'; return }
-$wt = Join-Path $env:LAVRAY_TP_ROOT 'wt\A04'
+if (-not (Test-TestPc)) { 'BLOCKED: нет маркера TESTPC_OK (или он создан на другом ПК, или старше 30 суток)'; return }
+$wt = 'C:\lavray-test\wt\A04'
+if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
 git -C $env:LAVRAY_SRC worktree add --detach $wt $env:LAVRAY_REF
 Set-Location $wt
-git rev-parse HEAD
+"HEAD рабочей копии: " + (git rev-parse HEAD)
+"коммит $($env:LAVRAY_REF):  " + (Get-RefCommit)
 ```
 
-   Ожидается: маркер найден, печатается коммит.
+   Ожидается: маркер найден (`Test-TestPc` = `True`), `HEAD рабочей копии` равен `коммиту v0.9.0`.
 
 2. Сборка интерфейса (нужна для `frontendDist`).
 
@@ -188,13 +190,13 @@ Set-Location (Join-Path $wt 'shell')
 (Get-ChildItem -Path src, tests -Recurse -Include *.rs | Select-String -Pattern '#\[test\]' | Measure-Object).Count
 ```
 
-    Ориентир: число `#[test]` в исходниках на `97624d6` равно 308. Часть тестов компилируется только под Windows или только под Unix, поэтому сумма `passed` обычно близка к 308, но точное эталонное число в плане не зафиксировано (при написании плана полный `cargo test` не запускался). Критерий: сумма `passed` от 90 до 115 % числа `#[test]`; точное значение запишите в отчёт.
+    Ориентир: число `#[test]` в исходниках на `v0.9.0` равно 457. Часть тестов компилируется только под Windows или только под Unix, поэтому сумма `passed` обычно близка к 457, но точное эталонное число в плане не зафиксировано (при написании плана полный `cargo test` не запускался). Критерий: сумма `passed` от 90 до 115 % числа `#[test]`; точное значение запишите в отчёт.
 
 ## Критерии PASS/FAIL
 
 | № | Критерий | Как проверить |
 |---|---|---|
-| К1 | Маркер `TESTPC_OK` есть | шаг 1 |
+| К1 | Маркер `TESTPC_OK` есть и создан на этом ПК (`Test-TestPc`) | шаг 1 |
 | К2 | UI собран (`ui\dist\index.html` существует) | шаг 2 |
 | К3 | `cargo fmt --all -- --check` вернул 0 | `fmt exit=0` |
 | К4 | `cargo clippy --all-targets -- -D warnings` вернул 0 | `clippy exit=0` |
@@ -228,9 +230,9 @@ if ((Get-ItemProperty -Path $conn -ErrorAction SilentlyContinue).PSObject.Proper
 
 ```powershell
 Set-Location C:\lavray-test
-git -C $env:LAVRAY_SRC worktree remove --force (Join-Path $env:LAVRAY_TP_ROOT 'wt\A04')
+git -C $env:LAVRAY_SRC worktree remove --force C:\lavray-test\wt\A04
 git -C $env:LAVRAY_SRC worktree prune
-Test-Path (Join-Path $env:LAVRAY_TP_ROOT 'wt\A04')
+Test-Path C:\lavray-test\wt\A04
 ```
 
 Ожидается `False`. Кэш `~\.cargo` оставьте.

@@ -19,7 +19,7 @@
 - Git, Go (версия из `core/go.mod`), Python 3.12, Node 24, `buf` 1.75.0, `protoc-gen-go` v1.36.12, `protoc-gen-connect-go` 1.21.1 (см. `01-ENVIRONMENT.md`, раздел 5); Git Bash в `PATH` (его ставит Git for Windows).
 - Для шагов 13–14: пакет Python `playwright` и браузер Chromium (шаг 13 их устанавливает).
 - Сеть: нужна для `go vet` (скачивание модулей), `npm ci`, `pip install`.
-- Переменные из `env.ps1`: `LAVRAY_TP_ROOT`, `LAVRAY_SRC`, `LAVRAY_REF`.
+- Переменные и функции из `env.ps1`: `LAVRAY_SRC`, `LAVRAY_REF`, `Test-RepoLf`, `Get-RefCommit`.
 
 ## Безопасность
 
@@ -33,12 +33,20 @@
 
 ```powershell
 . C:\lavray-test\env.ps1
-git -C $env:LAVRAY_SRC worktree add --detach (Join-Path $env:LAVRAY_TP_ROOT 'wt\A01') $env:LAVRAY_REF
-git -C (Join-Path $env:LAVRAY_TP_ROOT 'wt\A01') rev-parse HEAD
-git -C (Join-Path $env:LAVRAY_TP_ROOT 'wt\A01') status --short
+# Предусловие: клон src создан с core.autocrlf=false. Иначе buf format и кодогенерация дают ложные расхождения (шаги 3-4).
+$crlf = git -C $env:LAVRAY_SRC config core.autocrlf
+"core.autocrlf в клоне src: $crlf"
+if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
+git -C $env:LAVRAY_SRC worktree add --detach C:\lavray-test\wt\A01 $env:LAVRAY_REF
+$head = git -C C:\lavray-test\wt\A01 rev-parse HEAD
+$tagCommit = Get-RefCommit        # git rev-parse "v0.9.0^{commit}": коммит тега, а не HEAD чего-либо
+"HEAD рабочей копии: $head"
+"коммит $($env:LAVRAY_REF):  $tagCommit"
+"совпадают: " + ($head -eq $tagCommit)
+git -C C:\lavray-test\wt\A01 status --short
 ```
 
-   Ожидается: код выхода `0`, 40 шестнадцатеричных символов, `status --short` пуст. Запишите коммит в отчёт.
+   Ожидается: `core.autocrlf в клоне src: false`, `совпадают: True`, 40 шестнадцатеричных символов, `status --short` пуст. Запишите коммит тега в отчёт. Если `core.autocrlf` не `false` (системная настройка Git for Windows `true` перебивается только ключом клонирования `-c core.autocrlf=false`), итог файла `FAIL` на этом шаге с понятным сообщением, остальные шаги не выполняются: иначе шаг 3 дал бы ложный `FAIL` (`buf format -d` видит CRLF). Исправление: `git -C $env:LAVRAY_SRC config core.autocrlf false`, затем пересоздайте рабочую копию (`git worktree remove --force`), либо переклонируйте `src\` по `01-ENVIRONMENT.md`, раздел 6.
 
 2. Копии контракта побайтно одинаковы (`proto/lavray.proto` и `ui/proto/lavray.proto`).
 
@@ -108,7 +116,7 @@ cd ..
 python scripts/size_ratchet.py; echo "size exit=$?"
 ```
 
-   Ожидается: последняя содержательная строка `size_ratchet: проверено <N> файлов, нарушений: 0` (на коммите `97624d6` — `проверено 366 файлов`) и `size exit=0`. Строки «можно снизить: …» — подсказки, не ошибки.
+   Ожидается: последняя содержательная строка `size_ratchet: проверено <N> файлов, нарушений: 0` (на `v0.9.0` — `проверено 734 файлов`) и `size exit=0`. Строки «можно снизить: …» — подсказки, не ошибки.
 
 9. SPDX-заголовки во всех файлах кода.
 
@@ -134,7 +142,7 @@ test -z "$bad"; echo "eol exit=$?"
 python -m unittest discover -s scripts/tests 2>&1 | tail -4; echo "unittest exit=${PIPESTATUS[0]}"
 ```
 
-    Ожидается: строка `Ran <N> tests` (на `97624d6` — 29), строка `OK`, `unittest exit=0`. Набор не должен уменьшиться относительно эталона 29 без объяснения в отчёте.
+    Ожидается: строка `Ran <N> tests` (на `v0.9.0` — 51), строка `OK`, `unittest exit=0`. Набор не должен уменьшиться относительно эталона 51 без объяснения в отчёте.
 
 12. Запрещённые фразы и упоминания в документах.
 
@@ -172,7 +180,7 @@ EOF
 echo "presets exit=$?"
 ```
 
-    Ожидается: по строке `ok presets/<имя>.json: rev <N>` на каждый пресет, строк `FAIL` нет, `presets exit=0`.
+    Ожидается: по строке `ok presets/<имя>.json: rev <N>` на каждый пресет (в Windows `glob` даёт обратную косую: `ok presets\<имя>.json: rev <N>`, это норма), строк `FAIL` нет, `presets exit=0`.
 
 14. Проверки дизайна (задание `design` CI): прототип интерфейса.
 
@@ -183,7 +191,7 @@ python design/tools/i18n_check.py; echo "i18n exit=$?"
 python design/tools/token_contrast.py; echo "contrast exit=$?"
 ```
 
-    Ожидается: `i18n_check` печатает `languages: ['ru', 'en', 'zh', 'es', 'de']; keys in ru: <N>; errors: 0; warnings: 0` (на `97624d6` — 741 ключ), `token_contrast` печатает шесть строк `PASS <тема>/<акцент>: 38 pairs`, оба кода выхода `0`.
+    Ожидается: `i18n_check` печатает `languages: ['ru', 'en', 'zh', 'es', 'de']; keys in ru: <N>; errors: 0; warnings: 0` (на `v0.9.0` — 741 ключ), `token_contrast` печатает шесть строк `PASS <тема>/<акцент>: 38 pairs`, оба кода выхода `0`.
 
     Замечание: `i18n_check.py` проверяет словари прототипа `design/prototype.html`. Словари приложения (`ui/src/lib/dictionaries`) проверяет vitest в файле A05.
 
@@ -218,7 +226,7 @@ git status --short
 | К6 | Шаг 8: нарушений размерной «трещотки» 0 | строка `нарушений: 0` и `size exit=0` |
 | К7 | Шаг 9: файлов без SPDX 0 | строка `без SPDX-строки: 0` |
 | К8 | Шаг 10: CRLF в индексе нет | `eol exit=0` |
-| К9 | Шаг 11: тесты скриптов `OK`, число тестов не меньше 29 | `Ran N tests` с `N >= 29`, `OK` |
+| К9 | Шаг 11: тесты скриптов `OK`, число тестов не меньше 51 | `Ran N tests` с `N >= 51`, `OK` |
 | К10 | Шаг 12: запрещённых фраз и упоминаний нет | обе строки `ok: …`, `exit=0` |
 | К11 | Шаг 13: все пресеты прошли | нет строк `FAIL`, `presets exit=0` |
 | К12 | Шаг 14: `i18n_check` `errors: 0; warnings: 0`, `token_contrast` шесть `PASS` | коды `0` |
@@ -236,9 +244,9 @@ git status --short
 Рабочая копия — единственное, что создано. После отчёта:
 
 ```powershell
-git -C $env:LAVRAY_SRC worktree remove --force (Join-Path $env:LAVRAY_TP_ROOT 'wt\A01')
+git -C $env:LAVRAY_SRC worktree remove --force C:\lavray-test\wt\A01
 git -C $env:LAVRAY_SRC worktree prune
-Test-Path (Join-Path $env:LAVRAY_TP_ROOT 'wt\A01')
+Test-Path C:\lavray-test\wt\A01
 ```
 
 Ожидается: последняя строка `False`. Системное состояние файлом не менялось, откат системы не нужен. (Пакет `playwright` и браузер Chromium из шага 14 остаются установленными; это допустимо, они не влияют на продукт.)

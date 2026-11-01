@@ -28,7 +28,7 @@
 
 ## Предусловия
 
-- Тестовый ПК подтверждён (`C:\lavray-test\TESTPC_OK`), ZIP релиза 0.9.0 распакован (`$env:LAVRAY_PORTABLE\LAVRay.exe`, `binaries\lavray-core.exe`), Python 3.12, PowerShell 7 с модулем `VpnClient` (есть в Windows 10/11).
+- Тестовый ПК подтверждён (`Test-TestPc` = `True`: маркер `C:\lavray-test\TESTPC_OK` есть, создан на этом ПК и не старше 30 суток), ZIP релиза 0.9.0 распакован (`$env:LAVRAY_PORTABLE\LAVRay.exe`, `binaries\lavray-core.exe`), Python 3.12, PowerShell 7 с модулем `VpnClient` (есть в Windows 10/11).
 - Права обычного пользователя достаточны для частей А–Г. Для части Д — PowerShell от администратора и `LAVRAY_ALLOW_TUN=1`.
 - Процессов `LAVRay`, `lavray-core` нет. Порт 2080 не используется: порт входящего подключения выбирается случайно.
 - В настройках Windows желательно включено «Определять параметры автоматически» (Параметры → Сеть и Интернет → Прокси): по умолчанию это так. Если выключено, шаги про возврат WPAD получают `SKIPPED` (не `FAIL`).
@@ -165,7 +165,7 @@ $b = ConvertFrom-InetBlob -Bytes $ms.ToArray()
 
 ```powershell
 . C:\lavray-test\env.ps1
-if (-not (Test-Path C:\lavray-test\TESTPC_OK)) { 'BLOCKED: нет маркера TESTPC_OK'; return }
+if (-not (Test-TestPc)) { 'BLOCKED: нет маркера TESTPC_OK (или он создан на другом ПК, или старше 30 суток)'; return }
 $T = 'C:\lavray-test\tmp\A11'
 New-Item -ItemType Directory -Force -Path $T, "$T\up", C:\lavray-test\results\A11 | Out-Null
 . "$T\a11-lib.ps1"

@@ -2,7 +2,7 @@
 
 Выполняет оркестратор один раз до запуска файлов `auto/` и `manual/`. Субагенты читают только свой файл и этот документ (разделы 3, 4 и 10), поэтому переменные, каталоги и правила именования ниже обязательны для всех.
 
-Команды в блоках `powershell` выполняются в PowerShell 7 (`pwsh`), в блоках `bash` — в Git Bash. Все пути и имена — примеры для каталога `C:\lavray-test`; если владелец выбрал другой, меняется только `LAVRAY_TP_ROOT`.
+Команды в блоках `powershell` выполняются в PowerShell 7 (`pwsh`), в блоках `bash` — в Git Bash. Корень **фиксирован: `C:\lavray-test`**. Пути в файлах плана (в блоках `powershell`, `bash` и в скриптах) записаны буквально, страж, шаблоны очистки (`Path -like 'C:\lavray-test\*'`) и проверка маркера привязаны к тому же каталогу, поэтому другой корень выбирать нельзя. Переменная `LAVRAY_TP_ROOT` в `env.ps1` — константа, из которой собраны остальные пути; переопределять её не нужно.
 
 ## 1. Что нужно от тестового ПК
 
@@ -27,8 +27,8 @@ C:\lavray-test\
   env.ps1            переменные окружения (создаёт оркестратор, раздел 4)
   guard.ps1          страж «тестовый ПК» (раздел 3)
   TESTPC_OK          маркер: страж пройден и владелец подтвердил (создаёт guard.ps1)
-  plan\              клон тега v0.9.0 (или ветки main, если тега нет) с документами docs\test-plan
-  src\               клон продукта на нужной версии, ТОЛЬКО ЧТЕНИЕ
+  plan\              клон ветки main с документами docs\test-plan (план исправляется после выхода тега; код на main равен v0.9.0)
+  src\               клон продукта, переключённый на тег v0.9.0, ТОЛЬКО ЧТЕНИЕ
   wt\<ID>\           рабочая копия (git worktree) для файла <ID>; создаёт сам файл
   assets\0.9.0\      скачанные ассеты релиза под тестом (семь файлов, раздел 7)
   assets\0.3.0\      ассеты предыдущего релиза (для проверки обновления в A10, M01)
@@ -47,7 +47,7 @@ C:\lavray-test\
 
 ## 3. Страж «тестовый ПК»
 
-Страж защищает ПК владельца от ошибки: он отказывается ставить маркер, если видит признаки рабочего VPN. Маркер `TESTPC_OK` нужен каждому файлу с опасностью `прокси`, `TUN`, `реестр` или `установка` (шаг 1 такого файла проверяет его наличие). Без маркера файл завершается итогом `BLOCKED`.
+Страж защищает ПК владельца от ошибки: он отказывается ставить маркер, если видит признаки рабочего VPN. Маркер `TESTPC_OK` нужен каждому файлу с опасностью `прокси`, `TUN`, `реестр`, `установка` или `данные приложения` — **и автоматическим, и ручным**. Файл проверяет его первой командой (`Test-TestPc` из `env.ps1`, раздел 4): маркер существует, создан на **этом** ПК (поле `machine` равно имени компьютера) и не старше 30 суток. Без маркера (или с маркером, перенесённым с другого ПК) файл завершается итогом `BLOCKED`, ни один шаг не выполняется.
 
 Подтверждение даёт только владелец: переменная окружения `LAVRAY_TESTPC_CONFIRMED=YES-DISPOSABLE` задаётся им в окне, откуда запущен ZCode (или в промпте из `00-README.md`). Оркестратор не имеет права задавать её сам, даже если страж ничего не нашёл.
 
@@ -56,7 +56,7 @@ C:\lavray-test\
 ```powershell
 # guard.ps1: проверка «это тестовый ПК». Код выхода 0 - маркер создан, 1 - отказ.
 $ErrorActionPreference = 'Stop'
-$root = if ($env:LAVRAY_TP_ROOT) { $env:LAVRAY_TP_ROOT } else { 'C:\lavray-test' }
+$root = 'C:\lavray-test'
 $marker = Join-Path $root 'TESTPC_OK'
 $problems = New-Object System.Collections.Generic.List[string]
 
@@ -103,10 +103,13 @@ if ($problems.Count -gt 0) {
 }
 
 New-Item -ItemType Directory -Force -Path $root | Out-Null
+# Маркер несёт содержимое, а не только факт существования: имя ПК, пользователь, время (UTC) и подтверждение владельца.
+# Test-TestPc (env.ps1) сверяет machine с именем этого ПК и возраст, поэтому маркер, скопированный на другой ПК, не годится.
 [pscustomobject]@{
-  machine = $env:COMPUTERNAME
-  user    = $env:USERNAME
-  utc     = (Get-Date).ToUniversalTime().ToString('o')
+  machine   = $env:COMPUTERNAME
+  user      = $env:USERNAME
+  utc       = (Get-Date).ToUniversalTime().ToString('o')
+  confirmed = $env:LAVRAY_TESTPC_CONFIRMED
 } | ConvertTo-Json | Set-Content -LiteralPath $marker -Encoding utf8
 Write-Host "OK: маркер создан: $marker"
 exit 0
@@ -119,7 +122,9 @@ pwsh -NoProfile -File C:\lavray-test\guard.ps1
 $LASTEXITCODE
 ```
 
-PASS: код выхода `0` и существует файл `C:\lavray-test\TESTPC_OK`. FAIL (стоп всего прогона опасных файлов): код `1`; оркестратор показывает владельцу список причин и не продолжает. Файлы без опасности (A01, A02, A03, A05, A06, A07, A08, M02, M05, M07, M18) запускаются и без маркера.
+PASS: код выхода `0` и существует файл `C:\lavray-test\TESTPC_OK` (после `. C:\lavray-test\env.ps1` команда `Test-TestPc` печатает `True`). FAIL (стоп всего прогона опасных файлов): код `1`; оркестратор показывает владельцу список причин и не продолжает.
+
+Файлы **без** опасности запускаются и без маркера: A01, A02, A03, A05, A06, A07, A08, A09, A12, A13, A14, A15, M02, M07, M18. Файлы с опасностью проверяют маркер целиком: A04, A10, A11, M01, M03, M04, M06, M08, M10, M11, M12, M14, M15, M17. Файлы с опасностью в **части** проверяют маркер перед этой частью (без него блокируется только она): M05 и M09 — часть 6, M13 — часть 3 и шаг 4.31, M16 — часть 8.
 
 ## 4. Переменные окружения
 
@@ -131,8 +136,8 @@ $env:LAVRAY_TP_ROOT   = 'C:\lavray-test'
 $env:LAVRAY_REPO      = 'anatolijlaptev1991-ctrl/lavray'
 $env:LAVRAY_VERSION   = '0.9.0'
 $env:LAVRAY_FROM_VERSION = '0.3.0'
-# Версия под тестом по умолчанию: тег v0.9.0 (<TAG> в документах плана = v0.9.0).
-# main - только запасной вариант на случай, когда тег ещё не выпущен; тогда в отчёте указывайте фактический коммит (git rev-parse HEAD).
+# Под тестом всегда РЕЛИЗ v0.9.0 (<TAG> в документах плана = v0.9.0). План берётся с main, где его исправляют уже после тега.
+# main у продукта - только запасной вариант на случай, когда тег ещё не выпущен; тогда в отчёте указывайте фактический коммит.
 $env:LAVRAY_REF       = 'v0.9.0'
 $env:LAVRAY_REF_FALLBACK = 'main'
 $env:LAVRAY_SRC       = Join-Path $env:LAVRAY_TP_ROOT 'src'
@@ -145,6 +150,21 @@ $env:LAVRAY_RESULTS   = Join-Path $env:LAVRAY_TP_ROOT 'results'
 $env:LAVRAY_BASELINE  = Join-Path $env:LAVRAY_TP_ROOT 'baseline'
 # Go: на свежем ПК прокси модулей включён (A02 разрешает сеть).
 $env:CGO_ENABLED      = '0'
+
+# Общие проверки (используются в файлах плана).
+# Коммит под тестом - ВСЕГДА коммит тега, а не HEAD клона плана или рабочей копии.
+function Get-RefCommit { git -C $env:LAVRAY_SRC rev-parse "$($env:LAVRAY_REF)^{commit}" }
+# Клон продукта создан с core.autocrlf=false (иначе buf format и кодогенерация дают ложные расхождения).
+function Test-RepoLf { (git -C $env:LAVRAY_SRC config core.autocrlf) -eq 'false' }
+# Маркер тестового ПК: файл есть, создан на ЭТОМ ПК (machine = имя компьютера), не старше 30 суток.
+function Test-TestPc {
+  $m = 'C:\lavray-test\TESTPC_OK'
+  if (-not (Test-Path -LiteralPath $m)) { return $false }
+  try { $j = Get-Content -LiteralPath $m -Raw | ConvertFrom-Json } catch { return $false }
+  if ($j.machine -ne $env:COMPUTERNAME) { return $false }
+  $utc = if ($j.utc -is [datetime]) { $j.utc.ToUniversalTime() } else { [datetime]::Parse([string]$j.utc).ToUniversalTime() }
+  return (((Get-Date).ToUniversalTime() - $utc).TotalDays -lt 30)
+}
 ```
 
 Переменные, которые задаёт только владелец (оркестратор их лишь читает и никогда не печатает значения):
@@ -219,10 +239,9 @@ foreach ($c in 'git --version','go version','rustc --version','cargo --version',
 }
 ```
 
-Git: репозиторий хранит LF, поэтому выключите преобразование окончаний строк, как это делает CI для Windows-сборки:
+Git: репозиторий хранит LF, а в `C:\Program Files\Git\etc\gitconfig` по умолчанию стоит `core.autocrlf=true`: с ним `buf format -d` и кодогенерация видят CRLF и дают ложный `FAIL` (проверено). Глобальные настройки ПК план **не меняет**: клоны создаются с ключом `-c core.autocrlf=false` (раздел 6), а A01 перед работой проверяет это и останавливается с понятным сообщением.
 
 ```powershell
-git config --global core.autocrlf false
 gh auth setup-git
 ```
 
@@ -232,8 +251,9 @@ gh auth setup-git
 
 ```powershell
 . C:\lavray-test\env.ps1
-New-Item -ItemType Directory -Force -Path $env:LAVRAY_TP_ROOT, $env:LAVRAY_RESULTS, $env:LAVRAY_BASELINE | Out-Null
-gh repo clone $env:LAVRAY_REPO $env:LAVRAY_SRC
+New-Item -ItemType Directory -Force -Path C:\lavray-test, $env:LAVRAY_RESULTS, $env:LAVRAY_BASELINE | Out-Null
+# core.autocrlf=false задаётся только для клона; глобальные настройки Git не меняются.
+gh repo clone $env:LAVRAY_REPO $env:LAVRAY_SRC -- -c core.autocrlf=false
 git -C $env:LAVRAY_SRC fetch --tags origin
 git -C $env:LAVRAY_SRC rev-parse --verify --quiet "refs/tags/$($env:LAVRAY_REF)^{commit}"
 if ($LASTEXITCODE -ne 0) {
@@ -241,25 +261,28 @@ if ($LASTEXITCODE -ne 0) {
   $env:LAVRAY_REF = $env:LAVRAY_REF_FALLBACK
 }
 git -C $env:LAVRAY_SRC checkout --detach $env:LAVRAY_REF
-git -C $env:LAVRAY_SRC rev-parse HEAD
+"HEAD клона:         " + (git -C $env:LAVRAY_SRC rev-parse HEAD)
+"коммит $($env:LAVRAY_REF):   " + (Get-RefCommit)
+"core.autocrlf:      " + (git -C $env:LAVRAY_SRC config core.autocrlf)
 git -C $env:LAVRAY_SRC status --short
 ```
 
-PASS: `rev-parse HEAD` печатает 40 шестнадцатеричных символов, `status --short` пуст. По умолчанию проверяется тег `v0.9.0`. Если его нет, блок выше берёт запасной вариант `main` (`LAVRAY_REF_FALLBACK`): это отклонение, его и фактический коммит (`rev-parse HEAD`) записывают в отчёт; ассеты релиза при этом недоступны, и файлы с установщиком и ZIP получают `BLOCKED`.
+PASS: `HEAD клона` и `коммит v0.9.0` — одинаковые 40 шестнадцатеричных символов, `core.autocrlf: false`, `status --short` пуст. Во всех файлах плана коммит под тестом получают из `Get-RefCommit` (то есть `git rev-parse "v0.9.0^{commit}"`), а не из `HEAD`. По умолчанию проверяется тег `v0.9.0`. Если его нет, блок выше берёт запасной вариант `main` (`LAVRAY_REF_FALLBACK`): это отклонение, его и фактический коммит (`rev-parse HEAD`) записывают в отчёт; ассеты релиза при этом недоступны, и файлы с установщиком и ZIP получают `BLOCKED`.
 
-Документы плана берутся отдельным клоном, чтобы продукт в `src\` оставался только для чтения. В быстром старте (`00-README.md`, раздел 9) владелец клонирует план сразу на тег `v0.9.0`; если команда ниже выполняется заново, берите тот же тег:
+Документы плана берутся отдельным клоном **ветки `main`**: исправления плана вносятся после выхода тега, а исходный код на `main` равен `v0.9.0` (отличается только `docs\test-plan`). Продукт в `src\` остаётся только для чтения и стоит на теге; тестируется всегда релиз `v0.9.0` (ассеты скачиваются с релиза, сравнения коммитов идут с `Get-RefCommit`, не с `HEAD` клона плана). В быстром старте (`00-README.md`, раздел 9) владелец клонирует план так же:
 
 ```powershell
-gh repo clone $env:LAVRAY_REPO $env:LAVRAY_PLAN -- --branch $env:LAVRAY_REF
+gh repo clone $env:LAVRAY_REPO $env:LAVRAY_PLAN -- -c core.autocrlf=false
+git -C $env:LAVRAY_PLAN fetch --tags origin
 Test-Path (Join-Path $env:LAVRAY_PLAN 'docs\test-plan\00-README.md')
 ```
 
-PASS: `True`. Если тега ещё нет или план не вошёл в него, владелец указывает ветку в промпте (`--branch main`, до слияния плана `--branch docs/test-plan`), и это отклонение записывается в отчёт.
+PASS: `True`. Если main ушёл вперёд тега за счёт кода (а не плана), это отклонение записывается в отчёт; тестируется по-прежнему тег.
 
 Рабочая копия для файла `<ID>` создаётся так (каждый файл повторяет это в своём первом шаге):
 
 ```powershell
-git -C $env:LAVRAY_SRC worktree add --detach (Join-Path $env:LAVRAY_TP_ROOT 'wt\A02') $env:LAVRAY_REF
+git -C $env:LAVRAY_SRC worktree add --detach C:\lavray-test\wt\A02 $env:LAVRAY_REF
 ```
 
 ## 7. Ассеты релиза

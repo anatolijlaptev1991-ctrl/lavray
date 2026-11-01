@@ -30,7 +30,8 @@
 
 ```powershell
 . C:\lavray-test\env.ps1
-$wt = Join-Path $env:LAVRAY_TP_ROOT 'wt\A02'
+$wt = 'C:\lavray-test\wt\A02'
+if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
 git -C $env:LAVRAY_SRC worktree add --detach $wt $env:LAVRAY_REF
 Set-Location (Join-Path $wt 'core')
 go version
@@ -67,14 +68,14 @@ $log = Get-Content C:\lavray-test\results\A02\go-test-all.txt
 ($log | Where-Object { $_ -match '^\?\s' }) -replace '\s+\[no test files\]',''
 ```
 
-   Ожидается на коммите `97624d6`: `ok: 22`, `FAIL: 0`, и три пакета без тестов: `internal/gen/lavrayv1`, `internal/gen/lavrayv1connect`, `internal/testsocks` (сгенерированный код и вспомогательный SOCKS5-сервер для тестов). Если `ok` больше 22 (появились пакеты), это не ошибка; если меньше или какой-то пакет из таблицы ниже пропал, это `FAIL`.
+   Ожидается на `v0.9.0`: `ok: 24`, `FAIL: 0`, и четыре пакета без тестов: `internal/gen/lavrayv1`, `internal/gen/lavrayv1connect`, `internal/testsocks` (сгенерированный код и вспомогательный SOCKS5-сервер для тестов), `internal/updates/updatestest` (вспомогательный код тестов обновлений). Если `ok` больше 24 (появились пакеты), это не ошибка; если меньше или какой-то пакет из таблицы ниже пропал, это `FAIL`.
 
    Эталонные времена этой машины (для оценки, не критерий): `cmd/lavray-core` 22 с, `internal/api` 44 с, `internal/updates` 15 с, `internal/store` 11 с, `internal/mcp` 10 с, `internal/presets` 8 с, `internal/subs` 7 с, остальные до 4 с.
 
 5. Число тестовых функций по пакетам (защита от тихого удаления тестов). Команда печатает пары «пакет число»:
 
 ```powershell
-$pk = 'cmd/lavray-core','internal/api','internal/buildtags','internal/cfgbuild','internal/gateway','internal/headless',
+$pk = 'cmd/lavray-core','cmd/updsign','internal/api','internal/backup','internal/buildtags','internal/cfgbuild','internal/gateway','internal/headless',
       'internal/inst','internal/links','internal/logs','internal/mcp','internal/model','internal/presets','internal/store',
       'internal/store/nekoimport','internal/subs','internal/subs/parser','internal/textdiff','internal/traffic','internal/updates','internal/version','internal/web'
 foreach ($p in $pk) {
@@ -83,33 +84,35 @@ foreach ($p in $pk) {
 }
 ```
 
-   Эталон на `97624d6` (функции верхнего уровня `Test*` и `Fuzz*`, без тегов сборки, Windows). Это нижняя граница: на `<TAG>` чисел больше, проверяется «не меньше»:
+   Эталон на `v0.9.0` (функции верхнего уровня `Test*` и `Fuzz*`, без тегов сборки, Windows). Это нижняя граница: на `<TAG>` чисел больше, проверяется «не меньше»:
 
    | Пакет | Число | Что в нём главное |
    |---|---|---|
-   | `cmd/lavray-core` | 13 | запуск, токен из stdin, агентский токен, выход при EOF, ошибки хранилища |
-   | `internal/api` | 181 | RPC всех сервисов, трещотка `TestUnimplementedRatchet`, агентская таблица, T-08B, T-79 |
+   | `cmd/lavray-core` | 36 | запуск, токен из stdin, агентский токен, выход при EOF, ошибки хранилища |
+   | `cmd/updsign` | 31 | утилита подписи метаданных обновлений: `genkey`, `manifest`, `geo-pack`, `verify` (T-75) |
+   | `internal/api` | 404 | RPC всех сервисов, трещотка `TestUnimplementedRatchet`, агентская таблица, T-08B, T-79 |
+   | `internal/backup` | 25 | зашифрованная копия `.lavbk` (T-83) |
    | `internal/buildtags` | 6 | единый список тегов, запрет `clash_api`, имена ассетов |
-   | `internal/cfgbuild` | 44 | сборка конфигов, golden-эталоны |
-   | `internal/gateway` | 4 | модель шлюза (не подключена к ядру) |
+   | `internal/cfgbuild` | 59 | сборка конфигов, golden-эталоны |
+   | `internal/gateway` | 28 | модель шлюза (не подключена к ядру) |
    | `internal/headless` | 3 | авторестарт в сервисном режиме |
    | `internal/inst` | 20 | менеджер инстанса на подставном раннере (остальные 33 теста требуют тегов, файл A03) |
-   | `internal/links` | 16 | парсеры ссылок, `FuzzParseLink` |
+   | `internal/links` | 20 | парсеры ссылок, `FuzzParseLink` |
    | `internal/logs` | 12 | журнал и маскировка секретов |
    | `internal/mcp` | 31 | MCP-сервер и инструменты |
-   | `internal/model` | 29 | модель, канонический JSON, хэш custom-полей |
-   | `internal/presets` | 19 | формат пресетов, перенос из NekoRay, `FuzzConvertNekoRayRoute` |
-   | `internal/store` | 36 | SQLite, миграции (до v6 с T-76 и T-78), сессии и трафик |
-   | `internal/store/nekoimport` | 5 | импортёр каталога NekoBox (T-78, подключён) |
+   | `internal/model` | 37 | модель, канонический JSON, хэш custom-полей |
+   | `internal/presets` | 52 | формат пресетов, перенос из NekoRay, `FuzzConvertNekoRayRoute` |
+   | `internal/store` | 74 | SQLite, миграции (до v6 с T-76 и T-78), сессии и трафик |
+   | `internal/store/nekoimport` | 52 | импортёр каталога NekoBox (T-78, подключён) |
    | `internal/subs` | 39 | подписки и их применение (в подпакете расшифровки ссылок ещё 9 тестов, их считает шаг 7) |
    | `internal/subs/parser` | 23 | разбор содержимого подписок (base64, YAML, список ссылок), `FuzzParseContent` |
    | `internal/textdiff` | 8 | построчный diff, `FuzzUnified` |
    | `internal/traffic` | 15 | счётчик скоростей, `FuzzMeterNeverNegative` |
-   | `internal/updates` | 8 | центр обновлений (T-75, подключён; на `dce8ba0` с §7.5 тестов больше) |
+   | `internal/updates` | 166 | центр обновлений (T-75, включая наборы и гео §7.5) |
    | `internal/version` | 1 | версия ядра |
-   | `internal/web` | 9 | веб-панель (T-76, подключена флагом `--web-bind`) |
+   | `internal/web` | 59 | веб-панель (T-76, подключена флагом `--web-bind`) |
 
-   Критерий: число не меньше эталона. Меньше — запишите разницу в отчёт и пометьте `minor`, если тесты удалены; пометьте `doc`, если их перенесли в другой пакет (в этом случае общая сумма не уменьшилась). Сумма таблицы 522; вместе с 9 тестами подпакета расшифровки ссылок в `internal/subs/` получается 531 функция верхнего уровня.
+   Критерий: число не меньше эталона. Меньше — запишите разницу в отчёт и пометьте `minor`, если тесты удалены; пометьте `doc`, если их перенесли в другой пакет (в этом случае общая сумма не уменьшилась). Сумма таблицы 1201; вместе с 9 тестами подпакета расшифровки ссылок в `internal/subs/` получается 1210 функций верхнего уровня.
 
 6. Защитные тесты-трещотки присутствуют и проходят. Это защита от ситуации «тест удалили, прогон зелёный».
 
@@ -183,9 +186,9 @@ git -C $wt status --short -- core
 
 ```powershell
 Set-Location C:\lavray-test
-git -C $env:LAVRAY_SRC worktree remove --force (Join-Path $env:LAVRAY_TP_ROOT 'wt\A02')
+git -C $env:LAVRAY_SRC worktree remove --force C:\lavray-test\wt\A02
 git -C $env:LAVRAY_SRC worktree prune
-Test-Path (Join-Path $env:LAVRAY_TP_ROOT 'wt\A02')
+Test-Path C:\lavray-test\wt\A02
 ```
 
 Ожидается `False`. Кэш сборки Go (`go env GOCACHE`) и кэш модулей остаются: это ускоряет следующие файлы и не влияет на систему. Системного отката нет.

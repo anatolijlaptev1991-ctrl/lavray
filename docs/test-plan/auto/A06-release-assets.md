@@ -35,20 +35,24 @@ $repo = $env:LAVRAY_REPO
 gh auth status
 "auth exit=$LASTEXITCODE"
 "версия под тестом: $ver"
+git -C $env:LAVRAY_SRC fetch --tags origin
+"коммит тега v${ver}: " + (git -C $env:LAVRAY_SRC rev-parse "v$ver^{commit}")
 ```
 
-   Ожидается: `auth exit=0`. Иначе `BLOCKED` (просьба к владельцу: `gh auth login`).
+   Ожидается: `auth exit=0` и коммит тега из 40 шестнадцатеричных символов (он нужен шагам 8 и 14: сравнение ревизии идёт с коммитом **тега**, а не с `HEAD` клона). Иначе `BLOCKED` (просьба к владельцу: `gh auth login`; нет тега в клоне — релиз не выпущен).
 
 2. Релиз опубликован, список ассетов.
 
 ```powershell
 $rel = gh release view "v$ver" -R $repo --json tagName,isDraft,isPrerelease,assets,targetCommitish 2>&1
 "view exit=$LASTEXITCODE"
-$rel | ConvertFrom-Json | Select-Object tagName, isDraft, isPrerelease, targetCommitish
-($rel | ConvertFrom-Json).assets | Select-Object name, size
+$relObj = $rel | ConvertFrom-Json
+# Format-Table у каждой таблицы: без него PowerShell печатает одну таблицу, а вторая выходит пустой (колонки первой навязываются второй).
+$relObj | Select-Object tagName, isDraft, isPrerelease, targetCommitish | Format-Table -AutoSize | Out-String
+$relObj.assets | Select-Object name, size | Format-Table -AutoSize | Out-String
 ```
 
-   Ожидается: `view exit=0`, `isDraft=False`. Ответ `release not found` — `BLOCKED` для всех шагов версии 0.4.0 (см. «Предусловия»).
+   Ожидается: `view exit=0`, `isDraft=False`. Ответ `release not found` — `BLOCKED` для всех шагов версии 0.9.0 (см. «Предусловия»).
 
 3. Состав ассетов: ровно семь файлов с именами из двух workflow.
 
@@ -68,7 +72,7 @@ $have = (($rel | ConvertFrom-Json).assets | ForEach-Object name) | Sort-Object
 New-Item -ItemType Directory -Force -Path $dir | Out-Null
 gh release download "v$ver" -R $repo -D $dir --clobber
 "download exit=$LASTEXITCODE"
-Get-ChildItem $dir | Select-Object Name, Length
+Get-ChildItem $dir | Select-Object Name, Length | Format-Table -AutoSize | Out-String
 $setup = Join-Path $dir "LAVRay-$ver-x64-setup.exe"
 "установщик <= 25 МБ: " + ((Get-Item $setup).Length -le 25MB)
 ```
@@ -153,16 +157,19 @@ $tags = (Get-Content (Join-Path $env:LAVRAY_SRC 'core\BUILD_TAGS') -Raw).Trim()
 "trimpath:           " + [bool]($info -match '-trimpath=true')
 "CGO отключён:       " + [bool]($info -match 'CGO_ENABLED=0')
 "форк закреплён:     " + [bool]($info -match '=>\s+github\.com/anatolijlaptev1991-ctrl/sing-box\s+v1\.14\.2-0\.20261031133806-35f3fd09bcf9')
-"версия в ldflags:    " + [bool]($info -match [regex]::Escape("internal/version.Version=$ver"))
 $rev = [regex]::Match($info, 'vcs\.revision=([0-9a-f]{40})').Groups[1].Value
 "vcs.revision:       $rev"
-"vcs.modified=false: " + [bool]($info -match 'vcs\.modified=false')
 $tagCommit = (git -C $env:LAVRAY_SRC rev-parse "v$ver^{commit}" 2>$null)
 "коммит тега v${ver}:  $tagCommit"
 "ядро из коммита тега: " + ($rev -eq $tagCommit)
+"vcs.modified:       " + [regex]::Match($info, 'vcs\.modified=(\w+)').Groups[1].Value + '   (INFO: true ожидаемо, см. ниже)'
 ```
 
-   Ожидается: все `True` (строка `версия в ldflags` — версия, подставленная workflow флагом `-X …/internal/version.Version=<версия>`); `vcs.revision` равен коммиту тега (если тега нет в `src\`, выполните `git -C $env:LAVRAY_SRC fetch --tags`). Версию форка в строке `форк закреплён` сверяйте с `replace` в `core/go.mod` выбранного коммита: если пин в коммите другой, подставьте его (запишите в отклонения). `vcs.modified=true` — `WARN`, не `FAIL`: перед сборкой workflow выполняет `go mod tidy`, и если он правит `go.mod` или `go.sum`, дерево считается изменённым; обязательно совпадение `vcs.revision` с коммитом тега.
+   Ожидается: все пять строк `True`; `vcs.revision` равен коммиту тега `v0.9.0` (не `HEAD` клона; тег подтянул `git fetch --tags` шага 1). Версию форка в строке `форк закреплён` сверяйте с `replace` в `core/go.mod` на теге: если пин другой, подставьте его (запишите в отклонения).
+
+   **`vcs.modified` — только `INFO`**, не `WARN` и не `FAIL`: `true` у всех трёх ядер ожидаемо. Перед сборкой оба workflow выполняют `go mod tidy` с `GOFLAGS=-mod=mod` (так подтягивается приватный форк sing-box; `release-windows.yml`, `release-linux.yml`), а это правит `go.mod` и `go.sum`; Linux-сборка ещё копирует `ui/dist` в `core/internal/web/dist`. Дерево поэтому считается изменённым. Обязательно совпадение `vcs.revision` с коммитом тега.
+
+   **Флаг версии `-X …/internal/version.Version=<версия>` здесь не проверяется.** Оба workflow передают его через `-ldflags`, но при `-trimpath` Go не записывает `-ldflags` в метаданные сборки (go.dev/issue/52372), поэтому `go version -m` его не показывает, и проверка «версия в ldflags» не может быть `True` (ложный `FAIL`, проверено на релизе). Версию доказывают: шаг 9 (строка версии в бинарнике), шаг 16 (Linux-ядро в WSL, `coreVersion` = `0.9.0`) и A07 (Windows-ядро из этого же ZIP: `coreVersion` из `GetStatus`, часть А шаг `status.initial` и часть Б `ci_smoke.sh`).
 
 9. Ядро из ZIP — честная проверка версии без запуска сервера: строка версии в двоичном файле.
 
@@ -172,7 +179,7 @@ $text = [Text.Encoding]::ASCII.GetString($bytes)
 "версия $ver найдена в ядре: " + $text.Contains($ver)
 ```
 
-   Ожидается `True`. Фактическая проверка `coreVersion` через API делается в A07 (шаг `status.initial`, поле `coreVersion`).
+   Ожидается `True`. Это предварительная проверка; обязательная — `coreVersion` через API в A07 (часть А шаг `status.initial` и часть Б `ci_smoke.sh`): если там не `0.9.0`, A07 даёт `FAIL` (`major`).
 
 10. Подписи Authenticode. В версии 0.9.0 сборки не подписаны (если это изменится — улучшение) (заметки к выпуску: «Сборки не подписаны», SmartScreen предупредит); цель шага — зафиксировать текущее состояние, а не требовать подпись.
 
@@ -198,7 +205,7 @@ if (-not $sigs) { 'minisig: нет (ожидаемо для 0.9.0, ключей 
 ```powershell
 $mirror = gh release view "v$ver" -R anatolijlaptev1991-ctrl/lavray-windows --json assets 2>&1
 "mirror exit=$LASTEXITCODE"
-if ($LASTEXITCODE -eq 0) { ($mirror | ConvertFrom-Json).assets | Select-Object name, size }
+if ($LASTEXITCODE -eq 0) { ($mirror | ConvertFrom-Json).assets | Select-Object name, size | Format-Table -AutoSize | Out-String }
 ```
 
     Ожидается: либо те же три Windows-ассета с теми же размерами (Linux-ассеты в платформенный репозиторий не копируются), либо `release not found`/нет доступа. Второе — `SKIPPED` с причиной, не `FAIL`. Совпадение размеров при несовпадении сумм — `major`.
@@ -240,23 +247,25 @@ foreach ($arch in 'amd64', 'arm64') {
   "[$arch] trimpath, без cgo: " + [bool]($info -match '-trimpath=true' -and $info -match 'CGO_ENABLED=0')
   $rev = [regex]::Match($info, 'vcs\.revision=([0-9a-f]{40})').Groups[1].Value
   "[$arch] vcs.revision: $rev; равен коммиту тега: " + ($rev -eq $tagCommit)
-  "[$arch] vcs.modified: " + [regex]::Match($info, 'vcs\.modified=(\w+)').Groups[1].Value
+  "[$arch] vcs.modified (INFO, true ожидаемо): " + [regex]::Match($info, 'vcs\.modified=(\w+)').Groups[1].Value
 }
 ```
 
-    Ожидается: у обеих архитектур все строки `True`, `vcs.revision` равен коммиту тега, `vcs.modified=false` (иначе `WARN`, см. шаг 8). Теги обязаны содержать `with_webui` и **каждый** тег из `core/BUILD_TAGS`: ядро без `with_webui` покажет вместо веб-панели страницу «панель не встроена» (`FAIL`, `major`); без `singbox_run` — ядро без настоящего sing-box (`FAIL`, `critical`).
+    Ожидается: у обеих архитектур все строки `True`, `vcs.revision` равен коммиту тега; `vcs.modified=true` — `INFO` (см. шаг 8: `go mod tidy` и копия `ui/dist` в сборке). Теги обязаны содержать `with_webui` и **каждый** тег из `core/BUILD_TAGS`: ядро без `with_webui` покажет вместо веб-панели страницу «панель не встроена» (`FAIL`, `major`); без `singbox_run` — ядро без настоящего sing-box (`FAIL`, `critical`).
 
 15. `ui-dist.tar.gz`: содержимое интерфейса веб-панели.
 
 ```powershell
 $tgz = Join-Path $dir 'ui-dist.tar.gz'
-$list = tar -tzf $tgz
+# Системный bsdtar по полному пути: если pwsh запущен из Git Bash, первым в PATH стоит GNU tar, который принимает «C:\...» за «хост:путь».
+$tar = Join-Path $env:SystemRoot 'System32\tar.exe'
+$list = & $tar -tzf $tgz
 "tar exit=$LASTEXITCODE; записей: $($list.Count)"
 "index.html есть: " + [bool]($list | Where-Object { $_ -match '^(\./)?index\.html$' })
 "карт кода (.map) нет: " + (-not [bool]($list | Where-Object { $_ -match '\.map$' }))
 $tmp = Join-Path $env:TEMP ('a06-ui-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $tmp | Out-Null
-tar -xzf $tgz -C $tmp
+& $tar -xzf $tgz -C $tmp
 $html = Get-Content (Join-Path $tmp 'index.html') -Raw
 $refs = [regex]::Matches($html, '(?:src|href)="\.?/?(assets/[^"]+)"') | ForEach-Object { $_.Groups[1].Value }
 "ссылок на assets/ в index.html: $($refs.Count); все файлы на месте: " + (-not [bool]($refs | Where-Object { -not (Test-Path (Join-Path $tmp $_)) }))
@@ -317,8 +326,8 @@ $assetsMeta = Get-ChildItem $dir -Recurse -Include 'timestamp.json', 'manifest-*
 | К4 | Суммы совпали: `SHA256SUMS.txt` (2 файла) и `SHA256SUMS-linux.txt` (3 файла, `sha256sum -c`) | `суммы совпали: True`, три `OK` |
 | К5 | В ZIP ровно три файла: `LAVRay.exe`, `LICENSE`, `binaries/lavray-core.exe` | `состав верный: True` |
 | К6 | Оба exe — `Amd64` | шаг 7 |
-| К7 | Ядро: теги из `BUILD_TAGS`, `-trimpath`, без cgo, форк закреплён, `vcs.modified=false`, ревизия равна коммиту тега | шаг 8, все `True` |
-| К8 | В Windows-ядре есть строка версии 0.9.0 и она передана через `-X` | шаги 8 и 9 |
+| К7 | Ядро: теги из `BUILD_TAGS`, `-trimpath`, без cgo, форк закреплён, ревизия равна коммиту тега (`vcs.modified=true` — `INFO`) | шаг 8, все пять строк `True` |
+| К8 | В Windows-ядре есть строка версии 0.9.0 (шаг 9), а `coreVersion` через API равна `0.9.0` (A07, К6); флаг `-X` через `go version -m` не проверяется: `-trimpath` скрывает `-ldflags` | шаг 9, A07 |
 | К9 | Подписи: `NotSigned` или `Valid`, без `HashMismatch`/`NotTrusted` | шаг 10 |
 | К10 | Linux-ядра: ELF нужной архитектуры, теги `BUILD_TAGS` + `with_webui` точно, `trimpath`, без cgo, `vcs.revision` равен коммиту тега | шаги 13–14 |
 | К11 | `ui-dist.tar.gz`: `index.html` есть, все ссылки на `assets/` разрешаются, карт нет | шаг 15 |
@@ -337,4 +346,4 @@ $assetsMeta = Get-ChildItem $dir -Recurse -Include 'timestamp.json', 'manifest-*
 
 ## Отчёт
 
-`results/A06.md` по `templates/REPORT.md`: статусы 17 шагов, К1–К13, список ассетов с размерами и суммами, `vcs.revision`. Провал К4, К7, К10 — `critical` (выпущен не тот артефакт), К2, К5, К6, К11, К12 — `major`, К3 — `minor`; `vcs.modified=true` и размеры вне диапазона — `WARN`.
+`results/A06.md` по `templates/REPORT.md`: статусы 17 шагов, К1–К13, список ассетов с размерами и суммами, `vcs.revision`. Провал К4, К7, К10 — `critical` (выпущен не тот артефакт), К2, К5, К6, К11, К12 — `major`, К3 — `minor`; размеры вне диапазона — `WARN`; `vcs.modified=true` — `INFO` (не дефект).

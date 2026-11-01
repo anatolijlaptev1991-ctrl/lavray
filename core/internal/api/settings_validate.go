@@ -11,6 +11,7 @@ import (
 
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
 )
 
 // intRanges — допустимые границы целочисленных настроек (включительно).
@@ -27,6 +28,7 @@ var intRanges = map[string][2]int64{
 var stringChoices = map[string][]string{
 	"mux.protocol":   {"h2mux", "smux", "yamux"},
 	SettingAgentMode: {AgentModeOff, AgentModeRead, AgentModeControl},
+	"update.channel": {updates.ChannelStable, updates.ChannelBeta}, // T-75: чужой канал не сводится молча к stable
 }
 
 // validateSetting проверяет одно значение известного ключа (неизвестные ключи

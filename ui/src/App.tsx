@@ -33,6 +33,7 @@ import { ServersScreen } from './screens/screen_servers';
 import { SubscriptionsScreen } from './screens/screen_subscriptions';
 import { SettingsScreen } from './screens/screen_settings';
 import { UpdatesScreen } from './screens/screen_updates';
+import { AppNotices } from './components/AppNotices';
 import { ImportDialog } from './components/ImportDialog';
 import { HotkeysDialog, LicensesDialog, OnboardingDialog } from './components/dialogs';
 import { TitlebarMenu } from './components/TitlebarMenu';
@@ -483,6 +484,7 @@ function AppInner(): JSX.Element {
               )}
             </div>
           )}
+          <AppNotices state={status.state} />
           {/* Одна панель на все вкладки раздела (прототип: #scr-*, role=tabpanel
               только у разделов с несколькими вкладками). */}
           <div

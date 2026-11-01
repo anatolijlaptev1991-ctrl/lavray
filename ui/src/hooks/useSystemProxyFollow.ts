@@ -10,6 +10,7 @@ import {
   isSystemProxyApplied,
   loadModes,
 } from '../lib/connection';
+import { isProxyKept } from '../lib/killSwitch';
 import { followAction } from '../lib/proxyFollow';
 import type { CoreState } from '../gen/lavray_pb';
 
@@ -28,6 +29,7 @@ export function useSystemProxyFollow(status: CoreStatus): void {
       sysProxyWanted: loadModes(window.localStorage).sysProxy,
       applied: isSystemProxyApplied(),
       busy: isOwnChangeBusy(),
+      kept: isProxyKept(), // kill switch: после падения ядра прокси остаётся до решения пользователя
     });
     previous.current = state;
     // Вне оболочки (веб-панель) прокси ОС ставить нечем.

@@ -1,5 +1,5 @@
 {
-  "core/cmd/lavray-core/main.go": 260,
+  "core/cmd/lavray-core/main.go": 258,
   "core/internal/api/agent.go": 401,
   "core/internal/api/connect_health.go": 290,
   "core/internal/api/convert.go": 852,
@@ -20,7 +20,6 @@
   "core/internal/cfgbuild/outbounds.go": 484,
   "core/internal/cfgbuild/route.go": 383,
   "core/internal/cfgbuild/routetable.go": 340,
-  "core/internal/gateway/gateway.go": 206,
   "core/internal/inst/inst.go": 439,
   "core/internal/inst/singbox.go": 201,
   "core/internal/links/build.go": 519,
@@ -48,7 +47,6 @@
   "core/internal/testsocks/socks.go": 304,
   "core/internal/updates/client.go": 429,
   "core/internal/updates/meta.go": 803,
-  "core/internal/web/web.go": 353,
   "design/tools/a11y_sweep.py": 276,
   "shell/src/agent.rs": 249,
   "shell/src/autostart.rs": 461,

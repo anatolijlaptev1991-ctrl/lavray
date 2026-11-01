@@ -79,6 +79,15 @@ func buildInbounds(st *BuildSettings, forTest bool) ([]any, error) {
 		inbounds = append(inbounds, in)
 	}
 
+	// tproxy-in: шлюз OpenWrt (tproxy.go); на десктопе — INVALID_ARGUMENT.
+	tp, err := tproxyInbound(st, forTest)
+	if err != nil {
+		return nil, err
+	}
+	if tp != nil {
+		inbounds = append(inbounds, tp)
+	}
+
 	// tun-in (FR-UI-184; оракул ConfigBuilder.cpp:414–428).
 	if st.Tun.Enabled && !forTest {
 		name := strings.TrimSpace(st.Tun.InterfaceName)

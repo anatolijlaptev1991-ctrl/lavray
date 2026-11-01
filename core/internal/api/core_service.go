@@ -46,9 +46,8 @@ func (s *Server) startRunLocked(ctx context.Context, profile *model.Profile, mod
 			mode = lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY
 		}
 	}
-	switch mode {
-	case lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TPROXY, lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TUN:
-		return nil, nil, invalidArg("режим шлюза доступен только в сборке для роутера; на компьютере — системный прокси или TUN")
+	if err := s.checkGatewayMode(mode); err != nil { // gateway_mode.go
+		return nil, nil, err
 	}
 
 	// Режим TUN без прав: понятная причина вместо сырой ошибки sing-box
@@ -60,6 +59,7 @@ func (s *Server) startRunLocked(ctx context.Context, profile *model.Profile, mod
 	}
 
 	st := s.buildSettings(mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN)
+	s.applyGateway(st, mode)
 	var warnings []string
 	if mode != lavrayv1.ConnectMode_CONNECT_MODE_TUN {
 		// T-55: в TUN mixed-слушатель остаётся (cfgbuild/inbounds.go), и
@@ -98,10 +98,7 @@ func (s *Server) startRunLocked(ctx context.Context, profile *model.Profile, mod
 		return nil, nil, err
 	}
 
-	modeStr := "system_proxy"
-	if mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN {
-		modeStr = "tun"
-	}
+	modeStr := runModeString(mode)
 	// Итог проверки связи прежнего запуска к новому не относится.
 	s.resetHealth()
 	startCtx, cancel := context.WithTimeout(ctx, inst.StartTimeout) // LNB-06
@@ -169,10 +166,11 @@ func (s *Server) dryRunBuild(profile *model.Profile, mode lavrayv1.ConnectMode) 
 			return nil, failedPrecondition("тип %s требует внешнего ядра (enable_external_cores)", profile.Type)
 		}
 	}
-	if mode == lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TPROXY || mode == lavrayv1.ConnectMode_CONNECT_MODE_GATEWAY_TUN {
-		return nil, invalidArg("режим шлюза доступен только в сборке для роутера")
+	if err := s.checkGatewayMode(mode); err != nil {
+		return nil, err
 	}
 	st := s.buildSettings(mode == lavrayv1.ConnectMode_CONNECT_MODE_TUN)
+	s.applyGateway(st, mode)
 	if mode != lavrayv1.ConnectMode_CONNECT_MODE_TUN {
 		if err := s.validateInboundLAN(st.Inbound); err != nil {
 			return nil, err

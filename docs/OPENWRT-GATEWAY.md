@@ -70,5 +70,5 @@
 
 - Точная nftables-грамматика include fw4 и юнит-файлы — фиксируются при реализации и становятся приложением к этому документу [проверь на реальном fw4 24.10/25.12].
 - Матрица производительности TProxy/TUN по архитектурам — после первых бенчмарков (бюджеты — `docs/TEST-PLAN.md`).
-> **Статус реализации (0.1.x).** Это спецификация. В репозитории есть заготовки `core/internal/gateway` (nftables-рендер, watchdog) и `core/internal/web` (вход в панель), но к ядру они не подключены; `GatewayService` и `WebSessionService` отвечают `unimplemented`. Пакетов `lavrayd`, `lavray-webui`, `luci-app-lavray` и фидов нет; работает только флаг `--headless`.
+> **Статус реализации (0.9.0).** Ядро подключает `core/internal/gateway` (флаг `--platform openwrt`: режим `GATEWAY_TPROXY`, `GatewayService`, политики по MAC, watchdog) и `core/internal/web` (флаг `--web-bind`: вход по паролю, сессии, TLS, раздача интерфейса). Без `--web-bind` `WebSessionService` отвечает `unimplemented`, без `--platform openwrt` `GatewayService` — `invalid_argument`. Пакеты `lavrayd`, `lavray-webui`, `luci-app-lavray` и фиды вне этого репозитория: [`OPENWRT-PACKAGING.md`](OPENWRT-PACKAGING.md).
 

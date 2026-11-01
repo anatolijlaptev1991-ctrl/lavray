@@ -20,6 +20,7 @@ import (
 
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/presets"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
 )
 
 // geoFx — fixture с уже раскладанным встроенным набором в <данные>/geo.
@@ -267,5 +268,69 @@ func TestDownloadSeveralComponentsSkipsNothingToDo(t *testing.T) {
 	}
 	if _, err := f.downloadComps(lavrayv1.UpdateComponent_UPDATE_COMPONENT_CORE); connect.CodeOf(err) != connect.CodeUnimplemented {
 		t.Fatalf("CORE: %v", err)
+	}
+}
+
+// Архив из updsign geo-pack (updates.PackGeoZip) целиком проходит клиента:
+// загрузка, проверка, применение вместе с набором и откат обоих компонентов.
+func TestPackedGeoAndPresetsRoundTripViaRPC(t *testing.T) {
+	f := geoFixture(t)
+	src := t.TempDir()
+	files, _ := presets.EmbeddedGeoFiles()
+	for _, rel := range append(files, "geosite/zz-packed.srs") {
+		from := rel
+		if rel == "geosite/zz-packed.srs" {
+			from = "geosite/google.srs"
+		}
+		raw, _ := presets.GeoFile(from)
+		p := filepath.Join(src, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, raw, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	zb, err := updates.PackGeoZip(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pr, rev := oneLavRu(t, "full:packed.example")
+	f.releaseData(1, pr, zb)
+	chk, err := f.check()
+	if err != nil || offerFor(chk, compPresets) == nil || offerFor(chk, compGeo) == nil {
+		t.Fatalf("предложения: %v %v", chk, err)
+	}
+	if _, err := f.downloadComps(compPresets, compGeo); err != nil {
+		t.Fatal(err)
+	}
+	evs, err := f.applyComps(compPresets, compGeo)
+	if err != nil || !slices.Equal(appliedOf(evs), []string{"presets", "geo"}) {
+		t.Fatalf("применение: %v %v", evs, err)
+	}
+	if got := getCustom(t, f, "lav-ru"); int(got.Revision) != rev {
+		t.Fatalf("lav-ru r%d, ожидалась %d", got.Revision, rev)
+	}
+	if _, err := os.Stat(filepath.Join(f.geoDirPath(), "geosite", "zz-packed.srs")); err != nil {
+		t.Fatal("файл гео-набора:", err)
+	}
+	for _, c := range []lavrayv1.UpdateComponent{compPresets, compGeo} {
+		if res, err := f.rollbackComp(c); err != nil || !res.Success {
+			t.Fatalf("откат %v: %+v %v", c, res, err)
+		}
+	}
+	if got := getCustom(t, f, "lav-ru"); int(got.Revision) != rev-1 {
+		t.Fatalf("после отката lav-ru r%d", got.Revision)
+	}
+	if _, err := os.Stat(filepath.Join(f.geoDirPath(), "geosite", "zz-packed.srs")); err == nil {
+		t.Fatal("после отката нового файла нет")
+	}
+	// Подмена архива на источнике после выпуска не проходит.
+	tampered := append([]byte(nil), zb...)
+	tampered[len(tampered)/2] ^= 0xff
+	f.src.Put("geo/set.zip", tampered)
+	evs, err = f.downloadComps(compGeo)
+	if err != nil || evs[len(evs)-1].GetVerifyFailed() == nil || evs[len(evs)-1].GetVerifyFailed().Reason != "sha256_mismatch" {
+		t.Fatalf("подменённый архив: %v %v", evs, err)
 	}
 }

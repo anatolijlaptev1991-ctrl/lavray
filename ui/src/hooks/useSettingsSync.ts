@@ -65,6 +65,7 @@ async function listen(
   let received = false;
   const iterator = core.settings.subscribeSettings({}, { signal })[Symbol.asyncIterator]();
   const first = iterator.next(); // запрос уходит здесь, раньше GetSettings
+  first.catch(() => undefined); // обрыв до await ниже не должен стать необработанным отказом
   try {
     const initial = await readAll(core);
     onMap((prev) => ({ ...prev, ...initial }));

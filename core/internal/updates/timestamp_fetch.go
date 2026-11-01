@@ -141,8 +141,10 @@ func firstErr(cur, next error) error {
 	return next
 }
 
-// maxTimestampHorizon — максимальное окно свежести timestamp (§3.2).
-const maxTimestampHorizon = 7 * 24 * time.Hour
+// maxTimestampHorizon — максимальное окно свежести timestamp (§3.2: 7 суток) плюс
+// допуск на расхождение часов в час: подписанный «сейчас + 7 суток» документ не
+// должен отвергаться клиентом, у которого часы чуть отстают.
+const maxTimestampHorizon = 7*24*time.Hour + time.Hour
 
 func expires(t time.Time, now time.Time) bool {
 	return !now.Before(t) // zero time = истёкший (строгость)

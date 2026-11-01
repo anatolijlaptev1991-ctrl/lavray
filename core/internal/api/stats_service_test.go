@@ -8,6 +8,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,7 +26,7 @@ func (e *trafficEnv) subscribe(ctx context.Context, req *lavrayv1.SubscribeStats
 
 // pump непрерывно наращивает счётчики соединений: любой кадр потока видит
 // прирост, как при живом трафике. Останавливается вместе с тестом.
-func (e *trafficEnv) pump(ids ...string) {
+func (e *trafficEnv) pump(ids ...string) (stopPump func()) {
 	stop := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
@@ -41,7 +42,10 @@ func (e *trafficEnv) pump(ids ...string) {
 			}
 		}
 	}()
-	e.t.Cleanup(func() { close(stop); <-done })
+	var once sync.Once
+	stopPump = func() { once.Do(func() { close(stop); <-done }) }
+	e.t.Cleanup(stopPump)
+	return stopPump
 }
 
 func tagByName(f *lavrayv1.StatsSnapshot, name string) *lavrayv1.TagStat {
@@ -190,7 +194,7 @@ func TestStatsFinalFrameOnDisconnect(t *testing.T) {
 	e := newTrafficEnv(t)
 	e.connect()
 	e.open(idA, "proxy", "a:1", 1)
-	e.pump(idA)
+	stopPump := e.pump(idA)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	var serr error
@@ -198,6 +202,9 @@ func TestStatsFinalFrameOnDisconnect(t *testing.T) {
 	if f, ok := next(ch, 3*time.Second); !ok || f.Final {
 		t.Fatalf("обычный кадр: %+v", f)
 	}
+	// Трафик останавливается до отключения: иначе байты, добавленные после
+	// финального кадра, расходятся с итогом источника (флейк CI).
+	stopPump()
 	e.disconnect(&lavrayv1.DisconnectRequest{})
 	var final *lavrayv1.StatsSnapshot
 	for i := 0; i < 10 && final == nil; i++ {

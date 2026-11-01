@@ -6,6 +6,7 @@ package api
 // настоящим хранилищем и клиентом Connect, быстрые параметры Argon2id.
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"os"
@@ -195,7 +196,7 @@ func customBackup(t *testing.T, st *store.Store, password string, mutate func(db
 		_ = db.Close()
 	}
 	raw := readFile(t, snap)
-	body, err := backup.Pack([]byte(`{"app_version":"9.9.9","created_at_ms":1}`), raw)
+	body, err := backup.Pack([]byte(`{"app_version":"9.9.9","created_at_ms":1}`), bytes.NewReader(raw))
 	if err != nil {
 		t.Fatal(err)
 	}

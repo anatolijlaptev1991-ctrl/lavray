@@ -35,11 +35,6 @@ import (
 // реализованную» процедуру остаться в списке.
 var allowUnimplemented = map[string]bool{
 	// unimplemented.go (заглушки W6).
-	"/lavray.v1.RoutingService/CreatePreset":       true,
-	"/lavray.v1.RoutingService/UpdatePreset":       true,
-	"/lavray.v1.RoutingService/DeletePreset":       true,
-	"/lavray.v1.RoutingService/ResetBuiltinPreset": true,
-	"/lavray.v1.RoutingService/ImportNekoRayRoute": true,
 	// Реализация в Ф3 (T-75).
 	"/lavray.v1.UpdateService/ApplyUpdates": true,
 	// GatewayService: встроенный UnimplementedGatewayServiceHandler (Ф7).

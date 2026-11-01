@@ -270,7 +270,12 @@ describe('экран «Соединения» (T-79)', () => {
     await push(frame(MIXED));
     await click(rows()[0]!.querySelector('button.conn-menu')!);
     const items = Array.from(document.querySelectorAll('[role="menuitem"]'));
-    expect(items.map((i) => i.textContent)).toEqual(['Copy address', 'Close connection']);
+    expect(items.map((i) => i.textContent)).toEqual([
+      'Copy address',
+      'Create rule: direct',
+      'Create rule: via proxy',
+      'Close connection',
+    ]);
     await click(items[0]!);
     expect(writeText).toHaveBeenCalledWith('video.example.com:443');
     expect(document.querySelector('[role="status"]')?.textContent).toBe('Address copied');
@@ -289,7 +294,7 @@ describe('экран «Соединения» (T-79)', () => {
     await open();
     await push(frame(MIXED));
     await click(rows()[1]!.querySelector('button.conn-menu')!);
-    await click(document.querySelectorAll('[role="menuitem"]')[1]!);
+    await click(document.querySelectorAll('[role="menuitem"]')[3]!);
     expect(closeConnection).toHaveBeenCalledTimes(1);
     expect(closeConnection).toHaveBeenCalledWith({ id: 'd' });
     expect(banner()).toBeNull();
@@ -301,7 +306,11 @@ describe('экран «Соединения» (T-79)', () => {
     await push(frame([conn('b')], ['a']));
     const closedRow = rows().find((r) => r.classList.contains('muted'))!;
     await click(closedRow.querySelector('button.conn-menu')!);
-    expect(Array.from(document.querySelectorAll('[role="menuitem"]')).map((i) => i.textContent)).toEqual(['Copy address']);
+    expect(Array.from(document.querySelectorAll('[role="menuitem"]')).map((i) => i.textContent)).toEqual([
+      'Copy address',
+      'Create rule: direct',
+      'Create rule: via proxy',
+    ]);
   });
 
   it('close_not_found_is_quiet: NOT_FOUND — уже закрыто, ни баннера, ни сообщения', async () => {
@@ -309,7 +318,7 @@ describe('экран «Соединения» (T-79)', () => {
     await open();
     await push(frame(MIXED));
     await click(rows()[0]!.querySelector('button.conn-menu')!);
-    await click(document.querySelectorAll('[role="menuitem"]')[1]!);
+    await click(document.querySelectorAll('[role="menuitem"]')[3]!);
     expect(closeConnection).toHaveBeenCalledTimes(1);
     expect(banner()).toBeNull();
     expect(document.querySelector('[role="status"]')).toBeNull();
@@ -321,7 +330,7 @@ describe('экран «Соединения» (T-79)', () => {
     await open();
     await push(frame(MIXED));
     await click(rows()[0]!.querySelector('button.conn-menu')!);
-    await click(document.querySelectorAll('[role="menuitem"]')[1]!);
+    await click(document.querySelectorAll('[role="menuitem"]')[3]!);
     expect(banner()?.textContent).toContain('id is not a UUID');
   });
 

@@ -27,9 +27,9 @@ import (
 // Connect / Disconnect / Restart
 // ============================================================================
 
-// startRun — общая логика запуска Connect и RestartProfile: сборка конфига,
+// startRunLocked — общая логика запуска Connect и RestartProfile: сборка конфига,
 // валидаторы, старт менеджера. Возвращает статус и предупреждения сборки.
-func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavrayv1.ConnectMode) (*lavrayv1.CoreStatus, []string, error) {
+func (s *Server) startRunLocked(ctx context.Context, profile *model.Profile, mode lavrayv1.ConnectMode) (*lavrayv1.CoreStatus, []string, error) {
 	// Гейт внешних ядер (решение №5): naive/custom-external off по умолчанию.
 	if profile.Type == model.TypeNaive || profile.Type == model.TypeCustomExternal {
 		if !s.settingBool("enable_external_cores") {
@@ -92,7 +92,7 @@ func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavr
 	if err != nil {
 		return nil, nil, err
 	}
-	warnings = append(warnings, tunMixedWarning(result.Config, mode)...) // T-55: по факту конфига
+	warnings = append(warnings, s.buildWarnings(result, mode)...)
 	configJSON, err := cfgbuild.MarshalIndent(result.Config)
 	if err != nil {
 		return nil, nil, err
@@ -144,7 +144,7 @@ func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.Conn
 			return nil, err
 		}
 		warnings := append([]string{"validate_only: конфиг собран и валиден, инстанс не запущен"}, inlineWarns...)
-		warnings = append(warnings, tunMixedWarning(built.Config, in.GetMode())...) // T-55: по факту конфига
+		warnings = append(warnings, s.buildWarnings(built, in.GetMode())...)
 		return connect.NewResponse(&lavrayv1.ConnectResponse{
 			Status:   s.coreStatus(),
 			Warnings: warnings,

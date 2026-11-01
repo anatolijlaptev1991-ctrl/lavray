@@ -124,3 +124,16 @@ func TestParseCustomRules(t *testing.T) {
 		t.Fatal("невалидный формат должен давать ошибку")
 	}
 }
+
+// T-80: пользовательские наборы хранят custom-правила массивом (как в proto);
+// сборка конфига читает оба вида записи одинаково.
+func TestParseCustomRulesArrayForm(t *testing.T) {
+	arr, err := parseCustomRules(`[{"port":53,"outbound":"block"}]`, "k")
+	if err != nil || len(arr) != 1 {
+		t.Fatalf("массив: %v %v", arr, err)
+	}
+	obj, _ := parseCustomRules(`{"rules":[{"port":53,"outbound":"block"}]}`, "k")
+	if len(obj) != 1 || obj[0].(map[string]any)["port"] != arr[0].(map[string]any)["port"] {
+		t.Fatalf("виды записи дают разные правила: %v / %v", arr, obj)
+	}
+}

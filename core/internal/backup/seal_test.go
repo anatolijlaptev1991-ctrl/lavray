@@ -242,3 +242,44 @@ func FuzzOpenNeverPanicsNeverSucceeds(f *testing.F) {
 		}
 	})
 }
+
+// FuzzOpenMutatedValidFile — S: файл, полученный правкой настоящей копии, и
+// открытие ВЕРНЫМ паролем — это путь AEAD и keycheck. Успехом может закончиться
+// только открытие неизменённого файла.
+func FuzzOpenMutatedValidFile(f *testing.F) {
+	const pw = "fuzz-correct-pw"
+	payload := []byte("полезная нагрузка резервной копии")
+	// соль и nonce фиксированы: рабочий процесс фаззера строит тот же valid,
+	// что и координатор, и сид «исходный файл» действительно равен valid
+	opts := fastOpts()
+	opts.Rand = &countRand{}
+	valid, err := Seal(pw, payload, opts)
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(valid)
+	for _, i := range []int{0, offVersion, offT, offM, offP, offSalt, offNonce, offKeyCheck, offReserved, HeaderSize, len(valid) - 1} {
+		mod := bytes.Clone(valid)
+		mod[i] ^= 0x01
+		f.Add(mod)
+	}
+	f.Add(valid[:HeaderSize+TagSize])
+	f.Add(valid[:len(valid)-1])
+	f.Add(append(bytes.Clone(valid), 0))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		// дорогие параметры KDF фаззер не проверяет: время и память
+		if h, err := ParseHeader(data); err == nil && (h.Params.MKiB > 16*1024 || h.Params.T > 3 || h.Params.P > 4) {
+			return
+		}
+		got, err := Open(pw, data)
+		if bytes.Equal(data, valid) {
+			if err != nil || !bytes.Equal(got, payload) {
+				t.Fatalf("исходный файл не открылся: %v", err)
+			}
+			return
+		}
+		if err == nil {
+			t.Fatalf("изменённый файл (%d байт) открылся: %q", len(data), got)
+		}
+	})
+}

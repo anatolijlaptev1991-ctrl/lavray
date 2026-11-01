@@ -1108,7 +1108,9 @@ service RoutingService {
   // клонировать (Create с builtin_id источником) или Reset к ревизии.
   rpc CreatePreset(CreatePresetRequest) returns (RoutingPreset);
   rpc UpdatePreset(UpdatePresetRequest) returns (UpdatePresetResponse);
-  rpc DeletePreset(DeletePresetRequest) returns (Empty); // нельзя последний (FR-UI-140)
+  // Встроенный удалить нельзя; удаление активного переключает на «global»
+  // (T-80: DeletePresetResponse.new_active_id, needs_profile_restart).
+  rpc DeletePreset(DeletePresetRequest) returns (DeletePresetResponse);
 
   // Активация набора. Если соединение активно — ответ предлагает перезапуск
   // (needs_profile_restart, FR-UI-141/062); headless может применить сам
@@ -1125,7 +1127,14 @@ service RoutingService {
   // NekoBox — config/routes_box/<name> (поправка аудита 2026-10; каталог
   // routes/ старых форков тоже принимается). Эталон конвертации —
   // nekobox-ru-bypass-games «RU-bypass + Games» (PRESET-LAV-RU §3).
-  rpc ImportNekoRayRoute(ImportNekoRayRouteRequest) returns (RoutingPreset);
+  rpc ImportNekoRayRoute(ImportNekoRayRouteRequest) returns (ImportNekoRayRouteResponse);
+
+  // Обмен наборами файлом (T-80, формат presets/SCHEMA.md). Экспорт отдаёт
+  // JSON набора (встроенного тоже); импорт принимает JSON LAVRay или маршрут
+  // NekoRay (формат определяется сам) и ВСЕГДА создаёт новый пользовательский
+  // набор с новым id — id встроенного файл занять не может.
+  rpc ExportPreset(ExportPresetRequest) returns (ExportPresetResponse);
+  rpc ImportPreset(ImportPresetRequest) returns (ImportPresetResponse);
 }
 
 // ----------------------------------------------------------------------------
@@ -1167,6 +1176,15 @@ message RoutingPreset {
   // привязан к спискам маршрутов (FR-UI-150). Редактируется через DnsService,
   // но хранится здесь.
   DnsSettings dns = 22;
+
+  // Источник копии (T-80): id и ревизия встроенного набора, с которого она
+  // снята (пусто / 0 — набор создан с нуля или импортирован). Только чтение:
+  // ядро проставляет их само, значения от клиента игнорируются.
+  string builtin_source_id = 23;
+  int32 builtin_source_revision = 24;
+  // Встроенный источник обновился (его ревизия выше записанной): UI
+  // предлагает ResetBuiltinPreset. Вычисляется при чтении, не хранится.
+  bool source_updated = 25;
 }
 
 message ProcessRule {
@@ -1206,10 +1224,19 @@ message UpdatePresetRequest {
 message UpdatePresetResponse {
   RoutingPreset preset = 1;
   int32 new_revision = 2;
+  // Изменён активный набор при работающем соединении (T-80).
+  bool needs_profile_restart = 3;
 }
 
 message DeletePresetRequest {
   string id = 1;
+}
+
+message DeletePresetResponse {
+  // Удалён активный набор при работающем соединении (T-80).
+  bool needs_profile_restart = 1;
+  // Непусто, если активным стал другой набор ("global" после удаления активного).
+  string new_active_id = 2;
 }
 
 message ActivatePresetRequest {
@@ -1231,6 +1258,29 @@ message ResetBuiltinPresetRequest {
 message ImportNekoRayRouteRequest {
   string nekobox_json = 1; // содержимое файла routes_box/<name> (или routes/<name>)
   optional string name = 2;
+}
+
+message ImportNekoRayRouteResponse {
+  RoutingPreset preset = 1; // созданный пользовательский набор
+  repeated string warnings = 2; // что конвертер отбросил или заменил
+}
+
+message ExportPresetRequest {
+  string id = 1;
+}
+
+message ExportPresetResponse {
+  string json = 1; // файл набора (presets/SCHEMA.md), отступ в 2 пробела
+  string suggested_name = 2; // имя файла без расширения (латиница, цифры, «-»)
+}
+
+message ImportPresetRequest {
+  string json = 1; // файл набора LAVRay либо маршрут NekoRay, до 1 МиБ
+}
+
+message ImportPresetResponse {
+  RoutingPreset preset = 1;
+  repeated string warnings = 2;
 }
 
 // ============================================================================
@@ -2144,6 +2194,8 @@ message RevokeSessionRequest {
 //                         connection_active
 //   RESOURCE_EXHAUSTED  — backup_too_large
 //   ABORTED             — backup_busy (идёт другая операция с копией)
+//   INTERNAL            — backup_failed (прочий сбой; подробности только в журнале
+//                         ядра, в ответе пути и тексты ошибок ОС не передаются)
 service BackupService {
   // Собрать и зашифровать копию. Файл сохраняет клиент (диалог «Сохранить как»).
   rpc ExportBackup(ExportBackupRequest) returns (ExportBackupResponse);

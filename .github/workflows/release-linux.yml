@@ -56,7 +56,9 @@ jobs:
           tags="$(tr -d '[:space:]' < BUILD_TAGS),with_webui"
           mkdir -p ../dist
           for arch in amd64 arm64; do
-            GOOS=linux GOARCH="$arch" go build -tags "$tags" -trimpath -ldflags '-s -w' \
+            # T-75: версия приложения в ядре — флагом компоновщика (как в release-windows).
+            ld="-s -w -X github.com/anatolijlaptev1991-ctrl/lavray/core/internal/version.Version=${VERSION}"
+            GOOS=linux GOARCH="$arch" go build -tags "$tags" -trimpath -ldflags "$ld" \
               -o "../dist/lavray-core-linux-${arch}" ./cmd/lavray-core/
             # В бинарнике записан with_webui, а панель действительно встроена.
             go version -m "../dist/lavray-core-linux-${arch}" | grep -q -- "-tags=${tags}" \

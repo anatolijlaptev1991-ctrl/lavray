@@ -2008,6 +2008,11 @@ message RollbackResponse {
   bool success = 1;
   optional string restored_version = 2;
   optional string error = 3;
+  // Откат пресетов или гео-набора изменил данные, по которым собран работающий
+  // профиль (активный встроенный набор, каталог geo): чтобы они вступили в силу,
+  // профиль нужно перезапустить (T-75/7.5; для применения то же сообщает событие
+  // ready_for_restart с причиной "profile").
+  bool needs_profile_restart = 4;
 }
 
 message GetUpdateStateRequest {}

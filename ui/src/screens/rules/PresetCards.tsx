@@ -74,7 +74,7 @@ export function PresetCards({ presets, activeId, onActivate, onMenu }: PresetCar
               <span className="badge">
                 {t('preset.rev')} {p.revision}
               </span>
-              {p.sourceUpdated && <span className="badge badge-warn">{t('rt.sourceUpdated')}</span>}
+              {!p.builtin && p.sourceUpdated && <span className="badge badge-warn">{t('rt.sourceUpdated')}</span>}
             </span>
           </div>
         );

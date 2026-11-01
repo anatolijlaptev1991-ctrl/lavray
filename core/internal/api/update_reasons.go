@@ -27,6 +27,7 @@ const (
 	ReasonRootRotation        = "root_rotation"
 	ReasonArtifactRoleMissing = "artifact_role_missing"
 	ReasonMirrorUnreachable   = "mirror_unreachable" // зеркало метаданных молчит (проверка не удалась, а не «нет обновлений»)
+	ReasonManifestMismatch    = "manifest_mismatch"  // манифест подменён: не тот документ, что пиннит timestamp
 	ReasonClockSkew           = "clock_skew"         // timestamp «из будущего»: часы компьютера отстают
 	ReasonActiveSession       = "active_session"
 	ReasonNotStaged           = "not_staged"
@@ -41,6 +42,8 @@ func updateReason(err error) string {
 	switch {
 	case errors.Is(err, updates.ErrNotConfigured):
 		return ReasonNotConfigured
+	case errors.Is(err, updates.ErrManifestMismatch):
+		return ReasonManifestMismatch
 	case errors.Is(err, updates.ErrArtifactRoleMissing):
 		return ReasonArtifactRoleMissing
 	case errors.Is(err, updates.ErrRootRotation), errors.Is(err, updates.ErrRootNotAdvanced):

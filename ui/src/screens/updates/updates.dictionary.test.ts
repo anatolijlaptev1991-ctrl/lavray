@@ -115,7 +115,7 @@ describe('ключи upd.* центра обновлений во всех пя�
     ];
     const reasons = [
       'bad_signature', 'expired', 'serial_rollback', 'wrong_product', 'wrong_channel', 'root_rotation',
-      'artifact_role_missing', 'sha256_mismatch', 'truncated',
+      'artifact_role_missing', 'sha256_mismatch', 'truncated', 'manifest_mismatch',
     ];
     for (const lang of LANGUAGES) {
       for (const code of codes) expect(dict(lang)[`upd.err.${code}`], `${lang} upd.err.${code}`).toBeTruthy();

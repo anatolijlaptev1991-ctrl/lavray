@@ -15,7 +15,13 @@ import (
 // не зависит от id во входном наборе и держит лимит; пачка вставок работает
 // через List предыдущего шага.
 func TestPlanInsertPure(t *testing.T) {
-	base, _, _ := builtinPreset("global")
+	embedded, _ := presets.BuiltinPresets()
+	var base *presets.Preset
+	for _, p := range embedded {
+		if p.ID == "global" {
+			base = p
+		}
+	}
 	mk := func(name string) *presets.Preset {
 		p := presets.NewCustomFrom(base, "custom:ignored")
 		p.Name = presets.Localized{"en": name}

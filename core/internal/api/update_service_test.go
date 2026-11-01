@@ -146,3 +146,27 @@ func TestCheckMirrorUnreachableNamesTheHost(t *testing.T) {
 		t.Fatal("last_checked_at не меняется при неудачной проверке")
 	}
 }
+
+// Подменённый манифест: FAILED_PRECONDITION с устойчивой причиной manifest_mismatch
+// в начале сообщения и в заголовке, как у остальных причин проверки.
+func TestCheckSwappedManifestHasReason(t *testing.T) {
+	f := newUpdFix(t, "0.5.0", nil)
+	f.release(updatestest.Release{Version: "0.6.0", Serial: 1, TSVersion: 1})
+	old, err := f.src.Fetch(context.Background(), "manifest-stable.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.release(updatestest.Release{Version: "0.7.0", Serial: 2, TSVersion: 2})
+	f.src.Put("manifest-stable.json", old) // подпись настоящая, документ не тот, что пиннит timestamp
+	_, err = f.check()
+	var ce *connect.Error
+	if !errors.As(err, &ce) || ce.Code() != connect.CodeFailedPrecondition {
+		t.Fatalf("ожидался FAILED_PRECONDITION: %v", err)
+	}
+	if ce.Meta().Get(UpdateReasonHeader) != ReasonManifestMismatch || !strings.HasPrefix(ce.Message(), ReasonManifestMismatch+": ") {
+		t.Fatalf("причина manifest_mismatch в заголовке и сообщении: %q %q", ce.Meta().Get(UpdateReasonHeader), ce.Message())
+	}
+	if f.srv.loadUpdateState().LastCheckedAt != 0 {
+		t.Fatal("last_checked_at не меняется при неудачной проверке")
+	}
+}

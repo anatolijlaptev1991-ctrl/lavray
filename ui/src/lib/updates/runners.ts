@@ -4,7 +4,7 @@
 // загрузка, установка. Каждый шаг ходит в ядро (и оболочку) и превращает
 // результат в действия автомата через `dispatch`; React тут не нужен.
 import { UpdateChannel, UpdateComponent } from '../../gen/lavray_pb';
-import type { UpdateEvent } from '../../gen/lavray_pb';
+import type { CheckUpdatesResponse, UpdateEvent } from '../../gen/lavray_pb';
 import type { CoreClients } from '../core';
 import { appUpdateOf, versionsOf } from './appUpdate';
 import { classifyCoreError, shellErrorKey, shellRetryTarget } from './errors';
@@ -24,12 +24,21 @@ export type Dispatch = (action: FlowAction) => void;
 
 const APP_ONLY = [UpdateComponent.APP];
 
-/** Проверка. Возвращает время успешной проверки (мс) или `null`, если проверка не удалась. */
-export async function runCheck(core: CoreClients, channel: Channel, dispatch: Dispatch): Promise<number | null> {
+/**
+ * Проверка. Возвращает время успешной проверки (мс) или `null`, если проверка не удалась.
+ * `onResponse` получает ответ целиком: наборы и гео-данные показывает отдельная карточка.
+ */
+export async function runCheck(
+  core: CoreClients,
+  channel: Channel,
+  dispatch: Dispatch,
+  onResponse?: (res: CheckUpdatesResponse) => void,
+): Promise<number | null> {
   try {
     const res = await core.updates.checkUpdates({
       channel: channel === 'beta' ? UpdateChannel.BETA : UpdateChannel.STABLE,
     });
+    onResponse?.(res);
     dispatch({ type: 'checkDone', update: appUpdateOf(res, channel), versions: versionsOf(res) });
     return Number(res.lastCheckedAtMs);
   } catch (e) {

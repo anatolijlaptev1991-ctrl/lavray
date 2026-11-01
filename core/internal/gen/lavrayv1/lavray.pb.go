@@ -12784,8 +12784,13 @@ type RollbackResponse struct {
 	Success         bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
 	RestoredVersion *string                `protobuf:"bytes,2,opt,name=restored_version,json=restoredVersion,proto3,oneof" json:"restored_version,omitempty"`
 	Error           *string                `protobuf:"bytes,3,opt,name=error,proto3,oneof" json:"error,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Откат пресетов или гео-набора изменил данные, по которым собран работающий
+	// профиль (активный встроенный набор, каталог geo): чтобы они вступили в силу,
+	// профиль нужно перезапустить (T-75/7.5; для применения то же сообщает событие
+	// ready_for_restart с причиной "profile").
+	NeedsProfileRestart bool `protobuf:"varint,4,opt,name=needs_profile_restart,json=needsProfileRestart,proto3" json:"needs_profile_restart,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *RollbackResponse) Reset() {
@@ -12837,6 +12842,13 @@ func (x *RollbackResponse) GetError() string {
 		return *x.Error
 	}
 	return ""
+}
+
+func (x *RollbackResponse) GetNeedsProfileRestart() bool {
+	if x != nil {
+		return x.NeedsProfileRestart
+	}
+	return false
 }
 
 type GetUpdateStateRequest struct {
@@ -16368,11 +16380,12 @@ const file_lavray_proto_rawDesc = "" +
 	"components\x128\n" +
 	"\x18active_session_confirmed\x18\x02 \x01(\bR\x16activeSessionConfirmed\"K\n" +
 	"\x0fRollbackRequest\x128\n" +
-	"\tcomponent\x18\x01 \x01(\x0e2\x1a.lavray.v1.UpdateComponentR\tcomponent\"\x96\x01\n" +
+	"\tcomponent\x18\x01 \x01(\x0e2\x1a.lavray.v1.UpdateComponentR\tcomponent\"\xca\x01\n" +
 	"\x10RollbackResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12.\n" +
 	"\x10restored_version\x18\x02 \x01(\tH\x00R\x0frestoredVersion\x88\x01\x01\x12\x19\n" +
-	"\x05error\x18\x03 \x01(\tH\x01R\x05error\x88\x01\x01B\x13\n" +
+	"\x05error\x18\x03 \x01(\tH\x01R\x05error\x88\x01\x01\x122\n" +
+	"\x15needs_profile_restart\x18\x04 \x01(\bR\x13needsProfileRestartB\x13\n" +
 	"\x11_restored_versionB\b\n" +
 	"\x06_error\"\x17\n" +
 	"\x15GetUpdateStateRequest\"\xce\x01\n" +

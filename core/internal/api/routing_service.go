@@ -14,7 +14,7 @@ import (
 
 // presetProto — набор → proto с вычисленным source_updated.
 func (s *Server) presetProto(p *presets.Preset) (*lavrayv1.RoutingPreset, error) {
-	rev, err := builtinRevisions()
+	rev, err := s.builtinRevisions()
 	if err != nil {
 		return nil, err
 	}
@@ -23,7 +23,7 @@ func (s *Server) presetProto(p *presets.Preset) (*lavrayv1.RoutingPreset, error)
 
 // allPresets — встроенные наборы, затем пользовательские (порядок карточек в UI).
 func (s *Server) allPresets() ([]*presets.Preset, error) {
-	list, err := presets.BuiltinPresets()
+	list, err := s.builtinList()
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (s *Server) ListPresets(ctx context.Context, req *connect.Request[lavrayv1.
 	if err != nil {
 		return nil, mapErr(err)
 	}
-	rev, err := builtinRevisions()
+	rev, err := s.builtinRevisions()
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -73,7 +73,7 @@ func (s *Server) ActivatePreset(ctx context.Context, req *connect.Request[lavray
 	// Проверка набора и запись активного id — под замком репозитория: иначе
 	// DeletePreset между ними оставил бы активным уже удалённый набор.
 	err := s.presetRepo.Locked(func(list []*presets.Preset) error {
-		p, err := lookupPreset(list, req.Msg.Id)
+		p, err := s.lookupPreset(list, req.Msg.Id)
 		if err != nil {
 			return err
 		}

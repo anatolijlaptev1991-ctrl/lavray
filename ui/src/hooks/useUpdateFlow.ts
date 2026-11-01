@@ -3,8 +3,9 @@
 // useUpdateFlow.ts — поток «проверить → скачать → установить» для экрана
 // «Обновления» (T-75). Состояние держит чистый редьюсер; замок от двойных кликов
 // и отмену даёт useStepRunner; сами шаги — lib/updates/runners.ts.
-import { useCallback, useMemo, useReducer, useState } from 'react';
+import { useCallback, useMemo, useReducer, useRef, useState } from 'react';
 import type { Dispatch } from 'react';
+import type { CheckUpdatesResponse } from '../gen/lavray_pb';
 import { flowReducer, initialFlowState } from '../lib/updates/flowReducer';
 import { APPLY_IDLE_MS, DOWNLOAD_IDLE_MS, runCheck, runDownload, runInstall } from '../lib/updates/runners';
 import type { Channel, FlowAction, FlowState } from '../lib/updates/types';
@@ -19,6 +20,8 @@ export interface UpdateFlowOptions {
   readonly downloadIdleMs?: number;
   /** То же для повторной проверки перед установкой. */
   readonly applyIdleMs?: number;
+  /** Ответ успешной проверки целиком (наборы и гео-данные живут вне автомата). */
+  readonly onCheck?: (res: CheckUpdatesResponse) => void;
 }
 
 export interface UpdateFlowApi {
@@ -61,12 +64,14 @@ export function useUpdateFlow(channel: Channel, options: UpdateFlowOptions = {})
   const { accepts, run, cancel } = useStepRunner(state);
   const downloadIdle = options.downloadIdleMs ?? DOWNLOAD_IDLE_MS;
   const applyIdle = options.applyIdleMs ?? APPLY_IDLE_MS;
+  const onCheck = useRef(options.onCheck);
+  onCheck.current = options.onCheck;
 
   const check = useCallback((): void => {
     if (accepts('checkStart') === null) return;
     dispatch({ type: 'checkStart' });
     run(async () => {
-      const ms = await runCheck(core, channel, dispatch);
+      const ms = await runCheck(core, channel, dispatch, (res) => onCheck.current?.(res));
       if (ms !== null && ms > 0) setLastChecked(ms);
     });
   }, [accepts, run, core, channel]);

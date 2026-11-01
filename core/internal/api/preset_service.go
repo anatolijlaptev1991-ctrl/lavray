@@ -34,7 +34,7 @@ func (s *Server) CreatePreset(ctx context.Context, req *connect.Request[lavrayv1
 	err := s.presetRepo.Modify(func(list []*presets.Preset) ([]*presets.Preset, error) {
 		in := presetFromProtoOrNil(m.Preset)
 		if src != "" {
-			base, err := lookupPreset(list, src)
+			base, err := s.lookupPreset(list, src)
 			if err != nil {
 				return nil, err
 			}
@@ -80,8 +80,8 @@ func copyName(name string) string {
 }
 
 // lookupPreset — встроенный набор или набор из list; иначе NOT_FOUND.
-func lookupPreset(list []*presets.Preset, id string) (*presets.Preset, error) {
-	if p, ok, err := builtinPreset(id); err != nil || ok {
+func (s *Server) lookupPreset(list []*presets.Preset, id string) (*presets.Preset, error) {
+	if p, ok, err := s.builtinPreset(id); err != nil || ok {
 		return p, err
 	}
 	if i := indexOfPreset(list, id); i >= 0 {
@@ -93,7 +93,7 @@ func lookupPreset(list []*presets.Preset, id string) (*presets.Preset, error) {
 // editableIndex — позиция пользовательского набора в list. Встроенный —
 // FAILED_PRECONDITION (только чтение), неизвестный — NOT_FOUND.
 func editableIndex(list []*presets.Preset, id string) (int, error) {
-	if _, ok, err := builtinPreset(id); err != nil {
+	if ok, err := isBuiltinID(id); err != nil {
 		return -1, err
 	} else if ok {
 		return -1, failedPrecondition("встроенный набор %q только для чтения: сделайте копию", id)
@@ -122,7 +122,7 @@ func (s *Server) ResetBuiltinPreset(ctx context.Context, req *connect.Request[la
 			return nil, err
 		}
 		stored := list[i]
-		src, ok, err := builtinPreset(stored.SourceID)
+		src, ok, err := s.builtinPreset(stored.SourceID)
 		if err != nil {
 			return nil, err
 		}

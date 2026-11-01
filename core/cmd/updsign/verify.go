@@ -116,18 +116,24 @@ func (c *cli) verifyChannel(trust *updates.Trust, src dirSource, channel, produc
 	if err != nil {
 		return err
 	}
-	if res.Manifest == nil || res.Manifest.App == nil {
-		return errors.New("в манифесте нет секции app")
-	}
 	mf := res.Manifest
-	fmt.Fprintf(c.out, "ok  root v%d, timestamp v%d, manifest-%s serial %d, версия %s\n",
-		res.Trust.Root().Version, res.Timestamp.Version, channel, mf.Serial, mf.App.Version)
-	for key := range mf.App.Assets {
-		if err := c.verifyAsset(res, key, assetsDir); err != nil {
-			return fmt.Errorf("актив %s: %w", key, err)
+	if mf == nil || (mf.App == nil && len(mf.Presets) == 0 && mf.Geo == nil) {
+		return errors.New("в манифесте нет ни app, ни presets, ни geo")
+	}
+	what := "данные без приложения"
+	if mf.App != nil {
+		what = "версия " + mf.App.Version
+	}
+	fmt.Fprintf(c.out, "ok  root v%d, timestamp v%d, manifest-%s serial %d, %s\n",
+		res.Trust.Root().Version, res.Timestamp.Version, channel, mf.Serial, what)
+	if mf.App != nil {
+		for key := range mf.App.Assets {
+			if err := c.verifyAsset(res, key, assetsDir); err != nil {
+				return fmt.Errorf("актив %s: %w", key, err)
+			}
 		}
 	}
-	return nil
+	return c.verifyData(mf, assetsDir)
 }
 
 // verifyAsset: без каталога установщиков проверяется только разбор подписи и

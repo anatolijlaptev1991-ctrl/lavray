@@ -56,7 +56,7 @@ export function RuntimeConfigCard(): JSX.Element {
           <>
             <button className="btn btn-ghost btn-sm" onClick={() => void copy()}>
               <Icon name="copy" />
-              <span>{copied ? t('toast.copied') : t('diag.cfg.copy')}</span>
+              <span>{copied ? t('diag.cfg.copied') : t('diag.cfg.copy')}</span>
             </button>
             <button
               className="btn btn-ghost btn-sm"

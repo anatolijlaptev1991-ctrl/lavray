@@ -137,8 +137,9 @@ func TestApplyWithoutDownloadAndOtherComponents(t *testing.T) {
 	}
 	for comp, want := range map[lavrayv1.UpdateComponent]connect.Code{
 		lavrayv1.UpdateComponent_UPDATE_COMPONENT_CORE:    connect.CodeFailedPrecondition,
-		lavrayv1.UpdateComponent_UPDATE_COMPONENT_PRESETS: connect.CodeUnimplemented,
-		lavrayv1.UpdateComponent_UPDATE_COMPONENT_GEO:     connect.CodeUnimplemented,
+		lavrayv1.UpdateComponent_UPDATE_COMPONENT_PRESETS: connect.CodeFailedPrecondition, // T-75/7.5: нужна загрузка
+		lavrayv1.UpdateComponent_UPDATE_COMPONENT_GEO:     connect.CodeFailedPrecondition,
+		lavrayv1.UpdateComponent_UPDATE_COMPONENT_WEBUI:   connect.CodeUnimplemented,
 	} {
 		_, err := collectEvents(f.cl.ApplyUpdates(context.Background(), connect.NewRequest(
 			&lavrayv1.ApplyUpdatesRequest{Components: []lavrayv1.UpdateComponent{comp}})))

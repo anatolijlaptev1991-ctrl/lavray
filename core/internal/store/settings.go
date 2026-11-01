@@ -51,3 +51,27 @@ func (s *Store) Settings() (map[string]string, error) {
 	}
 	return out, rows.Err()
 }
+
+// DeleteSettings удаляет ключи одной транзакцией (сброс к умолчанию) и
+// возвращает те, у которых была запись, в порядке keys. Отсутствующие ключи
+// ошибкой не считаются.
+func (s *Store) DeleteSettings(keys []string) ([]string, error) {
+	var deleted []string
+	err := s.withTx(func(tx *sql.Tx) error {
+		deleted = nil
+		for _, key := range keys {
+			res, err := tx.Exec(`DELETE FROM settings WHERE key = ?`, key)
+			if err != nil {
+				return err
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				deleted = append(deleted, key)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return deleted, nil
+}

@@ -35,12 +35,6 @@ import (
 // реализованную» процедуру остаться в списке.
 var allowUnimplemented = map[string]bool{
 	// unimplemented.go (заглушки W6).
-	"/lavray.v1.ProfileService/RemoveUnavailableProfiles": true,
-	"/lavray.v1.ProfileService/DeduplicateProfiles":       true,
-	"/lavray.v1.ProfileService/ExportConfig":              true,
-	"/lavray.v1.ProfileService/ResolveDomains":            true,
-	"/lavray.v1.SettingsService/ResetSettings":            true,
-	"/lavray.v1.SettingsService/SubscribeSettings":        true,
 	// Реализация в Ф3 (T-75).
 	"/lavray.v1.UpdateService/ApplyUpdates": true,
 	// WebSessionService: ПОСТОЯННАЯ запись (T-76). Сервис включается только при

@@ -3,8 +3,8 @@
 package api
 
 // settings_event.go — событие SettingsChanged после замены настроек целиком
-// (восстановление копии, T-83). Подписчики лежат в Server.setSubs; поток
-// SubscribeSettings появится в «хвостах A» и будет брать события оттуда же.
+// (восстановление копии, T-83), SetSettings и ResetSettings. Рассылка —
+// settings_broadcast.go, поток — settings_subscribe.go.
 
 import (
 	"sort"
@@ -36,20 +36,4 @@ func settingsDiff(before, after map[string]string) (*lavrayv1.SettingsChanged, b
 	}
 	sort.Strings(ev.Removed)
 	return ev, needsRestart
-}
-
-// publishSettingsChanged рассылает событие подписчикам без блокировки:
-// у кого буфер полон, тот событие пропускает.
-func (s *Server) publishSettingsChanged(ev *lavrayv1.SettingsChanged) {
-	if len(ev.Changed) == 0 && len(ev.Removed) == 0 {
-		return
-	}
-	s.setMu.Lock()
-	defer s.setMu.Unlock()
-	for ch := range s.setSubs {
-		select {
-		case ch <- ev:
-		default:
-		}
-	}
 }

@@ -13,7 +13,6 @@ package api
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"connectrpc.com/connect"
 
@@ -127,20 +126,6 @@ func (s *Server) startRunLocked(ctx context.Context, profile *model.Profile, mod
 	return s.coreStatus(), warnings, nil
 }
 
-// rememberedMode — последний режим профиля (remember.modes, перенос §5.4;
-// формат NekoBox — список "system_proxy"/"tun"; пусто = не запомнен).
-func (s *Server) rememberedMode() lavrayv1.ConnectMode {
-	for _, v := range s.settingStringList("remember.modes") {
-		switch strings.TrimSpace(v) {
-		case "tun", "vpn":
-			return lavrayv1.ConnectMode_CONNECT_MODE_TUN
-		case "system_proxy", "proxy":
-			return lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY
-		}
-	}
-	return lavrayv1.ConnectMode_CONNECT_MODE_UNSPECIFIED
-}
-
 // Connect — FR-UI-032. Ровно один источник профиля: profile_id или inline.
 func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.ConnectRequest]) (*connect.Response[lavrayv1.ConnectResponse], error) {
 	in := req.Msg
@@ -170,6 +155,7 @@ func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.Conn
 		}
 		return nil, err
 	}
+	s.rememberConnect(in, status) // remember.go: профиль и режим для Ctrl+D и автоподключения
 	return connect.NewResponse(&lavrayv1.ConnectResponse{Status: status, Warnings: append(inlineWarns, warnings...)}), nil
 }
 

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 // onboarding-finish.test.tsx — T-73 (F-108, B1-26, D1-06): мастер заканчивается
-// кнопкой «Готово» (не «Далее»), выбранные режимы сохраняются, «Перенести из
-// NekoBox» — настоящая кнопка со статусом «Скоро» и без нераскрытых {servers}.
+// кнопкой «Готово» (не «Далее»), выбранные режимы сохраняются. T-78: «Перенести
+// из NekoBox» — настоящая кнопка, показывает найденное с числами и открывает
+// диалог переноса.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode, act } from 'react';
 import type { ReactElement } from 'react';
@@ -13,6 +14,7 @@ import { CoreContext } from '../hooks/useCore';
 import { createCoreClients } from '../lib/core';
 import { loadModes } from '../lib/connection';
 import { setLanguage, t } from '../lib/i18n';
+import { stubCore } from '../test-utils/coreStub';
 import { OnboardingDialog } from './dialogs';
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -68,11 +70,16 @@ describe('T-73: онбординг — «Готово», режимы, NekoBox',
     window.localStorage.clear();
     setActEnvironment(false);
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
-  function open(onClose = vi.fn(), onOpenImport = vi.fn()): { onClose: typeof onClose; onOpenImport: typeof onOpenImport } {
+  function open(
+    onClose = vi.fn(),
+    onOpenImport = vi.fn(),
+    core = clients,
+  ): { onClose: typeof onClose; onOpenImport: typeof onOpenImport } {
     const el: ReactElement = (
-      <CoreContext.Provider value={clients}>
+      <CoreContext.Provider value={core}>
         <OnboardingDialog onClose={onClose} onOpenImport={onOpenImport} />
       </CoreContext.Provider>
     );
@@ -166,7 +173,7 @@ describe('T-73: онбординг — «Готово», режимы, NekoBox',
     });
   });
 
-  describe('«Перенести из NekoBox»', () => {
+  describe('«Перенести из NekoBox» (T-78)', () => {
     function nekoTile(): HTMLElement {
       const label = Array.from(dialog().querySelectorAll<HTMLElement>('.onb-src')).find((e) =>
         (e.textContent ?? '').includes(t('onb.src.neko', 'en')),
@@ -175,21 +182,22 @@ describe('T-73: онбординг — «Готово», режимы, NekoBox',
       return label;
     }
 
-    it('это кнопка (не span) со статусом «Soon», недоступная для действий', () => {
+    it('neko_tile_is_button: настоящая кнопка без «Скоро», доступна с клавиатуры', () => {
       open();
       goToStep(2);
       const tile = nekoTile();
       expect(tile.tagName).toBe('BUTTON');
-      expect(tile.getAttribute('aria-disabled')).toBe('true');
-      expect(tile.textContent).toContain(t('onb.neko.soon', 'en'));
+      expect(tile.getAttribute('type')).toBe('button');
+      expect(tile.hasAttribute('aria-disabled')).toBe(false);
+      expect((tile as HTMLButtonElement).disabled).toBe(false);
+      expect(tile.tabIndex).toBeGreaterThanOrEqual(0);
+      expect(tile.getAttribute('title')).toBe(t('onb.neko.d', 'en'));
+      expect(tile.textContent).not.toMatch(/soon/i);
     });
 
-    it('подсказка и текст не содержат нераскрытых {servers}/{subs}', () => {
+    it('в мастере нет нераскрытых {…}', () => {
       open();
       goToStep(2);
-      const tile = nekoTile();
-      expect(tile.getAttribute('title')).toBe(t('onb.neko.soonHint', 'en'));
-      // ни в одном title/aria-label мастера нет шаблонных скобок {…}
       const withText = Array.from(dialog().querySelectorAll<HTMLElement>('[title],[aria-label]'));
       for (const el of withText) {
         const text = `${el.getAttribute('title') ?? ''} ${el.getAttribute('aria-label') ?? ''}`;
@@ -198,12 +206,31 @@ describe('T-73: онбординг — «Готово», режимы, NekoBox',
       expect(dialog().textContent).not.toMatch(/\{\w+\}/);
     });
 
-    it('клик объясняет, что функции пока нет, и ничего не запускает', () => {
+    it('neko_found_banner_shows_counts: найденная установка — «Found: 32 servers, 2 groups, 3 routes»', async () => {
+      stubCore({
+        'MigrationService/DetectNekoBox': {
+          candidates: [{ path: 'C:/neko/config', source: 'process', groups: 2, profiles: 32, routes: 3 }],
+        },
+      });
+      open(vi.fn(), vi.fn(), createCoreClients('http://127.0.0.1:1'));
+      goToStep(2);
+      await act(async () => {
+        await sleep(30);
+      });
+      const tile = nekoTile();
+      expect(tile.textContent).toContain('Found: 32 servers, 2 groups, 3 routes');
+      expect(tile.getAttribute('title')).toBe('Found: 32 servers, 2 groups, 3 routes');
+      expect(tile.textContent).not.toMatch(/\{\w+\}/);
+    });
+
+    it('клик открывает диалог переноса поверх мастера и ничего не закрывает', () => {
       const { onClose, onOpenImport } = open();
       goToStep(2);
-      expect(dialog().querySelector('[role="status"]')).toBeNull();
+      expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(1);
       click(nekoTile());
-      expect(dialog().querySelector('[role="status"]')?.textContent).toBe(t('onb.neko.soonHint', 'en'));
+      expect(document.querySelectorAll('[role="dialog"]')).toHaveLength(2);
+      expect(document.querySelector('#nbTitle')?.textContent).toBe(t('nb.title', 'en'));
+      expect(document.querySelector('#onbTitle'), 'мастер остался').not.toBeNull();
       expect(onOpenImport).not.toHaveBeenCalled();
       expect(onClose).not.toHaveBeenCalled();
     });

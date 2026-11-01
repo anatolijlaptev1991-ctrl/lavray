@@ -23,8 +23,8 @@ afterEach(() => {
 describe('pickFolder (T-78)', () => {
   it('returns_the_path_chosen_in_the_shell_dialog', async () => {
     (window as TauriWindow).__TAURI_INTERNALS__ = {};
-    invokeMock.mockResolvedValue('C:\Users\Анна\nekoray\config');
-    await expect(pickFolder()).resolves.toBe('C:\Users\Анна\nekoray\config');
+    invokeMock.mockResolvedValue('C:/Users/Анна/nekoray/config');
+    await expect(pickFolder()).resolves.toBe('C:/Users/Анна/nekoray/config');
     expect(invokeMock).toHaveBeenCalledWith('file_pick_folder');
   });
 

@@ -19,6 +19,7 @@ import {
   DiagnosticsService,
   UpdateService,
   BackupService,
+  MigrationService,
 } from '../gen/lavray_pb';
 import { t as translate } from './i18n';
 
@@ -41,6 +42,7 @@ export interface CoreClients {
   diagnostics: ReturnType<typeof createClient<typeof DiagnosticsService>>;
   updates: ReturnType<typeof createClient<typeof UpdateService>>;
   backup: ReturnType<typeof createClient<typeof BackupService>>;
+  migration: ReturnType<typeof createClient<typeof MigrationService>>;
 }
 
 export function createCoreClients(baseUrl: string, auth?: CoreAuth): CoreClients {
@@ -71,6 +73,7 @@ export function createCoreClients(baseUrl: string, auth?: CoreAuth): CoreClients
     diagnostics: c(DiagnosticsService),
     updates: c(UpdateService),
     backup: c(BackupService),
+    migration: c(MigrationService),
   };
 }
 

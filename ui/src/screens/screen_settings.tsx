@@ -18,6 +18,7 @@ import { HOTKEYS, HotkeysCard } from '../components/settings/HotkeysCard';
 import { ShellPrefRows } from '../components/settings/ShellPrefRows';
 import { ConfirmDialog } from '../components/dialogs';
 import { BackupRows } from '../components/settings/BackupRows';
+import { NekoBoxRow } from '../components/settings/NekoBoxRow';
 import { Icon, type IconName } from '../components/Icon';
 import { AGENT_MODE_KEY, parseAgentMode, type AgentMode } from '../lib/agents';
 import {
@@ -127,10 +128,7 @@ const SECTION_SEARCH: Readonly<Record<string, readonly SearchRow[]>> = {
     { labelKey: 'set.accent' },
     ...ACCENTS.map((ac) => ({ labelKey: `accent.${ac}` as MessageKey })),
   ],
-  backup: [
-    { labelKey: 'bk.export', descKey: 'bk.hint' },
-    { labelKey: 'bk.restore', descKey: 'bk.restoreD' },
-  ],
+  backup: [{ labelKey: 'bk.export', descKey: 'bk.hint' }, { labelKey: 'bk.restore', descKey: 'bk.restoreD' }, { labelKey: 'nb.row.l', descKey: 'nb.row.d' }],
   core: [{ labelKey: 'mux.title' }, { labelKey: 'set.appVersion' }, { labelKey: 'set.coreVersion' }, ...CORE_ROWS],
   agents: [
     { labelKey: 'agent.mode.l', descKey: 'agent.mode.d' },
@@ -764,6 +762,7 @@ export function SettingsScreen(): JSX.Element {
                   }, 2500);
                 }}
               />
+              <NekoBoxRow />
             </div>
           )}
 

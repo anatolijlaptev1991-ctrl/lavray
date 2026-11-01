@@ -19,6 +19,7 @@ describe('parseReason', () => {
     'wrong_channel',
     'root_rotation',
     'artifact_role_missing',
+    'clock_skew',
     'active_session',
   ])('%s: текст — известная причина и остаток', (reason) => {
     expect(parseReason(`${reason}: что-то пошло не так`)).toEqual({ reason, detail: 'что-то пошло не так' });
@@ -128,6 +129,9 @@ describe('shellErrorKey: коды оболочки update_apply / update_rollbac
     'invalid_source',
     'too_large',
     'stage_failed',
+    'signature_invalid',
+    'version_mismatch',
+    'core_unavailable',
   ])('%s → upd.err.%s', (code) => {
     expect(shellErrorKey(code)).toBe(`upd.err.${code}`);
   });
@@ -146,12 +150,23 @@ describe('shellErrorKey: коды оболочки update_apply / update_rollbac
   });
 });
 
+describe('clock_skew: часы компьютера отстают', () => {
+  it('FAILED_PRECONDITION clock_skew имеет свой текст, а не «просрочено»', () => {
+    const failure = classifyCoreError(
+      new ConnectError('clock_skew: timestamp.expires дальше 7 дней', Code.FailedPrecondition),
+    );
+    expect(failure.kind).toBe('error');
+    expect(failure.key).toBe('upd.reason.clock_skew');
+    expect(verifyReasonKey('clock_skew')).toBe('upd.reason.clock_skew');
+  });
+});
+
 describe('shellRetryTarget', () => {
   it('битая или подменённая копия — только новая загрузка, остальное — повтор установки', () => {
-    for (const code of ['sha256_mismatch', 'path_outside_staging', 'invalid_sha256', 'invalid_version']) {
+    for (const code of ['sha256_mismatch', 'path_outside_staging', 'invalid_sha256', 'invalid_version', 'signature_invalid', 'version_mismatch']) {
       expect(shellRetryTarget(code)).toBe('download');
     }
-    for (const code of ['busy', 'locked', 'core_stop_failed', 'launch_failed', 'proxy_release_failed', 'prepare_failed', 'x']) {
+    for (const code of ['busy', 'locked', 'core_stop_failed', 'launch_failed', 'proxy_release_failed', 'prepare_failed', 'core_unavailable', 'x']) {
       expect(shellRetryTarget(code)).toBe('install');
     }
     expect(shellRetryTarget(new Error('sha256_mismatch'))).toBe('download');

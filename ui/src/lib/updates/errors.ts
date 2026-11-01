@@ -16,6 +16,7 @@ const REASONS = [
   'wrong_channel',
   'root_rotation',
   'artifact_role_missing',
+  'clock_skew',
   'active_session',
 ] as const;
 
@@ -47,6 +48,7 @@ const REASON_KEYS: Readonly<Record<string, MessageKey>> = {
   wrong_channel: 'upd.reason.wrong_channel',
   root_rotation: 'upd.reason.root_rotation',
   artifact_role_missing: 'upd.reason.artifact_role_missing',
+  clock_skew: 'upd.reason.clock_skew',
   sha256_mismatch: 'upd.reason.sha256_mismatch',
   truncated: 'upd.reason.truncated',
 };
@@ -110,6 +112,9 @@ const SHELL_KEYS: Readonly<Record<string, MessageKey>> = {
   invalid_source: 'upd.err.invalid_source',
   too_large: 'upd.err.too_large',
   stage_failed: 'upd.err.stage_failed',
+  signature_invalid: 'upd.err.signature_invalid',
+  version_mismatch: 'upd.err.version_mismatch',
+  core_unavailable: 'upd.err.core_unavailable',
   no_shell: 'upd.err.no_shell',
 };
 
@@ -131,6 +136,8 @@ const STAGED_REJECTED: ReadonlySet<string> = new Set([
   'path_outside_staging',
   'invalid_sha256',
   'invalid_version',
+  'signature_invalid',
+  'version_mismatch',
 ]);
 
 /** Что повторять после отказа оболочки: установку или загрузку заново. */

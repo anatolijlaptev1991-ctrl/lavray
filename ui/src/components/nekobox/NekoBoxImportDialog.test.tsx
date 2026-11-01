@@ -235,6 +235,32 @@ describe('NekoBoxImportDialog (T-78)', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('onImported получает отчёт; подсказка о перезапуске — только при настройках, которым он нужен', async () => {
+    await open({
+      'SettingsService/DescribeSettings': {
+        descriptors: [
+          { key: 'inbound.port', requiresProfileRestart: true },
+          { key: 'ui.theme', requiresAppRestart: false },
+        ],
+      },
+    });
+    typePath('C:/neko/config');
+    await press(t('nb.preview'));
+    await press(t('nb.import'));
+    expect(onImported).toHaveBeenCalledTimes(1);
+    expect(dlg().textContent).toContain(t('nb.restartProfile'));
+    expect(dlg().textContent).not.toContain(t('nb.restartApp'));
+  });
+
+  it('без перенесённых настроек подсказки нет и описания настроек не запрашиваются', async () => {
+    await open({ 'MigrationService/ImportNekoBox': { ...REPORT, settingsImported: [] } });
+    typePath('C:/neko/config');
+    await press(t('nb.preview'));
+    await press(t('nb.import'));
+    expect(dlg().textContent).not.toContain(t('nb.restartProfile'));
+    expect(stub.bodies('SettingsService/DescribeSettings')).toHaveLength(0);
+  });
+
   it('a11y: диалог подписан заголовком, поле пути — меткой и подсказкой', async () => {
     await open();
     expect(dlg().getAttribute('aria-labelledby')).toBe('nbTitle');

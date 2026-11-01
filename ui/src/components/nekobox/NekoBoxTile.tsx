@@ -11,7 +11,7 @@ import { foundText } from '../../lib/nekoBox';
 import { Icon } from '../Icon';
 import { NekoBoxImportDialog } from './NekoBoxImportDialog';
 
-export function NekoBoxTile(): JSX.Element {
+export function NekoBoxTile({ onImported }: { readonly onImported?: () => void }): JSX.Element {
   const { t, lang } = useI18n();
   const { candidates } = useNekoBoxDetect();
   const [open, setOpen] = useState(false);
@@ -33,6 +33,7 @@ export function NekoBoxTile(): JSX.Element {
       </button>
       {open && (
         <NekoBoxImportDialog
+          {...(onImported === undefined ? {} : { onImported })}
           onClose={() => {
             setOpen(false);
           }}

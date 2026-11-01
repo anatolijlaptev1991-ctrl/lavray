@@ -1107,4 +1107,6 @@ export const deDict: Record<string, string> = {
   "pl.rt.one": "{n} Route",
   "pl.rt.other": "{n} Routen",
   "nb.more": "…und {n} weitere",
+  "nb.restartProfile": "Einige importierte Einstellungen gelten erst nach einem Neustart des Profils (neu verbinden).",
+  "nb.restartApp": "Einige importierte Einstellungen gelten erst nach einem Neustart der App.",
 }

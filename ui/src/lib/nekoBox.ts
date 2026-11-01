@@ -3,7 +3,7 @@
 // nekoBox.ts — чистая логика переноса из NekoBox (T-78): строка с числами для
 // плитки онбординга и отчёта, перевод ошибок MigrationService.
 import { Code, ConnectError } from '@connectrpc/connect';
-import type { NekoBoxCandidate, NekoBoxReport } from '../gen/lavray_pb';
+import type { NekoBoxCandidate, NekoBoxReport, SettingDescriptor } from '../gen/lavray_pb';
 import { friendlyCoreError } from './core';
 import { pluralN, tf, type Language, type MessageKey } from './i18n';
 
@@ -61,4 +61,22 @@ export function nekoBoxErrorText(e: unknown, tr: (key: MessageKey) => string): s
   }
   const friendly = friendlyCoreError(e, (k) => tr(k));
   return friendly === tr('core.unavailable') ? friendly : tr('nb.err.generic');
+}
+
+/**
+ * Что нужно перезапустить, чтобы перенесённые настройки вступили в силу:
+ * приложение важнее профиля; `null` — ничего. Решает дескриптор каждого ключа.
+ */
+export function restartNeeded(
+  report: NekoBoxReport,
+  descriptors: readonly SettingDescriptor[],
+): 'profile' | 'app' | null {
+  const byKey = new Map(descriptors.map((d) => [d.key, d]));
+  let need: 'profile' | 'app' | null = null;
+  for (const key of report.settingsImported) {
+    const d = byKey.get(key);
+    if (d?.requiresAppRestart === true) return 'app';
+    if (d?.requiresProfileRestart === true) need = 'profile';
+  }
+  return need;
 }

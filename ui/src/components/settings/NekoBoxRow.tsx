@@ -8,7 +8,12 @@ import type { JSX } from 'react';
 import { useI18n } from '../../hooks/useI18n';
 import { NekoBoxImportDialog } from '../nekobox/NekoBoxImportDialog';
 
-export function NekoBoxRow(): JSX.Element {
+interface Props {
+  /** Перенос выполнен: экран настроек перечитывает значения. */
+  readonly onImported?: () => void;
+}
+
+export function NekoBoxRow({ onImported }: Props): JSX.Element {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
   return (
@@ -32,6 +37,7 @@ export function NekoBoxRow(): JSX.Element {
       </div>
       {open && (
         <NekoBoxImportDialog
+          {...(onImported === undefined ? {} : { onImported })}
           onClose={() => {
             setOpen(false);
           }}

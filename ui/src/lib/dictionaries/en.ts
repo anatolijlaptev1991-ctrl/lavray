@@ -1107,4 +1107,6 @@ export const enDict: Record<string, string> = {
   "pl.rt.one": "{n} route",
   "pl.rt.other": "{n} routes",
   "nb.more": "…and {n} more",
+  "nb.restartProfile": "Some imported settings take effect after the profile is restarted (reconnect).",
+  "nb.restartApp": "Some imported settings take effect after the app is restarted.",
 }

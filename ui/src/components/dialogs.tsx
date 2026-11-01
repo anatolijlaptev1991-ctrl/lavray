@@ -300,9 +300,12 @@ export function LicensesDialog({ onClose }: { readonly onClose: () => void }): J
 export function OnboardingDialog({
   onClose,
   onOpenImport,
+  onImported,
 }: {
   readonly onClose: () => void;
   readonly onOpenImport: (tab?: 'link' | 'qr' | 'file') => void;
+  /** Перенос из NekoBox выполнен: приложение открывает список серверов. */
+  readonly onImported?: () => void;
 }): JSX.Element {
   const { t, tf, lang, setLanguage } = useI18n();
   const core = useCore();
@@ -477,7 +480,7 @@ export function OnboardingDialog({
                 </button>
                 {/* Перенос из NekoBox (T-78): настоящая кнопка, открывает диалог переноса;
                     при найденной установке показывает «Найдено: …» с числами. */}
-                <NekoBoxTile />
+                <NekoBoxTile {...(onImported === undefined ? {} : { onImported })} />
               </div>
               <button className="btn btn-ghost btn-sm" style={{ marginTop: 12 }} onClick={() => { setStep(3); }}>
                 {t('onb.later')}

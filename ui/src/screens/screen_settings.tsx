@@ -216,6 +216,7 @@ export function SettingsScreen(): JSX.Element {
   const [err, setErr] = useState('');
   const [ok, setOk] = useState('');
   const [coreVersion, setCoreVersion] = useState('');
+  const [reloadKey, setReloadKey] = useState(0); // растёт после переноса из NekoBox
   const [confirmInsecure, setConfirmInsecure] = useState(false);
   // Восстановление из файла ждёт подтверждения: null — диалога нет (U-02).
   const cardRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -237,7 +238,7 @@ export function SettingsScreen(): JSX.Element {
         setErr(showCoreError(e, t));
       }
     })();
-  }, [core, t]);
+  }, [core, t, reloadKey]);
 
   /** Записывает настройку; true — ядро приняло значение. */
   const save = useCallback(
@@ -762,7 +763,7 @@ export function SettingsScreen(): JSX.Element {
                   }, 2500);
                 }}
               />
-              <NekoBoxRow />
+              <NekoBoxRow onImported={() => { setReloadKey((k) => k + 1); }} />
             </div>
           )}
 

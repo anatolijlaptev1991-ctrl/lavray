@@ -517,6 +517,7 @@ function AppInner(): JSX.Element {
             setModes(loadModes(window.localStorage)); // чипы статус-бара без ожидания опроса
           }}
           onOpenImport={(tab) => { setQuickImport(tab ?? 'link'); }}
+          onImported={() => { window.location.hash = 'screen=servers&tab=profiles'; }}
         />
       )}
       {hotkeysOpen && <HotkeysDialog onClose={() => { setHotkeysOpen(false); }} />}

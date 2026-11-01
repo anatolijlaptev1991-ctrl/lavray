@@ -4,8 +4,8 @@
 import { create } from '@bufbuild/protobuf';
 import { Code, ConnectError } from '@connectrpc/connect';
 import { describe, expect, it } from 'vitest';
-import { NekoBoxCandidateSchema, NekoBoxReportSchema } from '../gen/lavray_pb';
-import { countsLine, foundText, nekoBoxErrorText, profilesTotal, reportText } from './nekoBox';
+import { NekoBoxCandidateSchema, NekoBoxReportSchema, SettingDescriptorSchema, type NekoBoxReport, type SettingDescriptor } from '../gen/lavray_pb';
+import { countsLine, foundText, nekoBoxErrorText, profilesTotal, reportText, restartNeeded } from './nekoBox';
 import { LANGUAGES, t, type MessageKey } from './i18n';
 
 const tr = (key: MessageKey): string => t(key, 'en');
@@ -41,5 +41,17 @@ describe('nekoBox (T-78)', () => {
     for (const [code, text] of cases) expect(nekoBoxErrorText(new ConnectError('x', code), tr), String(code)).toBe(text);
     expect(nekoBoxErrorText(new TypeError('Failed to fetch'), tr)).toBe(tr('core.unavailable'));
     expect(nekoBoxErrorText(new Error('boom'), tr)).toBe(tr('nb.err.generic'));
+  });
+
+  it('restartNeeded: приложение важнее профиля; без перенесённых ключей — null', () => {
+    const d = (key: string, requiresProfileRestart: boolean, requiresAppRestart: boolean): SettingDescriptor =>
+      create(SettingDescriptorSchema, { key, requiresProfileRestart, requiresAppRestart });
+    const descriptors = [d('a', true, false), d('b', false, true), d('c', false, false)];
+    const rep = (...keys: string[]): NekoBoxReport => create(NekoBoxReportSchema, { settingsImported: keys });
+    expect(restartNeeded(rep('c'), descriptors)).toBeNull();
+    expect(restartNeeded(rep('a', 'c'), descriptors)).toBe('profile');
+    expect(restartNeeded(rep('a', 'b'), descriptors)).toBe('app');
+    expect(restartNeeded(rep(), descriptors)).toBeNull();
+    expect(restartNeeded(rep('zzz'), descriptors)).toBeNull();
   });
 });

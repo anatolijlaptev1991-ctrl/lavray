@@ -11,7 +11,7 @@ import type { NekoBoxReport } from '../../gen/lavray_pb';
 import { useCore } from '../../hooks/useCore';
 import { useI18n } from '../../hooks/useI18n';
 import { useNekoBoxDetect } from '../../hooks/useNekoBoxDetect';
-import { nekoBoxErrorText } from '../../lib/nekoBox';
+import { nekoBoxErrorText, restartNeeded } from '../../lib/nekoBox';
 import { pickFolder } from '../../lib/pickFolder';
 import { DialogShell } from '../DialogShell';
 import { NekoBoxForm } from './NekoBoxForm';
@@ -19,8 +19,8 @@ import { NekoBoxReportView } from './NekoBoxReportView';
 
 interface Props {
   readonly onClose: () => void;
-  /** Перенос выполнен (данные в базе изменились). */
-  readonly onImported?: () => void;
+  /** Перенос выполнен (данные в базе изменились): хозяин диалога перечитывает своё. */
+  readonly onImported?: (report: NekoBoxReport) => void;
 }
 
 type Phase = 'form' | 'previewed' | 'done';
@@ -38,6 +38,7 @@ export function NekoBoxImportDialog({ onClose, onImported }: Props): JSX.Element
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [activated, setActivated] = useState(false);
+  const [restart, setRestart] = useState<'profile' | 'app' | null>(null);
 
   // Любое изменение формы обесценивает предпросмотр.
   const edit = <T,>(set: (v: T) => void) => (v: T): void => {
@@ -64,11 +65,23 @@ export function NekoBoxImportDialog({ onClose, onImported }: Props): JSX.Element
       const res = dry ? await core.migration.previewNekoBoxImport(req) : await core.migration.importNekoBox(req);
       setReport(res);
       setPhase(dry ? 'previewed' : 'done');
-      if (!dry) onImported?.();
+      if (!dry) {
+        onImported?.(res);
+        if (res.settingsImported.length > 0) setRestart(await restartHint(res));
+      }
     } catch (e) {
       setErr(nekoBoxErrorText(e, t));
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** Нужен ли перезапуск для перенесённых настроек (сбой описания — подсказки нет). */
+  const restartHint = async (res: NekoBoxReport): Promise<'profile' | 'app' | null> => {
+    try {
+      return restartNeeded(res, (await core.settings.describeSettings({})).descriptors);
+    } catch {
+      return null;
     }
   };
 
@@ -156,6 +169,11 @@ export function NekoBoxImportDialog({ onClose, onImported }: Props): JSX.Element
           />
         )}
         {report !== null && <NekoBoxReportView report={report} mode={phase === 'done' ? 'result' : 'preview'} />}
+        {phase === 'done' && restart !== null && (
+          <p className="cap" role="status">
+            {t(restart === 'app' ? 'nb.restartApp' : 'nb.restartProfile')}
+          </p>
+        )}
       </div>
     </DialogShell>
   );

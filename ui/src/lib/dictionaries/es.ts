@@ -1107,4 +1107,6 @@ export const esDict: Record<string, string> = {
   "pl.rt.one": "{n} ruta",
   "pl.rt.other": "{n} rutas",
   "nb.more": "…y {n} más",
+  "nb.restartProfile": "Algunos ajustes importados se aplicarán al reiniciar el perfil (vuelve a conectar).",
+  "nb.restartApp": "Algunos ajustes importados se aplicarán al reiniciar la aplicación.",
 }

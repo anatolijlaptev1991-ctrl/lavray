@@ -1098,4 +1098,6 @@ export const zhDict: Record<string, string> = {
   "pl.grp.other": "{n} 个分组",
   "pl.rt.other": "{n} 条路由",
   "nb.more": "…以及另外 {n} 项",
+  "nb.restartProfile": "部分导入的设置需重启配置后生效（请重新连接）。",
+  "nb.restartApp": "部分导入的设置需重启应用后生效。",
 }

@@ -70,7 +70,7 @@
    $res.checks | Where-Object { -not $_.pass } | Select-Object id, detail | Format-Table -AutoSize -Wrap
    ```
 
-   Ожидается: `a12 exit=0`, `провалов: 0`. Эталон на `main` `9b26be6` (и на `feat/T-76-web`, `622a10a`): 98 проверок. Каталог `C:\lavray-test\results\A12` создайте заранее (`New-Item -ItemType Directory -Force C:\lavray-test\results\A12`).
+   Ожидается: `a12 exit=0`, `провалов: 0`. Эталон на теге v0.9.0 (коммит `8093656`): 98 проверок (на более поздних тегах проверок может быть больше, меньше быть не должно). Каталог `C:\lavray-test\results\A12` создайте заранее (`New-Item -ItemType Directory -Force C:\lavray-test\results\A12`).
 
 4. Что и по каким кодам проверяет скрипт:
 

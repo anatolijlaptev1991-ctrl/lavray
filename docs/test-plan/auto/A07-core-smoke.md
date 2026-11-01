@@ -80,15 +80,26 @@ python -I "$t\a07_verify.py" "$t\a\smoke-report.json" 47950 $env:LAVRAY_VERSION 
    | `double-connect` | второе подключение при активном | `400`, код `failed_precondition`, статус остаётся `CONNECTED` |
    | `exit on stdin EOF` | закрытие stdin = «оболочка умерла», ядро выходит само | код `0`, быстрее 10 с (эталон 0,04 с) |
 
-4. Часть Б: проверка задания `core-run` CI на curl. Сохраните скрипт из раздела «Скрипт части Б» как `C:\lavray-test\tmp\A07\ci_smoke.sh` и запустите в Git Bash (вывод — в файл, иначе фоновый `sleep` задержит завершение):
+4. Часть Б: проверка задания `core-run` CI на curl. Сохраните скрипт из раздела «Скрипт части Б» как `C:\lavray-test\tmp\A07\ci_smoke.sh` и запустите его из pwsh через Git Bash. Переменные `LAVRAY_CORE_EXE_UNIX` и `LAVRAY_VERSION` блок задаёт явно, в окружении процесса `bash`; `env.ps1` — сценарий PowerShell, в Git Bash командой `. C:\lavray-test\env.ps1` его выполнить нельзя (это синтаксическая ошибка). Вывод скрипта пишется в файл внутри самого `bash` (иначе фоновый `sleep` задержит завершение, а кодировка консоли pwsh исказила бы кириллицу).
 
-```bash
-export LAVRAY_CORE_EXE_UNIX="$(cygpath -u "$LAVRAY_CORE_EXE")"
-bash /c/lavray-test/tmp/A07/ci_smoke.sh > /c/lavray-test/results/A07/ci-smoke.txt 2>&1; echo "ci-smoke exit=$?"
-cut -c1-200 /c/lavray-test/results/A07/ci-smoke.txt
+```powershell
+. C:\lavray-test\env.ps1
+$exe = if (Test-Path $env:LAVRAY_CORE_EXE) { $env:LAVRAY_CORE_EXE } else { 'C:\lavray-test\tmp\A03\lavray-core.exe' }
+# Путь к ядру в формате Git Bash (C:\a\b.exe -> /c/a/b.exe) и версия продукта передаются скрипту через окружение.
+$env:LAVRAY_CORE_EXE_UNIX = '/' + $exe.Substring(0, 1).ToLower() + ($exe.Substring(2) -replace '\\', '/')
+"LAVRAY_CORE_EXE_UNIX=$env:LAVRAY_CORE_EXE_UNIX  LAVRAY_VERSION=$env:LAVRAY_VERSION"
+# Нужен именно Git Bash: bash из PATH может оказаться WSL (C:\Windows\System32\bash.exe), он не поймёт путь /c/...
+$bash = @('C:\Program Files\Git\bin\bash.exe', 'C:\Program Files (x86)\Git\bin\bash.exe', (Join-Path $env:LOCALAPPDATA 'Programs\Git\bin\bash.exe')) |
+  Where-Object { Test-Path $_ } | Select-Object -First 1
+if (-not $bash) { 'BLOCKED: Git Bash (bin\bash.exe) не найден'; return }
+& $bash -lc 'bash /c/lavray-test/tmp/A07/ci_smoke.sh > /c/lavray-test/results/A07/ci-smoke.txt 2>&1'
+"ci-smoke exit=$LASTEXITCODE"
+Get-Content C:\lavray-test\results\A07\ci-smoke.txt -Encoding utf8 | ForEach-Object { $_.Substring(0, [Math]::Min(200, $_.Length)) }
 ```
 
-   Ожидается: `ci-smoke exit=0`, в выводе `healthz=200 no-auth=401 bad-auth=401`, строка `status={...}` с `"coreVersion":"0.9.0"` (равна `$env:LAVRAY_VERSION`; bash берёт её из окружения pwsh), строка `coreVersion=0.9.0 подтверждена`, последняя строка `CI-SMOKE-OK`. Другая версия — `FAIL` (`major`): ядро из ZIP релиза выдаёт чужую версию, а сравнение версий обновлений идёт по ней. Если `LAVRAY_CORE_EXE` не задана в сессии Git Bash, передайте путь вручную в формате `/c/lavray-test/portable/0.9.0/binaries/lavray-core.exe`.
+   Ожидается: `ci-smoke exit=0`, в выводе `healthz=200 no-auth=401 bad-auth=401`, строка `status={...}` с `"coreVersion":"0.9.0"` (равна `$env:LAVRAY_VERSION`), строка `coreVersion=0.9.0 подтверждена`, последняя строка `CI-SMOKE-OK`. Другая версия — `FAIL` (`major`): ядро из ZIP релиза выдаёт чужую версию, а сравнение версий обновлений идёт по ней.
+
+   Если запускаете скрипт из «чистого» Git Bash (без pwsh), задайте обе переменные вручную: `export LAVRAY_CORE_EXE_UNIX=/c/lavray-test/portable/0.9.0/binaries/lavray-core.exe LAVRAY_VERSION=0.9.0`, затем `bash /c/lavray-test/tmp/A07/ci_smoke.sh > /c/lavray-test/results/A07/ci-smoke.txt 2>&1; echo "ci-smoke exit=$?"`.
 
 5. Часть В: T-08B и T-79 на настоящем ядре. Сохраните скрипт «Скрипт части В» как `C:\lavray-test\tmp\A07\a07_extra.py` и запустите:
 
@@ -260,7 +271,7 @@ kill $CORE_PID 2>/dev/null || true
 test "$HEALTH" = "200"
 test "$NOAUTH" = "401"
 test "$BADAUTH" = "401"
-VER="${LAVRAY_VERSION:?задайте LAVRAY_VERSION (выполните env.ps1 в pwsh, откуда запущен bash)}"
+VER="${LAVRAY_VERSION:?задайте LAVRAY_VERSION (шаг 4 передаёт её из pwsh; в чистом Git Bash: export LAVRAY_VERSION=0.9.0)}"
 echo "$STATUS" | grep -q "\"coreVersion\":\"$VER\""
 echo "coreVersion=$VER подтверждена"
 echo "CI-SMOKE-OK"

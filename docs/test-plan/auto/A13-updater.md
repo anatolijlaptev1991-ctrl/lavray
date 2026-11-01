@@ -62,15 +62,15 @@
    $res.checks | Where-Object { -not $_.pass } | Select-Object id, warn, detail | Format-Table -AutoSize -Wrap
    ```
 
-   Ожидается: `a13 exit=0`, `провалов: 0`. Эталон на `dce8ba0` (T-75 с §7.5): **298 проверок** (разделы 0–11: 144, разделы 12.*: 154) и 3 `WARN`, все в разделах 12.*:
+   Ожидается: `a13 exit=0`, `провалов: 0`. Эталон на теге v0.9.0 (коммит `8093656`): **298 проверок** (разделы 0–11: 144, разделы 12.*: 154) и 3 `WARN`, все в разделах 12.* (на более поздних тегах проверок может быть больше, меньше быть не должно):
 
    | `WARN` | Что наблюдается | Серьёзность |
    |---|---|---|
-   | `12.pack.refuses.symlink` | Windows без режима разработчика или прав администратора не даёт создать символическую ссылку: проверка «`geo-pack` отказывает на ссылке в каталоге» пропущена (ограничение ПК). Ссылка внутри архива без прав проверяется в `12.hostile.symlink_entry` | не дефект |
-   | `12.tamper.tampered_preset_file.no_stray_staged_files` | при подмене второго файла пачки наборов первый, уже проверенный файл (`<sha256>-lav-cn.json`) остаётся в `staging\components` до следующей загрузки; применить его нельзя (пачка не принята, фаза `FAILED`) | `minor` |
-   | `12.norev.has_reason_header` | манифест без `geo.rev` отвергается (`400 failed_precondition: updates: отсутствует обязательное поле: "rev"`), но без причины и заголовка `Lavray-Update-Reason`: интерфейс покажет общий текст «Обновление не прошло проверку.» | `minor` |
+   | `12.pack.refuses.symlink` | Проверка «`geo-pack` отказывает на ссылке в каталоге» пропущена: создание символической ссылки требует прав. Нужны Режим разработчика Windows или запуск PowerShell от имени администратора; без них это ограничение ПК, не дефект. С правами проверка проходит (`PASS`, `WARN` исчезает). Ссылка внутри архива без прав проверяется в `12.hostile.symlink_entry` | не дефект |
+   | `12.tamper.tampered_preset_file.no_stray_staged_files` | дефект D-7b (известно в 0.9.0, исправлено в 0.9.1): при подмене второго файла пачки наборов первый, уже проверенный файл (`<sha256>-lav-cn.json`) остаётся в `staging\components` до следующей загрузки; применить его нельзя (пачка не принята, фаза `FAILED`). На `v0.9.0` остаётся `WARN`; на тегах 0.9.1 и позже проверка обязана быть `PASS` | `minor` |
+   | `12.norev.has_reason_header` | дефект D-7c (известно в 0.9.0, исправлено в 0.9.1): манифест без `geo.rev` отвергается (`400 failed_precondition: updates: отсутствует обязательное поле: "rev"`), но без причины и заголовка `Lavray-Update-Reason`: интерфейс покажет общий текст «Обновление не прошло проверку.». На `v0.9.0` остаётся `WARN`; на тегах 0.9.1 и позже проверка обязана быть `PASS` | `minor` |
 
-   Два прежних `WARN` на `80be1e9` (подмена манифеста без причины; `update.channel` принимал любую строку) в `dce8ba0` исправлены: теперь это строгие проверки `3.manifest_swapped_after_timestamp.reason_manifest_mismatch` (`manifest_mismatch` в сообщении и заголовке) и `4.settings.update_channel_is_validated` (`400 invalid_argument`); на сборках до §7.5 они дают `FAIL` серьёзности `minor`. Строка `2.rollback.presets.no_previous` вместо прежней `…unimplemented`: `Rollback(PRESETS)` без прошлой ревизии теперь `failed_precondition` с причиной `no_previous`.
+   Два прежних `WARN` (подмена манифеста без причины; `update.channel` принимал любую строку) в теге v0.9.0 уже исправлены: теперь это строгие проверки `3.manifest_swapped_after_timestamp.reason_manifest_mismatch` (`manifest_mismatch` в сообщении и заголовке) и `4.settings.update_channel_is_validated` (`400 invalid_argument`); на сборках до §7.5 они дают `FAIL` серьёзности `minor`. Строка `2.rollback.presets.no_previous` вместо прежней `…unimplemented`: `Rollback(PRESETS)` без прошлой ревизии теперь `failed_precondition` с причиной `no_previous`.
 
    Если нужен только повтор без пересборки, достаточно запустить тот же скрипт ещё раз: кэш сборки Go сократит подготовку до секунд. Если скрипт остановили на середине, завершите оставшиеся ядра: `Get-Process lavray-core-test, lavray-core-placeholder, lavray-core-data -ErrorAction SilentlyContinue | Stop-Process -Force`.
 
@@ -98,7 +98,7 @@
    Set-Location C:\lavray-test
    ```
 
-   Ожидается: строки `ok` для пакетов `internal/updates`, `cmd/updsign`, `internal/api`, `cmd/lavray-core`, для каждого перечисленного имени `--- PASS`. `TestEmbeddedRootValid` на заглушке проходит (корня ещё нет); после церемонии ключей он потребует срок корня больше 180 дней. Тест, которого нет в выбранном коммите (`testing: warning: no tests to run`), запишите в отклонения и сверьтесь с `go test -list 'Update|Root|Rotat' ./internal/...`.
+   Ожидается: строки `ok` для пакетов `internal/updates`, `cmd/updsign`, `internal/api`, `cmd/lavray-core`, для каждого перечисленного имени `--- PASS`, кроме `TestEmbeddedRootValid`. Пока `core/cmd/lavray-core/root.json` является заглушкой (церемония ключей не проведена, как в v0.9.0), `TestEmbeddedRootValid` печатает `--- SKIP` («в этой сборке нет корня доверия»): это ожидаемый результат, не `FAIL` и не пропуск по ошибке. После церемонии ключей (в `root.json` вшит настоящий корень) тест обязан дать `--- PASS` и потребует срок корня больше 180 дней; `--- SKIP` после церемонии — `FAIL`. `TestPlaceholderRootIsNotConfigured` и `TestNoPrivateKeysInTree` дают `--- PASS` всегда. Тест, которого нет в выбранном коммите (`testing: warning: no tests to run`), запишите в отклонения и сверьтесь с `go test -list 'Update|Root|Rotat' ./internal/...`.
 
 5. Что проверяет скрипт (для отчёта и поиска причины; идентификаторы начинаются с номера раздела):
 
@@ -161,7 +161,7 @@ updsign.exe verify -root root1.json -dir site\meta -channel stable -assets site\
 
 | № | Критерий | Шаг |
 |---|---|---|
-| К1 | `a13 exit=0`, провалов 0 (допустимы три `WARN` из таблицы шага 2) | 2 |
+| К1 | `a13 exit=0`, провалов 0, проверок не меньше 298 (значение для тега v0.9.0, коммит `8093656`). `WARN`: на `v0.9.0` допустимы три из таблицы шага 2; на тегах 0.9.1 и позже допустим только `12.pack.refuses.symlink` (если у PowerShell нет права на символические ссылки), `12.tamper.tampered_preset_file.no_stray_staged_files` и `12.norev.has_reason_header` обязаны быть `PASS` | 2 |
 | К2 | При заглушке корня везде `not_configured`, зеркала не получают запросов | 2 (`1.*`) |
 | К3 | Успешный путь: проверка, загрузка, повторная проверка, подмена в staging ловится | 2 (`2.*`) |
 | К4 | Каждый неверный документ даёт свою причину и не обновляет время проверки; подмена принята ни в одном случае | 2 (`3.*`, `7.*`) |

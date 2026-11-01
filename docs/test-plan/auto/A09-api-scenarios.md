@@ -47,14 +47,19 @@
 
    ```powershell
    $env:LAVRAY_SRC = $env:LAVRAY_SRC   # скрипт читает presets\lav-ru.source.json из клона
-   python -I "$t\a09_api.py" $exe "$t\run" 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A09\run.txt | Select-Object -Last 12
+   # Скрипт печатает UTF-8, а консоль pwsh по умолчанию читает вывод в OEM-кодировке (cp866/cp1251): без двух строк ниже кириллица
+   # в run.txt портится (двойная перекодировка), а Tee-Object -FilePath этого не исправляет. Поэтому запись идёт через Out-File -Encoding utf8.
+   [Console]::OutputEncoding = [Text.UTF8Encoding]::new()
+   $OutputEncoding = [Text.UTF8Encoding]::new()
+   python -I "$t\a09_api.py" $exe "$t\run" 2>&1 | Out-File -Encoding utf8 -FilePath C:\lavray-test\results\A09\run.txt
    "a09 exit=$LASTEXITCODE"
-   $res = Get-Content "$t\run\a09-result.json" -Raw | ConvertFrom-Json
+   Get-Content C:\lavray-test\results\A09\run.txt -Encoding utf8 -Tail 12
+   $res = Get-Content "$t\run\a09-result.json" -Raw -Encoding utf8 | ConvertFrom-Json
    "проверок: $($res.total), провалов: $($res.failed), наблюдений: $($res.warnings)"
    $res.checks | Where-Object { -not $_.pass } | Select-Object id, warn, detail | Format-Table -AutoSize -Wrap
    ```
 
-   Ожидается: `a09 exit=0`, `провалов: 0`, список непройденных содержит только записи с `warn = True`. Эталон на `main` `773b4e8` (T-80, T-83, хвосты A и B, T-76, T-78, T-75): 220 проверок, 0 `FAIL` и 1 `WARN` (на `80be1e9` — 203); на `dce8ba0` (T-75 §7.5) — 222 проверки (добавлены `8.apply.geo.not_staged` и `8.rollback.geo.no_previous`; `8.rollback.presets.unimplemented` заменена на `8.rollback.presets.no_previous`), 0 `FAIL` и 1 `WARN`. На `main` `9b26be6` и раньше было 181 проверка и 3 `FAIL` очистки (шаг 4). Каждая проверка в `run.txt` — строка `PASS <id>` / `WARN <id>` / `FAIL <id> :: <подробности>`.
+   Ожидается: `a09 exit=0`, `провалов: 0`, список непройденных содержит только записи с `warn = True`. Эталон на теге v0.9.0 (коммит `8093656`): 222 проверки, 0 `FAIL` и 1 `WARN` (`1.create.port0.invalid_argument`, шаг 4). Это значение для тега; на более поздних тегах проверок может быть больше, меньше быть не должно. Если в ходе прогона соединение было сброшено (RST, известный дефект D-4: «известно в 0.9.0, исправлено в 0.9.1», см. шаг 4), в `run.txt` добавляется ещё одна строка `WARN transport.connection_reset` (223 проверки, 2 `WARN`); на 0.9.1 и позже сбросов быть не должно. Каждая проверка в `run.txt` — строка `PASS <id>` / `WARN <id>` / `FAIL <id> :: <подробности>`.
 
 3. Что и по каким кодам проверяет каждый раздел (для отчёта и поиска причины):
 
@@ -76,6 +81,7 @@
 
    - **Очистка недоступных не видела неудачных проверок (исправлено в `470d5f2`, в `main` с `80be1e9`).** До исправления `RemoveUnavailableProfiles` считала недоступным только профиль с `latency_ms < 0`, а `TestLatency` при неудаче записывает только `lastError` (задержка пуста), поэтому пробный прогон возвращал пустой список: проверки `5.cleanup.dry_run_lists_only_failed`, `5.cleanup.apply_removes_only_failed_untested_kept`, `5.cleanup.remaining_two` давали `FAIL` (серьёзность `major`). Теперь недоступным считается профиль с отрицательной задержкой либо с неудачной проверкой (время есть, задержки нет, есть ошибка); непроверенные и прерванные проверки не считаются. Если на вашем `<TAG>` эти три проверки снова `FAIL` — это регресс `major`.
    - **`CreateProfile` принимает порт 0** (`WARN 1.create.port0.invalid_argument`, серьёзность `minor`): профиль создаётся и не подключится.
+   - **Сброс соединения на пути 401** (дефект D-4, известно в 0.9.0, исправлено в 0.9.1). На Windows запрос с неверным токеном (проверка `5.cors.origin_is_not_authentication`) иногда получает не `401`, а RST: `ConnectionResetError` вместо ответа. Скрипт перехватывает `ConnectionError` и `URLError` в `Core.rpc`, не обрывая раздел: сбой записывается в список сбросов, запрос с неверным токеном повторяется один раз (без побочных эффектов), а в конце добавляется `WARN transport.connection_reset` с перечнем затронутых вызовов. Если повтор тоже сброшен, проверка получает статус `0` и `FAIL` с текстом `transport_reset`: на `v0.9.0` запишите его как известный D-4, на более поздних тегах это дефект `major`. Сброс на другом вызове (не на пути 401) — тоже `FAIL` соответствующей проверки: опишите вызов в отчёте и приложите `run.txt`.
    - Нормализация Unicode в пароле копии (NFC/NFD) выполняется интерфейсом (`lib/password.ts`), а не ядром; это проверяет A14 (`WARN`).
 
 5. Проверки, которые выполняет `go test ./...` (A02) на том же коде и которые не дублируются скриптом, но входят в критерии файла:
@@ -87,13 +93,13 @@
    Set-Location C:\lavray-test
    ```
 
-   Ожидается: три строки `--- PASS` (у каждого ключа настроек есть читатель; у каждой процедуры есть решение для агента; список `allowUnimplemented` не вырос). На `dce8ba0` (T-75 с §7.5) в этом списке остаются только девять процедур `WebSessionService` (до T-75 в нём был ещё `UpdateService/ApplyUpdates`) (постоянная запись: без `--web-bind` сервис не реализован, см. A12). Появление в списке любой другой процедуры — `FAIL`.
+   Ожидается: три строки `--- PASS` (у каждого ключа настроек есть читатель; у каждой процедуры есть решение для агента; список `allowUnimplemented` не вырос). На теге v0.9.0 (коммит `8093656`) в этом списке остаются только девять процедур `WebSessionService` (постоянная запись: без `--web-bind` сервис не реализован, см. A12). Появление в списке любой другой процедуры — `FAIL`.
 
 ## Критерии PASS/FAIL
 
 | № | Критерий | Как проверить |
 |---|---|---|
-| К1 | Шаг 2: `a09 exit=0`, провалов 0 | вывод |
+| К1 | Шаг 2: `a09 exit=0`, провалов 0, проверок не меньше 222 (значение для тега v0.9.0, коммит `8093656`) | вывод |
 | К2 | Все коды ошибок раздела 3 совпали с таблицей (проверки `*.invalid_argument`, `*.not_found`, `*.failed_precondition`, `*.aborted`, `*.resource_exhausted`, `*.permission_denied`, `*.data_loss`) | `a09-result.json` |
 | К3 | Адреса назначения не встречаются в собственных сообщениях LAVRay, в журнале агента и в сводке (`2.log.own_messages_have_no_destinations`, `2.log.agent_view_has_no_destinations`, `2.summary.has_no_destinations`) | `PASS` |
 | К4 | После `log.level = warn` и переподключения строк sing-box о соединениях нет (`2.log.level_warn.no_inbound_connection_lines`) | `PASS` |
@@ -135,7 +141,7 @@
 
 ## Что собрать
 
-`results\A09\run.txt`, `a09-result.json` (копия), список `WARN` и `FAIL` с подробностями, версия ядра из `status.initial`. Файл `data\` каталога теста не копировать (в нём тестовые секреты).
+`results\A09\run.txt`, `a09-result.json` (копия), список `WARN` и `FAIL` с подробностями, версия ядра: строка `coreVersion=<версия>` в `run.txt` и поле `coreVersion` в `a09-result.json` (это поле `coreVersion` ответа `GetStatus`; поля `status.initial` в `CoreStatus` нет, `status.initial` - только имя шага скрипта A07). Файл `data\` каталога теста не копировать (в нём тестовые секреты).
 
 ## Откат / уборка
 
@@ -186,6 +192,7 @@ sys.stdout.reconfigure(encoding="utf-8")
 EXE, OUT = os.path.abspath(sys.argv[1]), os.path.abspath(sys.argv[2])
 os.makedirs(OUT, exist_ok=True)
 RESULTS = []
+RESETS = []  # вызовы, на которых соединение было сброшено (RST): известный дефект D-4 на Windows, v0.9.0
 CRLF = chr(13) + chr(10)
 
 
@@ -267,20 +274,28 @@ class Core:
         self.p.stdin.flush()
         self.base = "http://" + self.p.stdout.readline().decode().split()[1].replace("tcp://", "")
 
-    def rpc(self, svc, method, body=None, token=None, headers=None):
+    def rpc(self, svc, method, body=None, token=None, headers=None, retry_reset=False):
         h = {"Authorization": "Bearer " + (token or self.tok), "Content-Type": "application/json"}
         h.update(headers or {})
-        req = urllib.request.Request(f"{self.base}/lavray.v1.{svc}/{method}", data=json.dumps(body or {}).encode(), headers=h)
-        try:
-            with urllib.request.urlopen(req, timeout=120) as r:
-                raw = r.read()
-                return r.status, (json.loads(raw) if raw else {})
-        except urllib.error.HTTPError as e:
-            raw = e.read().decode(errors="replace")
+        req = urllib.request.Request(f"{self.base}/lavray.v1.{svc}/{method}", data=json.dumps(body or {}).encode("utf-8"), headers=h)
+        for attempt in (1, 2):
             try:
-                return e.code, json.loads(raw)
-            except ValueError:
-                return e.code, raw
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    raw = r.read()
+                    return r.status, (json.loads(raw) if raw else {})
+            except urllib.error.HTTPError as e:
+                raw = e.read().decode("utf-8", errors="replace")
+                try:
+                    return e.code, json.loads(raw)
+                except ValueError:
+                    return e.code, raw
+            except (ConnectionError, urllib.error.URLError) as e:
+                # На Windows путь 401 иногда отвечает RST (ConnectionResetError, дефект D-4, исправлен в 0.9.1).
+                # Не роняем раздел: записываем сброс; повтор допустим только для запросов без побочных эффектов (retry_reset=True).
+                RESETS.append(f"{svc}/{method}: {type(e).__name__}")
+                if retry_reset and attempt == 1:
+                    continue
+                return 0, {"code": "transport_reset", "message": repr(e)}
 
     def stream(self, svc, method, body=None, seconds=3.0, action=None):
         """Server-stream по connect+json: читает кадры seconds секунд; action() вызывается после подписки."""
@@ -826,7 +841,7 @@ def sec5_tails_a(c, X):
         with urllib.request.urlopen(req, timeout=10) as r:
             acao, status, hdrs = r.headers.get("Access-Control-Allow-Origin"), r.status, r.headers.get("Access-Control-Allow-Headers", "")
         check(f"5.cors.preflight[{origin}]", status == 204 and (acao == origin) == want and (not want or "X-LAVRay-CSRF" in hdrs), (status, acao))
-    st, r = c.rpc("CoreService", "GetStatus", token="wrong", headers={"Origin": "tauri://localhost"})
+    st, r = c.rpc("CoreService", "GetStatus", token="wrong", headers={"Origin": "tauri://localhost"}, retry_reset=True)
     check("5.cors.origin_is_not_authentication", st == 401, (st, r))
 
 
@@ -1073,7 +1088,11 @@ def main():
     X["data"] = data
     c = Core(data)
     X["core"] = c
+    core_version = ""
     try:
+        st, ver = c.rpc("CoreService", "GetStatus")
+        core_version = ver.get("coreVersion", "") if st == 200 and isinstance(ver, dict) else ""
+        print(f"coreVersion={core_version}", flush=True)
         c.rpc("SettingsService", "SetSettings", {"values": {"inbound.port": {"intValue": str(X["mixed"])}, "connect.health_check": {"boolValue": False}}})
         GID[0] = c.rpc("ProfileService", "ListGroups")[1]["groups"][0]["id"]
         X["gid"] = GID[0]
@@ -1090,10 +1109,12 @@ def main():
                 check(f"{fn.__name__}.exception", False, repr(e) + " @ " + traceback.format_exc().strip().splitlines()[-3].strip())
     finally:
         c.close()
+    if RESETS:
+        check("transport.connection_reset", False, "RST на запросах (D-4, известно в 0.9.0, исправлено в 0.9.1): " + "; ".join(RESETS[:8]), warn=True)
     failed = [r for r in RESULTS if not r["pass"] and not r["warn"]]
     warns = [r for r in RESULTS if r["warn"]]
     with open(os.path.join(OUT, "a09-result.json"), "w", encoding="utf-8") as f:
-        json.dump({"total": len(RESULTS), "failed": len(failed), "warnings": len(warns), "checks": RESULTS}, f, ensure_ascii=False, indent=1)
+        json.dump({"total": len(RESULTS), "failed": len(failed), "warnings": len(warns), "coreVersion": core_version, "checks": RESULTS}, f, ensure_ascii=False, indent=1)
     print(f"A09: проверок {len(RESULTS)}, провалов {len(failed)}, наблюдений WARN {len(warns)}")
     return 1 if failed else 0
 

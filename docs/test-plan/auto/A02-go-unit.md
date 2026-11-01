@@ -131,7 +131,7 @@ go test -count=1 -v -run '^Fuzz' ./internal/links/ ./internal/model/ ./internal/
   Select-String -Pattern '^(--- |ok|FAIL)'
 ```
 
-   Ожидается ровно семь строк `--- PASS:` с именами: `FuzzParseLink`, `FuzzCanonicalJSON`, `FuzzConvertNekoRayRoute`, `FuzzDecrypt`, `FuzzParseContent`, `FuzzUnified`, `FuzzMeterNeverNegative`, и ни одной `FAIL`. Корпус `internal/links/testdata/fuzz/FuzzParseLink` содержит файлы ранее найденных входов (на `97624d6` — два); проверьте `(Get-ChildItem internal/links/testdata/fuzz/FuzzParseLink).Count -ge 2`.
+   Ожидается ровно десять строк `--- PASS:` с именами: `FuzzParseLink`, `FuzzCanonicalJSON`, `FuzzConvertNekoRayRoute`, `FuzzNormalizeCustomRules`, `FuzzDetectAndParse`, `FuzzSlugify` (ещё три фаззера пакета `internal/presets`), `FuzzDecrypt`, `FuzzParseContent`, `FuzzUnified`, `FuzzMeterNeverNegative`, и ни одной `FAIL` (значение для тега v0.9.0, коммит `8093656`; на более поздних тегах фаззеров может быть больше, меньше быть не должно). Корпус `internal/links/testdata/fuzz/FuzzParseLink` содержит файлы ранее найденных входов (на `97624d6` — два); проверьте `(Get-ChildItem internal/links/testdata/fuzz/FuzzParseLink).Count -ge 2`.
 
 8. Порог покрытия (`scripts/covergate.py`, пороги в `scripts/coverage.yaml`).
 
@@ -171,10 +171,10 @@ git -C $wt status --short -- core
 |---|---|---|
 | К1 | Шаг 2: `go build ./...` вернул 0 | `build exit=0` |
 | К2 | Шаг 3: `go test ./...` вернул 0 | `test exit=0` |
-| К3 | Шаг 4: `ok: 22` (или больше), `FAIL: 0`, пакеты без тестов только перечисленные | значения вывода |
+| К3 | Шаг 4: `ok: 24` (или больше), `FAIL: 0`, пакеты без тестов только перечисленные | значения вывода |
 | К4 | Шаг 5: число тестов в каждом пакете не меньше эталона | таблица шага 5 |
 | К5 | Шаг 6: все 8 защитных тестов `--- PASS` | вывод |
-| К6 | Шаг 7: 7 фаззеров `--- PASS`, корпус `FuzzParseLink` не пуст | вывод и счётчик |
+| К6 | Шаг 7: 10 фаззеров `--- PASS`, корпус `FuzzParseLink` не пуст | вывод и счётчик |
 | К7 | Шаг 8: `covergate exit=0`, нарушений 0 | вывод |
 | К8 | Шаг 9 (если выполнялся): все цели `exit=0`, новых файлов в `testdata/fuzz` нет | вывод и `git status` |
 

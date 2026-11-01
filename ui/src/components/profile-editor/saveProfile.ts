@@ -8,6 +8,7 @@ import { ProfileSchema } from '../../gen/lavray_pb';
 import type { Profile } from '../../gen/lavray_pb';
 import type { CoreClients } from '../../lib/core';
 import { mergeDetail, mergeStream } from '../../lib/profileMerge';
+import { markRestartNeeded } from '../../lib/restartNeeded';
 
 /** Копия новой модели с метаданными исходного профиля (для UpdateProfile). */
 function mergedWithOriginal(original: Profile, model: Profile): Profile {
@@ -36,5 +37,6 @@ export async function persistProfile(
   if (original === null) return core.profiles.createProfile({ profile: model });
   const merged = mergedWithOriginal(original, model);
   const res = await core.profiles.updateProfile({ profile: merged });
+  if (res.needsProfileRestart) markRestartNeeded(); // запущенный профиль: баннер «Перезапустить ядро»
   return res.profile ?? merged;
 }

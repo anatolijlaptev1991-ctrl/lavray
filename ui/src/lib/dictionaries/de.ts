@@ -1030,6 +1030,7 @@ export const deDict: Record<string, string> = {
   "upd.err.signature_invalid": "Die Signatur des Installers konnte nicht bestätigt werden, die Installation wurde abgelehnt.",
   "upd.err.version_mismatch": "Die Version des signierten Installers stimmt nicht mit der erwarteten überein, die Installation wurde abgelehnt.",
   "upd.err.core_unavailable": "Der integrierte Kern zur Signaturprüfung wurde nicht gefunden. Installiere LAVRay neu.",
+  "upd.err.installer_locked": "Windows konnte den Installer nicht starten, weil die Datei in Gebrauch ist. Schließe Programme, die sie geöffnet haben könnten, und versuche es erneut.",
   "upd.err.no_shell": "Die Installation ist nur in der Windows-App möglich.",
   "upd.err.generic": "Die Aktion ist fehlgeschlagen. Bitte versuche es erneut.",
   "upd.dlFailed": "Das Update konnte nicht heruntergeladen werden.",

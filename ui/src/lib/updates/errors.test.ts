@@ -133,6 +133,7 @@ describe('shellErrorKey: коды оболочки update_apply / update_rollbac
     'signature_invalid',
     'version_mismatch',
     'core_unavailable',
+    'installer_locked',
   ])('%s → upd.err.%s', (code) => {
     expect(shellErrorKey(code)).toBe(`upd.err.${code}`);
   });

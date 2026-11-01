@@ -558,3 +558,24 @@ fn the_gate_is_released_when_nothing_was_started() {
     assert!(rejected.run(Mode::Update).is_err());
     assert!(rejected.gate.try_enter().is_ok());
 }
+
+// ---- установщик, удерживаемый с запретом записи, мог не принять ShellExecute/CreateProcess ----
+
+#[test]
+fn a_sharing_violation_is_a_clear_code_and_the_core_is_restarted_without_retries() {
+    let mut rig = Rig::new(Mode::Update);
+    rig.elevator.answer = Err(ElevateError::SharingViolation);
+    assert_eq!(rig.run(Mode::Update), Err(ApplyError::InstallerLocked));
+    assert_eq!(ApplyError::InstallerLocked.code(), "installer_locked");
+    assert_eq!(
+        rig.elevator.launched.borrow().len(),
+        1,
+        "повторных запусков нет"
+    );
+    assert_eq!(rig.log.count("core.restart"), 1, "ядро возвращено");
+    assert!(
+        rig.gate.try_enter().is_ok(),
+        "замок снят: пользователь может повторить сам"
+    );
+    assert_eq!(rig.log.count("watchdog.spawn"), 0);
+}

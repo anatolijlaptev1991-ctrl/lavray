@@ -9,7 +9,9 @@ use super::install::{join_args, system32_dir, ElevateError, ElevatedHandle, Elev
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
-use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_CANCELLED};
+use windows_sys::Win32::Foundation::{
+    CloseHandle, GetLastError, ERROR_CANCELLED, ERROR_SHARING_VIOLATION,
+};
 use windows_sys::Win32::System::Com::{
     CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE,
 };
@@ -83,6 +85,7 @@ fn execute(info: &mut SHELLEXECUTEINFOW) -> Result<ElevatedHandle, ElevateError>
     match code {
         _ if launched => Ok(ElevatedHandle { pid }),
         ERROR_CANCELLED => Err(ElevateError::UacCancelled),
+        ERROR_SHARING_VIOLATION => Err(ElevateError::SharingViolation),
         other => Err(ElevateError::Failed(format!(
             "ShellExecuteEx: код ошибки Windows {other}"
         ))),

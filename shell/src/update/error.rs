@@ -37,6 +37,9 @@ pub enum ApplyError {
     VersionMismatch,
     /// Встроенное ядро для проверки подписи не найдено или не запустилось.
     CoreUnavailable,
+    /// Система не запустила установщик: файл удерживается с запретом записи
+    /// (`ERROR_SHARING_VIOLATION`). Повторов нет — пользователь видит код.
+    InstallerLocked,
 }
 
 impl ApplyError {
@@ -57,6 +60,7 @@ impl ApplyError {
             Self::SignatureInvalid => "signature_invalid",
             Self::VersionMismatch => "version_mismatch",
             Self::CoreUnavailable => "core_unavailable",
+            Self::InstallerLocked => "installer_locked",
         }
     }
 }
@@ -92,6 +96,7 @@ mod tests {
             (ApplyError::SignatureInvalid, "signature_invalid"),
             (ApplyError::VersionMismatch, "version_mismatch"),
             (ApplyError::CoreUnavailable, "core_unavailable"),
+            (ApplyError::InstallerLocked, "installer_locked"),
         ];
         for (error, code) in all {
             assert_eq!(error.code(), code);

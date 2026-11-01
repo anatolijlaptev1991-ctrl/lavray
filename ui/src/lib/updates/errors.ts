@@ -124,6 +124,7 @@ const SHELL_KEYS: Readonly<Record<string, MessageKey>> = {
   signature_invalid: 'upd.err.signature_invalid',
   version_mismatch: 'upd.err.version_mismatch',
   core_unavailable: 'upd.err.core_unavailable',
+  installer_locked: 'upd.err.installer_locked',
   no_shell: 'upd.err.no_shell',
 };
 

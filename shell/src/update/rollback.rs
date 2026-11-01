@@ -51,6 +51,9 @@ impl RollbackStep for PreviousRollback<'_> {
                 RollbackResult::Started(handle.pid)
             }
             Err(ElevateError::UacCancelled) => RollbackResult::UacCancelled,
+            Err(ElevateError::SharingViolation) => {
+                RollbackResult::Failed(ApplyError::InstallerLocked.code().to_string())
+            }
             Err(ElevateError::Failed(_)) => {
                 RollbackResult::Failed(ApplyError::LaunchFailed.code().to_string())
             }

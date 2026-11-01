@@ -1023,6 +1023,7 @@ export const zhDict: Record<string, string> = {
   "upd.err.signature_invalid": "无法确认安装程序的签名，已拒绝安装。",
   "upd.err.version_mismatch": "已签名安装程序的版本与预期不符，已拒绝安装。",
   "upd.err.core_unavailable": "未找到用于验证签名的内置核心。请重新安装 LAVRay。",
+  "upd.err.installer_locked": "系统无法启动安装程序，因为文件正被占用。请关闭可能已打开它的程序后重试。",
   "upd.err.no_shell": "仅 Windows 应用内可安装更新。",
   "upd.err.generic": "操作失败，请重试。",
   "upd.dlFailed": "无法下载更新。",

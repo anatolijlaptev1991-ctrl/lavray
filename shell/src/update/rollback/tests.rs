@@ -200,3 +200,20 @@ fn a_signed_installer_of_another_version_than_previous_json_is_refused() {
     );
     assert!(elevator.launched.borrow().is_empty());
 }
+
+#[test]
+fn a_sharing_violation_during_rollback_is_reported_with_its_own_code() {
+    let tmp = TempDir::new("rb-share");
+    let layout = Layout::new(tmp.path());
+    let store = PreviousStore::new(layout.clone());
+    let a = apply(&store, &tmp, "release A", "0.5.0");
+    apply(&store, &tmp, "release B", "0.5.1");
+    let sig = signed(&a);
+    let elevator = FakeElevator::answering(Err(ElevateError::SharingViolation));
+    assert_eq!(
+        run_step(&layout, &store, &elevator, &sig),
+        RollbackResult::Failed("installer_locked".into())
+    );
+    assert_eq!(elevator.launched.borrow().len(), 1);
+    assert!(store.available().is_some(), "ничего не потреблено");
+}

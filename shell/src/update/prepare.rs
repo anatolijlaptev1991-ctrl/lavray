@@ -158,6 +158,10 @@ fn stop_and_launch(deps: &ApplyDeps<'_>, installer: &Path) -> Result<Launched, A
             deps.core.restart();
             Ok(Launched::Cancelled)
         }
+        Err(ElevateError::SharingViolation) => {
+            deps.core.restart();
+            Err(ApplyError::InstallerLocked)
+        }
         Err(ElevateError::Failed(_)) => {
             deps.core.restart();
             Err(ApplyError::LaunchFailed)

@@ -1030,6 +1030,7 @@ export const enDict: Record<string, string> = {
   "upd.err.signature_invalid": "The installer’s signature couldn’t be verified, so the installation was refused.",
   "upd.err.version_mismatch": "The signed installer’s version doesn’t match the expected one, so the installation was refused.",
   "upd.err.core_unavailable": "The built-in core needed to verify the signature wasn’t found. Reinstall LAVRay.",
+  "upd.err.installer_locked": "Windows couldn’t start the installer because the file is in use. Close any program that may have it open and try again.",
   "upd.err.no_shell": "Installing is available only in the Windows app.",
   "upd.err.generic": "The action failed. Please try again.",
   "upd.dlFailed": "The update couldn’t be downloaded.",

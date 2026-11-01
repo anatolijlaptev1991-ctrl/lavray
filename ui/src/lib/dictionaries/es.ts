@@ -1030,6 +1030,7 @@ export const esDict: Record<string, string> = {
   "upd.err.signature_invalid": "No se pudo confirmar la firma del instalador, así que se rechazó la instalación.",
   "upd.err.version_mismatch": "La versión del instalador firmado no coincide con la esperada, así que se rechazó la instalación.",
   "upd.err.core_unavailable": "No se encontró el núcleo integrado necesario para verificar la firma. Reinstala LAVRay.",
+  "upd.err.installer_locked": "Windows no pudo iniciar el instalador porque el archivo está en uso. Cierra los programas que puedan tenerlo abierto e inténtalo de nuevo.",
   "upd.err.no_shell": "La instalación solo está disponible en la aplicación de Windows.",
   "upd.err.generic": "No se pudo completar la acción. Inténtalo de nuevo.",
   "upd.dlFailed": "No se pudo descargar la actualización.",

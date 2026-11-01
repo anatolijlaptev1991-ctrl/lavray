@@ -65,10 +65,10 @@ func PresetsPrevious(dir string) (map[string]int, bool) {
 	return out, true
 }
 
-// PendingGeo — гео-набор манифеста, если он отличается от установленного
-// (installedSha — sha256 установленного архива, пусто — поставка из бинарника).
-func PendingGeo(mf *Manifest, installedSha string) *GeoSection {
-	if mf == nil || mf.Geo == nil || mf.Geo.Sha256 == installedSha {
+// PendingGeo — гео-набор манифеста, если он новее установленного по ревизии и
+// отличается по содержимому (нулевое installed — поставка из бинарника).
+func PendingGeo(mf *Manifest, installed GeoInstalled) *GeoSection {
+	if mf == nil || mf.Geo == nil || mf.Geo.Sha256 == installed.Sha256 || mf.Geo.Rev <= installed.Rev {
 		return nil
 	}
 	g := *mf.Geo

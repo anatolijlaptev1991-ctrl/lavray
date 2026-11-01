@@ -66,7 +66,7 @@ func readNotes(p string) (map[string]string, error) {
 // уже опубликованного манифеста канала, а ревизия набора — не ниже опубликованной
 // (равная допустима: данные без изменений в новом релизе). Нечитаемый
 // опубликованный манифест — отказ, а не «можно».
-func refuseNotNewer(dir, channel, version string, serial int64, revs map[string]int) error {
+func refuseNotNewer(dir, channel, version string, serial int64, plan *dataPlan) error {
 	if dir == "" {
 		return nil
 	}
@@ -91,10 +91,21 @@ func refuseNotNewer(dir, channel, version string, serial int64, revs map[string]
 	if serial <= old.Serial {
 		return fmt.Errorf("serial %d не больше опубликованного %d в канале %s", serial, old.Serial, channel)
 	}
-	for id, rev := range revs {
+	for id, rev := range plan.presetRevs {
 		if e, ok := old.Presets[id]; ok && int64(rev) < e.Rev {
 			return fmt.Errorf("набор %s: ревизия %d ниже опубликованной %d в канале %s: подписывать откат нельзя", id, rev, e.Rev, channel)
 		}
+	}
+	return refuseOlderGeo(old.Geo, plan, channel)
+}
+
+// refuseOlderGeo: ревизия гео не ниже опубликованной, а при равной — то же содержимое.
+func refuseOlderGeo(old *updates.GeoSection, plan *dataPlan, channel string) error {
+	if old == nil || plan.geoRev == 0 {
+		return nil
+	}
+	if plan.geoRev < old.Rev || (plan.geoRev == old.Rev && plan.geoSha != old.Sha256) {
+		return fmt.Errorf("гео-набор: ревизия %d ниже опубликованной %d в канале %s (равная допустима только для тех же данных): подписывать откат нельзя", plan.geoRev, old.Rev, channel)
 	}
 	return nil
 }

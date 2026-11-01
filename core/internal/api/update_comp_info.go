@@ -84,7 +84,7 @@ func (s *Server) presetsOffer(res *updates.Result) *lavrayv1.ComponentUpdate {
 
 func (s *Server) geoOffer(res *updates.Result) *lavrayv1.ComponentUpdate {
 	have := updates.InstalledGeo(s.geoDir())
-	sec := updates.PendingGeo(res.Manifest, have.Sha256)
+	sec := updates.PendingGeo(res.Manifest, have)
 	if sec == nil {
 		return nil
 	}

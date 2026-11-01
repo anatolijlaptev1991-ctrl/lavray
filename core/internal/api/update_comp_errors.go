@@ -10,6 +10,10 @@ package api
 import (
 	"errors"
 
+	"connectrpc.com/connect"
+
+	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
 )
 
@@ -29,8 +33,14 @@ func componentFailReason(err error) string {
 		return "truncated"
 	case errors.Is(err, updates.ErrTooLarge):
 		return "too_large"
-	case errors.Is(err, updates.ErrPresetNotNewer):
+	case errors.Is(err, updates.ErrPresetNotNewer), errors.Is(err, updates.ErrGeoNotNewer):
 		return "not_newer"
+	case errors.Is(err, updates.ErrExpired):
+		return "expired"
+	case errors.Is(err, updates.ErrSerialRollback):
+		return "serial_rollback"
+	case errors.Is(err, updates.ErrNotStaged):
+		return "not_staged"
 	case errors.Is(err, updates.ErrPresetRejected):
 		return "preset_rejected"
 	case errors.Is(err, updates.ErrArchiveEntry):
@@ -45,13 +55,49 @@ func componentFailReason(err error) string {
 	return ""
 }
 
-// componentStateErr — ошибки состояния применения и отката данных.
-func componentStateErr(err error) error {
+// logDetail пишет подробности сбоя (с путями) в журнал ядра: по RPC они не уходят.
+func (s *Server) logDetail(what string, err error) {
+	detail := updates.ErrorDetail(err)
+	if detail == "" {
+		detail = err.Error()
+	}
+	s.logs.Logf(logs.LevelWarn, "update", "%s: %s", what, detail)
+}
+
+// dataFailure — ошибка вызова для сбоя применения или отката данных: состояние
+// окружения (нет прошлой ревизии, каталог занят) называется причиной, прочее —
+// общий INTERNAL. Тексты ошибок ФС с абсолютными путями наружу не отдаются.
+func (s *Server) dataFailure(c lavrayv1.UpdateComponent, err error) error {
 	switch {
 	case errors.Is(err, updates.ErrNoPrevious):
 		return reasonError(ReasonNoPrevious, "прошлой ревизии нет: откатываться не к чему")
 	case errors.Is(err, updates.ErrDirBusy):
-		return reasonError(ReasonDirBusy, "каталог занят (работающее соединение держит файлы): отключитесь и повторите: %v", err)
+		s.logDetail(compName(c), err)
+		return reasonError(ReasonDirBusy, "каталог данных занят работающим соединением: отключитесь и повторите")
 	}
-	return mapErr(err)
+	s.logDetail(compName(c), err)
+	return connect.NewError(connect.CodeInternal, errors.New("не удалось выполнить действие с данными; подробности в журнале ядра"))
+}
+
+// dataApplyFailed разбирает причину неудачного применения. Нарушение целостности,
+// безопасности или свежести — событие verify_failed и очистка staging; занятый
+// каталог — ошибка вызова (артефакт цел, повторить можно после отключения).
+func (s *Server) dataApplyFailed(c lavrayv1.UpdateComponent, staged *stagedComp, err error, send eventSend) error {
+	if errors.Is(err, updates.ErrDirBusy) {
+		s.upd.setCompPhase(c, lavrayv1.ComponentState_PHASE_DOWNLOADED, ReasonDirBusy)
+		return s.dataFailure(c, err)
+	}
+	s.upd.setCompStaged(c, nil)
+	s.cleanComponentStaging(staged)
+	reason := componentFailReason(err)
+	state := reason
+	if reason == "" {
+		state = "internal" // в состоянии компонента — код, а не текст ошибки с путями
+	}
+	s.upd.setCompPhase(c, lavrayv1.ComponentState_PHASE_FAILED, state)
+	if reason == "" {
+		return s.dataFailure(c, err)
+	}
+	send(&lavrayv1.UpdateEvent{Kind: &lavrayv1.UpdateEvent_VerifyFailed{VerifyFailed: &lavrayv1.VerificationFailed{Component: c, Reason: reason}}})
+	return nil
 }

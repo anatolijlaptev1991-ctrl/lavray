@@ -19,12 +19,9 @@
 package presets
 
 import (
-	"bytes"
-	"compress/zlib"
 	"crypto/sha256"
 	"embed"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -165,17 +162,8 @@ func readGeoRevision(dir string) int {
 // zlib-поток, читаемый до конца с проверкой контрольной суммы (усечённый файл
 // даёт unexpected EOF). Формат — sing-box common/srs.Read.
 func validSRS(raw []byte) bool {
-	if len(raw) < 5 || !bytes.HasPrefix(raw, []byte("SRS")) {
-		return false
-	}
-	zr, err := zlib.NewReader(bytes.NewReader(raw[4:]))
-	if err != nil {
-		return false
-	}
-	if _, err := io.Copy(io.Discard, zr); err != nil {
-		return false
-	}
-	return zr.Close() == nil
+	_, err := InflatedSRSSize(raw, MaxSRSInflated) // разжатие ограничено: проверка идёт при каждом запуске
+	return err == nil
 }
 
 // writeFileAtomic пишет data во временный файл рядом с dst, сбрасывает его на

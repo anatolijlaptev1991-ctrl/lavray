@@ -60,10 +60,16 @@ func srs(t *testing.T, rel string) []byte {
 	return b
 }
 
-func sectionOf(archive []byte) GeoSection {
+func sectionOf(archive []byte) GeoSection { return sectionRev(archive, 1) }
+
+// sectionRev — запись geo манифеста для archive с ревизией rev.
+func sectionRev(archive []byte, rev int64) GeoSection {
 	sum := sha256.Sum256(archive)
-	return GeoSection{Path: "geo/set.zip", Sha256: hex.EncodeToString(sum[:]), Length: int64(len(archive))}
+	return GeoSection{Path: "geo/set.zip", Sha256: hex.EncodeToString(sum[:]), Length: int64(len(archive)), Rev: rev}
 }
+
+// curOpenAI — «действующий» файл набора в фикстуре: корректный .srs, не совпадающий со встроенным.
+func curOpenAI(t *testing.T) []byte { return srs(t, "geosite/google.srs") }
 
 var geoRequired = []string{"geosite/openai.srs", "geoip/cn.srs"}
 
@@ -88,7 +94,7 @@ func newGeoFx(t *testing.T) *geoFx {
 	t.Helper()
 	root := t.TempDir()
 	dir := filepath.Join(root, "geo")
-	writeTree(t, dir, map[string]string{"geosite/openai.srs": "current", "revision.txt": "1 2026-01-01T00:00:00Z\n"})
+	writeTree(t, dir, map[string]string{"geosite/openai.srs": string(curOpenAI(t)), "revision.txt": "2 2026-01-01T00:00:00Z\n"})
 	return &geoFx{t: t, root: root, dir: dir}
 }
 
@@ -112,7 +118,7 @@ func (g *geoFx) rootNames() []string {
 
 func (g *geoFx) untouched() {
 	g.t.Helper()
-	if readFile(g.t, filepath.Join(g.dir, "geosite", "openai.srs")) != "current" {
+	if readFile(g.t, filepath.Join(g.dir, "geosite", "openai.srs")) != string(curOpenAI(g.t)) {
 		g.t.Fatal("действующий каталог geo изменился")
 	}
 	if names := g.rootNames(); len(names) != 1 || names[0] != "geo" {
@@ -130,7 +136,7 @@ func TestGeoAppliesArchive(t *testing.T) {
 	if !exists(filepath.Join(g.dir, "geosite", "extra.srs")) || !exists(filepath.Join(g.dir, "geoip", "cn.srs")) {
 		t.Fatal("файлы набора на месте")
 	}
-	if readFile(t, filepath.Join(PrevDir(g.dir), "geosite", "openai.srs")) != "current" {
+	if readFile(t, filepath.Join(PrevDir(g.dir), "geosite", "openai.srs")) != string(curOpenAI(t)) {
 		t.Fatal("прошлая ревизия хранится в geo.prev")
 	}
 	if rev := presets.GeoRevisionOf(g.dir); rev <= presets.GeoRevision {
@@ -176,7 +182,7 @@ func TestGeoApplyIsIdempotent(t *testing.T) {
 	if err != nil || res.Changed {
 		t.Fatalf("повторное применение того же архива не меняет набор: %+v %v", res, err)
 	}
-	if readFile(t, filepath.Join(PrevDir(g.dir), "geosite", "openai.srs")) != "current" {
+	if readFile(t, filepath.Join(PrevDir(g.dir), "geosite", "openai.srs")) != string(curOpenAI(t)) {
 		t.Fatal("повтор не должен затирать прошлую ревизию")
 	}
 }
@@ -362,7 +368,7 @@ func TestGeoRollbackPrevious(t *testing.T) {
 	if err := RollbackGeo(g.dir); err != nil {
 		t.Fatal(err)
 	}
-	if readFile(t, filepath.Join(g.dir, "geosite", "openai.srs")) != "current" || exists(filepath.Join(g.dir, "geosite", "extra.srs")) {
+	if readFile(t, filepath.Join(g.dir, "geosite", "openai.srs")) != string(curOpenAI(t)) || exists(filepath.Join(g.dir, "geosite", "extra.srs")) {
 		t.Fatal("после отката действует прошлая ревизия")
 	}
 	if got := InstalledGeo(g.dir); got.Sha256 != "" {
@@ -386,13 +392,13 @@ func TestPendingGeoAndPreviousInfo(t *testing.T) {
 	zb := goodZip(t, "extra")
 	sec := sectionOf(zb)
 	mf := &Manifest{Geo: &sec}
-	if got := PendingGeo(mf, InstalledGeo(g.dir).Sha256); got == nil || got.Sha256 != sec.Sha256 {
+	if got := PendingGeo(mf, InstalledGeo(g.dir)); got == nil || got.Sha256 != sec.Sha256 {
 		t.Fatalf("новый набор предлагается: %+v", got)
 	}
 	if _, err := g.apply(zb, sec); err != nil {
 		t.Fatal(err)
 	}
-	if PendingGeo(mf, InstalledGeo(g.dir).Sha256) != nil || PendingGeo(&Manifest{}, "") != nil || PendingGeo(nil, "") != nil {
+	if PendingGeo(mf, InstalledGeo(g.dir)) != nil || PendingGeo(&Manifest{}, GeoInstalled{}) != nil || PendingGeo(nil, GeoInstalled{}) != nil {
 		t.Fatal("установленный или отсутствующий набор не предлагается")
 	}
 	prev, ok := GeoPrevious(g.dir)

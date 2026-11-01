@@ -27,6 +27,7 @@ type dataOpts struct {
 	presetsDir string // каталог с <id>.json встроенных наборов
 	geoZip     string // архив, собранный geo-pack
 	geoDate    string // дата среза (generatedAt и часть имени файла)
+	geoRev     int64  // монотонная ревизия гео-набора (0 — unix-время)
 	prefix     string // префикс путей на источнике («v1.2.0/»)
 	outDir     string // куда копировать файлы под их именами на источнике
 }
@@ -41,28 +42,41 @@ type dataFile struct {
 
 var dateRe = regexp.MustCompile(`^[0-9]{4}-[0-9]{2}-[0-9]{2}$`)
 
-// sections строит секции presets и geo; revs — ревизии наборов для сверки с опубликованным.
-func (d dataOpts) sections(now time.Time) (doc map[string]any, files []dataFile, revs map[string]int, err error) {
-	doc, revs = map[string]any{}, map[string]int{}
+// dataPlan — секции данных, файлы для публикации и что сверять с опубликованным манифестом.
+type dataPlan struct {
+	doc        map[string]any
+	files      []dataFile
+	presetRevs map[string]int
+	geoRev     int64
+	geoSha     string
+}
+
+// sections строит секции presets и geo.
+func (d dataOpts) sections(now time.Time) (*dataPlan, error) {
+	plan := &dataPlan{doc: map[string]any{}, presetRevs: map[string]int{}}
 	if d.presetsDir != "" {
-		sec, fs, err := presetsSection(d.presetsDir, d.prefix, revs)
+		sec, fs, err := presetsSection(d.presetsDir, d.prefix, plan.presetRevs)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, err
 		}
-		doc["presets"], files = sec, append(files, fs...)
+		plan.doc["presets"], plan.files = sec, append(plan.files, fs...)
 	}
 	if d.geoZip != "" {
-		date := d.geoDate
+		date, rev := d.geoDate, d.geoRev
 		if date == "" {
 			date = now.UTC().Format("2006-01-02")
 		}
-		sec, f, err := geoSection(d.geoZip, d.prefix, date)
-		if err != nil {
-			return nil, nil, nil, err
+		if rev == 0 {
+			rev = now.Unix()
 		}
-		doc["geo"], files = sec, append(files, f)
+		sec, f, err := geoSection(d.geoZip, d.prefix, date, rev)
+		if err != nil {
+			return nil, err
+		}
+		plan.doc["geo"], plan.files = sec, append(plan.files, f)
+		plan.geoRev, plan.geoSha = rev, sec["sha256"].(string)
 	}
-	return doc, files, revs, nil
+	return plan, nil
 }
 
 // presetsSection читает <id>.json встроенных наборов каталога. Не .json
@@ -135,9 +149,12 @@ func readPresetFile(p, id string) ([]byte, int, error) {
 }
 
 // geoSection — секция geo по архиву geo-pack; архив обязан проходить проверку клиента.
-func geoSection(zipPath, prefix, date string) (map[string]any, dataFile, error) {
+func geoSection(zipPath, prefix, date string, rev int64) (map[string]any, dataFile, error) {
 	if !dateRe.MatchString(date) {
 		return nil, dataFile{}, fmt.Errorf("-geo-generated-at: дата ГГГГ-ММ-ДД, получено %q", date)
+	}
+	if rev < 1 || rev > updates.MaxGeoRev {
+		return nil, dataFile{}, fmt.Errorf("-geo-rev: ревизия вне 1…%d, получено %d", updates.MaxGeoRev, rev)
 	}
 	raw, err := os.ReadFile(zipPath)
 	if err != nil {
@@ -147,7 +164,7 @@ func geoSection(zipPath, prefix, date string) (map[string]any, dataFile, error) 
 		return nil, dataFile{}, fmt.Errorf("%s: %w", zipPath, err)
 	}
 	rel := path.Join(prefix, "geo-"+date+".zip")
-	sec := map[string]any{"path": rel, "sha256": sha256Hex(raw), "length": len(raw), "generatedAt": date}
+	sec := map[string]any{"path": rel, "sha256": sha256Hex(raw), "length": len(raw), "generatedAt": date, "rev": rev}
 	return sec, dataFile{rel, raw}, nil
 }
 

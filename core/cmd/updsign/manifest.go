@@ -45,6 +45,7 @@ func parseManifestFlags(errw io.Writer, args []string) (*manifestOpts, error) {
 	fs.StringVar(&o.data.presetsDir, "presets-dir", "", "каталог с <id>.json встроенных наборов (секция presets)")
 	fs.StringVar(&o.data.geoZip, "geo-zip", "", "архив из geo-pack (секция geo)")
 	fs.StringVar(&o.data.geoDate, "geo-generated-at", "", "дата среза гео ГГГГ-ММ-ДД (по умолчанию сегодня, UTC)")
+	fs.Int64Var(&o.data.geoRev, "geo-rev", 0, "монотонная ревизия гео-набора (0 — текущее unix-время)")
 	fs.StringVar(&o.data.prefix, "data-prefix", "data/", "префикс путей наборов и гео на источнике, например v1.2.0/")
 	fs.StringVar(&o.data.outDir, "data-out", "", "каталог, куда скопировать файлы наборов и гео под их именами на источнике")
 	return o, fs.Parse(args)
@@ -109,13 +110,14 @@ func (c *cli) manifest(args []string) error {
 
 // manifestDoc собирает подписываемый документ и список файлов данных.
 func (c *cli) manifestDoc(o *manifestOpts) (map[string]any, []dataFile, error) {
-	doc, files, revs, err := o.data.sections(time.Now())
+	plan, err := o.data.sections(time.Now())
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := refuseNotNewer(o.published, o.channel, o.version, o.serial, revs); err != nil {
+	if err := refuseNotNewer(o.published, o.channel, o.version, o.serial, plan); err != nil {
 		return nil, nil, err
 	}
+	doc, files := plan.doc, plan.files
 	doc["type"], doc["product"], doc["channel"], doc["serial"] = "manifest", o.product, o.channel, o.serial
 	doc["expires"], doc["mandatory"] = expiresAt(time.Now(), o.ttl), o.mandatory
 	if len(o.assets) > 0 {

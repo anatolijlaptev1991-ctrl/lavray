@@ -26,6 +26,7 @@ const geoSourceFile = "source.json"
 type GeoInstalled struct {
 	Sha256      string `json:"sha256"`
 	GeneratedAt string `json:"generated_at,omitempty"`
+	Rev         int64  `json:"rev,omitempty"` // ревизия манифеста; 0 — поставка из бинарника
 }
 
 // GeoApplied — итог ApplyGeo.
@@ -36,7 +37,12 @@ type GeoApplied struct {
 }
 
 // InstalledGeo читает сведения о наборе в dir; нет маркера — нулевое значение.
+// Маркер ревизии не выше встроенной (GeoRevision) значит, что набор переписан
+// EnsureGeo нового бинарника: source.json устарел и набор снова предлагается.
 func InstalledGeo(dir string) GeoInstalled {
+	if presets.GeoRevisionOf(dir) <= presets.GeoRevision {
+		return GeoInstalled{}
+	}
 	p := filepath.Join(dir, geoSourceFile)
 	if fi, err := os.Stat(p); err != nil || fi.Size() > 4096 {
 		return GeoInstalled{}
@@ -59,8 +65,12 @@ func ApplyGeo(dir string, archive []byte, sec GeoSection, lim GeoLimits, require
 	if err := CheckSha256(archive, sec.Sha256); err != nil {
 		return nil, err
 	}
-	if InstalledGeo(dir).Sha256 == sec.Sha256 {
+	have := InstalledGeo(dir)
+	if have.Sha256 == sec.Sha256 {
 		return &GeoApplied{Sha256: sec.Sha256}, nil
+	}
+	if sec.Rev < 1 || sec.Rev <= have.Rev {
+		return nil, fmt.Errorf("%w: rev %d при установленной %d", ErrGeoNotNewer, sec.Rev, have.Rev)
 	}
 	CleanSwapLeftovers(dir)
 	next, err := NewSiblingDir(dir)
@@ -92,7 +102,7 @@ func buildGeoDir(cur, next string, archive []byte, sec GeoSection, lim GeoLimits
 	if err := writeFileSynced(filepath.Join(next, presets.GeoMarkerFile), []byte(marker)); err != nil {
 		return nil, err
 	}
-	src, err := json.Marshal(GeoInstalled{Sha256: sec.Sha256, GeneratedAt: sec.GeneratedAt})
+	src, err := json.Marshal(GeoInstalled{Sha256: sec.Sha256, GeneratedAt: sec.GeneratedAt, Rev: sec.Rev})
 	if err != nil {
 		return nil, err
 	}
@@ -122,5 +132,16 @@ func requireGeoFiles(files, required []string) error {
 	return nil
 }
 
-// RollbackGeo возвращает прошлую ревизию набора; ErrNoPrevious — её нет.
-func RollbackGeo(dir string) error { return RollbackDir(dir) }
+// RollbackGeo возвращает прошлую ревизию набора; ErrNoPrevious — её нет. Возвращённый
+// набор проверяется как при запуске (presets.ExtractGeo): недостающие и повреждённые
+// файлы, ставшие встроенными позже прошлой ревизии, чинятся из поставки, целые
+// файлы прошлой ревизии остаются.
+func RollbackGeo(dir string) error {
+	if err := RollbackDir(dir); err != nil {
+		return err
+	}
+	if _, err := presets.ExtractGeo(dir); err != nil {
+		return fmt.Errorf("набор возвращён, но не восстановлен до полного: %w", err)
+	}
+	return nil
+}

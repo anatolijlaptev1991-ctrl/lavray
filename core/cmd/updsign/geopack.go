@@ -52,7 +52,7 @@ func checkGeoZip(raw []byte) error {
 		return err
 	}
 	defer os.RemoveAll(tmp)
-	sec := updates.GeoSection{Sha256: sha256Hex(raw), Length: int64(len(raw))}
+	sec := updates.GeoSection{Sha256: sha256Hex(raw), Length: int64(len(raw)), Rev: 1}
 	_, err = updates.ApplyGeo(filepath.Join(tmp, "geo"), raw, sec, updates.DefaultGeoLimits, required)
 	return err
 }

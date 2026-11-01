@@ -9,9 +9,9 @@ package updates
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -43,34 +43,36 @@ func isDir(p string) bool {
 
 // SwapDir ставит собранный каталог next на место cur, прежний cur становится
 // cur.prev (одна прошлая ревизия). При ошибке cur и cur.prev остаются как были,
-// next не удаляется — это забота вызывающего.
+// next не удаляется — это забота вызывающего. Ошибка — NewDirBusyError: наружу
+// общий текст, в Detail — все сбои, включая неудавшийся возврат состояния.
 func SwapDir(cur, next string) error {
 	prev, discard := PrevDir(cur), cur+discardSuffix
 	_ = os.RemoveAll(discard)
 	hadPrev, hadCur := isDir(prev), isDir(cur)
 	if hadPrev {
 		if err := renameDir(prev, discard); err != nil {
-			return fmt.Errorf("%w: %v", ErrDirBusy, err)
+			return NewDirBusyError(err)
 		}
 	}
-	undo := func() {
+	undo := func() error {
 		if hadPrev {
-			_ = renameDir(discard, prev)
+			return renameDir(discard, prev)
 		}
+		return nil
 	}
 	if hadCur {
 		if err := renameDir(cur, prev); err != nil {
-			undo()
-			return fmt.Errorf("%w: %v", ErrDirBusy, err)
+			return NewDirBusyError(errors.Join(err, undo()))
 		}
 	}
 	if err := renameDir(next, cur); err != nil {
+		var back error
 		if hadCur {
-			err = errors.Join(err, renameDir(prev, cur))
+			back = renameDir(prev, cur)
 		}
-		undo()
-		return fmt.Errorf("%w: %v", ErrDirBusy, err)
+		return NewDirBusyError(errors.Join(err, back, undo()))
 	}
+	syncDir(filepath.Dir(cur))
 	_ = os.RemoveAll(discard)
 	return nil
 }
@@ -86,25 +88,35 @@ func RollbackDir(cur string) error {
 	hadCur := isDir(cur)
 	if hadCur {
 		if err := renameDir(cur, aside); err != nil {
-			return fmt.Errorf("%w: %v", ErrDirBusy, err)
+			return NewDirBusyError(err)
 		}
 	}
 	if err := renameDir(prev, cur); err != nil {
+		var back error
 		if hadCur {
-			err = errors.Join(err, renameDir(aside, cur))
+			back = renameDir(aside, cur)
 		}
-		return fmt.Errorf("%w: %v", ErrDirBusy, err)
+		return NewDirBusyError(errors.Join(err, back))
 	}
+	syncDir(filepath.Dir(cur))
 	_ = os.RemoveAll(aside)
 	return nil
 }
 
 // CleanSwapLeftovers убирает временные каталоги прерванной замены рядом с cur.
-// Вызывается под замком применения: работающей замены в это время нет.
+// Вызывается под замком применения: работающей замены в это время нет. Каталог
+// просматривается целиком, а не glob: «[» и «*» в пути данных ничего не ломают.
 func CleanSwapLeftovers(cur string) {
-	matches, _ := filepath.Glob(cur + newInfix + "*")
-	for _, m := range append(matches, cur+discardSuffix, cur+asideSuffix) {
-		_ = os.RemoveAll(m)
+	parent, base := filepath.Dir(cur), filepath.Base(cur)
+	entries, err := os.ReadDir(parent)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		n := e.Name()
+		if strings.HasPrefix(n, base+newInfix) || n == base+discardSuffix || n == base+asideSuffix {
+			_ = os.RemoveAll(filepath.Join(parent, n))
+		}
 	}
 }
 

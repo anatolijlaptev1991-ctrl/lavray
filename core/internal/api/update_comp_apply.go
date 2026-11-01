@@ -12,8 +12,10 @@ package api
 import (
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"slices"
+	"time"
 
 	"connectrpc.com/connect"
 
@@ -43,7 +45,10 @@ func (s *Server) applyData(c lavrayv1.UpdateComponent, stream *connect.ServerStr
 	}
 	send := eventSender(stream)
 	s.upd.setCompPhase(c, lavrayv1.ComponentState_PHASE_APPLYING, "")
-	restart, err := s.applyStaged(c, staged)
+	restart, err := false, s.checkStagedFresh(staged)
+	if err == nil {
+		restart, err = s.applyStaged(c, staged)
+	}
 	if err != nil {
 		return s.dataApplyFailed(c, staged, err, send)
 	}
@@ -108,42 +113,50 @@ func (s *Server) applyGeoFile(staged *stagedComp) (bool, error) {
 	return res.Changed, nil
 }
 
-// readStaged читает файл из staging/components, не выходя за каталог и за предел размера.
+// readStaged читает файл из staging/components, не выходя за каталог и за предел
+// размера: читается не больше limit+1 байт. Системные ошибки с путями не
+// возвращаются — они уходят в журнал, наружу идёт ErrNotStaged.
 func (s *Server) readStaged(f stagedFile, limit int64) ([]byte, error) {
 	p, err := updates.InsideStaging(s.compStagingDir(), f.path)
-	if err != nil {
+	if errors.Is(err, updates.ErrUnsafePath) {
 		return nil, err
 	}
-	fi, err := os.Stat(p)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", updates.ErrNotStaged, err)
+	if err != nil { // файла нет или он недоступен: путь в ошибке ФС наружу не идёт
+		s.logDetail("staging", err)
+		return nil, fmt.Errorf("%w: файл недоступен", updates.ErrNotStaged)
 	}
-	if fi.Size() > limit {
+	fh, err := os.Open(p)
+	if err != nil {
+		s.logDetail("staging", err)
+		return nil, fmt.Errorf("%w: файл недоступен", updates.ErrNotStaged)
+	}
+	defer fh.Close()
+	data, err := io.ReadAll(io.LimitReader(fh, limit+1))
+	if err != nil {
+		s.logDetail("staging", err)
+		return nil, fmt.Errorf("%w: файл не читается", updates.ErrNotStaged)
+	}
+	if int64(len(data)) > limit {
 		return nil, fmt.Errorf("%w: файл в staging больше %d байт", updates.ErrTooLarge, limit)
-	}
-	data, err := os.ReadFile(p)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", updates.ErrNotStaged, err)
 	}
 	return data, nil
 }
 
-// dataApplyFailed разбирает причину неудачного применения.
-func (s *Server) dataApplyFailed(c lavrayv1.UpdateComponent, staged *stagedComp, err error, send eventSend) error {
-	if errors.Is(err, updates.ErrDirBusy) {
-		s.upd.setCompPhase(c, lavrayv1.ComponentState_PHASE_DOWNLOADED, err.Error())
-		return componentStateErr(err) // артефакт цел: повторить можно после отключения
+// checkStagedFresh: скачанные данные не применяются, если манифест, по которому они
+// сверены, успел истечь или вытеснен более новым (serial ниже виденного последней
+// проверкой). Долго живущее ядро шлюза не ставит устаревшее.
+func (s *Server) checkStagedFresh(st *stagedComp) error {
+	mf := st.manifest
+	if !mf.Expires.After(time.Now()) {
+		return fmt.Errorf("%w: манифест скачанных данных истёк", updates.ErrExpired)
 	}
-	s.upd.setCompStaged(c, nil)
-	s.cleanComponentStaging(staged)
-	s.upd.setCompPhase(c, lavrayv1.ComponentState_PHASE_FAILED, err.Error())
-	reason := componentFailReason(err)
-	if errors.Is(err, updates.ErrNotStaged) {
-		reason = "not_staged"
+	state := s.loadUpdateState()
+	saved := state.SerialStable
+	if mf.Channel == updates.ChannelBeta {
+		saved = state.SerialBeta
 	}
-	if reason == "" {
-		return mapErr(err)
+	if mf.Serial < saved {
+		return fmt.Errorf("%w: serial скачанных данных %d ниже виденного %d", updates.ErrSerialRollback, mf.Serial, saved)
 	}
-	send(&lavrayv1.UpdateEvent{Kind: &lavrayv1.UpdateEvent_VerifyFailed{VerifyFailed: &lavrayv1.VerificationFailed{Component: c, Reason: reason}}})
 	return nil
 }

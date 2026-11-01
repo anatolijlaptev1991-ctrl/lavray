@@ -13,6 +13,8 @@ var (
 	ErrPresetRejected = errors.New("updates: набор из обновления отвергнут")
 	// ErrPresetNotNewer — ревизия набора не выше установленной.
 	ErrPresetNotNewer = errors.New("updates: ревизия набора не выше установленной")
+	// ErrGeoNotNewer — ревизия гео-набора не выше установленной (откат назад).
+	ErrGeoNotNewer = errors.New("updates: ревизия гео-набора не выше установленной")
 	// ErrArchiveEntry — запись архива недопустима: путь, ссылка, каталог, шифрование.
 	ErrArchiveEntry = errors.New("updates: недопустимая запись архива")
 	// ErrArchiveLimit — архив превышает лимиты (записей, размера, сжатия): возможная zip-бомба.
@@ -22,5 +24,6 @@ var (
 	// ErrGeoInvalid — файл архива не является корректным .srs.
 	ErrGeoInvalid = errors.New("updates: файл гео-архива не является .srs")
 	// ErrDirBusy — каталог нельзя переименовать (занят работающим соединением).
+	// Сообщение общее, без путей: подробности — в ErrorDetail, для журнала.
 	ErrDirBusy = errors.New("updates: каталог занят и не может быть заменён")
 )

@@ -23,7 +23,7 @@ func (s *Server) rollbackData(c lavrayv1.UpdateComponent) (*connect.Response[lav
 	defer s.upd.endApply()
 	restored, restart, err := s.rollbackStep(c)
 	if err != nil {
-		return nil, componentStateErr(err)
+		return nil, s.dataFailure(c, err)
 	}
 	old := s.upd.stagedOf(c)
 	s.upd.setCompStaged(c, nil) // скачанное относилось к прежнему состоянию данных

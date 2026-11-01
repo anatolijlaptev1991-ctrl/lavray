@@ -93,6 +93,8 @@ type Release struct {
 	// гео-набора (nil — секции geo в манифесте нет).
 	Presets map[string]PresetArtifact
 	Geo     []byte
+	// GeoRev — ревизия гео-набора (0 — берётся serial релиза): монотонна, клиент не откатывается назад.
+	GeoRev int64
 }
 
 // PresetArtifact — файл набора ревизии Rev, публикуемый в секции presets манифеста.
@@ -160,7 +162,11 @@ func (e *Env) publishComponents(src *Source, mf map[string]any, r Release) {
 	if r.Geo != nil {
 		sum := sha256.Sum256(r.Geo)
 		src.Put("geo/set.zip", r.Geo)
+		rev := r.GeoRev
+		if rev == 0 {
+			rev = r.Serial
+		}
 		mf["geo"] = map[string]any{"path": "geo/set.zip", "sha256": hex.EncodeToString(sum[:]),
-			"length": len(r.Geo), "generatedAt": "2026-10-20"}
+			"length": len(r.Geo), "generatedAt": "2026-10-20", "rev": rev}
 	}
 }

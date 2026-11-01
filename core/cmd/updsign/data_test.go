@@ -127,7 +127,7 @@ func (h *harness) dataArgs(channel, presetsDir, geoZip, extra string) []string {
 		args = append(args, "-presets-dir", presetsDir)
 	}
 	if geoZip != "" {
-		args = append(args, "-geo-zip", geoZip)
+		args = append(args, "-geo-zip", geoZip, "-geo-rev", itoa(h.serial))
 	}
 	if extra != "" {
 		args = append(args, "-published-dir", extra)
@@ -190,7 +190,7 @@ func TestManifestWithPresetsAndGeoSections(t *testing.T) {
 	raw := writePreset(t, h.p("presets"), "lav-ru", rev, "full:a.example")
 	h.must("geo-pack", "-in", geoSource(t, h.p("geo-src"), "zz-new"), "-out", h.p("geo.zip"))
 	zb, _ := os.ReadFile(h.p("geo.zip"))
-	h.must(h.dataArgs("stable", h.p("presets"), h.p("geo.zip"), "")...)
+	h.must(append(h.dataArgs("stable", h.p("presets"), h.p("geo.zip"), ""), "-geo-rev", "7")...)
 	mf := h.readManifest("stable")
 	if mf.App != nil {
 		t.Fatal("манифест данных без приложения")
@@ -200,7 +200,7 @@ func TestManifestWithPresetsAndGeoSections(t *testing.T) {
 	if len(mf.Presets) != 1 || e.Rev != int64(rev) || e.Path != wantPath || e.Sha256 != sum(raw) {
 		t.Fatalf("секция presets: %+v", mf.Presets)
 	}
-	if g := mf.Geo; g == nil || g.Path != "v1.0.0/geo-"+genDate+".zip" || g.Sha256 != sum(zb) || g.Length != int64(len(zb)) || g.GeneratedAt != genDate {
+	if g := mf.Geo; g == nil || g.Path != "v1.0.0/geo-"+genDate+".zip" || g.Sha256 != sum(zb) || g.Length != int64(len(zb)) || g.GeneratedAt != genDate || g.Rev != 7 {
 		t.Fatalf("секция geo: %+v", mf.Geo)
 	}
 	for _, name := range []string{"presets-lav-ru-" + itoa(rev) + ".json", "geo-" + genDate + ".zip"} {
@@ -490,7 +490,7 @@ func applyPresets(t *testing.T, res *updates.Result, overrideDir string) {
 
 func applyGeo(t *testing.T, res *updates.Result, geoDir string) {
 	t.Helper()
-	sec := updates.PendingGeo(res.Manifest, updates.InstalledGeo(geoDir).Sha256)
+	sec := updates.PendingGeo(res.Manifest, updates.InstalledGeo(geoDir))
 	if sec == nil {
 		t.Fatal("гео-набор должен предлагаться")
 	}
@@ -555,4 +555,41 @@ func TestManifestRefusesGeoZipTheClientWouldReject(t *testing.T) {
 	if _, err := os.Stat(h.p("meta/manifest-stable.json")); err == nil {
 		t.Fatal("манифест не должен быть записан")
 	}
+}
+
+// Ревизия гео монотонна: без -geo-rev берётся текущее unix-время, отрицательные и выше потолка не принимаются.
+func TestManifestGeoRevDefaultAndBounds(t *testing.T) {
+	h := newHarness(t)
+	h.must("geo-pack", "-in", geoSource(t, h.p("geo-src"), "zz-new"), "-out", h.p("geo.zip"))
+	args := h.dataArgs("stable", "", h.p("geo.zip"), "")
+	args = args[:len(args)-2] // без -geo-rev: значение по умолчанию
+	h.must(args...)
+	if g := h.readManifest("stable").Geo; g == nil || g.Rev < 1_000_000_000 {
+		t.Fatalf("ревизия по умолчанию — unix-время: %+v", g)
+	}
+	for _, bad := range []string{"-3", "99999999999999999"} {
+		if code, _, _ := h.run(append(h.dataArgs("stable", "", h.p("geo.zip"), ""), "-geo-rev", bad)...); code == 0 {
+			t.Errorf("-geo-rev %s должен отвергаться", bad)
+		}
+	}
+}
+
+// S: гео-набор с ревизией ниже опубликованной (или равной при другом содержимом) не подписывается.
+func TestManifestRefusesOlderGeoRevThanPublished(t *testing.T) {
+	h := newHarness(t)
+	h.must("geo-pack", "-in", geoSource(t, h.p("geo-src"), "zz-one"), "-out", h.p("geo1.zip"))
+	h.must("geo-pack", "-in", geoSource(t, h.p("geo-src2"), "zz-two"), "-out", h.p("geo2.zip"))
+	h.must(append(h.dataArgs("stable", "", h.p("geo1.zip"), ""), "-geo-rev", "10")...)
+	published := h.p("meta")
+	older := append(h.dataArgs("stable", "", h.p("geo2.zip"), published), "-geo-rev", "9")
+	if code, _, errw := h.run(older...); code == 0 || !strings.Contains(errw, "ниже опубликованной") {
+		t.Fatalf("откат ревизии гео: код %d %s", code, errw)
+	}
+	sameRevOtherData := append(h.dataArgs("stable", "", h.p("geo2.zip"), published), "-geo-rev", "10")
+	if code, _, errw := h.run(sameRevOtherData...); code == 0 || !strings.Contains(errw, "ревизия 10") {
+		t.Fatalf("та же ревизия с другим содержимым: код %d %s", code, errw)
+	}
+	same := append(h.dataArgs("stable", "", h.p("geo1.zip"), published), "-geo-rev", "10")
+	h.must(same...) // те же данные в новом релизе допустимы
+	h.must(append(h.dataArgs("stable", "", h.p("geo2.zip"), published), "-geo-rev", "11")...)
 }

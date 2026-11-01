@@ -11,6 +11,7 @@ package updates
 import (
 	"archive/zip"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -31,10 +32,11 @@ type GeoLimits struct {
 }
 
 // DefaultGeoLimits — пределы для настоящих наборов (около 20 файлов по сотням КиБ).
-var DefaultGeoLimits = GeoLimits{MaxEntries: 512, MaxFileBytes: 32 << 20, MaxTotalBytes: 256 << 20, MaxRatio: 100}
+var DefaultGeoLimits = GeoLimits{MaxEntries: 512, MaxFileBytes: 8 << 20, MaxTotalBytes: 32 << 20, MaxRatio: 100}
 
 // MaxGeoArchiveBytes — предел размера самого архива (проверяется до загрузки).
-const MaxGeoArchiveBytes = 64 << 20
+// Настоящие наборы занимают меньше мегабайта; предел подходит и для OpenWrt.
+const MaxGeoArchiveBytes = 16 << 20
 
 // ratioFloor — файлы меньше этого размера проверке сжатия не подлежат.
 const ratioFloor = 64 << 10
@@ -146,12 +148,16 @@ func extractGeoZip(archive []byte, dst string, lim GeoLimits) ([]string, error) 
 		if err != nil {
 			return nil, err
 		}
-		if total += int64(len(raw)); total > lim.MaxTotalBytes {
-			return nil, fmt.Errorf("%w: суммарно больше %d байт", ErrArchiveLimit, lim.MaxTotalBytes)
+		// Лимит суммарного объёма действует и на размер после распаковки .srs
+		// (вложенный zlib-поток): бомба в Store-записи не разворачивается.
+		n, err := presets.InflatedSRSSize(raw, min(lim.MaxTotalBytes-total, presets.MaxSRSInflated))
+		if errors.Is(err, presets.ErrSRSTooLarge) {
+			return nil, fmt.Errorf("%w: %q разжимается больше доступных %d байт", ErrArchiveLimit, rel, lim.MaxTotalBytes-total)
 		}
-		if !presets.ValidSRS(raw) {
+		if err != nil {
 			return nil, fmt.Errorf("%w: %q", ErrGeoInvalid, rel)
 		}
+		total += n
 		if err := putGeoFile(dst, rel, raw); err != nil {
 			return nil, err
 		}

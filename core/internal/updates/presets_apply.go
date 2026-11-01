@@ -21,6 +21,9 @@ import (
 // MaxPresetBytes — предел размера файла набора из обновления.
 const MaxPresetBytes = presets.MaxImportBytes
 
+// MaxPresetRev — потолок ревизии набора в манифесте и в файле набора.
+const MaxPresetRev = presets.MaxRevision
+
 // PresetFile — скачанный файл набора id (sha256 ещё не проверен).
 type PresetFile struct {
 	ID   string

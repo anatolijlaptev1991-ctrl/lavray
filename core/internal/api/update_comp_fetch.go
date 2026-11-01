@@ -20,7 +20,7 @@ import (
 func (s *Server) downloadPresets(ctx context.Context, res *updates.Result, send func(*lavrayv1.UpdateEvent) bool) (bool, error) {
 	installed, err := s.builtinList()
 	if err != nil {
-		return false, mapErr(err)
+		return false, s.dataFailure(compPresets, err)
 	}
 	offers := updates.PendingPresets(res.Manifest, installed)
 	if len(offers) == 0 {
@@ -36,7 +36,7 @@ func (s *Server) downloadPresets(ctx context.Context, res *updates.Result, send 
 		}
 		f, err := s.stageBlob(o.ID+".json", e.Sha256, data)
 		if err != nil {
-			return true, mapErr(err)
+			return true, s.dataFailure(compPresets, err)
 		}
 		f.id = o.ID
 		files, revs[o.ID] = append(files, f), o.Rev
@@ -47,7 +47,7 @@ func (s *Server) downloadPresets(ctx context.Context, res *updates.Result, send 
 
 // downloadGeo качает гео-архив, если он отличается от установленного.
 func (s *Server) downloadGeo(ctx context.Context, res *updates.Result, send func(*lavrayv1.UpdateEvent) bool) (bool, error) {
-	sec := updates.PendingGeo(res.Manifest, updates.InstalledGeo(s.geoDir()).Sha256)
+	sec := updates.PendingGeo(res.Manifest, updates.InstalledGeo(s.geoDir()))
 	if sec == nil {
 		return false, nil
 	}
@@ -69,7 +69,7 @@ func (s *Server) downloadGeo(ctx context.Context, res *updates.Result, send func
 	}
 	f, err := s.stageBlob("geo.zip", sec.Sha256, data)
 	if err != nil {
-		return true, mapErr(err)
+		return true, s.dataFailure(compGeo, err)
 	}
 	s.commitStaged(compGeo, &stagedComp{manifest: res.Manifest, version: geoLabel(sec.GeneratedAt, sec.Sha256), files: []stagedFile{f}}, send)
 	return true, nil

@@ -24,7 +24,7 @@ import { ProfileEditor } from '../components/ProfileEditor';
 import { ProfileRow } from '../components/servers/ProfileRow';
 import type { RowProps } from '../components/servers/ProfileRow';
 import { typeBadge } from '../components/servers/typeBadge';
-import { ImportDialog } from '../components/ImportDialog';
+import { LazyImportDialog } from '../components/LazyImportDialog';
 import { QrDialog } from '../components/QrDialog';
 import { CleanupDialog } from '../components/servers/CleanupDialog';
 import { RowMenu } from '../components/servers/RowMenu';
@@ -751,7 +751,7 @@ export function ServersScreen(): JSX.Element {
       )}
 
       {importOpen && (
-        <ImportDialog
+        <LazyImportDialog
           groupId={importTarget}
           onClose={() => {
             setImportOpen(false);

@@ -336,6 +336,8 @@ jobs:
         run: npx vitest run
       - name: vite build
         run: npm run build
+      - name: "Бюджет бандла (JS до первого кадра ≤ 250 КБ gzip)"
+        run: python3 ../scripts/check_bundle_budget.py
 
   # --------------------------------------------------------------------------
   # nft-check (T-76): golden-выводы NftRenderer (core/internal/gateway/testdata)

@@ -1293,4 +1293,7 @@ export const enDict: Record<string, string> = {
   "diag.cfg.copy": "Copy",
   "diag.cfg.copied": "Copied",
   "diag.cfg.none": "There is no config yet: connect to a server.",
+  "lazy.loading": "Loading…",
+  "lazy.failed": "Could not load this section",
+  "lazy.failedHint": "Check your connection and try again.",
 }

@@ -1293,4 +1293,7 @@ export const deDict: Record<string, string> = {
   "diag.cfg.copy": "Kopieren",
   "diag.cfg.copied": "Kopiert",
   "diag.cfg.none": "Noch keine Konfiguration: Verbinden Sie sich mit einem Server.",
+  "lazy.loading": "Wird geladen…",
+  "lazy.failed": "Dieser Bereich konnte nicht geladen werden",
+  "lazy.failedHint": "Prüfen Sie die Verbindung und versuchen Sie es erneut.",
 }

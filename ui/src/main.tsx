@@ -5,10 +5,15 @@ import { createRoot } from 'react-dom/client';
 import './prototype.css';
 import './base.css';
 import App from './App';
+import { showBootError } from './app/bootError';
+import { initialRoute } from './app/initialRoute';
+import { preloadRoute } from './app/lazyViews';
 import { WebGate } from './screens/web/WebGate';
 import { detectOS, osAttribute } from './platform/adapter';
 import { FIRST_ENDPOINT_WAIT_MS, followShellEndpoint } from './lib/coreEndpoint';
 import { installDropGuard } from './lib/external';
+import { startupLanguage } from './lib/i18n';
+import { loadLanguage } from './lib/i18nLoad';
 import { loadLaunchInfo } from './lib/launch';
 import { hydrateUiState, installUiStateSync } from './lib/uiState';
 
@@ -19,6 +24,9 @@ import { hydrateUiState, installUiStateSync } from './lib/uiState';
 // оставалось пустым, если ядро не стартует.
 // Веб-режим: адрес из location.origin (панель и API за одним origin, cookie).
 async function bootstrap(): Promise<void> {
+  // D-3: экран стартового раздела грузится параллельно с ожиданием оболочки и словаря.
+  const route = initialRoute(window.location.hash);
+  preloadRoute(route.section, route.tab);
   const tauri = (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__;
   if (tauri !== undefined) {
     // T-81: у повышенного экземпляра свой профиль WebView, а язык, тема, режимы,
@@ -48,6 +56,15 @@ async function bootstrap(): Promise<void> {
   const container = document.getElementById('root');
   if (container === null) {
     throw new Error('LAVRay: #root container not found');
+  }
+  // D-3: в главном чанке только en; словарь выбранного языка должен быть
+  // зарегистрирован до первого рендера, иначе t() вернёт ключи.
+  const lang = startupLanguage(window);
+  try {
+    await loadLanguage(lang);
+  } catch {
+    showBootError(container, lang);
+    return;
   }
   createRoot(container).render(
     <StrictMode>

@@ -1293,4 +1293,7 @@ export const esDict: Record<string, string> = {
   "diag.cfg.copy": "Copiar",
   "diag.cfg.copied": "Copiado",
   "diag.cfg.none": "Aún no hay configuración: conéctese a un servidor.",
+  "lazy.loading": "Cargando…",
+  "lazy.failed": "No se pudo cargar esta sección",
+  "lazy.failedHint": "Compruebe la conexión e inténtelo de nuevo.",
 }

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode, act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { warmViews } from './test-harness';
 import App from './App';
 
 /** jsdom lacks matchMedia — install a minimal stub. */
@@ -21,6 +22,8 @@ function stubMatchMedia(): void {
 function setActEnvironment(on: boolean): void {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = on;
 }
+
+beforeAll(warmViews, 60_000);
 
 describe('App scaffold smoke render', () => {
   let root: Root | null = null;
@@ -49,7 +52,14 @@ describe('App scaffold smoke render', () => {
     setActEnvironment(false);
   });
 
-  function renderApp(): void {
+  /** D-3: экраны ленивые — после рендера даём чанку подгрузиться. */
+  async function settle(ms = 40): Promise<void> {
+    await act(async () => {
+      await new Promise<void>((resolve) => setTimeout(resolve, ms));
+    });
+  }
+
+  async function renderApp(): Promise<void> {
     act(() => {
       root?.render(
         <StrictMode>
@@ -57,10 +67,11 @@ describe('App scaffold smoke render', () => {
         </StrictMode>,
       );
     });
+    await settle();
   }
 
-  it('renders the five sections and the first screen', () => {
-    renderApp();
+  it('renders the five sections and the first screen', async () => {
+    await renderApp();
 
     const buttons = Array.from(document.querySelectorAll<HTMLElement>('.sb-item'));
     expect(buttons.map((b) => b.textContent)).toEqual([
@@ -87,26 +98,27 @@ describe('App scaffold smoke render', () => {
     expect(document.documentElement.dataset.accent).toBe('amber');
   });
 
-  it('switches sections via Ctrl+1..5', () => {
-    renderApp();
+  it('switches sections via Ctrl+1..5', async () => {
+    await renderApp();
 
-    const press = (key: string): void => {
+    const press = async (key: string): Promise<void> => {
       act(() => {
         window.dispatchEvent(new KeyboardEvent('keydown', { key, ctrlKey: true }));
       });
+      await settle();
     };
 
-    press('3'); // Правила
+    await press('3'); // Правила
     const items = Array.from(document.querySelectorAll<HTMLElement>('.sb-item'));
     expect(items[2]?.classList.contains('on')).toBe(true);
 
-    press('5'); // Настройки — боевой экран (.set), заглушек-табов больше нет
+    await press('5'); // Настройки — боевой экран (.set), заглушек-табов больше нет
     expect(document.querySelector('#ghTitle')?.textContent).toBe('Настройки');
     expect(document.querySelector('[role="radiogroup"][aria-label="Язык интерфейса"]')).not.toBeNull();
   });
 
-  it('gives every brand-mark gradient a unique id (ray stays painted)', () => {
-    renderApp();
+  it('gives every brand-mark gradient a unique id (ray stays painted)', async () => {
+    await renderApp();
 
     // Регрессия: одинаковые id у <linearGradient> в нескольких знаках
     // «Отражение» — невалидный документ; браузер разрешал url(#lavRay) в

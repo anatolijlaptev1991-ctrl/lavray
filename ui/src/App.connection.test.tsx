@@ -2,8 +2,9 @@
 
 // App.connection.test.tsx — горячие клавиши и статус-бар настоящего приложения.
 // App сам создаёт клиентов, поэтому ядро подменено на уровне fetch.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
+import { warmViews } from './test-harness';
 import App from './App';
 import { setLanguage } from './lib/i18n';
 import { applySystemProxy } from './lib/connection';
@@ -49,6 +50,8 @@ const ctrl = (key: string): Promise<void> =>
     window.dispatchEvent(new KeyboardEvent('keydown', { key, ctrlKey: true }));
     await Promise.resolve();
   });
+
+beforeAll(warmViews, 60_000);
 
 describe('Ctrl+D (T-26)', () => {
   it('подключает сервер, выбранный на экране «Подключение», а не первый в списке', async () => {

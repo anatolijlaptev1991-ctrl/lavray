@@ -59,3 +59,26 @@ var (
 	// а «проверка не удалась» — принцип 7).
 	ErrNetwork = errors.New("updates: все источники недоступны")
 )
+
+// Ошибки minisign, цепочки корня, источников и загрузки (T-75).
+var (
+	// ErrMinisigFormat — файл подписи не разбирается (4 строки, base64, длины).
+	ErrMinisigFormat = errors.New("updates: некорректный формат подписи minisign")
+	// ErrMinisigKeyID — keyid подписи не совпал с ключом роли artifact.
+	ErrMinisigKeyID = errors.New("updates: keyid подписи minisign не совпал с ключом")
+	// ErrMinisigTrustedComment — trusted comment подделан или не совпал с
+	// ожидаемым «product;platform;channel;version;serial».
+	ErrMinisigTrustedComment = errors.New("updates: trusted comment подписи minisign недействителен")
+	// ErrArtifactRoleMissing — в корне доверия нет роли artifact: клиент
+	// отказывает (fail-closed), без подписи minisign установка невозможна.
+	ErrArtifactRoleMissing = errors.New("updates: в root.json нет роли artifact (minisign)")
+	// ErrRootRotation — источник отдал кандидата следующего корня, но он не
+	// прошёл проверку (подпись, версия N+1, новые ключи).
+	ErrRootRotation = errors.New("updates: ротация root.json отвергнута")
+	// ErrTooLarge — ответ источника превысил лимит (не обрезается молча).
+	ErrTooLarge = errors.New("updates: ответ источника превысил лимит размера")
+	// ErrNotFound — источник ответил 404.
+	ErrNotFound = errors.New("updates: не найдено на источнике")
+	// ErrBadRedirect — редирект не на https или их больше пяти.
+	ErrBadRedirect = errors.New("updates: недопустимый редирект источника")
+)

@@ -20,6 +20,7 @@ import {
   UpdateService,
   BackupService,
 } from '../gen/lavray_pb';
+import { errorReason } from './errorInfo';
 import { t as translate } from './i18n';
 
 export interface CoreAuth {
@@ -107,7 +108,8 @@ export type CoreErrorKey =
   | 'core.unavailable'
   | 'err.unimplemented'
   | 'err.precondition'
-  | 'err.tunAccess';
+  | 'err.tunAccess'
+  | 'err.transport';
 export type CoreErrorTranslate = (key: CoreErrorKey) => string;
 
 // Сбой самого транспорта: сеть недоступна либо вместо ядра ответил чужой
@@ -158,6 +160,8 @@ export function friendlyCoreError(
   if (TRANSPORT_DOWN.test(raw)) return tr('core.unavailable');
   if (connectErr?.code === Code.Unimplemented) return tr('err.unimplemented');
   if (connectErr?.code === Code.FailedPrecondition) {
+    // XHTTP и другие транспорты, которых нет в ядре: понятная фраза вместо текста ядра.
+    if (errorReason(connectErr) === 'transport_unsupported') return tr('err.transport');
     const head = tr('err.precondition');
     const reason = raw.trim();
     return reason === '' ? head : `${head}: ${reason}`;

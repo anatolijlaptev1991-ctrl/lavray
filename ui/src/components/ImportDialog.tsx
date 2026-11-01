@@ -14,7 +14,9 @@ import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
+import { importLogWarnings } from '../lib/importWarnings';
 import { onTablistKeyDown } from '../lib/tabs';
+import { UnsupportedBadge } from './servers/UnsupportedBadge';
 import { QrTab } from './import/QrTab';
 
 type Tab = 'link' | 'qr' | 'file';
@@ -100,11 +102,12 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
         setPreview(res.parsedProfiles);
         // Предупреждения — отброшенные опасные custom-поля (LNB-25):
         // показываем, какие поля и у каких профилей вырезаны.
-        setWarnings(
-          res.customFieldWarnings.map(
+        setWarnings([
+          ...res.customFieldWarnings.map(
             (w) => `#${String(w.profileIndex + 1)}: ${w.droppedFields.join(', ')}`,
           ),
-        );
+          ...importLogWarnings(res.log, tf), // например, XHTTP: импорт есть, подключения нет
+        ]);
         setHint(res.hint ?? '');
         // Подписку определяет ядро (в том числе Happ-ссылку и URL с портом).
         setIsSubscription(res.kind === ImportContentResponse_ContentKind.SUBSCRIPTION_URL);
@@ -121,7 +124,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
         setBusy(false);
       }
     },
-    [core],
+    [core, tf],
   );
 
   const copyHappDetails = useCallback(async (): Promise<void> => {
@@ -397,6 +400,7 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
                   {preview.slice(0, 8).map((p, i) => (
                     <li key={`${String(p.type)}-${String(i)}`}>
                       <span className="mono">{p.name}</span>
+                      <UnsupportedBadge reason={p.unsupportedReason} />
                       <span className="muted mono">
                         {p.address}:{String(p.port)}
                       </span>

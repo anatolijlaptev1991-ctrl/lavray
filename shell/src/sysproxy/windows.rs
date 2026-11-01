@@ -46,6 +46,16 @@ fn captured_warnings(data: &Value) -> Vec<String> {
     strings.map(str::to_string).collect()
 }
 
+/// Есть ли в снимке записи RAS, которые пишутся через WinINET.
+///
+/// Запись подключения RAS через WinINET переписывает и общие значения LAN в
+/// реестре: прогон 0.9.0 (D-1) увидел, как после неё обнулился `ProxyServer`.
+/// Поэтому после записей RAS значения LAN пишутся ещё раз, последними.
+fn has_ras(data: &Value) -> bool {
+    let entries = data.get("ras").and_then(Value::as_object);
+    entries.is_some_and(|map| map.values().any(Value::is_object))
+}
+
 impl<R: Registry, C: Connections, E: RasEntries> Backend for Windows<R, C, E> {
     fn capture(&self) -> Result<ProxySnapshot, String> {
         let lan = capture_with(&self.reg)?;
@@ -85,6 +95,9 @@ impl<R: Registry, C: Connections, E: RasEntries> Backend for Windows<R, C, E> {
         let mut warnings = captured_warnings(&original.data);
         warnings.extend(wpad::apply(&self.conns, &original.data));
         warnings.extend(ras::apply(&self.conns, host, port, &original.data));
+        if has_ras(&original.data) {
+            apply_with(&self.reg, host, port)?;
+        }
         self.conns.refresh();
         Ok(warnings)
     }
@@ -95,6 +108,9 @@ impl<R: Registry, C: Connections, E: RasEntries> Backend for Windows<R, C, E> {
         let mut warnings: Vec<String> =
             wpad::restore(&self.conns, &snap.data).into_iter().collect();
         warnings.extend(ras::restore(&self.conns, &snap.data));
+        if has_ras(&snap.data) {
+            restore_with(&self.reg, snap)?;
+        }
         self.conns.refresh();
         Ok(warnings)
     }

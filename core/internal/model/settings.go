@@ -147,7 +147,7 @@ func SettingDescriptors() []SettingDescriptor {
 		{Key: "win.sp_format", Type: SettingString, GroupID: "misc", ShellOwned: true, DeprecatedBy: "sp_format"},
 		{Key: "update.channel", Type: SettingString, GroupID: "update", DefaultValue: `"stable"`, DeprecatedBy: "check_include_pre"},
 		{Key: "stats.interval_ms", Type: SettingInt, GroupID: "misc", DefaultValue: `1000`, DeprecatedBy: "traffic_loop_interval"},
-		{Key: "share.vmess_old_format", Type: SettingBool, GroupID: "misc", DeprecatedBy: "old_share_link_format"},
+		{Key: "share.vmess_old_format", Type: SettingBool, GroupID: "misc", DefaultValue: `true`, DeprecatedBy: "old_share_link_format"},
 		{Key: "enable_external_cores", Type: SettingBool, GroupID: "core", DefaultValue: `false`},
 		{Key: "web.bind", Type: SettingString, GroupID: "core"},
 		{Key: "web.tls", Type: SettingBool, GroupID: "core", DefaultValue: `false`},

@@ -232,14 +232,12 @@ func (s *Server) CloneProfiles(ctx context.Context, req *connect.Request[lavrayv
 		if err != nil {
 			return nil, mapErr(err)
 		}
-		origID := p.ID
 		p.ID = 0
 		p.Name = fmt.Sprintf("%s (копия)", p.Name)
 		if err := s.st.CreateProfile(p); err != nil {
 			return nil, mapErr(err)
 		}
 		cloned = append(cloned, p.ID)
-		_ = origID
 	}
 	return connect.NewResponse(&lavrayv1.CloneProfilesResponse{NewIds: cloned}), nil
 }
@@ -297,6 +295,7 @@ func (s *Server) ExportLinks(ctx context.Context, req *connect.Request[lavrayv1.
 		}
 	}
 	var out []string
+	std := s.shareOptions() // share.vmess_old_format: формат vmess у FORMAT_STANDARD
 	for _, p := range list {
 		var link string
 		var err error
@@ -306,7 +305,7 @@ func (s *Server) ExportLinks(ctx context.Context, req *connect.Request[lavrayv1.
 		case lavrayv1.ExportLinksRequest_FORMAT_VMESS_V2RAYN:
 			link, err = links.BuildLinkWithOptions(p, links.Options{VMessURLFormat: false})
 		default: // FORMAT_STANDARD
-			link, err = links.BuildLink(p)
+			link, err = links.BuildLinkWithOptions(p, std)
 		}
 		if err != nil {
 			// Неэкспортируемые типы (custom/chain/naive) пропускаем, не роняя пакет.

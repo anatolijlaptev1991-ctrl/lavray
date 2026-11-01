@@ -158,16 +158,17 @@ func TestAllSourcesFailIsCheckFailed(t *testing.T) {
 	}
 }
 
+// X: медленный источник не задерживает выбор timestamp (опрос параллельный,
+// после первого ответа остальным даётся короткая отсрочка).
 func TestSlowSourceTimeout(t *testing.T) {
 	e := newEnv(t, "0.5.0")
 	slow, fast := newMem(), newMem()
 	e.def.publish(t, slow, relOpts{version: "0.6.0", serial: 1, tsVersion: 1})
 	e.def.publish(t, fast, relOpts{version: "0.6.0", serial: 1, tsVersion: 2})
 	slow.delay = time.Minute
-	e.cl.BootstrapSources = []Source{slow, fast}
-	e.cl.PhaseTimeout, e.cl.Grace = 5*time.Second, 100*time.Millisecond
 	start := time.Now()
-	res, err := e.check(t)
+	res, err := FetchTimestamp(context.Background(), e.cl.Trust, []Source{slow, fast},
+		TimestampPolicy{Now: time.Now(), Timeout: 5 * time.Second, Grace: 100 * time.Millisecond})
 	if err != nil || res.Timestamp.Version != 2 {
 		t.Fatalf("медленный источник не должен блокировать: %v", err)
 	}

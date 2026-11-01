@@ -10,7 +10,6 @@ import (
 	"strconv"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
-	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
 )
 
@@ -48,30 +47,31 @@ func (s *Server) loadUpdateState() updates.State {
 }
 
 // saveUpdateState пишет состояние. Монотонные счётчики не уменьшаются даже при
-// гонке двух проверок: записывается максимум из сохранённого и нового.
+// гонке двух проверок: записывается максимум из сохранённого и нового. Исключение —
+// сброс после ротации ключей роли (State.ResetTimestamp/ResetSerials): тогда пишется
+// новое значение как есть, иначе утёкший ключ, подписавший MaxInt64, заперл бы
+// обновления навсегда.
 func (s *Server) saveUpdateState(st *updates.State) {
 	cur := s.loadUpdateState()
 	setNum := func(k string, v int64) { _ = s.st.SetSetting(k, strconv.FormatInt(v, 10)) }
+	pick := func(reset bool, saved, now int64) int64 {
+		if reset {
+			return now
+		}
+		return max(saved, now)
+	}
 	setNum(setUpdRoot, max(cur.RootVersion, st.RootVersion))
-	setNum(setUpdSerialSt, max(cur.SerialStable, st.SerialStable))
-	setNum(setUpdSerialBe, max(cur.SerialBeta, st.SerialBeta))
-	setNum(setUpdTSVer, max(cur.TimestampVersion, st.TimestampVersion))
+	setNum(setUpdSerialSt, pick(st.ResetSerials, cur.SerialStable, st.SerialStable))
+	setNum(setUpdSerialBe, pick(st.ResetSerials, cur.SerialBeta, st.SerialBeta))
+	setNum(setUpdTSVer, pick(st.ResetTimestamp, cur.TimestampVersion, st.TimestampVersion))
 	setNum(setUpdChecked, st.LastCheckedAt)
 	b, _ := json.Marshal(st.LastWorkingURL)
 	_ = s.st.SetSetting(setUpdLastURL, string(b))
+	st.ResetTimestamp, st.ResetSerials = false, false
 }
 
-// settingsRootStore — updates.RootStore поверх настройки update.root_json.
-type settingsRootStore struct{ st *store.Store }
-
-func (r settingsRootStore) LoadRoot() ([]byte, error) {
-	v, ok, err := r.st.GetSetting(setUpdRootJSON)
-	if err != nil || !ok || v == "" {
-		return nil, err
-	}
-	return []byte(v), nil
-}
-
-func (r settingsRootStore) SaveRoot(raw []byte) error {
-	return r.st.SetSetting(setUpdRootJSON, string(raw))
+// rootStore — цепочка принятых корней на диске (<данные>/updates/roots). Каталог
+// не обязан быть доверенным: цепочка перепроверяется от вшитого корня.
+func (s *Server) rootStore() updates.DirRootStore {
+	return updates.DirRootStore{Dir: s.rootsDir()}
 }

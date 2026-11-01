@@ -3,10 +3,13 @@
 package updates
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -134,32 +137,92 @@ func TestRootPersistedNotDowngraded(t *testing.T) {
 	r2 := newRootDef(t, 2, farFuture, "k2")
 	r3 := newRootDef(t, 3, farFuture, "k3")
 	store := &fakeRootStore{}
-	t3 := mustTrust(t, r3.rotatedFrom(t, r2))
-	if err := PersistRoot(store, t3); err != nil || store.saves != 1 {
-		t.Fatalf("первое сохранение: %v saves=%d", err, store.saves)
+	chain := mustTrust(t, r1.selfSigned(t))
+	for _, doc := range [][]byte{r2.rotatedFrom(t, r1), r3.rotatedFrom(t, r2)} {
+		var err error
+		if chain, err = chain.VerifyRootUpdate(doc); err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err := PersistRoot(store, t3); err != nil || store.saves != 1 {
-		t.Fatalf("повторное сохранение должно быть идемпотентным: saves=%d", store.saves)
+	if err := PersistRoot(store, chain); err != nil || store.saves != 2 {
+		t.Fatalf("сохранение цепочки v2, v3: %v saves=%d", err, store.saves)
 	}
-	if err := PersistRoot(store, mustTrust(t, r2.selfSigned(t))); err != nil || store.saves != 1 {
-		t.Fatalf("понижение версии не должно писаться: saves=%d", store.saves)
+	if err := PersistRoot(store, chain); err != nil || store.saves != 2 {
+		t.Fatalf("повторное сохранение идемпотентно: saves=%d", store.saves)
 	}
 	got, err := ResolveTrust(r1.selfSigned(t), store)
 	if err != nil || got.Root().Version != 3 {
-		t.Fatalf("вшитый v1 не должен перебивать сохранённый v3: %v %v", got, err)
+		t.Fatalf("вшитый v1 + цепочка в хранилище = v3: %v %v", got, err)
 	}
-	// новая сборка с вшитым v4 перебивает сохранённый v3
+	// более новый вшитый корень (новая сборка) начинает цепочку заново
 	r4 := newRootDef(t, 4, farFuture, "k4")
-	got, err = ResolveTrust(r4.selfSigned(t), store)
+	got, err = ResolveTrust(r4.rotatedFrom(t, r3), store)
 	if err != nil || got.Root().Version != 4 {
-		t.Fatalf("более новый вшитый корень: %v %v", got, err)
-	}
-	store.raw = []byte("мусор")
-	if got, err = ResolveTrust(r1.selfSigned(t), store); err != nil || got.Root().Version != 1 {
-		t.Fatalf("испорченный сохранённый корень игнорируется: %v %v", got, err)
+		t.Fatalf("новый вшитый корень: %v %v", got, err)
 	}
 	if _, err = ResolveTrust(nil, store); !errors.Is(err, ErrNotConfigured) {
 		t.Fatalf("нет вшитого корня: %v", err)
+	}
+}
+
+// S: подложенный в хранилище самоподписанный корень (хоть v2, хоть v7) не
+// принимается: цепочка проверяется от вшитого корня.
+func TestForgedSelfSignedRootInStoreIgnored(t *testing.T) {
+	r1 := newRootDef(t, 1, farFuture, "k1")
+	evil2 := newRootDef(t, 2, farFuture, "evil")
+	evil7 := newRootDef(t, 7, farFuture, "evil")
+	store := &fakeRootStore{docs: map[int64][]byte{2: evil2.selfSigned(t), 7: evil7.selfSigned(t)}}
+	got, err := ResolveTrust(r1.selfSigned(t), store)
+	if err != nil || got.Root().Version != 1 {
+		t.Fatalf("самоподписанная подделка принята: v%d %v", got.Root().Version, err)
+	}
+	// корень v2 подписан не теми ключами (только новым) — тоже не цепляется
+	r2 := newRootDef(t, 2, farFuture, "k2")
+	store.docs[2] = envelope(t, r2.signed(t), r2.rootKeys)
+	if got, _ = ResolveTrust(r1.selfSigned(t), store); got.Root().Version != 1 {
+		t.Fatal("корень без подписи порога прежнего принят")
+	}
+}
+
+func TestStoredChainStopsAtFirstBrokenLink(t *testing.T) {
+	r1 := newRootDef(t, 1, farFuture, "k1")
+	r2 := newRootDef(t, 2, farFuture, "k2")
+	r3 := newRootDef(t, 3, farFuture, "k3")
+	r4 := newRootDef(t, 4, farFuture, "k4")
+	bad3 := r3.rotatedFrom(t, r1) // v3 подписан ключами v1, а не v2
+	store := &fakeRootStore{docs: map[int64][]byte{
+		2: r2.rotatedFrom(t, r1), 3: bad3, 4: r4.rotatedFrom(t, r3)}}
+	got, err := ResolveTrust(r1.selfSigned(t), store)
+	if err != nil || got.Root().Version != 2 {
+		t.Fatalf("цепочка обрывается на битом звене: v%d %v", got.Root().Version, err)
+	}
+	store.docs[5] = []byte("мусор")
+	if _, err := ResolveTrust(r1.selfSigned(t), store); err != nil {
+		t.Fatalf("мусор в хранилище не ошибка: %v", err)
+	}
+}
+
+func TestDirRootStoreRoundTripAndGarbage(t *testing.T) {
+	dir := t.TempDir()
+	st := DirRootStore{Dir: filepath.Join(dir, "roots")}
+	if docs, err := st.LoadRoots(); err != nil || len(docs) != 0 {
+		t.Fatalf("нет каталога: %v %v", docs, err)
+	}
+	r1 := newRootDef(t, 1, farFuture, "k1")
+	r2 := newRootDef(t, 2, farFuture, "k2")
+	doc := r2.rotatedFrom(t, r1)
+	if err := st.SaveRoot(2, doc); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(st.Dir, "junk.txt"), []byte("x"), 0o600)
+	_ = os.WriteFile(filepath.Join(st.Dir, "9.root.json"), bytes.Repeat([]byte("a"), maxRootFileBytes+1), 0o600)
+	_ = os.Mkdir(filepath.Join(st.Dir, "3.root.json"), 0o700)
+	docs, err := st.LoadRoots()
+	if err != nil || len(docs) != 1 || !bytes.Equal(docs[0], doc) {
+		t.Fatalf("читается только корректный файл: %d %v", len(docs), err)
+	}
+	if got, _ := ResolveTrust(r1.selfSigned(t), st); got.Root().Version != 2 {
+		t.Fatal("цепочка из каталога")
 	}
 }
 

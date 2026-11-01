@@ -37,6 +37,12 @@ type State struct {
 	TimestampVersion int64
 	LastCheckedAt    int64 // мс; обновляется только успешной проверкой
 	LastWorkingURL   string
+	// ResetTimestamp/ResetSerials — после ротации сменился набор ключей роли
+	// timestamp/manifest: хранилище записывает счётчики как есть, а не берёт
+	// максимум со старыми (иначе утёкший ключ, подписавший MaxInt64, навсегда
+	// запер бы обновления).
+	ResetTimestamp bool
+	ResetSerials   bool
 }
 
 // Client — TUF-lite клиент. Trust — вшитый или сохранённый корень сборки.

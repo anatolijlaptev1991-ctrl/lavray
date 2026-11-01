@@ -8,6 +8,7 @@ package updates
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -48,27 +49,40 @@ func AdvanceRootWith(ctx context.Context, srcs []Source, start *Trust, now time.
 	return cur, steps, nil
 }
 
-// nextRoot — следующий корень или nil, если ни у одного источника его нет.
-// Источники опрашиваются параллельно; побеждает первый (по порядку списка)
-// кандидат, прошедший проверку.
+// nextRoot — следующий корень или nil, если цепочка закончилась. Цепочка
+// заканчивается ТОЛЬКО когда каждый источник ответил «нет файла»: источник,
+// который молчит, отвечает ошибкой или не успел, мог бы скрывать новый корень
+// (отзыв ключа), поэтому такая проверка заканчивается ErrNetwork. Побеждает
+// первый (по порядку списка) кандидат, прошедший проверку.
 func nextRoot(ctx context.Context, srcs []Source, cur *Trust, p QueryPolicy) (*Trust, error) {
+	p = p.withDefaults()
+	p.Grace = p.Timeout // ждём всех: конец цепочки нельзя объявлять по части ответов
 	answers := queryAll(ctx, srcs, RootName(cur.Root().Version+1), p)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	var rejected error
+	notFound := 0
 	for _, a := range answers {
-		if a.err != nil || len(a.body) == 0 {
-			continue // 404 или сеть: смотрим остальные источники
+		switch {
+		case errors.Is(a.err, ErrNotFound):
+			notFound++
+		case a.err != nil || len(a.body) == 0:
+			// недоступен или пустой ответ: не 404, конец цепочки не подтверждён
+		default:
+			next, verr := cur.VerifyRootUpdate(a.body)
+			if verr == nil {
+				return next, nil
+			}
+			rejected = firstErr(rejected, verr)
 		}
-		next, verr := cur.VerifyRootUpdate(a.body)
-		if verr == nil {
-			return next, nil
-		}
-		rejected = firstErr(rejected, verr)
 	}
 	if rejected != nil {
 		return nil, fmt.Errorf("%w: %v", ErrRootRotation, rejected)
+	}
+	if len(srcs) == 0 || notFound != len(srcs) {
+		return nil, fmt.Errorf("%w: не все источники подтвердили, что корня %d нет (ответили «нет файла»: %d из %d)",
+			ErrNetwork, cur.Root().Version+1, notFound, len(srcs))
 	}
 	return nil, nil
 }

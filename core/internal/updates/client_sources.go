@@ -26,10 +26,29 @@ func (c *Client) refreshRoot(ctx context.Context, now time.Time) error {
 		}
 	}
 	c.Trust = next
+	c.resetCountersAfterRotation()
 	if _, err := next.Root().ArtifactKeys(); err != nil {
 		return err
 	}
 	return nil
+}
+
+// resetCountersAfterRotation: если с корня, при котором сохранены счётчики
+// (State.RootVersion), сменился набор ключей timestamp или manifest, их версии
+// и serial обнуляются. Признак — версия корня в состоянии, а не факт ротации
+// в этом запуске: ротация могла пройти в прошлом запуске, не дошедшем до записи
+// состояния.
+func (c *Client) resetCountersAfterRotation() {
+	st := c.state()
+	if st.RootVersion <= 0 || c.Trust.Root().Version <= st.RootVersion {
+		return
+	}
+	if c.Trust.KeysChangedSince(st.RootVersion, RoleTimestamp) {
+		st.TimestampVersion, st.ResetTimestamp = 0, true
+	}
+	if c.Trust.KeysChangedSince(st.RootVersion, RoleManifest) {
+		st.SerialStable, st.SerialBeta, st.ResetSerials = 0, 0, true
+	}
 }
 
 // fetchSources — подписанный sources.json с любого bootstrap-источника; его

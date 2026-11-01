@@ -249,13 +249,23 @@ func newMem() *memSource { return &memSource{files: map[string][]byte{}} }
 
 // fakeRootStore — RootStore в памяти (считает записи).
 type fakeRootStore struct {
-	raw   []byte
+	docs  map[int64][]byte
 	saves int
 }
 
-func (f *fakeRootStore) LoadRoot() ([]byte, error) { return f.raw, nil }
-func (f *fakeRootStore) SaveRoot(raw []byte) error {
-	f.raw = append([]byte(nil), raw...)
+func (f *fakeRootStore) LoadRoots() ([][]byte, error) {
+	var out [][]byte
+	for _, raw := range f.docs {
+		out = append(out, raw)
+	}
+	return out, nil
+}
+
+func (f *fakeRootStore) SaveRoot(version int64, raw []byte) error {
+	if f.docs == nil {
+		f.docs = map[int64][]byte{}
+	}
+	f.docs[version] = append([]byte(nil), raw...)
 	f.saves++
 	return nil
 }

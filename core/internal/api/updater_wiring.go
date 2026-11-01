@@ -104,7 +104,7 @@ func (s *Server) updateClient(channel lavrayv1.UpdateChannel) (*updates.Client, 
 		return nil, nil, updates.ErrNotConfigured
 	}
 	conf := s.upd.conf
-	trust, err := updates.ResolveTrust(conf.RootJSON, settingsRootStore{s.st})
+	trust, err := updates.ResolveTrust(conf.RootJSON, s.rootStore())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -116,7 +116,7 @@ func (s *Server) updateClient(channel lavrayv1.UpdateChannel) (*updates.Client, 
 	}
 	srcs = append(srcs, conf.BootstrapSources...)
 	return &updates.Client{
-		Trust: trust, RootStore: settingsRootStore{s.st}, State: &st, Product: conf.Product,
+		Trust: trust, RootStore: s.rootStore(), State: &st, Product: conf.Product,
 		AppVersion: s.upd.appVersion(), Platform: conf.Platform, Channel: channelOf(channel),
 		BootstrapSources: srcs, HTTP: hc,
 		OnWarn: func(m string) { s.logs.Logf(logs.LevelWarn, "update", "%s", m) },

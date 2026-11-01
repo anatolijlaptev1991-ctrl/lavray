@@ -24,6 +24,7 @@ type previousInfo struct {
 
 func (s *Server) updatesDir() string   { return filepath.Join(s.st.Dir(), "updates") }
 func (s *Server) stagingDir() string   { return filepath.Join(s.updatesDir(), "staging") }
+func (s *Server) rootsDir() string     { return filepath.Join(s.updatesDir(), "roots") }
 func (s *Server) previousDir() string  { return filepath.Join(s.updatesDir(), "previous") }
 func (s *Server) ensureStaging() error { return os.MkdirAll(s.stagingDir(), 0o700) }
 

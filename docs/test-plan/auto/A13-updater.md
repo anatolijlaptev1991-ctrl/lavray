@@ -62,13 +62,13 @@
    $res.checks | Where-Object { -not $_.pass } | Select-Object id, warn, detail | Format-Table -AutoSize -Wrap
    ```
 
-   Ожидается: `a13 exit=0`, `провалов: 0`. Эталон на `dce8ba0` (T-75 с §7.5): **298 проверок** (разделы 0–11: 144, разделы 12.*: 154) и 3 `WARN`, все в разделах 12.*:
+   Ожидается: `a13 exit=0`, `провалов: 0`. Эталон на `dce8ba0` (T-75 с §7.5): **298 проверок** (разделы 0–11: 144, разделы 12.*: 154) и 1 `WARN` в разделах 12.*:
 
    | `WARN` | Что наблюдается | Серьёзность |
    |---|---|---|
    | `12.pack.refuses.symlink` | Windows без режима разработчика или прав администратора не даёт создать символическую ссылку: проверка «`geo-pack` отказывает на ссылке в каталоге» пропущена (ограничение ПК). Ссылка внутри архива без прав проверяется в `12.hostile.symlink_entry` | не дефект |
-   | `12.tamper.tampered_preset_file.no_stray_staged_files` | при подмене второго файла пачки наборов первый, уже проверенный файл (`<sha256>-lav-cn.json`) остаётся в `staging\components` до следующей загрузки; применить его нельзя (пачка не принята, фаза `FAILED`) | `minor` |
-   | `12.norev.has_reason_header` | манифест без `geo.rev` отвергается (`400 failed_precondition: updates: отсутствует обязательное поле: "rev"`), но без причины и заголовка `Lavray-Update-Reason`: интерфейс покажет общий текст «Обновление не прошло проверку.» | `minor` |
+
+   Ещё два `WARN` (`12.tamper.tampered_preset_file.no_stray_staged_files`: первый проверенный файл пачки наборов оставался в `staging\components` после отказа; `12.norev.has_reason_header`: отказ по манифесту без `geo.rev` шёл без причины) исправлены в 0.9.1 (D-7b, D-7c): теперь это строгие проверки, а отказ несёт причину `metadata_invalid` в сообщении и заголовке `Lavray-Update-Reason` (интерфейс показывает для неё общий текст).
 
    Два прежних `WARN` на `80be1e9` (подмена манифеста без причины; `update.channel` принимал любую строку) в `dce8ba0` исправлены: теперь это строгие проверки `3.manifest_swapped_after_timestamp.reason_manifest_mismatch` (`manifest_mismatch` в сообщении и заголовке) и `4.settings.update_channel_is_validated` (`400 invalid_argument`); на сборках до §7.5 они дают `FAIL` серьёзности `minor`. Строка `2.rollback.presets.no_previous` вместо прежней `…unimplemented`: `Rollback(PRESETS)` без прошлой ревизии теперь `failed_precondition` с причиной `no_previous`.
 
@@ -151,7 +151,7 @@ updsign.exe verify -root root1.json -dir site\meta -channel stable -assets site\
 | `sec12_tamper_and_freshness` (`12.tamper`, `12.not_newer`, `12.fresh`) | подмена байта в архиве или файле набора на зеркале → `verifyFailed: sha256_mismatch`, в `<данные>` ничего не применено; архив, обрезанный вдвое → `truncated`; **ревизия не новее**: после применения гео с `rev 7000` набор с `rev 7000` или `6000` и другим содержимым не предлагается, `DownloadUpdates(GEO)` → `no_update`, установленный набор цел; тот же архив с более высокой ревизией не предлагается; `rev 7001` предлагается; загрузка устаревшей: серийный номер манифеста вытеснен более новым → `serial_rollback`, манифест успел истечь → `expired`, staging очищен | `verifyFailed`: `sha256_mismatch`, `truncated`, `serial_rollback`, `expired`; `no_update` |
 | `sec12_race_not_newer` (`12.race`) | `not_newer` при применении: два ядра на одном каталоге данных (второе поставило более новый набор, пока первое держало скачанный старый) → у первого `verifyFailed: not_newer`; если второе ядро на том же каталоге не запускается — `WARN`, а защиту закрывают Go-тесты шага 4 | `verifyFailed: not_newer` |
 | `sec12_hostile_archives` (`12.hostile`) | манифест подписан верно (тестовым ключом), а архив враждебен — так выглядит выпуск с украденным ключом manifest; для этого `updsign` собирается из **копии** дерева с отключёнными самопроверками (продукт не меняется). Четырнадцать архивов: `..` в имени (`geosite/../../evil.srs`), абсолютный путь, обратная косая, буква диска, ссылка, каталог, чужой файл, дубль без учёта регистра, не Store и не Deflate (bzip2) → `archive_unsafe`; вложенная zlib-бомба в `.srs` (70 МиБ нулей в 70 КиБ), 520 записей, запись больше 8 МиБ → `archive_limits`; не `.srs` → `geo_invalid`; нет файла встроенного набора → `geo_incomplete`. Каждый архив скачивается как любой подписанный файл, а `ApplyUpdates` даёт `verifyFailed` с причиной; каталог `geo` не изменён (`source.json` нет, файл прежний), лишних каталогов `geo.*` рядом нет, файла `evil.srs` нигде нет, staging пуст, фаза `FAILED`. В конце чистый набор применяется (ядро не «залипло») | `verifyFailed`: `archive_unsafe`, `archive_limits`, `geo_invalid`, `geo_incomplete` |
-| `sec12_manifest_negatives` (`12.norev`, `12.swap`, `12.settings`) | манифест без `geo.rev` (тот же поддельный `updsign`) отвергается, гео не предлагается, время проверки не обновляется (`WARN`, если у ответа нет причины); подмена манифеста другим, тоже верно подписанным → `manifest_mismatch` в сообщении и заголовке, ничего не предлагается; `SetSettings update.channel = bogus` → `400 invalid_argument`, значение не меняется | `manifest_mismatch`, `invalid_argument` |
+| `sec12_manifest_negatives` (`12.norev`, `12.swap`, `12.settings`) | манифест без `geo.rev` (тот же поддельный `updsign`) отвергается, гео не предлагается, время проверки не обновляется (причина `metadata_invalid` в сообщении и заголовке); подмена манифеста другим, тоже верно подписанным → `manifest_mismatch` в сообщении и заголовке, ничего не предлагается; `SetSettings update.channel = bogus` → `400 invalid_argument`, значение не меняется | `manifest_mismatch`, `invalid_argument` |
 
 **Наблюдение 12.session (Windows).** Применение гео при работающем соединении на Windows даёт `dir_busy`: sing-box держит файлы набора открытыми, переименование каталога невозможно, прежний набор остаётся. Для пользователя это сообщение «Папка данных занята работающим соединением. Отключитесь от VPN и повторите.» (M12, часть 13). До §7.5 это место помечалось «не проверено вживую» (`docs/UPDATE-SYSTEM.md`, раздел «Не сделано и не проверено»): теперь проверено на настоящем sing-box. Если на вашем ПК гео применилось при работающем соединении, запишите это в наблюдения (не дефект): тест принимает оба исхода.
 
@@ -161,7 +161,7 @@ updsign.exe verify -root root1.json -dir site\meta -channel stable -assets site\
 
 | № | Критерий | Шаг |
 |---|---|---|
-| К1 | `a13 exit=0`, провалов 0 (допустимы три `WARN` из таблицы шага 2) | 2 |
+| К1 | `a13 exit=0`, провалов 0 (допустим один `WARN` из таблицы шага 2) | 2 |
 | К2 | При заглушке корня везде `not_configured`, зеркала не получают запросов | 2 (`1.*`) |
 | К3 | Успешный путь: проверка, загрузка, повторная проверка, подмена в staging ловится | 2 (`2.*`) |
 | К4 | Каждый неверный документ даёт свою причину и не обновляет время проверки; подмена принята ни в одном случае | 2 (`3.*`, `7.*`) |
@@ -1542,7 +1542,7 @@ def sec12_tamper_and_freshness():
         cs = comp_state(c, comp)
         check(f"12.tamper.{name}.failed_and_nothing_applied", cs.get("phase") == "PHASE_FAILED" and not cs.get("stagedVersion") and not geo_source(c) and
               not os.path.exists(os.path.join(c.data, "presets", "override")), (comp_staging(c), cs))
-        check(f"12.tamper.{name}.no_stray_staged_files", comp_staging(c) == [], "в staging остался уже проверенный файл той же пачки: " + str(comp_staging(c)), warn=True)
+        check(f"12.tamper.{name}.no_stray_staged_files", comp_staging(c) == [], "в staging остался уже проверенный файл той же пачки: " + str(comp_staging(c)))
         c.stop()
     SITE_SRV.behave = {}
     # ревизия «не новее»: после применения гео с rev 7000 набор с тем же или меньшим rev не предлагается и не качается
@@ -1698,8 +1698,8 @@ def sec12_manifest_negatives():
         r = c.check()
         code = r[1].get("code") if isinstance(r[1], dict) else None
         check("12.norev.refused_not_offered", r[0] >= 400 and COMP_G not in offered(r) and last_checked(c) == 0, (r[0], str(r[1])[:200]))
-        check("12.norev.has_reason_header", r[2].get("Lavray-Update-Reason") is not None,
-              "ответ " + str(r[0]) + " без причины (заголовок Lavray-Update-Reason): интерфейс покажет общий текст; " + str(r[1])[:100], warn=True)
+        check("12.norev.has_reason_header", r[2].get("Lavray-Update-Reason") == "metadata_invalid",
+              "ответ " + str(r[0]) + ", заголовок Lavray-Update-Reason: " + str(r[2].get("Lavray-Update-Reason")) + "; " + str(r[1])[:100])
         c.stop()
     else:
         check("12.norev.skipped", False, "нет собранного raw-updsign", warn=True)

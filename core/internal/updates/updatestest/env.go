@@ -95,6 +95,9 @@ type Release struct {
 	Geo     []byte
 	// GeoRev — ревизия гео-набора (0 — берётся serial релиза): монотонна, клиент не откатывается назад.
 	GeoRev int64
+	// MutateManifest правит собранный манифест до подписи (например, убрать
+	// обязательное поле): подпись остаётся настоящей, документ — неверного вида.
+	MutateManifest func(mf map[string]any)
 }
 
 // PresetArtifact — файл набора ревизии Rev, публикуемый в секции presets манифеста.
@@ -134,6 +137,9 @@ func (e *Env) Publish(t testing.TB, src *Source, r Release) string {
 		mf["notes"] = r.Notes
 	}
 	e.publishComponents(src, mf, r)
+	if r.MutateManifest != nil {
+		r.MutateManifest(mf)
+	}
 	signed, _ := json.Marshal(mf)
 	name := updates.ManifestName(r.Channel)
 	src.Put(name, Envelope(t, signed, "r1", e.Man))

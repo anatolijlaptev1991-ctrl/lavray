@@ -1291,5 +1291,6 @@ export const esDict: Record<string, string> = {
   "diag.cfg.hint": "Las contraseñas, claves y UUID están ocultos; la configuración completa solo está disponible al exportar el servidor.",
   "diag.cfg.hide": "Ocultar configuración",
   "diag.cfg.copy": "Copiar",
+  "diag.cfg.copied": "Copiado",
   "diag.cfg.none": "Aún no hay configuración: conéctese a un servidor.",
 }

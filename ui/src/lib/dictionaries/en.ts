@@ -1291,5 +1291,6 @@ export const enDict: Record<string, string> = {
   "diag.cfg.hint": "Passwords, keys and UUIDs are masked; the full config is available only through the server export.",
   "diag.cfg.hide": "Hide config",
   "diag.cfg.copy": "Copy",
+  "diag.cfg.copied": "Copied",
   "diag.cfg.none": "There is no config yet: connect to a server.",
 }

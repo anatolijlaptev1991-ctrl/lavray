@@ -1291,5 +1291,6 @@ export const deDict: Record<string, string> = {
   "diag.cfg.hint": "Passwörter, Schlüssel und UUIDs sind maskiert; die vollständige Konfiguration gibt es nur über den Server-Export.",
   "diag.cfg.hide": "Konfiguration ausblenden",
   "diag.cfg.copy": "Kopieren",
+  "diag.cfg.copied": "Kopiert",
   "diag.cfg.none": "Noch keine Konfiguration: Verbinden Sie sich mit einem Server.",
 }

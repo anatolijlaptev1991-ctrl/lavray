@@ -1281,5 +1281,6 @@ export const zhDict: Record<string, string> = {
   "diag.cfg.hint": "密码、密钥和 UUID 已被遮盖；完整配置仅可通过服务器导出获取。",
   "diag.cfg.hide": "隐藏配置",
   "diag.cfg.copy": "复制",
+  "diag.cfg.copied": "已复制",
   "diag.cfg.none": "暂无配置：请先连接服务器。",
 }

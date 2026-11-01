@@ -223,4 +223,18 @@ describe('mergeStream', () => {
     expect(mergeStream(oldStream, undefined)).toBe(oldStream);
     expect(mergeStream(undefined, undefined)).toBeUndefined();
   });
+
+  it('xhttp_mode и xhttp_extra сохраняются при правке других полей (UpdateProfile — полная замена)', () => {
+    const xhttp = create(StreamSettingsSchema, {
+      network: StreamSettings_Network.XHTTP,
+      path: '/split',
+      xhttpMode: 'packet-up',
+      xhttpExtra: '{"xPaddingBytes":"100-1000"}',
+    });
+    const fromForm = create(StreamSettingsSchema, { network: StreamSettings_Network.XHTTP, path: '/other' });
+    const merged = mergeStream(xhttp, fromForm);
+    expect(merged?.path).toBe('/other');
+    expect(merged?.xhttpMode).toBe('packet-up');
+    expect(merged?.xhttpExtra).toBe('{"xPaddingBytes":"100-1000"}');
+  });
 });

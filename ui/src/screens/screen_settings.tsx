@@ -6,10 +6,11 @@
 // локальными предпочтениями (как в прототипе).
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { JSX } from 'react';
-import { create } from '@bufbuild/protobuf';
-import { SettingType, SettingValueSchema } from '../gen/lavray_pb';
-import type { SettingValue } from '../gen/lavray_pb';
+import { SettingType } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
+import { KILL_SWITCH_SETTING } from '../lib/killSwitch';
+import { markRestartNeeded } from '../lib/restartNeeded';
+import { parseInteger, toSettingValue, valuesOf } from '../lib/settingValues';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { AgentsSettings } from '../components/AgentsSettings';
@@ -93,6 +94,8 @@ const CORE_ROWS: readonly Row[] = [
   { key: 'enable_external_cores', type: SettingType.BOOL, labelKey: 'core.external' },
   // 0.2.1: проверка связи после подключения («Подключено» не гарантирует трафик).
   { key: 'connect.health_check', type: SettingType.BOOL, labelKey: 'set.healthCheck', descKey: 'set.healthCheck.d' },
+  // Хвосты B: оболочка не снимает системный прокси, когда ядро упало (lib/killSwitch.ts).
+  { key: KILL_SWITCH_SETTING, type: SettingType.BOOL, labelKey: 'set.killProxy', descKey: 'set.killProxy.d' },
 ];
 
 interface SearchRow {
@@ -142,67 +145,6 @@ const SECTION_SEARCH: Readonly<Record<string, readonly SearchRow[]>> = {
     { labelKey: 'lic.title' },
   ],
 };
-
-function valueOf(v: SettingValue | undefined): string | boolean | number {
-  const c = v?.value;
-  if (c === undefined) return '';
-  switch (c.case) {
-    case 'stringValue':
-      return c.value;
-    case 'boolValue':
-      return c.value;
-    case 'intValue':
-      return Number(c.value);
-    case 'doubleValue':
-      return c.value;
-    case 'stringListValue':
-      return c.value.items.join('\n');
-    case 'jsonValue':
-      return c.value;
-    default:
-      return '';
-  }
-}
-
-/** Значения из GetSettings в виде, с которым работает экран. */
-function valuesOf(settings: Readonly<Record<string, SettingValue>>): Record<string, string | boolean | number> {
-  const map: Record<string, string | boolean | number> = {};
-  for (const [k, v] of Object.entries(settings)) map[k] = valueOf(v);
-  return map;
-}
-
-/** Целое число из ввода; пустое поле и нечисло → null (раньше становились 0). */
-function parseInteger(raw: string | boolean | number): number | null {
-  if (typeof raw === 'number') return Number.isInteger(raw) ? raw : null;
-  const text = String(raw).trim();
-  return /^-?\d+$/.test(text) ? Number(text) : null;
-}
-
-function toSettingValue(kind: SettingType, raw: string | boolean | number): SettingValue {
-  switch (kind) {
-    case SettingType.BOOL:
-      return create(SettingValueSchema, {
-        value: { case: 'boolValue', value: raw === true || raw === 'true' },
-      });
-    case SettingType.INT: {
-      const n = typeof raw === 'number' ? raw : Number.parseInt(String(raw), 10);
-      return create(SettingValueSchema, {
-        value: { case: 'intValue', value: BigInt(Number.isFinite(n) ? n : 0) },
-      });
-    }
-    case SettingType.STRING_LIST:
-      return create(SettingValueSchema, {
-        value: {
-          case: 'stringListValue',
-          value: { items: String(raw).split('\n').filter((s) => s.trim() !== '') },
-        },
-      });
-    case SettingType.JSON:
-      return create(SettingValueSchema, { value: { case: 'jsonValue', value: String(raw) } });
-    default:
-      return create(SettingValueSchema, { value: { case: 'stringValue', value: String(raw) } });
-  }
-}
 
 export function SettingsScreen(): JSX.Element {
   const { t, lang, setLanguage } = useI18n();
@@ -267,6 +209,7 @@ export function SettingsScreen(): JSX.Element {
           return false;
         }
         accepted.current = { ...accepted.current, [key]: raw };
+        if (res.needsProfileRestart) markRestartNeeded(); // баннер «Перезапустить ядро»
         setOk(t('toast.saved'));
         window.setTimeout(() => {
           setOk('');

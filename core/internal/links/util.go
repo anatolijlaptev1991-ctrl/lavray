@@ -78,10 +78,6 @@ var (
 		"360": true, "qq": true, "ios": true, "android": true,
 		"random": true, "randomized": true,
 	}
-	networks = map[string]bool{
-		"tcp": true, "http": true, "ws": true, "grpc": true,
-		"httpupgrade": true, "quic": true,
-	}
 	tuicCongestions = map[string]bool{"": true, "bbr": true, "cubic": true, "new_reno": true}
 	tuicRelayModes  = map[string]bool{"": true, "native": true, "quic": true}
 )

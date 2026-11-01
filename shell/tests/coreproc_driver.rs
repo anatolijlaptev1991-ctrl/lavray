@@ -127,6 +127,18 @@ fn test_driver() -> RealCoreProcess {
     })
 }
 
+/// Драйвер с длинным `eof_grace` для тестов, где фейк дописывает файл после
+/// EOF на stdin: на медленном раннере Windows `findstr` не успевал за 200 мс и
+/// убивался с пустым файлом. Фейк выходит сам — ожидание кончается раньше.
+fn patient_driver() -> RealCoreProcess {
+    RealCoreProcess::with_timeouts(DriverTimeouts {
+        eof_grace: Duration::from_secs(5),
+        sigterm_wait: Duration::from_millis(600),
+        kill_grace: Duration::from_millis(600),
+        poll_interval: Duration::from_millis(15),
+    })
+}
+
 /// Зачистка каталога данных теста (лучшее усилие).
 fn cleanup(config: &CoreSpawnConfig) {
     let _ = std::fs::remove_dir_all(&config.data_dir);
@@ -211,7 +223,7 @@ fn agent_token_reaches_the_core_as_the_second_stdin_line() {
     std::fs::create_dir_all(&dir).unwrap();
     let recorded = dir.join("stdin.txt");
 
-    let mut driver = test_driver();
+    let mut driver = patient_driver();
     let mut config = fake_config("agent-token", record_stdin_argv(FAKE_URL, &recorded));
     config.auth_token = SecretToken::from_base64url(main.clone()).unwrap();
     config.agent_token = Some(SecretToken::from_base64url(agent.clone()).unwrap());

@@ -247,11 +247,9 @@ func applyStreamFromQuery(st *model.StreamSettings, get func(string) (string, bo
 	if netw == "" {
 		netw = "tcp"
 	}
-	if netw == "h2" {
-		netw = "http"
-	}
+	netw = canonicalNetwork(netw)
 	if !networks[netw] {
-		return fmt.Errorf("тип транспорта %q не поддерживается (tcp, ws, grpc, http, httpupgrade, quic)", netw)
+		return fmt.Errorf("тип транспорта %q не поддерживается (tcp, ws, grpc, http, httpupgrade, quic, xhttp)", netw)
 	}
 	st.Network = netw
 
@@ -303,7 +301,8 @@ func applyStreamFromQuery(st *model.StreamSettings, get func(string) (string, bo
 
 	// поля сети
 	switch st.Network {
-	case "ws", "http", "httpupgrade":
+	case "ws", "http", "httpupgrade", "xhttp":
+		applyXHTTPQuery(st, get)
 		if v, ok := get("path"); ok {
 			st.Path = v
 		}
@@ -328,26 +327,6 @@ func applyStreamFromQuery(st *model.StreamSettings, get func(string) (string, bo
 				st.Host = v
 			}
 		}
-	}
-	return nil
-}
-
-// validateStreamCaps — лимиты полей потока (LNB-17).
-func validateStreamCaps(scheme string, st *model.StreamSettings) error {
-	for _, f := range []struct {
-		name, val string
-	}{
-		{"path", st.Path}, {"host", st.Host}, {"sni", st.SNI},
-		{"alpn", st.ALPN}, {"reality_public_key", st.RealityPublicKey},
-		{"reality_short_id", st.RealityShortID}, {"reality_spx", st.RealitySPX},
-		{"header_type", st.HeaderType},
-	} {
-		if err := checkFieldLen(scheme, f.name, f.val, maxFieldLength); err != nil {
-			return err
-		}
-	}
-	if st.Security == "reality" && st.RealityPublicKey == "" {
-		return fmt.Errorf("%s: security=reality без pbk", scheme)
 	}
 	return nil
 }
@@ -574,12 +553,9 @@ func vmessFromJSON(j *vmessJSON) (*model.Profile, error) {
 	}
 
 	st := &model.StreamSettings{}
-	netw := strings.ToLower(strings.TrimSpace(j.Net))
-	if netw == "h2" {
-		netw = "http"
-	}
+	netw := canonicalNetwork(strings.ToLower(strings.TrimSpace(j.Net)))
 	if netw != "" && !networks[netw] {
-		return nil, fmt.Errorf("vmess: сеть %q не поддерживается (tcp, ws, grpc, http, httpupgrade, quic)", netw)
+		return nil, fmt.Errorf("vmess: сеть %q не поддерживается (tcp, ws, grpc, http, httpupgrade, quic, xhttp)", netw)
 	}
 	st.Network = netw
 	st.Host = j.Host

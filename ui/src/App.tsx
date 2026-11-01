@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import { BrandMark, Icon, type IconName } from './components/Icon';
 import { SECTIONS, type Section, type SectionTab } from './app/sections';
+import { initialRoute } from './app/initialRoute';
 import { CoreContext, useCore, useCoreClients, useCoreStatus } from './hooks/useCore';
 import { ConnectMode, CoreState } from './gen/lavray_pb';
 import { useI18n, useStartupLanguage } from './hooks/useI18n';
@@ -33,6 +34,7 @@ import { ServersScreen } from './screens/screen_servers';
 import { SubscriptionsScreen } from './screens/screen_subscriptions';
 import { SettingsScreen } from './screens/screen_settings';
 import { UpdatesScreen } from './screens/updates/UpdatesScreen';
+import { AppNotices } from './components/AppNotices';
 import { ImportDialog } from './components/ImportDialog';
 import { HotkeysDialog, LicensesDialog, OnboardingDialog } from './components/dialogs';
 import { TitlebarMenu } from './components/TitlebarMenu';
@@ -77,12 +79,7 @@ function AppInner(): JSX.Element {
   });
   // Хеш-API (как в прототипе): #screen=servers&tab=subscriptions — для
   // скриншотов/проверок; неизвестное значение игнорируется.
-  const initial = ((): { section: string; tab: string } => {
-    const params = new URLSearchParams(window.location.hash.slice(1));
-    const sec = params.get('screen') ?? '';
-    const known = SECTIONS.find((x) => x.id === sec);
-    return { section: known ? sec : 'connection', tab: params.get('tab') ?? '' };
-  })();
+  const initial = initialRoute(window.location.hash);
   const [sectionId, setSectionId] = useState(initial.section);
   const [tabId, setTabId] = useState(initial.tab);
   // Онбординг — при первом запуске (как в прототипе: dlgOnb).
@@ -483,6 +480,7 @@ function AppInner(): JSX.Element {
               )}
             </div>
           )}
+          <AppNotices state={status.state} />
           {/* Одна панель на все вкладки раздела (прототип: #scr-*, role=tabpanel
               только у разделов с несколькими вкладками). */}
           <div

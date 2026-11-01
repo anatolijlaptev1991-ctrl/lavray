@@ -166,7 +166,7 @@ let sysProxyApplied = false;
 const sysProxyListeners = new Set<() => void>();
 const proxyQueue = serialQueue();
 
-function markSystemProxy(on: boolean): void {
+export function markSystemProxy(on: boolean): void {
   if (sysProxyApplied === on) return;
   sysProxyApplied = on;
   for (const fn of sysProxyListeners) fn();

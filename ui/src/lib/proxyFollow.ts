@@ -22,6 +22,8 @@ export interface FollowInput {
   readonly applied: boolean;
   /** Идёт собственное изменение соединения окна. */
   readonly busy: boolean;
+  /** Ядро упало, kill switch оставил прокси: снимает его только пользователь (по умолчанию нет). */
+  readonly kept?: boolean;
 }
 
 /**
@@ -37,6 +39,8 @@ export function followAction(i: FollowInput): FollowAction {
     const proxyMode = i.mode === ConnectMode.SYSTEM_PROXY || i.mode === ConnectMode.TUN;
     return proxyMode && i.sysProxyWanted && !i.applied ? 'apply' : null;
   }
-  if ((i.next === CoreState.IDLE || i.next === CoreState.ERROR) && i.applied) return 'release';
+  if ((i.next === CoreState.IDLE || i.next === CoreState.ERROR) && i.applied && i.kept !== true) {
+    return 'release';
+  }
   return null;
 }

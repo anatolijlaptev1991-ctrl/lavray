@@ -116,6 +116,9 @@ func SettingReaders() map[string]SettingReader {
 		"core.underlying_dns":    apiReader("server.go"),
 		"log.level":              apiReader("server.go"),
 		"connect.health_check":   apiReader("connect_health.go"),
+		// Оболочка читает зеркало ключа lavray.killSwitchProxy из ui-state.json
+		// (интерфейс копирует в него настройку ядра), см. shell/src/killswitch.rs.
+		"connect.kill_switch_proxy": {Kind: ReaderShell, File: "shell/src/killswitch.rs"},
 
 		// Безопасность.
 		"security.allow_insecure_default": apiReader("server.go"),

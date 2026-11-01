@@ -10,7 +10,9 @@ import {
   isSystemProxyApplied,
   loadModes,
 } from '../lib/connection';
+import { isProxyKept } from '../lib/killSwitch';
 import { followAction } from '../lib/proxyFollow';
+import { releaseUnlessKept } from '../lib/proxyRelease';
 import type { CoreState } from '../gen/lavray_pb';
 
 /** Порт входящего подключения, пока ядро его не сообщило (inbound.port по умолчанию). */
@@ -28,6 +30,7 @@ export function useSystemProxyFollow(status: CoreStatus): void {
       sysProxyWanted: loadModes(window.localStorage).sysProxy,
       applied: isSystemProxyApplied(),
       busy: isOwnChangeBusy(),
+      kept: isProxyKept(), // kill switch: после падения ядра прокси остаётся до решения пользователя
     });
     previous.current = state;
     // Вне оболочки (веб-панель) прокси ОС ставить нечем.
@@ -35,7 +38,7 @@ export function useSystemProxyFollow(status: CoreStatus): void {
       return;
     }
     const change =
-      action === 'apply' ? applySystemProxy(true, port ?? DEFAULT_PORT) : applySystemProxy(false, 0);
+      action === 'apply' ? applySystemProxy(true, port ?? DEFAULT_PORT) : releaseUnlessKept();
     // Оболочка отказала — чип «Системный прокси» в статус-баре остаётся погашенным.
     change.catch(() => undefined);
   }, [state, mode, port]);

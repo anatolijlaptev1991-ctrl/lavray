@@ -10,19 +10,14 @@ import type { Group } from '../gen/lavray_pb';
 import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
-import { formatBytes, NB } from '../lib/i18n';
 import { SubscriptionProgress_Phase } from '../gen/lavray_pb';
 import { ConfirmDialog } from '../components/dialogs';
 import { Icon } from '../components/Icon';
 import { SubscriptionSettingsDialog } from '../components/SubscriptionSettingsDialog';
+import { SubscriptionCard } from './subscriptions/SubscriptionCard';
+import type { SubError, SubErrKey } from './subscriptions/SubscriptionCard';
+import { UpdateAllButton } from './subscriptions/UpdateAllButton';
 import { openExternal } from '../lib/external';
-
-type SubErrKey =
-  | 'sub.err.auth'
-  | 'sub.err.notFound'
-  | 'sub.err.timeout'
-  | 'sub.err.zero'
-  | 'sub.err.generic';
 
 /**
  * Текст ошибки обновления → короткий код, как sub.error прототипа: HTTP-статус,
@@ -47,6 +42,11 @@ function subErrKey(code: string): SubErrKey {
   if (code === 'timeout') return 'sub.err.timeout';
   if (code === 'zero') return 'sub.err.zero';
   return 'sub.err.generic';
+}
+
+/** Ошибка для карточки: ключ фразы и код; null — ошибок не было. */
+function subError(stored: StoredErr | undefined): SubError | null {
+  return stored === undefined ? null : { key: subErrKey(stored.code), code: stored.code };
 }
 
 /**
@@ -88,26 +88,6 @@ function saveErrors(errors: Record<string, StoredErr>): void {
   }
 }
 
-/**
- * Когда подписка обновится в следующий раз: последнее обновление + интервал
- * (свой, иначе рекомендованный провайдером). null — автообновления нет.
- */
-function nextUpdateMs(g: Group): number | null {
-  if (g.skipAutoUpdate || g.lastUpdateMs === undefined) return null;
-  const own = g.updateIntervalMin ?? 0;
-  const minutes = own > 0 ? own : (g.subscriptionInfo?.updateIntervalHours ?? 0) * 60;
-  return minutes > 0 ? Number(g.lastUpdateMs) + minutes * 60e3 : null;
-}
-
-function relDate(ms: number, lang: string): string {
-  const diff = ms - Date.now();
-  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: 'auto' });
-  const abs = Math.abs(diff);
-  if (abs < 3600e3) return rtf.format(Math.round(diff / 60e3), 'minute');
-  if (abs < 864e5) return rtf.format(Math.round(diff / 3600e3), 'hour');
-  return rtf.format(Math.round(diff / 864e5), 'day');
-}
-
 /** Обновление, остановленное на вопросе «удалить N из M серверов?» (T-18). */
 interface PendingConfirm {
   readonly id: bigint;
@@ -117,7 +97,7 @@ interface PendingConfirm {
 }
 
 export function SubscriptionsScreen(): JSX.Element {
-  const { t, tf, plural, lang } = useI18n();
+  const { t, tf, plural } = useI18n();
   const core = useCore();
   const [subs, setSubs] = useState<Group[]>([]);
   const [counts, setCounts] = useState<Record<string, number>>({});
@@ -343,164 +323,43 @@ export function SubscriptionsScreen(): JSX.Element {
       {ok !== '' && <div className="toast-ok" role="status">{ok}</div>}
       {progress !== '' && <div className="toast-ok" role="status">{progress}</div>}
 
+      <div className="srv-actions">
+        <UpdateAllButton
+          disabled={subs.length === 0}
+          otherBusy={busy !== ''}
+          onFinished={(text) => {
+            setOk(text);
+            void reload();
+          }}
+          onError={setErr}
+        />
+      </div>
+
       <div className="sub-grid">
-        {subs.map((g) => {
-          const info = g.subscriptionInfo;
-          const used = Number(info?.uploadBytes ?? 0n) + Number(info?.downloadBytes ?? 0n);
-          const limit = Number(info?.totalBytes ?? 0n);
-          const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-          const expire = info?.expireMs !== undefined ? Number(info.expireMs) : 0;
-          const soon = expire > 0 && expire - Date.now() < 3 * 864e5;
-          const lastErr = errors[String(g.id)];
-          const ekey = lastErr === undefined ? null : subErrKey(lastErr.code);
-          const nextAt = nextUpdateMs(g);
-          const isBusy = busy === String(g.id);
-          return (
-            <article key={String(g.id)} className="card sub-card">
-              <div className="sub-top">
-                <h3 title={g.name}>{g.name}</h3>
-                {ekey !== null && (
-                  <span className="badge badge-err">
-                    <span className="dot err" />
-                    {t('sub.err.badge')}
-                  </span>
-                )}
-                <span className="flex1" />
-                <button
-                  className="btn btn-ic btn-sm"
-                  aria-label={t('sub.settings')}
-                  title={t('sub.settings')}
-                  onClick={() => {
-                    setSettingsFor(g);
-                  }}
-                >
-                  <Icon name="settings" />
-                </button>
-                <button
-                  className="btn btn-ic btn-sm"
-                  aria-label={t('common.open')}
-                  title={t('common.open')}
-                  onClick={() => {
-                    openUrl(g.subscriptionUrl ?? '');
-                  }}
-                >
-                  <Icon name="external" />
-                </button>
-              </div>
-
-              <div className="sub-url" title={g.subscriptionUrl ?? ''}>
-                {g.subscriptionUrl ?? ''}
-              </div>
-
-              <div className="sub-meta">
-                <div className="row">
-                  <span className="k">{t('nav.servers')}</span>
-                  <span>{String(counts[String(g.id)] ?? 0)}</span>
-                </div>
-                <div className="row">
-                  <span className="k">{t('subs.lastUp')}</span>
-                  <span>
-                    {g.lastUpdateMs !== undefined ? relDate(Number(g.lastUpdateMs), lang) : '—'}
-                  </span>
-                </div>
-                {ekey === null && (
-                  <div className="row">
-                    <span className="k">{t('subs.next')}</span>
-                    <span>{nextAt === null ? '—' : relDate(Math.max(nextAt, Date.now()), lang)}</span>
-                  </div>
-                )}
-                <div className="row">
-                  <span className="k">{t('subs.expiry')}</span>
-                  <span>
-                    {expire > 0 ? (
-                      <>
-                        {tf('sub.expires', { when: relDate(expire, lang) })}
-                        {soon && (
-                          <span className="badge badge-warn" style={{ marginInlineStart: 6 }}>
-                            {t('sub.expiresSoon')}
-                          </span>
-                        )}
-                      </>
-                    ) : (
-                      t('sub.noExpiry')
-                    )}
-                  </span>
-                </div>
-              </div>
-
-              {lastErr !== undefined && ekey !== null && (
-                <div className="sub-errline">
-                  <Icon name="alert" />
-                  <span>
-                    {t(ekey)}
-                    {lastErr.code !== 'error' && (
-                      <>
-                        {' '}
-                        <span className="cap mono">({lastErr.code})</span>
-                      </>
-                    )}
-                  </span>
-                </div>
-              )}
-
-              <div className="sub-traffic">
-                <div className="row">
-                  <span className="k">{t('subs.traffic')}</span>
-                  <b>
-                    ↓ {formatBytes(Number(info?.downloadBytes ?? 0n), lang)} · ↑{' '}
-                    {formatBytes(Number(info?.uploadBytes ?? 0n), lang)}
-                  </b>
-                </div>
-                <div className="progress">
-                  <div style={{ width: `${String(pct)}%` }} />
-                </div>
-                <span className="cap">
-                  {limit > 0
-                    ? `${formatBytes(used, lang)}${NB}${t('subs.of')}${NB}${formatBytes(limit, lang)}`
-                    : t('sub.unlimited')}
-                </span>
-              </div>
-
-              <div className="sub-foot">
-                <div className="sub-auto">
-                  <span>{t('subs.auto')}</span>
-                  <button
-                    className={`sw${g.skipAutoUpdate ? '' : ' on'}`}
-                    role="switch"
-                    aria-checked={!g.skipAutoUpdate}
-                    aria-label={t('subs.auto')}
-                    onClick={() => void toggleAuto(g)}
-                  />
-                </div>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button
-                    className={`btn btn-sec btn-sm${isBusy ? ' loading' : ''}`}
-                    aria-label={t('common.refresh')}
-                    title={t('common.refresh')}
-                    disabled={isBusy}
-                    onClick={() => void update(g.id, g.name)}
-                  >
-                    <Icon name="refresh" />
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    aria-label={t('subs.delete')}
-                    title={t('subs.delete')}
-                    onClick={() => {
-                      setPendingDelete({
-                        id: g.id,
-                        name: g.name,
-                        count: counts[String(g.id)] ?? g.profileOrder.length,
-                      });
-                    }}
-                  >
-                    <Icon name="trash" />
-                  </button>
-                </div>
-              </div>
-            </article>
-          );
-        })}
+        {subs.map((g) => (
+          <SubscriptionCard
+            key={String(g.id)}
+            group={g}
+            count={counts[String(g.id)] ?? g.profileOrder.length}
+            error={subError(errors[String(g.id)])}
+            busy={busy === String(g.id)}
+            onSettings={() => {
+              setSettingsFor(g);
+            }}
+            onOpenUrl={() => {
+              openUrl(g.subscriptionUrl ?? '');
+            }}
+            onToggleAuto={() => void toggleAuto(g)}
+            onUpdate={() => void update(g.id, g.name)}
+            onDelete={() => {
+              setPendingDelete({ id: g.id, name: g.name, count: counts[String(g.id)] ?? g.profileOrder.length });
+            }}
+            onRolledBack={(text) => {
+              setOk(text);
+              void reload();
+            }}
+          />
+        ))}
 
         {adding ? (
           <article className="card sub-card">

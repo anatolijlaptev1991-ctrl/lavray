@@ -463,6 +463,12 @@ message Profile {
   // пусто = неизвестна. Заполняется ядром при импорте (эмодзи-флаг, код в
   // имени, название, TLD) — UI группирует ключи подписки по странам.
   string geo = 29;
+
+  // ТОЛЬКО ЧТЕНИЕ, вычисляется ядром, не хранится: непусто, если ядро не умеет
+  // собрать этот профиль. Сейчас единственная причина — "xhttp_unsupported"
+  // (транспорт XHTTP); Connect такого профиля → FAILED_PRECONDITION с
+  // ErrorInfo.reason = "transport_unsupported". Значение от клиента игнорируется.
+  string unsupported_reason = 30;
 }
 
 // V2Ray Stream Settings (FR-UI-090a–090l; fmt/V2RayStreamSettings.hpp).
@@ -476,6 +482,8 @@ message StreamSettings {
     NETWORK_HTTP_UPGRADE = 5;
     NETWORK_QUIC = 6; // FR-UI-267 (SHOULD): поле зарезервировано контрактом;
     // реализация транспорта — после решения о доп-протоколах
+    NETWORK_XHTTP = 7; // Xray XHTTP (бывший splithttp): ссылка импортируется, но
+    // ядро (форк sing-box) транспорта не имеет — Profile.unsupported_reason
   }
   enum Security {
     SECURITY_NONE = 0;
@@ -514,6 +522,13 @@ message StreamSettings {
   optional string reality_spx = 18;
   PacketEncoding packet_encoding = 15;
   MultiplexStatus multiplex = 16;
+
+  // XHTTP (Xray; network = NETWORK_XHTTP): режим ("auto", "packet-up", "stream-up",
+  // "stream-one") и дополнительные параметры (сырой JSON, параметр extra ссылки). Ядро
+  // их не использует (транспорта нет), но хранит, чтобы импорт и экспорт ссылки не
+  // теряли настройки сервера и UpdateProfile их не стирал.
+  string xhttp_mode = 19;
+  string xhttp_extra = 20;
 }
 
 message SocksHttpDetail { // FR-UI-091

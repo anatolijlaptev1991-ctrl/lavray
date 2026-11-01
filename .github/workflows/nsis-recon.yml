@@ -1,0 +1,115 @@
+# nsis-recon.yml — Ф3.0 «разведка NSIS» (docs/UPDATE-SYSTEM.md §12.7, §12.9 п. 4) на одноразовом
+# раннере GitHub вместо виртуальной машины. Берёт НАСТОЯЩИЕ опубликованные установщики LAVRay
+# (репозиторий выпусков lavray-windows), проверяет SHA256SUMS и прогоняет семь сценариев
+# scripts/release/nsis_recon.ps1: чистая тихая установка, обновление поверх работающего
+# приложения, понижение, флаг /R, установщик под дескриптором с запретом записи, голый
+# exe watchdog, тихое удаление. Результат — артефакт nsis-recon (JSON + журнал).
+#
+# Запуск: gh workflow run nsis-recon.yml -f old=0.3.0 -f new=0.9.0
+# Раннер уже повышен: окна запроса UAC здесь не будет (записано в JSON, environment.limitations);
+# есть ли рабочий стол и WebView2, покажет сценарий 2. Секретов нет, права — только чтение.
+name: nsis-recon
+on:
+  workflow_dispatch:
+    inputs:
+      old:
+        description: "Старая версия установщика (без v), ставится первой"
+        default: "0.3.0"
+        required: true
+      new:
+        description: "Новая версия установщика (без v), обновление и понижение идут относительно неё"
+        default: "0.9.0"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nsis-recon
+  cancel-in-progress: false
+
+jobs:
+  # Ввод workflow_dispatch недоверенный: он проверяется отдельным заданием БЕЗ секретов и
+  # попадает в `run:` только через env; дальше уходят лишь проверенные значения.
+  validate:
+    name: "Проверка ввода"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      old: ${{ steps.versions.outputs.old }}
+      new: ${{ steps.versions.outputs.new }}
+    steps:
+      - name: "Проверка версий"
+        id: versions
+        env:
+          OLD: ${{ inputs.old }}
+          NEW: ${{ inputs.new }}
+        run: |
+          re='^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(-[0-9A-Za-z]+(\.[0-9A-Za-z]+)*)?$'
+          for v in "$OLD" "$NEW"; do
+            if ! [[ "$v" =~ $re ]]; then
+              echo "::error title=Неверная версия::old и new — версии вида X.Y.Z без v (допустим суффикс -rc.1)"
+              exit 1
+            fi
+          done
+          if [ "$OLD" = "$NEW" ] || [ "$(printf '%s\n%s\n' "$OLD" "$NEW" | sort -V | head -n 1)" != "$OLD" ]; then
+            echo "::error title=Неверный порядок::old должна быть строго младше new"
+            exit 1
+          fi
+          echo "old=$OLD" >> "$GITHUB_OUTPUT"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+
+  recon:
+    name: "Разведка NSIS (windows-2025)"
+    needs: validate
+    runs-on: windows-2025
+    timeout-minutes: 80
+    permissions:
+      contents: read
+    env:
+      OLD_VERSION: ${{ needs.validate.outputs.old }}
+      NEW_VERSION: ${{ needs.validate.outputs.new }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: "Скачивание установщиков и проверка SHA256SUMS"
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_REPO: anatolijlaptev1991-ctrl/lavray-windows
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sides = @(@{ dir = 'old'; version = $env:OLD_VERSION; var = 'OLD_SETUP' }, @{ dir = 'new'; version = $env:NEW_VERSION; var = 'NEW_SETUP' })
+          foreach ($side in $sides) {
+            $dest = New-Item -ItemType Directory -Force -Path (Join-Path 'dl' $side.dir)
+            $name = "LAVRay-$($side.version)-x64-setup.exe"
+            gh release download "v$($side.version)" --repo $env:SOURCE_REPO --dir $dest.FullName --pattern $name --pattern 'SHA256SUMS.txt' --clobber
+            if ($LASTEXITCODE -ne 0) { throw "gh release download v$($side.version): код $LASTEXITCODE" }
+            $want = $null
+            foreach ($line in (Get-Content -LiteralPath (Join-Path $dest.FullName 'SHA256SUMS.txt'))) {
+              if ($line.TrimStart([char]0xFEFF) -match '^([0-9a-fA-F]{64})\s+\*?(.+?)\s*$' -and $Matches[2] -eq $name) { $want = $Matches[1].ToLowerInvariant() }
+            }
+            if (-not $want) { throw "в SHA256SUMS.txt нет строки для $name" }
+            $path = Join-Path $dest.FullName $name
+            $got = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($got -ne $want) { throw "sha256 $name не совпал: ожидалось $want, получено $got" }
+            Write-Host "$name : sha256 совпал ($got), $((Get-Item -LiteralPath $path).Length) байт"
+            "$($side.var)=$path" | Add-Content -LiteralPath $env:GITHUB_ENV
+          }
+
+      - name: "Разведка NSIS (семь сценариев)"
+        shell: pwsh
+        timeout-minutes: 75
+        run: |
+          ./scripts/release/nsis_recon.ps1 -OldSetup $env:OLD_SETUP -NewSetup $env:NEW_SETUP -OldVersion $env:OLD_VERSION -NewVersion $env:NEW_VERSION -OutDir recon-out
+
+      - name: "Артефакт nsis-recon (JSON и журнал)"
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nsis-recon
+          path: recon-out/
+          if-no-files-found: warn
+          retention-days: 30

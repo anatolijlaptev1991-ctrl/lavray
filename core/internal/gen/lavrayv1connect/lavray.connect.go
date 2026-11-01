@@ -383,8 +383,8 @@ type CoreServiceClient interface {
 	//
 	// Валидаторы (FR-UI-279, LNB-33): inbound-адрес не loopback при пустой
 	// авторизации → INVALID_ARGUMENT («пароль обязателен при доступе из LAN»);
-	// режим TUN требует отключения mixed-слушателя (в TUN слушателей на
-	// loopback нет вообще) — ядро делает это само и сообщает в warnings.
+	// в режиме TUN mixed-слушатель остаётся (паритет с NekoBox: системный
+	// прокси и приложения пользуются им без TUN) — warnings: tun_mixed_enabled.
 	Connect(context.Context, *connect.Request[lavrayv1.ConnectRequest]) (*connect.Response[lavrayv1.ConnectResponse], error)
 	// Остановить инстанс. Финальная статистика возвращается в ответе —
 	// диффы и накопление считает ядро, а не UI (AUDIT §8). Покрытие:
@@ -522,8 +522,8 @@ type CoreServiceHandler interface {
 	//
 	// Валидаторы (FR-UI-279, LNB-33): inbound-адрес не loopback при пустой
 	// авторизации → INVALID_ARGUMENT («пароль обязателен при доступе из LAN»);
-	// режим TUN требует отключения mixed-слушателя (в TUN слушателей на
-	// loopback нет вообще) — ядро делает это само и сообщает в warnings.
+	// в режиме TUN mixed-слушатель остаётся (паритет с NekoBox: системный
+	// прокси и приложения пользуются им без TUN) — warnings: tun_mixed_enabled.
 	Connect(context.Context, *connect.Request[lavrayv1.ConnectRequest]) (*connect.Response[lavrayv1.ConnectResponse], error)
 	// Остановить инстанс. Финальная статистика возвращается в ответе —
 	// диффы и накопление считает ядро, а не UI (AUDIT §8). Покрытие:

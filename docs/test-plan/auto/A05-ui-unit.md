@@ -100,13 +100,13 @@ $guards = 'src/no-client-confirmed.test.ts','src/dead-code.test.ts','src/build-c
           'src/hooks/useConnections.test.tsx','src/hooks/useTraffic.test.tsx','src/hooks/useSystemProxyFollow.test.tsx',
           'src/components/settings/GlobalHotkeyRow.test.tsx','src/components/settings/ShellPrefRows.test.tsx',
           'src/components/AgentsSettings.test.tsx','src/components/dialog-a11y.test.tsx','src/components/a11y-controls.test.tsx',
-          'src/components/WindowChrome.tab-order.test.tsx'
+          'src/components/WindowChrome.tab-order.test.tsx','src/rpc-usage.test.ts'
 $missing = $guards | Where-Object { -not (Test-Path $_) }
 "отсутствуют: " + $(if ($missing) { $missing -join ', ' } else { 'нет' })
 npx vitest run $guards 2>&1 | Select-String -Pattern 'Test Files|Tests ' | ForEach-Object { $_.Line.Trim() }
 ```
 
-   Ожидается: `отсутствуют: нет`; в итоговых строках `23 passed (23)` файлов и ни одного `failed`. Отсутствующий файл — `FAIL` (его удалили или переименовали: сверьтесь с `git log --diff-filter=D --name-only -- ui/src`).
+   Ожидается: `отсутствуют: нет`; в итоговых строках `24 passed (24)` файлов и ни одного `failed`. Отсутствующий файл — `FAIL` (его удалили или переименовали: сверьтесь с `git log --diff-filter=D --name-only -- ui/src`).
 
 8. Словари пяти языков содержат одни и те же ключи (отдельно от прототипа, который проверяет A01).
 
@@ -150,7 +150,7 @@ git grep -n "customFieldsConfirmed: true" -- ui/src
 | К2 | `npx tsc --noEmit` вернул 0 | `tsc exit=0` |
 | К3 | `npx eslint . --max-warnings=0` вернул 0 | `eslint exit=0` |
 | К4 | `npx vitest run` вернул 0; не меньше 118 файлов и 886 тестов; пропущенных нет | шаг 6 |
-| К5 | Все 23 охранных файла существуют и проходят | шаг 7 |
+| К5 | Все 24 охранных файла существуют и проходят (в том числе `src/rpc-usage.test.ts`: каждый RPC из proto вызывается в интерфейсе или внесён в `rpc-unused.allow.ts` с причиной, 6 тестов) | шаг 7 |
 | К6 | Тесты словарей `passed`; запрещённого слова в словарях нет | шаг 8 |
 | К7 | `npm run build` вернул 0, файлов `.map` нет | шаг 9 |
 | К8 | В `ui/src` нет `customFieldsConfirmed: true` | шаг 10 |

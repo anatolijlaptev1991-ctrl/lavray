@@ -14,7 +14,7 @@
 
 Пройти по Connect JSON (`POST /lavray.v1.<Сервис>/<Метод>`, заголовок `Authorization: Bearer <токен ядра>`) сценарии каждого влитого сервиса и сверить **точные коды ошибок** с таблицами плана доработки. Покрывает: профили и группы (CRUD, метаданные, фильтры, клонирование, перенос), подтверждение custom-полей по хэшу (T-08B), соединения, статистику и сводку по группе (T-79), наборы маршрутов (T-80: создание из источника и из значений, обновление с ревизией, удаление, сброс копии, экспорт, импорт, маршрут NekoRay, лимит 100, конфликт ревизий → `ABORTED`), резервную копию (T-83), все RPC хвостов A (очистка недоступных, дубликаты, разрешение доменов с `failed`, экспорт конфига, сброс настроек, подписка на настройки, запоминание профиля, таблица читателей настроек), CORS отказы для агентского токена и `MigrationService` (T-78: малый набор, полные сценарии - файл A15).
 
-Раздел `MigrationService` (T-78) - раздел 7 скрипта, `UpdateService` (T-75) - раздел 8 (на ядре этого выпуска, без сети; сценарии с тестовым корнем доверия и локальными зеркалами - файл A13).
+Раздел `MigrationService` (T-78) - раздел 7 скрипта, `UpdateService` (T-75) - раздел 8 (на ядре этого выпуска, без сети; сценарии с тестовым корнем доверия и локальными зеркалами - файл A13), транспорт XHTTP (хвосты B) - раздел 9.
 
 ## Предусловия
 
@@ -54,7 +54,7 @@
    $res.checks | Where-Object { -not $_.pass } | Select-Object id, warn, detail | Format-Table -AutoSize -Wrap
    ```
 
-   Ожидается: `a09 exit=0`, `провалов: 0`, список непройденных содержит только записи с `warn = True`. Эталон на `main` `80be1e9` (T-80, T-83, хвосты A, T-76, T-78, T-75): 203 проверки, 0 `FAIL` и 1 `WARN`. На `main` `9b26be6` и раньше было 181 проверка и 3 `FAIL` очистки (шаг 4). Каждая проверка в `run.txt` — строка `PASS <id>` / `WARN <id>` / `FAIL <id> :: <подробности>`.
+   Ожидается: `a09 exit=0`, `провалов: 0`, список непройденных содержит только записи с `warn = True`. Эталон на `main` `773b4e8` (T-80, T-83, хвосты A и B, T-76, T-78, T-75): 220 проверок, 0 `FAIL` и 1 `WARN` (на `80be1e9` — 203). На `main` `9b26be6` и раньше было 181 проверка и 3 `FAIL` очистки (шаг 4). Каждая проверка в `run.txt` — строка `PASS <id>` / `WARN <id>` / `FAIL <id> :: <подробности>`.
 
 3. Что и по каким кодам проверяет каждый раздел (для отчёта и поиска причины):
 
@@ -68,6 +68,7 @@
    | 4. Резервная копия (T-83) | пароль пустой, 7 символов, 1025 байт → отказ; экспорт: заголовок `LAVBK1`, имя `lavray-backup-….lavbk`, сводка; в файле нет секретов и заголовка SQLite; `PreviewBackup`: сводка равна экспорту, неверный пароль, порча середины, порча заголовка, обрезка, мусор; `ImportBackup`: без `confirmReplace`, при подключении, успешный; профиль с секретом и настройка возвращены; подписчики настроек уведомлены; пароль не попал ни в журнал, ни в настройки; агент; лимит 64 МиБ выше общего 16 МиБ | пароль `400 invalid_argument`; неверный пароль `403 permission_denied`; порча тела `500 data_loss`; не файл копии `400 invalid_argument` с причиной `backup_not_recognized`; без подтверждения и при подключении `400 failed_precondition`; агент `403` |
    | 5. Хвосты A | `RemoveUnavailableProfiles` (пробный прогон, применение, неизвестная группа); `DeduplicateProfiles` (первый остаётся, имя не учитывается, идемпотентность); `ResolveDomains` (`localhost` → IP, несуществующее имя → `failed` с причиной, IP пропущен; пустой список и больше 1000 id); `ExportConfig` (RUN содержит секрет без маскирования, TEST без `inbounds`, внешнее ядро); `ResetSettings` (ключ → умолчание, остальные целы, неизвестный, служебный `sub.hwid_id`, `update.channel`); `SubscribeSettings` (изменение и `removed`, медленный подписчик не блокирует запись); запоминание профиля; CORS | неизвестная группа `404`; пустой/длинный список доменов `400 invalid_argument`; внешнее ядро `400 failed_precondition`; неизвестный и служебный ключи `400 invalid_argument`; агент `403` |
    | 8. UpdateService (T-75) | если в ядре заглушка корня (релиз до церемонии ключей): `CheckUpdates` и `DownloadUpdates` → `not_configured` (в начале сообщения и в заголовке `Lavray-Update-Reason`), `GetUpdateState` без времени проверки; во всех сборках: `ApplyUpdates` без загрузки → `not_staged`, `ApplyUpdates(CORE)` → `failed_precondition`, `Rollback(APP)` → `failed_precondition` («откат выполняет оболочка»), без компонента → `invalid_argument`, `PRESETS` → `unimplemented`; `VerifyLocalUpdate`: пустой путь и путь вне staging → `invalid_argument`; `SetSettings` служебных `update.*` → `200` без принятых ключей, `GetSettings` их не отдаёт; агент: `GetUpdateState` читает, `CheckUpdates`, `Rollback`, `VerifyLocalUpdate` → `403`. Если в ядре уже настоящий корень, сетевые вызовы пропускаются (`WARN`) | коды рядом с проверкой |
+   | 9. XHTTP (хвосты B) | ссылка `vless://…?type=xhttp&mode=auto&extra=…` в предпросмотре (`previewOnly`): транспорт `NETWORK_XHTTP`, `xhttpMode = auto`, `xhttpExtra` равен исходному JSON, `unsupportedReason = xhttp_unsupported`, строка журнала `xhttp_unsupported: …` без UUID, база не изменена; импорт сохраняет профиль (`addedProfileIds`), `GetProfile` отдаёт `unsupportedReason`; клиент не может задать `unsupportedReason` обычному профилю; `Connect` (по id, с `validateOnly`, с `inlineProfile`) → отказ с `ErrorInfo.reason = transport_unsupported`, ядро остаётся `idle`; цепочка с XHTTP-звеном → тот же отказ, у самой цепочки `unsupportedReason` пуст; `UpdateProfile` (переименование) сохраняет сеть, режим и extra; `ExportLinks` отдаёт `type=xhttp`, `mode`, `extra`, повторный разбор даёт те же сеть, режим, extra, путь, host и SNI | `400 failed_precondition`, причина `transport_unsupported` в `details[0]` |
    | 6. Сервисный режим | запомненный профиль подключается вторым ядром с `--headless` только при `remember.enable = true` | в течение 30 с `CORE_STATE_CONNECTED` |
    | 7. MigrationService (T-78) | `DetectNekoBox` с переданным путём: первым идёт кандидат `manual` с числами по именам файлов (1 группа, 3 профиля, 1 маршрут); пути `""`, относительный, файл, каталог без `groups`/`profiles` → `400 invalid_argument`, несуществующий → `404 not_found` (и в `Preview`, и в `Import`); `Preview`: `dryRun`, 1 группа, 2 профиля, 1 маршрут, 1 пропуск (битый файл), база и наборы не изменились; `Import` равен предпросмотру, цепочка указывает на перенесённый профиль, маршрут стал `custom:neko-a09-route`; повтор: `alreadyPresent = 4`, ничего нового; агентский токен в режимах `read` и `control` на все три метода | `403 permission_denied`; остальное см. выше |
 
@@ -101,6 +102,7 @@
 | К7 | Шаг 5: три защитных теста `--- PASS` | вывод |
 | К8 | `MigrationService`: коды путей, предпросмотр равен переносу, повтор без дублей, агент отказан (`7.*`, раздел 7) | `PASS` |
 | К9 | `UpdateService` на ядре выпуска: `not_configured` при заглушке корня, коды `Apply`/`Rollback`, служебные `update.*` закрыты, агент только читает состояние (`8.*`, раздел 8) | `PASS` |
+| К10 | XHTTP: ссылка импортируется и сохраняется, `unsupportedReason` вычисляется ядром, `Connect` (в том числе через цепочку) → `transport_unsupported`, правка и экспорт не теряют `mode` и `extra` (`9.*`, раздел 9) | `PASS` |
 
 `WARN` не меняет итог файла, но попадает в «Дефекты». Отсутствие адреса интерфейса — `BLOCKED` для раздела 2.
 
@@ -984,7 +986,75 @@ def sec8_updates(c, X):
             pass
 
 
-SECTIONS = [sec1_profiles, sec2_connections, sec3_presets, sec4_backup, sec5_tails_a, sec7_migration, sec8_updates, sec6_headless_remember]
+def sec9_xhttp(c, X):
+    """9. XHTTP (хвосты B): ссылка импортируется и сохраняется, но Connect отвечает transport_unsupported; Profile.unsupported_reason."""
+    import urllib.parse
+    P = "ProfileService"
+    extra = {"xPaddingBytes": "100-1000", "noGRPCHeader": False}
+    uid = str(uuid.uuid4())
+    name = "a09-xhttp"
+    link = (f"vless://{uid}@203.0.113.50:443?type=xhttp&mode=auto&extra={urllib.parse.quote(json.dumps(extra, separators=(',', ':')))}"
+            f"&security=tls&sni=x.example&path=%2Fxh&host=cdn.example#{name}")
+    n_before = len(c.rpc(P, "ListProfiles")[1].get("profiles", []))
+    st, pv = c.rpc(P, "ImportContent", {"content": link, "previewOnly": True})
+    p0 = pv["parsedProfiles"][0] if st == 200 and pv.get("parsedProfiles") else {}
+    s0 = p0.get("stream", {})
+    check("9.preview.xhttp_parsed", st == 200 and s0.get("network") == "NETWORK_XHTTP" and s0.get("xhttpMode") == "auto" and json.loads(s0.get("xhttpExtra", "null")) == extra, (st, s0))
+    check("9.preview.unsupported_reason", p0.get("unsupportedReason") == "xhttp_unsupported", p0.get("unsupportedReason"))
+    log = pv.get("log", []) if st == 200 else []
+    check("9.preview.log_line_has_reason_and_no_secret", any(l.startswith("xhttp_unsupported:") for l in log) and not any(uid in l for l in log), log)
+    check("9.preview.wrote_nothing", len(c.rpc(P, "ListProfiles")[1].get("profiles", [])) == n_before, "")
+    st, imp = c.rpc(P, "ImportContent", {"content": link, "intent": "INTENT_AS_LINKS"})
+    ids = imp.get("addedProfileIds", []) if st == 200 else []
+    check("9.import.saved_not_rejected", st == 200 and len(ids) == 1, (st, str(imp)[:120]))
+    pid = ids[0] if ids else "0"
+    st, prof = c.rpc(P, "GetProfile", {"id": pid})
+    check("9.get.unsupported_reason_computed", st == 200 and prof.get("unsupportedReason") == "xhttp_unsupported", (st, prof.get("unsupportedReason")))
+    st, plain = c.rpc(P, "CreateProfile", {"profile": {"groupId": prof.get("groupId"), "type": "PROFILE_TYPE_SOCKS", "name": "a09-plain", "address": "127.0.0.1", "port": 1090,
+                                                      "socksHttp": {"proto": "PROTO_SOCKS5"}, "unsupportedReason": "xhttp_unsupported"}})
+    check("9.create.client_cannot_set_unsupported_reason", st == 200 and not plain.get("unsupportedReason"), plain.get("unsupportedReason"))
+    # Connect: отказ с причиной transport_unsupported в ErrorInfo; соединение не поднимается
+    def reason_of(r):
+        d = r[1].get("details", []) if isinstance(r[1], dict) else []
+        return d[0].get("debug", {}).get("reason") if d else None
+
+    r = c.rpc("CoreService", "Connect", {"profileId": pid, "mode": "CONNECT_MODE_SYSTEM_PROXY"})
+    check("9.connect.transport_unsupported", r[0] == 400 and code(r) == "failed_precondition" and reason_of(r) == "transport_unsupported" and "xhttp" in r[1].get("message", ""), r)
+    st, status = c.rpc("CoreService", "GetStatus", {})
+    check("9.connect.core_stays_idle", st == 200 and status.get("state") in ("CORE_STATE_IDLE", None, ""), status.get("state"))
+    r = c.rpc("CoreService", "Connect", {"profileId": pid, "mode": "CONNECT_MODE_SYSTEM_PROXY", "validateOnly": True})
+    check("9.connect.validate_only.transport_unsupported", r[0] == 400 and reason_of(r) == "transport_unsupported", r)
+    r = c.rpc("CoreService", "Connect", {"inlineProfile": prof, "mode": "CONNECT_MODE_SYSTEM_PROXY"})
+    check("9.connect.inline_profile.transport_unsupported", r[0] == 400 and reason_of(r) == "transport_unsupported", r)
+    st, sock = c.rpc(P, "ImportContent", {"content": "socks://127.0.0.1:1091#a09-chain-member", "intent": "INTENT_AS_LINKS"})
+    sid = sock["addedProfileIds"][0]
+    st, ch = c.rpc(P, "CreateProfile", {"profile": {"groupId": prof.get("groupId"), "type": "PROFILE_TYPE_CHAIN", "name": "a09-chain-xhttp", "chain": {"profileIds": [sid, pid]}}})
+    check("9.chain.created_with_xhttp_member", st == 200 and ch.get("id"), (st, ch))
+    r = c.rpc("CoreService", "Connect", {"profileId": ch.get("id"), "mode": "CONNECT_MODE_SYSTEM_PROXY"})
+    check("9.connect.chain_with_xhttp_member.transport_unsupported", r[0] == 400 and reason_of(r) == "transport_unsupported", r)
+    check("9.chain.itself_is_not_marked_unsupported", not c.rpc(P, "GetProfile", {"id": ch.get("id")})[1].get("unsupportedReason"), "")
+    # правка профиля сохраняет режим и extra; причина остаётся
+    prof["name"] = name + "-renamed"
+    st, upd = c.rpc(P, "UpdateProfile", {"profile": prof})
+    st2, after = c.rpc(P, "GetProfile", {"id": pid})
+    s1 = after.get("stream", {})
+    check("9.update.keeps_mode_and_extra", st == 200 and st2 == 200 and s1.get("network") == "NETWORK_XHTTP" and s1.get("xhttpMode") == "auto" and json.loads(s1.get("xhttpExtra", "null")) == extra and
+          after.get("unsupportedReason") == "xhttp_unsupported", (st, st2, s1))
+    # круг ссылки: экспорт содержит type, mode и extra; повторный разбор даёт те же поля
+    st, ex = c.rpc(P, "ExportLinks", {"ids": [pid]})
+    out = ex.get("links", [""])[0] if st == 200 else ""
+    q = urllib.parse.parse_qs(urllib.parse.urlsplit(out).query)
+    check("9.export.link_has_type_mode_extra", q.get("type") == ["xhttp"] and q.get("mode") == ["auto"] and json.loads(q.get("extra", ["null"])[0]) == extra, out[:160])
+    st, again = c.rpc(P, "ImportContent", {"content": out, "previewOnly": True})
+    s2 = again["parsedProfiles"][0].get("stream", {}) if st == 200 and again.get("parsedProfiles") else {}
+    check("9.export.link_round_trip", s2.get("network") == "NETWORK_XHTTP" and s2.get("xhttpMode") == "auto" and json.loads(s2.get("xhttpExtra", "null")) == extra and
+          s2.get("path") == s1.get("path") and s2.get("host") == s1.get("host") and s2.get("sni") == s1.get("sni"), (st, s2))
+    # уборка
+    c.rpc(P, "DeleteProfile", {"ids": [ch.get("id")]})
+    c.rpc(P, "DeleteProfile", {"ids": [pid, sid, plain.get("id")]})
+
+
+SECTIONS = [sec1_profiles, sec2_connections, sec3_presets, sec4_backup, sec5_tails_a, sec7_migration, sec8_updates, sec9_xhttp, sec6_headless_remember]
 
 
 def main():

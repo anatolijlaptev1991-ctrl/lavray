@@ -26,10 +26,8 @@ export const RPC_UNUSED_ALLOWED: Readonly<Record<string, string>> = {
   'SettingsService/ResetSettings': 'кнопки «Сбросить настройки» в окне ещё нет (RPC появился в хвостах A)',
   'RoutingService/ImportNekoRayRoute': 'отдельной кнопки импорта маршрута NekoRay в окне нет: маршруты NekoBox переносит мастер миграции (MigrationService)',
 
-  // ---- Центр обновлений (T-75) живёт в другой ветке ----
-  'UpdateService/ApplyUpdates': 'установка обновлений: T-75 в ветке feat/T-75-updates, UI появится при слиянии',
-  'UpdateService/Rollback': 'откат обновления: T-75 в ветке feat/T-75-updates, UI появится при слиянии',
-  'UpdateService/VerifyLocalUpdate': 'проверка локального пакета: T-75 в ветке feat/T-75-updates, UI появится при слиянии',
+  // ---- Центр обновлений (T-75) ----
+  'UpdateService/Rollback': 'откат приложения идёт командой оболочки update_rollback (useRollback), ядро в откате не участвует; RPC окно не вызывает',
 
   // ---- Шлюз OpenWrt и веб-панель (T-76) ----
   'GatewayService/GetGatewayStatus': 'шлюз OpenWrt: на десктопе методы шлюза отвечают INVALID_ARGUMENT, экрана шлюза в окне нет',

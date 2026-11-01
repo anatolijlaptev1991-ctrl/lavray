@@ -44,6 +44,10 @@ func runImportNekoBox(args []string, out, errOut io.Writer) int {
 		fmt.Fprintln(errOut, err)
 		return 2
 	}
+	if err := api.ValidateNekoBoxPath(source); err != nil {
+		fmt.Fprintln(errOut, importErrMessage(err)) // до открытия базы: пустой lavray.db не создаётся
+		return 1
+	}
 	dir, cleanup, err := dataDirFor(*data, *dry)
 	if err != nil {
 		fmt.Fprintln(errOut, err)

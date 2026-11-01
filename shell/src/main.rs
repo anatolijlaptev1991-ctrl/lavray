@@ -24,8 +24,6 @@ use lavray_shell::endpoint::{
 use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
 use lavray_shell::killswitch::{self, Exit, ProxyFlags};
 use lavray_shell::launch::{wait_for_exit, LaunchArgs, WAIT_PID_TIMEOUT};
-use lavray_shell::msgbox;
-use lavray_shell::os_integration;
 use lavray_shell::prefs::ShellPrefs;
 use lavray_shell::profile;
 use lavray_shell::single_instance::{self, Verdict};
@@ -36,6 +34,7 @@ use lavray_shell::ui_state;
 use lavray_shell::uiprotocol::IPC_PROTOCOL_VERSION;
 use lavray_shell::window_geometry;
 use lavray_shell::window_policy::{self, CloseAction};
+use lavray_shell::{msgbox, os_integration};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
@@ -571,6 +570,7 @@ fn create_main_window(app: &tauri::App, elevated: bool) -> Result<(), String> {
 }
 
 fn main() {
+    lavray_shell::update::watchdog_entry::run_if_requested(); // T-75: --update-watchdog
     let launch = LaunchArgs::from_env();
     // T-81: перезапуск от администратора запускает этот экземпляр, пока прежний
     // ещё выходит. Ждём его до плагинов: single-instance иначе отдал бы

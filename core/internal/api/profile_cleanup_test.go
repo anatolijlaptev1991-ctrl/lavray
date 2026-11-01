@@ -155,3 +155,23 @@ func TestRemoveUnavailableUnknownGroup(t *testing.T) {
 		t.Fatalf("code = %v, err = %v", connect.CodeOf(mapErr(err)), err)
 	}
 }
+
+// Неудачный тест задержки сохраняет только время и ошибку (test_instance.go):
+// такой профиль недоступен. Прерванный тест (без времени) — нет.
+func TestRemoveUnavailableCountsFailedTest(t *testing.T) {
+	f := newSvcFixture(t, nil)
+	failed := f.addTrojan(t, "failed", "a.example.org", 443, "1")
+	cancelled := f.addTrojan(t, "cancelled", "b.example.org", 443, "2")
+	now := int64(1_700_000_000_000)
+	if err := f.srv.st.SaveTestResult(failed.ID, model.TestResult{TestedAtMs: &now, LastError: "dial tcp: timeout"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.srv.st.SaveTestResult(cancelled.ID, model.TestResult{LastError: "context canceled"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got := removeUnavailable(t, f, 1, false)
+	if !sameIDs(got.WouldRemoveIds, []int64{failed.ID}) {
+		t.Fatalf("would_remove = %v, want [%d]", got.WouldRemoveIds, failed.ID)
+	}
+}

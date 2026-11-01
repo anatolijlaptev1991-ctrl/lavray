@@ -37,7 +37,9 @@
 //!   в реестре, команды — через внедряемый исполнитель (T-82);
 //! - [`uiprotocol`] — протокол UI ↔ shell (команды/события, serde, версия
 //!   протокола);
-//! - [`updater`] — автомат состояний автообновления TUF-lite (§8.3), без сети.
+//! - [`updater`] — автомат состояний автообновления TUF-lite (§8.3), без сети;
+//! - [`update`] — установка подписанных обновлений: повторная проверка под
+//!   блокировкой, остановка ядра, UAC, откат по heartbeat (T-75).
 //!
 //! ПЛАН: имя `ipc` свободно под нижний канал shell ↔ ядро — Connect-клиент
 //! (UDS/named pipe из ready-строки §3.4, JSON-кодировка, Bearer-auth-токен
@@ -69,6 +71,7 @@ pub mod token;
 pub mod tray;
 pub mod ui_state;
 pub mod uiprotocol;
+pub mod update;
 pub mod updater;
 pub mod window_geometry;
 pub mod window_policy;

@@ -62,7 +62,7 @@ func (b *backupService) buildBackup(ctx context.Context, password string) ([]byt
 	if err != nil {
 		return nil, summaryDoc{}, fmt.Errorf("проверка снимка: %w", err)
 	}
-	doc := newSummaryDoc(b.srv.appVersion, b.now().UnixMilli(), info)
+	doc := newSummaryDoc(b.srv.upd.appVersion(), b.now().UnixMilli(), info)
 	summary, err := json.Marshal(doc)
 	if err != nil {
 		return nil, summaryDoc{}, err

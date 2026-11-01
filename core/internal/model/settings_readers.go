@@ -134,12 +134,21 @@ func SettingReaders() map[string]SettingReader {
 		"agent.mode": apiReader("agent.go"),
 
 		// Прочее.
-		"win.sp_format":          importOnly("ProxyServer системного прокси всегда host:port; передача формата через UI, set_system_proxy и Backend::apply (в том числе RAS) — отдельная работа вместе с выбором формата в «Настройках» (хвосты B)"),
-		"update.channel":         uiReader("screens/screen_updates.tsx"),
-		"stats.interval_ms":      apiReader("stats_interval.go"),
-		"share.vmess_old_format": apiReader("share_options.go"),
-		"enable_external_cores":  apiReader("core_service.go"),
-		"web.bind":               importOnly("зарезервирован для веб-панели (Ф7, T-76): адрес пока задают флаги запуска"),
-		"web.tls":                importOnly("зарезервирован для веб-панели (Ф7, T-76): TLS пока задают флаги запуска"),
+		"win.sp_format":     importOnly("ProxyServer системного прокси всегда host:port; передача формата через UI, set_system_proxy и Backend::apply (в том числе RAS) — отдельная работа вместе с выбором формата в «Настройках» (хвосты B)"),
+		"update.channel":    uiReader("hooks/useUpdateSettings.ts"),
+		"update.auto_check": uiReader("hooks/useUpdateSettings.ts"),
+		// служебные ключи обновлений (T-75): SetSettings их не принимает, читает и пишет api
+		SettingUpdateRootVersion:      apiReader("update_store.go"),
+		SettingUpdateTimestampVersion: apiReader("update_store.go"),
+		SettingUpdateSerialStable:     apiReader("update_store.go"),
+		SettingUpdateSerialBeta:       apiReader("update_store.go"),
+		SettingUpdateLastChecked:      apiReader("update_store.go"),
+		SettingUpdateLastURL:          apiReader("update_store.go"),
+		SettingUpdateRootJSON:         importOnly("устарел: принятые корни доверия лежат файлами updates/roots и перепроверяются от вшитого корня; ключ остаётся служебным, чтобы SetSettings его не принимал"),
+		"stats.interval_ms":           apiReader("stats_interval.go"),
+		"share.vmess_old_format":      apiReader("share_options.go"),
+		"enable_external_cores":       apiReader("core_service.go"),
+		"web.bind":                    importOnly("зарезервирован для веб-панели (Ф7, T-76): адрес пока задают флаги запуска"),
+		"web.tls":                     importOnly("зарезервирован для веб-панели (Ф7, T-76): TLS пока задают флаги запуска"),
 	}
 }

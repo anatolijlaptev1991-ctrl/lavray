@@ -68,6 +68,9 @@ windows-sys = { version = "0.61", features = [
   "Win32_Storage_FileSystem",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging",
+  # T-75: список процессов (ToolHelp) — ждать выход повышенного установщика,
+  # когда его хэндл из-за уровня целостности не открыть
+  "Win32_System_Diagnostics_ToolHelp",
   # T-77: снимок экрана для QR (BitBlt, GetDIBits)
   "Win32_Graphics_Gdi",
 ] }

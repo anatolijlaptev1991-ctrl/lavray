@@ -30,6 +30,10 @@ type SettingDescriptor struct {
 	// Internal — служебный ключ ядра: хранится в таблице settings, но не
 	// отдаётся UI (DescribeSettings/GetSettings) и не принимается SetSettings.
 	Internal bool `json:"internal,omitempty"`
+	// BackupExclude — ключ не входит в резервную копию (T-83): корень доверия
+	// обновлений и счётчики защиты от отката принадлежат установке, а не профилю
+	// пользователя; восстановление копии не должно их откатывать.
+	BackupExclude bool `json:"backup_exclude,omitempty"`
 }
 
 // SettingHWIDID — служебный ключ с постоянным HWID установки (D-02).
@@ -47,6 +51,10 @@ var SettingGroups = []string{
 // Значения хранятся в таблице settings как JSON (тип — из дескриптора).
 // extraCore.core_map NekoBox НЕ переносится (DROP, FR-UI-175).
 func SettingDescriptors() []SettingDescriptor {
+	return append(baseDescriptors(), updateInternalDescriptors()...)
+}
+
+func baseDescriptors() []SettingDescriptor {
 	return []SettingDescriptor{
 		// ---- Inbound (FR-UI-157/158/279) ----
 		{Key: "inbound.address", Type: SettingString, GroupID: "inbound", DefaultValue: `"127.0.0.1"`, RequiresProfileRestart: true, DeprecatedBy: "inbound_address"},
@@ -149,6 +157,8 @@ func SettingDescriptors() []SettingDescriptor {
 		// ---- Прочее ----
 		{Key: "win.sp_format", Type: SettingString, GroupID: "misc", ShellOwned: true, DeprecatedBy: "sp_format"},
 		{Key: "update.channel", Type: SettingString, GroupID: "update", DefaultValue: `"stable"`, DeprecatedBy: "check_include_pre"},
+		// T-75: фоновая проверка раз в ~6 ч; выключается пользователем.
+		{Key: "update.auto_check", Type: SettingBool, GroupID: "update", DefaultValue: `true`},
 		{Key: "stats.interval_ms", Type: SettingInt, GroupID: "misc", DefaultValue: `1000`, DeprecatedBy: "traffic_loop_interval"},
 		{Key: "share.vmess_old_format", Type: SettingBool, GroupID: "misc", DefaultValue: `true`, DeprecatedBy: "old_share_link_format"},
 		{Key: "enable_external_cores", Type: SettingBool, GroupID: "core", DefaultValue: `false`},

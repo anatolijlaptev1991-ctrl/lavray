@@ -5,6 +5,7 @@ package api
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -51,12 +52,15 @@ func TestRollbackKeepsMonotonicSerials(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, comp := range []lavrayv1.UpdateComponent{
-		lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP,
-		lavrayv1.UpdateComponent_UPDATE_COMPONENT_CORE,
+	// T-75: откат приложения выполняет оболочка, ядро отвечает FAILED_PRECONDITION;
+	// остальные компоненты пока не реализованы. Ни в одном случае serial не меняется.
+	for comp, want := range map[lavrayv1.UpdateComponent]connect.Code{
+		lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP:  connect.CodeFailedPrecondition,
+		lavrayv1.UpdateComponent_UPDATE_COMPONENT_CORE: connect.CodeUnimplemented,
 	} {
-		if _, err := srv.Rollback(ctx, connect.NewRequest(&lavrayv1.RollbackRequest{Component: comp})); err != nil {
-			t.Fatalf("Rollback(%v): %v", comp, err)
+		_, err := srv.Rollback(ctx, connect.NewRequest(&lavrayv1.RollbackRequest{Component: comp}))
+		if connect.CodeOf(err) != want {
+			t.Fatalf("Rollback(%v): код %v, ожидался %v (%v)", comp, connect.CodeOf(err), want, err)
 		}
 	}
 
@@ -85,5 +89,20 @@ func TestRollbackWithoutComponentIsRejected(t *testing.T) {
 	}
 	if got, _, _ := st.GetSetting(setUpdSerialSt); got != "42" {
 		t.Fatalf("serial_stable = %q после отклонённого запроса", got)
+	}
+}
+
+// T-75: Rollback(APP) — FAILED_PRECONDITION «откат выполняет оболочка», serial не меняется.
+func TestRollbackKeepsSerial(t *testing.T) {
+	srv, st := rollbackTestServer(t)
+	if err := st.SetSetting(setUpdSerialSt, "11"); err != nil {
+		t.Fatal(err)
+	}
+	_, err := srv.Rollback(context.Background(), connect.NewRequest(&lavrayv1.RollbackRequest{Component: lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP}))
+	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "оболочка") {
+		t.Fatalf("Rollback(APP): ожидался FAILED_PRECONDITION с пояснением про оболочку, получено %v", err)
+	}
+	if v, _, _ := st.GetSetting(setUpdSerialSt); v != "11" {
+		t.Fatalf("serial изменился: %q", v)
 	}
 }

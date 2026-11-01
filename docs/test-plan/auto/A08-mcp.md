@@ -96,15 +96,19 @@ $res = Get-Content "$t\run\a08-result.json" -Raw -Encoding utf8 | ConvertFrom-Js
    | `secrets.absent.*` | во всём, что увидел агент (ответы инструментов и RPC), нет: основного токена, агентского токена, портов обоих апстримов и входящего порта, адреса `127.0.0.1` | подстрок нет |
    | `mcp.no_endpoint_message`, `mcp.exit_code_0` | после удаления файла доступа инструменты отвечают сообщением «LAVRay не запущен…»; сервер выходит с кодом 0 | текст, код |
 
-5. Именованные тесты ядра, на которых держится белый список, не удалены (быстрая проверка в клоне `src\`; нужна рабочая копия с Go).
+5. Именованные тесты ядра, на которых держится белый список, не удалены. `src\` только для чтения (`01-ENVIRONMENT.md`, раздел 2, правило 1), поэтому тесты идут в собственной рабочей копии `wt\A08` (нужен Go).
 
 ```powershell
-Set-Location (Join-Path $env:LAVRAY_SRC 'core')
+. C:\lavray-test\env.ps1
+$wt = 'C:\lavray-test\wt\A08'
+if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
+git -C $env:LAVRAY_SRC worktree add --detach $wt $env:LAVRAY_REF
+Set-Location (Join-Path $wt 'core')
 go test -count=1 -v -run '^(TestEveryProcedureHasAgentDecision|TestAgentTableKeepsPreviousAllowlists)$' ./internal/api/ 2>&1 | Select-String -Pattern '^(--- |ok|FAIL)'
 Set-Location C:\lavray-test
 ```
 
-   Ожидается: `--- PASS: TestEveryProcedureHasAgentDecision`, `--- PASS: TestAgentTableKeepsPreviousAllowlists`, `ok`. (Команда читает `src\`, но `go test` может создать кэш сборки только в `GOCACHE`; файлы репозитория не меняются.)
+   Ожидается: `--- PASS: TestEveryProcedureHasAgentDecision`, `--- PASS: TestAgentTableKeepsPreviousAllowlists`, `ok`. (Рабочая копия `wt\A08` создана без ошибок; `go test` пишет только в кэш сборки `GOCACHE`. Клон `src\` не затрагивается, проверка в «Откате».)
 
 ## Критерии PASS/FAIL
 
@@ -124,11 +128,16 @@ Set-Location C:\lavray-test
 
 ```powershell
 Get-Process lavray-core -ErrorAction SilentlyContinue | Where-Object { $_.Path -like 'C:\lavray-test\*' } | Stop-Process -Force
+Set-Location C:\lavray-test
+git -C $env:LAVRAY_SRC worktree remove --force C:\lavray-test\wt\A08
+git -C $env:LAVRAY_SRC worktree prune
 Remove-Item -Recurse -Force C:\lavray-test\tmp\A08
 Test-Path C:\lavray-test\tmp\A08
+Test-Path C:\lavray-test\wt\A08
+git -C $env:LAVRAY_SRC status --short
 ```
 
-Ожидается `False`. Системного отката нет.
+Ожидается два `False` и пустой вывод `git status --short` (клон `src\` не изменён). Системного отката нет.
 
 ## Отчёт
 

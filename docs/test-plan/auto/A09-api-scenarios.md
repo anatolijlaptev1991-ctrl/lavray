@@ -86,8 +86,14 @@
 
 5. Проверки, которые выполняет `go test ./...` (A02) на том же коде и которые не дублируются скриптом, но входят в критерии файла:
 
+   `src\` только для чтения (`01-ENVIRONMENT.md`, раздел 2, правило 1), поэтому тесты идут в собственной рабочей копии `wt\A09`:
+
    ```powershell
-   Set-Location (Join-Path $env:LAVRAY_SRC 'core')
+   . C:\lavray-test\env.ps1
+   $wt = 'C:\lavray-test\wt\A09'
+   if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
+   git -C $env:LAVRAY_SRC worktree add --detach $wt $env:LAVRAY_REF
+   Set-Location (Join-Path $wt 'core')
    go test -count=1 -v -run '^(TestEverySettingHasReader)$' ./internal/model/ 2>&1 | Select-String -Pattern '^(--- |ok|FAIL)'
    go test -count=1 -v -run '^(TestEveryProcedureHasAgentDecision|TestUnimplementedRatchet)$' ./internal/api/ 2>&1 | Select-String -Pattern '^(--- |ok|FAIL)'
    Set-Location C:\lavray-test
@@ -147,11 +153,16 @@
 
 ```powershell
 Get-Process lavray-core -ErrorAction SilentlyContinue | Where-Object { $_.Path -like 'C:\lavray-test\*' } | Stop-Process -Force
+Set-Location C:\lavray-test
+git -C $env:LAVRAY_SRC worktree remove --force C:\lavray-test\wt\A09
+git -C $env:LAVRAY_SRC worktree prune
 Remove-Item -Recurse -Force C:\lavray-test\tmp\A09
 Test-Path C:\lavray-test\tmp\A09
+Test-Path C:\lavray-test\wt\A09
+git -C $env:LAVRAY_SRC status --short
 ```
 
-Ожидается `False`. Системного отката нет.
+Ожидается два `False` и пустой вывод `git status --short` (клон `src\` не изменён). Системного отката нет.
 
 ## Отчёт
 

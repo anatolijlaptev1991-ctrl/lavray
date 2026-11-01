@@ -34,7 +34,7 @@
 
 ## Безопасность
 
-Ключи, корень и «релизы» тестовые: они созданы командой `updsign genkey` на этом ПК и годятся только для проверки. Настоящие ключи выпуска, настоящий `root.json` и секреты CI сюда не передаются. Файл `core/cmd/lavray-core/root.json` в клоне не меняется: ядро с тестовым корнем собирается флагом компоновщика `-X main.rootJSONB64=…` (он сильнее файла), а ядро-заглушка — из копии дерева с заглушкой, поэтому проверка не зависит от того, лежит ли в клоне уже настоящий корень. Ничего не публикуется; зеркала слушают только `127.0.0.1`.
+Ключи, корень и «релизы» тестовые: они созданы командой `updsign genkey` на этом ПК и годятся только для проверки. Настоящие ключи выпуска, настоящий `root.json` и секреты CI сюда не передаются. Файл `core/cmd/lavray-core/root.json` в рабочей копии `wt\A13` (и тем более в клоне `src\`) не меняется: ядро с тестовым корнем собирается флагом компоновщика `-X main.rootJSONB64=…` (он сильнее файла), а ядро-заглушка — из копии дерева с заглушкой, поэтому проверка не зависит от того, лежит ли в клоне уже настоящий корень. Ничего не публикуется; зеркала слушают только `127.0.0.1`.
 
 Зеркала работают по обычному HTTP: адреса bootstrap-источников, вшитые в ядро флагом `-X main.bootstrapURLs=…`, схемой не проверяются, а подписанный `sources.json` обязан содержать только `https` и в тесте указывает на закрытый порт 1 (быстрый отказ). Поэтому тест не нуждается в сертификатах и не трогает хранилище сертификатов. Правила «только `https`» для подписанных источников и редиректа `https → http` проверяют Go-тесты (шаг 4: `TestHttpsToHttpRedirectRejected`); скрипт проверяет, что любой редирект зеркала отвергается и цель редиректа не запрашивается.
 
@@ -45,17 +45,22 @@
    ```powershell
    . C:\lavray-test\env.ps1
    $t = 'C:\lavray-test\tmp\A13'
+   $wt = 'C:\lavray-test\wt\A13'
    New-Item -ItemType Directory -Force -Path $t, C:\lavray-test\results\A13 | Out-Null
    git -C $t rev-parse --is-inside-work-tree 2>&1 | Select-Object -First 1
-   Test-Path (Join-Path $env:LAVRAY_SRC 'core\cmd\lavray-core\root.json')
+   if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
+   git -C $env:LAVRAY_SRC worktree add --detach $wt $env:LAVRAY_REF
+   Test-Path (Join-Path $wt 'core\cmd\lavray-core\root.json')
    ```
 
-   Ожидается: первая строка — `fatal: not a git repository…` (если напечатано `true`, перенесите `tmp\A13` из git-дерева), вторая — `True`.
+   `src\` только для чтения (`01-ENVIRONMENT.md`, раздел 2, правило 1), поэтому весь файл (сборка `updsign` и ядер, Go-тесты, unittest) работает в собственной рабочей копии `wt\A13`; `src\` не используется.
+
+   Ожидается: первая строка — `fatal: not a git repository…` (если напечатано `true`, перенесите `tmp\A13` из git-дерева), рабочая копия создана без ошибок, последняя строка — `True`.
 
 2. Сохраните скрипт из раздела «Скрипт `a13_updater.py`» как `C:\lavray-test\tmp\A13\a13_updater.py` и запустите:
 
    ```powershell
-   python -I "$t\a13_updater.py" (Join-Path $env:LAVRAY_SRC 'core') "$t\run" 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A13\run.txt | Select-Object -Last 12   # третий аргумент: base (разделы 0-11) или data (только §7.5)
+   python -I "$t\a13_updater.py" (Join-Path $wt 'core') "$t\run" 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A13\run.txt | Select-Object -Last 12   # третий аргумент: base (разделы 0-11) или data (только §7.5)
    "a13 exit=$LASTEXITCODE"
    $res = Get-Content "$t\run\a13-result.json" -Raw | ConvertFrom-Json
    "проверок: $($res.total), провалов: $($res.failed), наблюдений: $($res.warnings)"
@@ -77,17 +82,19 @@
 3. Статические тесты workflow подписи (12 тестов; запрет `${{ inputs.* }}` внутри `run:`, права, Environment для ключей, порядок шагов `meta-refresh` и `meta-resign`):
 
    ```powershell
-   Set-Location $env:LAVRAY_SRC
+   $wt = 'C:\lavray-test\wt\A13'
+   Set-Location $wt
    python -B -m unittest scripts/tests/test_signing_workflows.py -v 2>&1 | Select-Object -Last 6
    Set-Location C:\lavray-test
    ```
 
-   Ожидается: `Ran 12 tests` и `OK`. Ключ `-B` не даёт Python писать `__pycache__` в клон.
+   Ожидается: `Ran 12 tests` и `OK`. Ключ `-B` не даёт Python писать `__pycache__` в рабочую копию.
 
 4. Тесты репозитория, которые скрипт не повторяет (три последние команды go test — защита §7.5: параллельное применение → `aborted`, содержимое наборов отвергается при применении, `dir_busy` без путей, отказ `updsign` на архиве, который клиент не примет):
 
    ```powershell
-   Set-Location (Join-Path $env:LAVRAY_SRC 'core')
+   $wt = 'C:\lavray-test\wt\A13'
+   Set-Location (Join-Path $wt 'core')
    go test -count=1 ./internal/updates/... ./cmd/updsign/ 2>&1 | Select-String -Pattern '^(ok|FAIL|---)'
    go test -count=1 -run 'Update|Verify|Rollback|Staging|Root' ./internal/api/ ./cmd/lavray-core/ 2>&1 | Select-String -Pattern '^(ok|FAIL|---)'
    go test -count=1 -v -run '^(TestHttpsToHttpRedirectRejected|TestRedirectCap|TestRotationSkipRejected|TestRotationRequiresNewKeys|TestRevokedKeyRejectedAfterTwoRotations|TestRotationFailsClosedWhenASourceIsSilent|TestShortStreamKeepsPartAndResumes|TestDownloadRejectsOversizedAsset|TestTimestampClockSkewTolerance|TestGeoZipSlipRejected|TestGeoSymlinkEntryRejected)$' ./internal/updates/ 2>&1 | Select-String -Pattern '^(--- |ok|FAIL)'
@@ -186,11 +193,16 @@ updsign.exe verify -root root1.json -dir site\meta -channel stable -assets site\
 
 ```powershell
 Get-Process lavray-core-test, lavray-core-placeholder, lavray-core-data -ErrorAction SilentlyContinue | Where-Object { $_.Path -like 'C:\lavray-test\*' } | Stop-Process -Force
+Set-Location C:\lavray-test
+git -C $env:LAVRAY_SRC worktree remove --force C:\lavray-test\wt\A13
+git -C $env:LAVRAY_SRC worktree prune
 Remove-Item -Recurse -Force C:\lavray-test\tmp\A13
 Test-Path C:\lavray-test\tmp\A13
+Test-Path C:\lavray-test\wt\A13
+git -C $env:LAVRAY_SRC status --short
 ```
 
-Ожидается `False`. Клон `LAVRAY_SRC` не менялся: `git -C $env:LAVRAY_SRC status --short` пуст.
+Ожидается два `False` и пустой вывод `git status --short` (клон `LAVRAY_SRC` не менялся).
 
 ## Отчёт
 

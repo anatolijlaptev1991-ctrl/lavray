@@ -345,10 +345,9 @@ export const esDict: Record<string, string> = {
   "gw.tproxy.hint": "Proxy transparente para los dispositivos de la red mediante reglas nftables. Sirve en la mayoría de routers.",
   "gw.tun": "TUN",
   "gw.tun.hint": "Adaptador virtual en el router. Necesita el módulo kmod-tun.",
-  "health.dns": "Resolución DNS",
+  "health.dns": "DNS remoto",
   "health.lastCheck": "Última prueba",
   "health.latency": "Latencia",
-  "health.loss": "Pérdida",
   "health.preset": "Preset de rutas",
   "health.title": "Calidad de la conexión",
   "hist.cur": "actual",
@@ -1071,4 +1070,6 @@ export const esDict: Record<string, string> = {
   "kill.release": "Liberar proxy",
   "set.killProxy": "Mantener el proxy si el núcleo falla",
   "set.killProxy.d": "En modo de proxy del sistema, si el núcleo se detiene, el proxy sigue activo: las aplicaciones no salen directamente a la red. «Desconectar» y salir de la aplicación siempre liberan el proxy.",
+  "health.ip": "IP pública (por el túnel)",
+  "health.ip.refresh": "Actualizar IP pública",
 }

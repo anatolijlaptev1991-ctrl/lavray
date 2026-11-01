@@ -345,10 +345,9 @@ export const deDict: Record<string, string> = {
   "gw.tproxy.hint": "Transparenter Proxy für Netzwerkgeräte über nftables-Regeln. Passt für die meisten Router.",
   "gw.tun": "TUN",
   "gw.tun.hint": "Virtueller Adapter auf dem Router. Benötigt das Modul kmod-tun.",
-  "health.dns": "DNS-Auflösung",
+  "health.dns": "Remote-DNS",
   "health.lastCheck": "Letzte Prüfung",
   "health.latency": "Latenz",
-  "health.loss": "Paketverlust",
   "health.preset": "Routing-Preset",
   "health.title": "Verbindungsqualität",
   "hist.cur": "aktuell",
@@ -1071,4 +1070,6 @@ export const deDict: Record<string, string> = {
   "kill.release": "Proxy freigeben",
   "set.killProxy": "Proxy bei Core-Absturz beibehalten",
   "set.killProxy.d": "Im Systemproxy-Modus bleibt der Proxy aktiv, wenn der Core stoppt: Apps greifen nicht direkt auf das Netz zu. „Trennen“ und das Beenden der App geben den Proxy immer frei.",
+  "health.ip": "Öffentliche IP (über Tunnel)",
+  "health.ip.refresh": "Öffentliche IP aktualisieren",
 }

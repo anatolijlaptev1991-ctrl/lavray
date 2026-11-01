@@ -345,10 +345,9 @@ export const enDict: Record<string, string> = {
   "gw.tproxy.hint": "Transparent proxy for network devices via nftables rules. Suits most routers.",
   "gw.tun": "TUN",
   "gw.tun.hint": "A virtual adapter on the router. Requires the kmod-tun module.",
-  "health.dns": "DNS resolution",
+  "health.dns": "Remote DNS",
   "health.lastCheck": "Last check",
   "health.latency": "Latency",
-  "health.loss": "Packet loss",
   "health.preset": "Route preset",
   "health.title": "Connection quality",
   "hist.cur": "current",
@@ -1071,4 +1070,6 @@ export const enDict: Record<string, string> = {
   "kill.release": "Release proxy",
   "set.killProxy": "Keep the proxy if the core crashes",
   "set.killProxy.d": "In system proxy mode, if the core stops, the proxy stays on: apps do not reach the network directly. “Disconnect” and quitting the app always release the proxy.",
+  "health.ip": "Public IP (via tunnel)",
+  "health.ip.refresh": "Refresh public IP",
 }

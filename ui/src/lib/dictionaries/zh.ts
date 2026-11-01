@@ -345,10 +345,9 @@ export const zhDict: Record<string, string> = {
   "gw.tproxy.hint": "通过 nftables 规则为局域网设备做透明代理。适合大多数路由器。",
   "gw.tun": "TUN",
   "gw.tun.hint": "路由器上的虚拟网卡。需要 kmod-tun 模块。",
-  "health.dns": "DNS 解析",
+  "health.dns": "远程 DNS",
   "health.lastCheck": "上次检测",
   "health.latency": "延迟",
-  "health.loss": "丢包",
   "health.preset": "路由预设",
   "health.title": "连接质量",
   "hist.cur": "当前",
@@ -1064,4 +1063,6 @@ export const zhDict: Record<string, string> = {
   "kill.release": "解除代理",
   "set.killProxy": "内核崩溃时保留代理",
   "set.killProxy.d": "在系统代理模式下，内核停止时代理保持开启：应用不会直连网络。“断开”和退出应用始终会解除代理。",
+  "health.ip": "公网 IP（经隧道）",
+  "health.ip.refresh": "刷新公网 IP",
 }

@@ -9,18 +9,18 @@ import (
 	"encoding/json"
 	"strconv"
 
-	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
 )
 
+// Ключи — строками (файл читателя настроек, TestEverySettingHasReader); их
+// совпадение с model.SettingUpdate* проверяет TestUpdateSettingKeysMatchModel.
 const (
-	setUpdRoot     = model.SettingUpdateRootVersion
-	setUpdSerialSt = model.SettingUpdateSerialStable
-	setUpdSerialBe = model.SettingUpdateSerialBeta
-	setUpdChecked  = model.SettingUpdateLastChecked
-	setUpdLastURL  = model.SettingUpdateLastURL
-	setUpdTSVer    = model.SettingUpdateTimestampVersion
-	setUpdRootJSON = model.SettingUpdateRootJSON
+	setUpdRoot     = "update.root_version"
+	setUpdSerialSt = "update.serial_stable"
+	setUpdSerialBe = "update.serial_beta"
+	setUpdChecked  = "update.last_checked_at"
+	setUpdLastURL  = "update.last_url"
+	setUpdTSVer    = "update.timestamp_version"
 )
 
 func (s *Server) loadUpdateState() updates.State {

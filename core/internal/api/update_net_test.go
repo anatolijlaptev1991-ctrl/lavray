@@ -189,3 +189,19 @@ func TestSaveUpdateStateHonorsReset(t *testing.T) {
 		t.Fatal("флаги сброса гасятся после записи")
 	}
 }
+
+func TestUpdateSettingKeysMatchModel(t *testing.T) {
+	pairs := map[string]string{
+		setUpdRoot: model.SettingUpdateRootVersion, setUpdSerialSt: model.SettingUpdateSerialStable,
+		setUpdSerialBe: model.SettingUpdateSerialBeta, setUpdChecked: model.SettingUpdateLastChecked,
+		setUpdLastURL: model.SettingUpdateLastURL, setUpdTSVer: model.SettingUpdateTimestampVersion,
+	}
+	for got, want := range pairs {
+		if got != want {
+			t.Errorf("ключ api %q расходится с model %q", got, want)
+		}
+		if !model.BackupExcluded(want) {
+			t.Errorf("%s должен исключаться из копии", want)
+		}
+	}
+}

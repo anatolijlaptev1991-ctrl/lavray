@@ -163,28 +163,34 @@ jobs:
 
   # T-75: подпись метаданных обновлений. Секреты LAVRAY_TIMESTAMP_KEY,
   # LAVRAY_MANIFEST_KEY и LAVRAY_ARTIFACT_KEY лежат в Environment
-  # release-signing (ревьюер — владелец). Секретов нет — все шаги пропускаются
-  # и джоб завершается успешно: релиз выходит без meta/, клиент честно говорит
+  # release-signing (ревьюер — владелец; Environment ограничен тегами `v*`, см.
+  # docs/UPDATE-SYSTEM.md §12.4). Секретов нет — все шаги пропускаются и джоб
+  # завершается успешно: релиз выходит без meta/, клиент честно говорит
   # «обновления не настроены». Секреты нельзя проверить в job-level `if`, поэтому
-  # вентиль — первый шаг.
+  # вентиль — первый шаг; в него приходит только булево «задан ли секрет»
+  # (выражение вычисляется до запуска, значение секрета в шаг не попадает).
+  # Каждый ключ виден только тому шагу, который им подписывает.
   sign:
     name: "Подпись метаданных обновлений"
     needs: build
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     environment: release-signing
     permissions:
       contents: write
-    env:
-      LAVRAY_TIMESTAMP_KEY: ${{ secrets.LAVRAY_TIMESTAMP_KEY }}
-      LAVRAY_MANIFEST_KEY: ${{ secrets.LAVRAY_MANIFEST_KEY }}
-      LAVRAY_ARTIFACT_KEY: ${{ secrets.LAVRAY_ARTIFACT_KEY }}
-      GH_TOKEN: ${{ github.token }}
+    # Два релиза не подписываются одновременно: serial и gh-pages общие.
+    concurrency:
+      group: release-signing
+      cancel-in-progress: false
     steps:
       - name: "Ключи подписи заданы?"
         id: gate
+        env:
+          HAVE_TIMESTAMP: ${{ secrets.LAVRAY_TIMESTAMP_KEY != '' }}
+          HAVE_MANIFEST: ${{ secrets.LAVRAY_MANIFEST_KEY != '' }}
+          HAVE_ARTIFACT: ${{ secrets.LAVRAY_ARTIFACT_KEY != '' }}
         run: |
-          if [ -n "$LAVRAY_TIMESTAMP_KEY" ] && [ -n "$LAVRAY_MANIFEST_KEY" ] && [ -n "$LAVRAY_ARTIFACT_KEY" ]; then
+          if [ "$HAVE_TIMESTAMP" = true ] && [ "$HAVE_MANIFEST" = true ] && [ "$HAVE_ARTIFACT" = true ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
@@ -226,19 +232,25 @@ jobs:
         working-directory: core
         run: go build -o ../updsign ./cmd/updsign
 
+      # Токен передаётся заголовком http.extraheader, а не в адресе remote: так он
+      # не попадает ни в .git/config клона, ни в сообщения git.
       - name: "meta/: текущее состояние gh-pages"
         if: steps.gate.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          remote="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          if git ls-remote --exit-code --heads "$remote" gh-pages >/dev/null 2>&1; then
-            git clone --depth 1 --branch gh-pages "$remote" pages
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          remote="https://github.com/${GITHUB_REPOSITORY}.git"
+          if git -c "http.extraheader=AUTHORIZATION: basic $auth" ls-remote --exit-code --heads "$remote" gh-pages >/dev/null 2>&1; then
+            git -c "http.extraheader=AUTHORIZATION: basic $auth" clone --depth 1 --branch gh-pages "$remote" pages
           else
             mkdir pages && git -C pages init -q -b gh-pages && git -C pages remote add origin "$remote"
           fi
           mkdir -p pages/meta
           cp core/cmd/lavray-core/root.json pages/meta/root.json
 
-      - name: "Подпись: манифест, sources, timestamp, .minisig"
+      - name: "Заметки релиза"
         if: steps.gate.outputs.enabled == 'true'
         run: |
           python3 - <<'PY'
@@ -247,22 +259,56 @@ jobs:
           text = open(path, encoding="utf-8").read()[:4000] if os.path.exists(path) else ""
           json.dump({"ru": text} if text else {}, open("notes.json", "w", encoding="utf-8"), ensure_ascii=False)
           PY
-          ./updsign manifest -key env:LAVRAY_MANIFEST_KEY -artifact-key env:LAVRAY_ARTIFACT_KEY             -product lavray-windows -channel "$CHANNEL" -version "$VER" -notes notes.json             -asset "windows-x64=v$VER/$SETUP_NAME=dist/$SETUP_NAME"             -out "pages/meta/manifest-$CHANNEL.json"
-          ./updsign sources -key env:LAVRAY_MANIFEST_KEY -in scripts/release/sources.draft.json -out pages/meta/sources.json
-          ./updsign timestamp -key env:LAVRAY_TIMESTAMP_KEY -dir pages/meta -out pages/meta/timestamp.json
-          serial=$(python3 -c "import json,sys; print(json.load(open('pages/meta/manifest-$CHANNEL.json'))['signed']['serial'])")
-          ./updsign artifact -key env:LAVRAY_ARTIFACT_KEY -file "dist/$SETUP_NAME" -product lavray-windows             -channel "$CHANNEL" -version "$VER" -serial "$serial"
 
+      # Версия не новее уже опубликованной в канале — отказ (-published-dir).
+      - name: "Подпись манифеста (ключи manifest и artifact)"
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          LAVRAY_MANIFEST_KEY: ${{ secrets.LAVRAY_MANIFEST_KEY }}
+          LAVRAY_ARTIFACT_KEY: ${{ secrets.LAVRAY_ARTIFACT_KEY }}
+        run: |
+          ./updsign manifest -key env:LAVRAY_MANIFEST_KEY -artifact-key env:LAVRAY_ARTIFACT_KEY \
+            -product lavray-windows -channel "$CHANNEL" -version "$VER" -notes notes.json \
+            -published-dir pages/meta \
+            -asset "windows-x64=v$VER/$SETUP_NAME=dist/$SETUP_NAME" \
+            -out "pages/meta/manifest-$CHANNEL.json"
+
+      - name: "Подпись sources.json (ключ manifest)"
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          LAVRAY_MANIFEST_KEY: ${{ secrets.LAVRAY_MANIFEST_KEY }}
+        run: ./updsign sources -key env:LAVRAY_MANIFEST_KEY -in scripts/release/sources.draft.json -out pages/meta/sources.json
+
+      - name: "Подпись timestamp.json (ключ timestamp)"
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          LAVRAY_TIMESTAMP_KEY: ${{ secrets.LAVRAY_TIMESTAMP_KEY }}
+        run: ./updsign timestamp -key env:LAVRAY_TIMESTAMP_KEY -dir pages/meta -out pages/meta/timestamp.json
+
+      - name: "Подпись установщика .minisig (ключ artifact)"
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          LAVRAY_ARTIFACT_KEY: ${{ secrets.LAVRAY_ARTIFACT_KEY }}
+        run: |
+          serial=$(python3 -c "import json; print(json.load(open('pages/meta/manifest-$CHANNEL.json'))['signed']['serial'])")
+          ./updsign artifact -key env:LAVRAY_ARTIFACT_KEY -file "dist/$SETUP_NAME" -product lavray-windows \
+            -channel "$CHANNEL" -version "$VER" -serial "$serial"
+
+      # Проверяется только выпускаемый канал: просроченный манифест соседнего не мешает.
       - name: "updsign verify (до публикации)"
         if: steps.gate.outputs.enabled == 'true'
-        run: ./updsign verify -root core/cmd/lavray-core/root.json -dir pages/meta -assets dist -product lavray-windows
+        run: ./updsign verify -root core/cmd/lavray-core/root.json -dir pages/meta -channel "$CHANNEL" -assets dist -product lavray-windows
 
       - name: "Публикация meta/ в gh-pages и .minisig в релиз"
         if: steps.gate.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
           gh release upload "$GITHUB_REF_NAME" "dist/$SETUP_NAME.minisig" --clobber
           git -C pages config user.name "github-actions[bot]"
           git -C pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git -C pages add meta
           git -C pages commit -m "meta: $GITHUB_REF_NAME ($CHANNEL)" || { echo "метаданные не изменились"; exit 0; }
-          git -C pages push origin gh-pages
+          git -C pages -c "http.extraheader=AUTHORIZATION: basic $auth" push origin gh-pages

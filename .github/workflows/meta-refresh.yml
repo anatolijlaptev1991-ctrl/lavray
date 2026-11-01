@@ -1,0 +1,114 @@
+# meta-refresh.yml — T-75: ежедневное продление timestamp.json.
+#
+# Клиент отвергает timestamp старше 7 суток, а подписывается он только при
+# выпуске релиза. Без этого задания приложение через неделю после последнего
+# тега отвечало бы «проверка не удалась». Задание переподписывает ТОЛЬКО
+# timestamp.json ключом t1 и публикует его в gh-pages; манифесты, sources и
+# установщики не трогает (на них timestamp ссылается по sha256).
+#
+# Ключ t1 лежит в отдельном Environment `release-timestamp`: он разрешён только
+# для ветки по умолчанию и без ревьюера (задание ночное). Ключи r1 и a1 здесь
+# недоступны. Манифест и sources живут 90 суток: за 14 суток до конца задание
+# падает с понятным сообщением — выпустите релиз или запустите ручной
+# workflow meta-resign (Environment release-signing с ревьюером).
+name: meta-refresh
+on:
+  schedule:
+    - cron: '17 4 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    name: "Продление timestamp"
+    # только ветка по умолчанию: тег или чужая ветка ключ t1 не получит
+    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    environment: release-timestamp
+    permissions:
+      contents: write
+    # общий замок с выпуском релиза: gh-pages правит один за раз
+    concurrency:
+      group: release-signing
+      cancel-in-progress: false
+    steps:
+      - name: "Ключ timestamp задан?"
+        id: gate
+        env:
+          HAVE_TIMESTAMP: ${{ secrets.LAVRAY_TIMESTAMP_KEY != '' }}
+        run: |
+          if [ "$HAVE_TIMESTAMP" = true ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Продление timestamp пропущено::секрет LAVRAY_TIMESTAMP_KEY окружения release-timestamp не задан"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.enabled == 'true'
+
+      - uses: actions/setup-go@v5
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: "updsign: сборка утилиты"
+        if: steps.gate.outputs.enabled == 'true'
+        working-directory: core
+        run: go build -o ../updsign ./cmd/updsign
+
+      - name: "meta/: текущее состояние gh-pages"
+        id: pages
+        if: steps.gate.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          remote="https://github.com/${GITHUB_REPOSITORY}.git"
+          if git -c "http.extraheader=AUTHORIZATION: basic $auth" ls-remote --exit-code --heads "$remote" gh-pages >/dev/null 2>&1; then
+            git -c "http.extraheader=AUTHORIZATION: basic $auth" clone --depth 1 --branch gh-pages "$remote" pages
+          fi
+          if ls pages/meta/manifest-*.json >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Продлевать нечего::в gh-pages ещё нет опубликованных манифестов (релизов с подписью не было)"
+          fi
+
+      - name: "Подпись timestamp.json (ключ timestamp)"
+        if: steps.gate.outputs.enabled == 'true' && steps.pages.outputs.published == 'true'
+        env:
+          LAVRAY_TIMESTAMP_KEY: ${{ secrets.LAVRAY_TIMESTAMP_KEY }}
+        run: ./updsign timestamp -key env:LAVRAY_TIMESTAMP_KEY -dir pages/meta -out pages/meta/timestamp.json
+
+      # Проверка по корню из репозитория (а не из gh-pages) по каждому каналу отдельно.
+      - name: "updsign verify (до публикации)"
+        if: steps.gate.outputs.enabled == 'true' && steps.pages.outputs.published == 'true'
+        run: |
+          for f in pages/meta/manifest-*.json; do
+            ch=$(basename "$f" .json); ch="${ch#manifest-}"
+            ./updsign verify -root core/cmd/lavray-core/root.json -dir pages/meta -channel "$ch" -product lavray-windows
+          done
+
+      - name: "Публикация timestamp.json в gh-pages"
+        if: steps.gate.outputs.enabled == 'true' && steps.pages.outputs.published == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          git -C pages config user.name "github-actions[bot]"
+          git -C pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C pages add meta/timestamp.json
+          git -C pages commit -m "meta: продление timestamp" || { echo "timestamp не изменился"; exit 0; }
+          git -C pages -c "http.extraheader=AUTHORIZATION: basic $auth" push origin gh-pages
+
+      # Последним шагом: timestamp уже продлён и опубликован, задание краснеет,
+      # пока владелец не выпустит релиз или не запустит meta-resign.
+      - name: "Манифесты и sources: срок (предупреждение за 14 суток)"
+        if: steps.gate.outputs.enabled == 'true' && steps.pages.outputs.published == 'true'
+        run: ./updsign expiry -dir pages/meta -within 336h

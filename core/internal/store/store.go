@@ -50,6 +50,12 @@ func Open(dir string) (*Store, error) {
 	if dir == "" {
 		return nil, fmt.Errorf("store: empty dir")
 	}
+	// Относительный путь — от текущего каталога: ниже путь становится
+	// file:///C:/…, и без Abs он уходил бы в корень диска.
+	dir, err := filepath.Abs(dir)
+	if err != nil {
+		return nil, fmt.Errorf("store: abs %q: %w", dir, err)
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("store: mkdir: %w", err)
 	}

@@ -15,10 +15,15 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 )
 
-// isUnavailable: тест был и профиль не ответил (latency_ms < 0). Непроверенный
-// (latency не задана) недоступным не считается.
+// isUnavailable: тест был и профиль не ответил — latency_ms < 0 или
+// неудачный тест (время есть, задержки нет, есть ошибка; test_instance.go).
+// Непроверенный и прерванный тест (без времени) недоступным не считаются.
 func isUnavailable(p *model.Profile) bool {
-	return p.TestResult.LatencyMs != nil && *p.TestResult.LatencyMs < 0
+	tr := p.TestResult
+	if tr.LatencyMs != nil {
+		return *tr.LatencyMs < 0
+	}
+	return tr.TestedAtMs != nil && tr.LastError != ""
 }
 
 // RemoveUnavailableProfiles удаляет недоступные профили группы. Активный

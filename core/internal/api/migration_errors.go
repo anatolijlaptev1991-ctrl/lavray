@@ -44,6 +44,13 @@ func validateNekoPath(path string) (string, error) {
 	return dir, nil
 }
 
+// ValidateNekoBoxPath — проверка пути для CLI до открытия базы (ошибки — как у
+// MigrationService).
+func ValidateNekoBoxPath(path string) error {
+	_, err := validateNekoPath(path)
+	return err
+}
+
 // mapMigrationErr приводит ошибки переноса к кодам Connect; остальное — как mapErr.
 func mapMigrationErr(err error) error {
 	switch {

@@ -51,12 +51,15 @@ func TestRollbackKeepsMonotonicSerials(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	for _, comp := range []lavrayv1.UpdateComponent{
-		lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP,
-		lavrayv1.UpdateComponent_UPDATE_COMPONENT_CORE,
+	// T-75: откат приложения выполняет оболочка, ядро отвечает FAILED_PRECONDITION;
+	// остальные компоненты пока не реализованы. Ни в одном случае serial не меняется.
+	for comp, want := range map[lavrayv1.UpdateComponent]connect.Code{
+		lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP:  connect.CodeFailedPrecondition,
+		lavrayv1.UpdateComponent_UPDATE_COMPONENT_CORE: connect.CodeUnimplemented,
 	} {
-		if _, err := srv.Rollback(ctx, connect.NewRequest(&lavrayv1.RollbackRequest{Component: comp})); err != nil {
-			t.Fatalf("Rollback(%v): %v", comp, err)
+		_, err := srv.Rollback(ctx, connect.NewRequest(&lavrayv1.RollbackRequest{Component: comp}))
+		if connect.CodeOf(err) != want {
+			t.Fatalf("Rollback(%v): код %v, ожидался %v (%v)", comp, connect.CodeOf(err), want, err)
 		}
 	}
 

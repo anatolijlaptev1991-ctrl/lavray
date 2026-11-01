@@ -125,7 +125,7 @@ var agentTable = map[string]agentDecision{
 	lavrayv1connect.UpdateServiceDownloadUpdatesProcedure:   agentDeny,
 	lavrayv1connect.UpdateServiceApplyUpdatesProcedure:      agentDeny,
 	lavrayv1connect.UpdateServiceRollbackProcedure:          agentDeny,
-	lavrayv1connect.UpdateServiceGetUpdateStateProcedure:    agentDeny,
+	lavrayv1connect.UpdateServiceGetUpdateStateProcedure:    agentRead,
 	lavrayv1connect.UpdateServiceVerifyLocalUpdateProcedure: agentDeny,
 
 	// WebSessionService.

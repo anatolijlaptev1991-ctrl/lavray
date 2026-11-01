@@ -16,7 +16,7 @@ func TestVersionsComeFromSingleSource(t *testing.T) {
 	if got := s.coreStatus().CoreVersion; got != version.Version {
 		t.Errorf("CoreStatus.core_version = %q, ожидалось version.Version = %q", got, version.Version)
 	}
-	if s.appVersion != version.Version {
-		t.Errorf("appVersion = %q, ожидалось version.Version = %q", s.appVersion, version.Version)
+	if s.upd.appVersion() != version.Version {
+		t.Errorf("appVersion = %q, ожидалось version.Version = %q", s.upd.appVersion(), version.Version)
 	}
 }

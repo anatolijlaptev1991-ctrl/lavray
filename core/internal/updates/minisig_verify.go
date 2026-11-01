@@ -11,6 +11,7 @@ import (
 	"crypto/subtle"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"golang.org/x/crypto/blake2b"
 )
@@ -28,6 +29,16 @@ type ArtifactClaims struct {
 // String — «product;platform;channel;version;serial».
 func (c ArtifactClaims) String() string {
 	return c.Product + ";" + c.Platform + ";" + c.Channel + ";" + c.Version + ";" + strconv.FormatInt(c.Serial, 10)
+}
+
+// ParseClaims разбирает trusted comment «product;platform;channel;version;serial».
+func ParseClaims(trusted string) (ArtifactClaims, error) {
+	p := strings.Split(trusted, ";")
+	serial, err := strconv.ParseInt(p[len(p)-1], 10, 64)
+	if len(p) != 5 || err != nil || serial < 1 {
+		return ArtifactClaims{}, fmt.Errorf("%w: trusted comment не вида product;platform;channel;version;serial", ErrMinisigTrustedComment)
+	}
+	return ArtifactClaims{Product: p[0], Platform: p[1], Channel: p[2], Version: p[3], Serial: serial}, nil
 }
 
 // Verify проверяет подпись над сообщением целиком (оба алгоритма).

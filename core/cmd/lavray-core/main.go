@@ -111,7 +111,7 @@ func main() {
 	// L24 аудита №1: pickRunner() выбирает реальный sing-box в сборке с
 	// тегом singbox_run; раньше хардкод NopRunner означал, что туннель не
 	// запускался НИ В ОДНОЙ сборке.
-	server := api.NewServer(api.Deps{Store: st, Logs: mux, Runner: pickRunner(), TunCheck: tunPrivilegeCheck})
+	server := api.NewServer(api.Deps{Store: st, Logs: mux, Runner: pickRunner(), TunCheck: tunPrivilegeCheck, Updater: updaterConf()})
 	// Агентский токен (MCP) приходит второй строкой stdin сразу за основным,
 	// но может не прийти вовсе (старая оболочка, тесты): тогда агентский
 	// доступ закрыт. Режим доступа — настройка agent.mode.
@@ -124,11 +124,8 @@ func main() {
 			server.SetAgentToken(tok)
 		}
 	}()
-	// Автообновление подписок (FR-UI-126, T-20): таймер обновляет группы, у
-	// которых прошёл интервал; skip_auto_update и архив пропускаются.
-	stopAutoUpdate := server.StartSubscriptionScheduler(context.Background())
-	defer stopAutoUpdate()
-	// appVersion — билд-флаг платформенных репо.
+	// Автообновление подписок (FR-UI-126, T-20) и проверка обновлений (T-75).
+	defer startSchedulers(server)()
 	root := http.NewServeMux()
 	server.Register(root)
 	// RPC CoreService.Shutdown: инстанс он останавливает сам, а выход из

@@ -74,6 +74,7 @@ func TestAgentTableKeepsPreviousAllowlists(t *testing.T) {
 		lavrayv1connect.StatsServiceGetTrafficSummaryProcedure:        true, // T-79: сводка трафика группы — read
 		lavrayv1connect.DiagnosticsServiceGetPublicIpProcedure:        true,
 		lavrayv1connect.LogServiceGetTailProcedure:                    true,
+		lavrayv1connect.UpdateServiceGetUpdateStateProcedure:          true, // T-75: состояние обновлений — read
 	}
 	wantControl := map[string]bool{
 		lavrayv1connect.CoreServiceConnectProcedure:                        true,

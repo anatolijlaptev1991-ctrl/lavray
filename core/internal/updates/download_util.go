@@ -53,8 +53,13 @@ type digests struct {
 }
 
 func newDigests() *digests {
-	b2, _ := blake2b.New512(nil)
-	return &digests{sha: sha256.New(), b2: b2}
+	return &digests{sha: sha256.New(), b2: NewBlake2b()}
+}
+
+// NewBlake2b — хэшер BLAKE2b-512 для prehashed-подписи minisign.
+func NewBlake2b() hash.Hash {
+	h, _ := blake2b.New512(nil) // без ключа ошибки не бывает
+	return h
 }
 
 func (d *digests) Write(p []byte) (int, error) {

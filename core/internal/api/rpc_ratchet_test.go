@@ -46,8 +46,6 @@ var allowUnimplemented = map[string]bool{
 	"/lavray.v1.RoutingService/ImportNekoRayRoute":        true,
 	"/lavray.v1.SettingsService/ResetSettings":            true,
 	"/lavray.v1.SettingsService/SubscribeSettings":        true,
-	// Реализация в Ф3 (T-75).
-	"/lavray.v1.UpdateService/ApplyUpdates": true,
 	// GatewayService: встроенный UnimplementedGatewayServiceHandler (Ф7).
 	"/lavray.v1.GatewayService/GetGatewayStatus":   true,
 	"/lavray.v1.GatewayService/ListDevicePolicies": true,

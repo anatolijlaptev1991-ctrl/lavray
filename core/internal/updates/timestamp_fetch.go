@@ -142,9 +142,10 @@ func firstErr(cur, next error) error {
 }
 
 // maxTimestampHorizon — максимальное окно свежести timestamp (§3.2: 7 суток) плюс
-// допуск на расхождение часов в час: подписанный «сейчас + 7 суток» документ не
-// должен отвергаться клиентом, у которого часы чуть отстают.
-const maxTimestampHorizon = 7*24*time.Hour + time.Hour
+// допуск на расхождение часов клиента в сутки: подписанный «сейчас + 7 суток»
+// документ не должен отвергаться клиентом, у которого часы отстают. Дальше —
+// ErrTimestampHorizon (api сообщает причину clock_skew: либо часы, либо метаданные).
+const maxTimestampHorizon = 7*24*time.Hour + 24*time.Hour
 
 func expires(t time.Time, now time.Time) bool {
 	return !now.Before(t) // zero time = истёкший (строгость)

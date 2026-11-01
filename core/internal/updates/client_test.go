@@ -86,7 +86,7 @@ func TestTimestampExpired(t *testing.T) {
 	if _, err := e.check(t); err != nil {
 		t.Fatalf("expires на секунду позже — действителен: %v", err)
 	}
-	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 1, tsVersion: 1, tsExpires: now.Add(8 * 24 * time.Hour)})
+	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 1, tsVersion: 1, tsExpires: now.Add(9 * 24 * time.Hour)})
 	if _, err := e.check(t); !errors.Is(err, ErrTimestampHorizon) {
 		t.Fatalf("окно свежести > 7 суток: %v", err)
 	}

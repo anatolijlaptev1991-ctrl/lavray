@@ -95,7 +95,7 @@ func CleanStaging(dir, keep string, olderThan time.Duration, now time.Time) (int
 	for _, e := range entries {
 		full := filepath.Join(dir, e.Name())
 		base := strings.TrimSuffix(strings.TrimSuffix(e.Name(), PartSuffix), MinisigSuffix)
-		if e.IsDir() || !stagedName.MatchString(base) || samePath(full, keep) {
+		if e.IsDir() || !stagedName.MatchString(base) || samePath(full, keep) || samePath(full, keep+MinisigSuffix) {
 			continue
 		}
 		info, ierr := e.Info()

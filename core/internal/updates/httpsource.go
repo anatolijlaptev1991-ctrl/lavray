@@ -22,6 +22,7 @@ const (
 	DefaultMetaMaxBytes     = 8 << 20 // метаданные — килобайты; 8 МиБ с запасом
 	DefaultConnectTimeout   = 3 * time.Second
 	DefaultFirstByteTimeout = 5 * time.Second
+	DefaultStallTimeout     = 30 * time.Second // тело не двигается дольше — обрыв
 	MaxRedirects            = 5
 )
 
@@ -33,6 +34,9 @@ type HTTPSource struct {
 	// ConnectTimeout/FirstByteTimeout действуют только для клиента по умолчанию.
 	ConnectTimeout   time.Duration
 	FirstByteTimeout time.Duration
+	// StallTimeout — сколько тело ответа может не отдавать ни байта (0 → 30 с);
+	// действует для любых клиентов, включая заданный снаружи.
+	StallTimeout time.Duration
 }
 
 // Fetch скачивает небольшой документ целиком (с лимитом).
@@ -89,14 +93,26 @@ func (s *HTTPSource) Open(ctx context.Context, name string, offset int64) (*Arti
 }
 
 func (s *HTTPSource) get(ctx context.Context, name string, offset int64) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(s.Base, "/")+"/"+name, nil)
+	rctx, cancel := context.WithCancel(ctx)
+	req, err := http.NewRequestWithContext(rctx, http.MethodGet, strings.TrimRight(s.Base, "/")+"/"+name, nil)
 	if err != nil {
+		cancel()
 		return nil, err
 	}
 	if offset > 0 {
 		req.Header.Set("Range", "bytes="+strconv.FormatInt(offset, 10)+"-")
 	}
-	return s.client().Do(req)
+	resp, err := s.client().Do(req)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
+	stall := s.StallTimeout
+	if stall <= 0 {
+		stall = DefaultStallTimeout
+	}
+	resp.Body = newIdleBody(resp.Body, stall, cancel)
+	return resp, nil
 }
 
 // client — копия клиента с политикой редиректов (только https, не больше пяти).

@@ -49,7 +49,7 @@ func (c *Client) Download(ctx context.Context, res *Result, dir string, progress
 	if err != nil {
 		return nil, err
 	}
-	dl := &Downloader{Sources: res.Mirrors, Dir: dir, Verify: verify, Progress: progress}
+	dl := &Downloader{Sources: res.Mirrors, Dir: dir, Verify: verify, Progress: progress, Signature: asset.Minisig}
 	p, err := dl.Fetch(ctx, asset)
 	if err != nil {
 		return nil, err

@@ -15,6 +15,7 @@ import (
 
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates/updatestest"
 )
 
@@ -199,5 +200,31 @@ func TestApplyDetectsTamperedStaging(t *testing.T) {
 	}
 	if _, err := f.apply(false); connect.CodeOf(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("после отказа повторно применять нечего: %v", err)
+	}
+}
+
+// Рядом с проверенным установщиком лежит его подпись: по ней оболочка перепроверит файл.
+func TestDownloadStagesSignatureNextToInstaller(t *testing.T) {
+	f := newUpdFix(t, "0.5.0", nil)
+	f.release(updatestest.Release{Version: "0.6.0", Serial: 1, TSVersion: 1})
+	evs, err := f.download()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := verified(evs).StagedPath
+	sig, err := os.ReadFile(p + updates.MinisigSuffix)
+	if err != nil || !strings.Contains(string(sig), "trusted comment: lavray-windows;windows-x64;stable;0.6.0;1") {
+		t.Fatalf("подпись рядом с установщиком: %v %q", err, sig)
+	}
+}
+
+// Часы клиента отстали больше чем на сутки: причина clock_skew, а не «просрочено».
+func TestCheckClockSkewIsDistinctReason(t *testing.T) {
+	f := newUpdFix(t, "0.5.0", nil)
+	f.release(updatestest.Release{Version: "0.6.0", Serial: 1, TSVersion: 1, TSExpires: time.Now().Add(9 * 24 * time.Hour)})
+	_, err := f.check()
+	var ce *connect.Error
+	if !asConnect(err, &ce) || ce.Meta().Get(UpdateReasonHeader) != ReasonClockSkew || !strings.HasPrefix(ce.Message(), "clock_skew: ") {
+		t.Fatalf("ожидалась причина clock_skew: %v", err)
 	}
 }

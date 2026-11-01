@@ -9,10 +9,7 @@ package api
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"os"
 
 	"connectrpc.com/connect"
@@ -56,42 +53,21 @@ func protoChannel(ch string) lavrayv1.UpdateChannel {
 }
 
 // verifyLocalFile проверяет файл целиком и возвращает подписанные заявления.
+// Файл подписи читается с пределом 4 КиБ; его нет — подпись берётся из манифеста.
 func (s *Server) verifyLocalFile(ctx context.Context, c *updates.Client, installer, sigPath string) (updates.ArtifactClaims, error) {
-	sha, digest, size, err := hashInstaller(installer)
+	sha, digest, size, err := updates.HashInstaller(installer)
 	if err != nil {
 		return updates.ArtifactClaims{}, fmt.Errorf("installer_path: %w", err)
 	}
-	text, err := os.ReadFile(sigPath)
-	if err != nil {
-		if text, err = s.signatureFromManifest(ctx, c, sha, size); err != nil {
-			return updates.ArtifactClaims{}, err
-		}
+	text, err := updates.ReadSignatureFile(sigPath)
+	if os.IsNotExist(err) {
+		text, err = s.signatureFromManifest(ctx, c, sha, size)
 	}
-	sig, err := updates.ParseMinisig(text)
 	if err != nil {
 		return updates.ArtifactClaims{}, err
 	}
-	claims, err := updates.ParseClaims(sig.TrustedComment)
-	if err != nil {
-		return claims, err
-	}
-	if err := c.Trust.Root().VerifyArtifactSignature(sig, digest, claims); err != nil {
-		return claims, err
-	}
-	return claims, s.checkLocalPolicy(c, claims)
-}
-
-// checkLocalPolicy: продукт и платформа свои, версия строго новее установленной.
-func (s *Server) checkLocalPolicy(c *updates.Client, cl updates.ArtifactClaims) error {
-	switch {
-	case c.Product != "" && cl.Product != c.Product:
-		return fmt.Errorf("%w: файл для продукта %q", updates.ErrWrongProduct, cl.Product)
-	case cl.Platform != platformOf(c):
-		return fmt.Errorf("файл для платформы %q, а здесь %q", cl.Platform, platformOf(c))
-	case updates.CompareVersions(cl.Version, s.upd.appVersion()) <= 0:
-		return fmt.Errorf("версия файла %s не новее установленной %s", cl.Version, s.upd.appVersion())
-	}
-	return nil
+	pol := updates.LocalPolicy{Product: c.Product, Platform: platformOf(c), AppVersion: s.upd.appVersion()}
+	return updates.VerifyInstallerSignature(c.Trust, text, digest, pol)
 }
 
 func platformOf(c *updates.Client) string {
@@ -114,24 +90,4 @@ func (s *Server) signatureFromManifest(ctx context.Context, c *updates.Client, s
 		}
 	}
 	return nil, fmt.Errorf("рядом с установщиком нет файла .minisig, а в манифесте нет такого файла")
-}
-
-// hashInstaller — sha256 (hex), BLAKE2b-512 и размер файла за один проход.
-func hashInstaller(p string) (string, [updates.DigestSize]byte, int64, error) {
-	var d [updates.DigestSize]byte
-	f, err := os.Open(p)
-	if err != nil {
-		return "", d, 0, err
-	}
-	defer f.Close()
-	sum, b2 := sha256.New(), updates.NewBlake2b()
-	n, err := io.Copy(io.MultiWriter(sum, b2), io.LimitReader(f, updates.MaxArtifactBytes+1))
-	if err != nil {
-		return "", d, 0, err
-	}
-	if n > updates.MaxArtifactBytes {
-		return "", d, 0, updates.ErrTooLarge
-	}
-	copy(d[:], b2.Sum(nil))
-	return hex.EncodeToString(sum.Sum(nil)), d, n, nil
 }

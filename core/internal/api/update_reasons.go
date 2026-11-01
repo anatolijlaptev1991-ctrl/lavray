@@ -25,6 +25,7 @@ const (
 	ReasonWrongChannel        = "wrong_channel"
 	ReasonRootRotation        = "root_rotation"
 	ReasonArtifactRoleMissing = "artifact_role_missing"
+	ReasonClockSkew           = "clock_skew" // timestamp «из будущего»: часы компьютера отстают
 	ReasonActiveSession       = "active_session"
 	ReasonNotStaged           = "not_staged"
 	ReasonNoUpdate            = "no_update"
@@ -48,7 +49,9 @@ func updateReason(err error) string {
 		return ReasonWrongProduct
 	case errors.Is(err, updates.ErrWrongChannel):
 		return ReasonWrongChannel
-	case errors.Is(err, updates.ErrExpired), errors.Is(err, updates.ErrTimestampHorizon):
+	case errors.Is(err, updates.ErrTimestampHorizon):
+		return ReasonClockSkew
+	case errors.Is(err, updates.ErrExpired):
 		return ReasonExpired
 	case errors.Is(err, updates.ErrBadSignature), errors.Is(err, updates.ErrInsufficientSignatures),
 		errors.Is(err, updates.ErrBadRole), errors.Is(err, updates.ErrMinisigFormat),

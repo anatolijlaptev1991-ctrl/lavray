@@ -44,8 +44,8 @@ import (
 const readyPrefix = "LAVRAY_CORE_READY"
 
 func main() {
-	if len(os.Args) >= 2 && os.Args[1] == "mcp" {
-		os.Exit(runMCP(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	if code, ok := runSubcommand(os.Args[1:]); ok { // mcp, verify-artifact
+		os.Exit(code)
 	}
 	if len(os.Args) < 2 || os.Args[1] != "serve" {
 		fmt.Fprintln(os.Stderr, "использование: lavray-core serve --listen-socket <path> [--data dir] [--headless]")

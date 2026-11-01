@@ -29,6 +29,10 @@ type Downloader struct {
 	// Verify обязателен: установщик без подписи minisign не принимается (fail-closed).
 	Verify   ArtifactVerifier
 	Progress func(done, total int64) // монотонно возрастает; nil — без прогресса
+	// Signature — текст minisig актива. Если задан, рядом с установщиком кладётся
+	// «<файл>.minisig»: оболочка перед повышением прав перепроверит файл по нему
+	// тем же кодом, что и ядро (подкоманда verify-artifact).
+	Signature string
 }
 
 // run — состояние одной загрузки (Downloader можно переиспользовать).
@@ -53,7 +57,7 @@ func (d *Downloader) Fetch(ctx context.Context, asset Asset) (string, error) {
 	}
 	r := &run{d: d, asset: asset}
 	if r.reuse(final) {
-		return final, nil
+		return final, d.putSignature(final)
 	}
 	var last error
 	for _, src := range d.Sources {
@@ -118,6 +122,9 @@ func (r *run) fetchFrom(ctx context.Context, src ArtifactSource, final string) e
 	}
 	closed = true
 	if err := f.Close(); err != nil {
+		return err
+	}
+	if err := r.d.putSignature(final); err != nil { // подпись раньше установщика: файл без неё не появится
 		return err
 	}
 	return os.Rename(part, final)

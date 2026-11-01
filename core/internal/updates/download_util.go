@@ -92,3 +92,20 @@ func (c *ctxReader) Read(p []byte) (int, error) {
 	}
 	return c.r.Read(p)
 }
+
+// putSignature кладёт «<установщик>.minisig» атомарно (временный файл и
+// переименование). Signature пусто — ничего не делает.
+func (d *Downloader) putSignature(final string) error {
+	if d.Signature == "" {
+		return nil
+	}
+	tmp := final + MinisigSuffix + ".tmp"
+	if err := os.WriteFile(tmp, []byte(d.Signature), 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, final+MinisigSuffix); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	return nil
+}

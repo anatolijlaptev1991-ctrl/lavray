@@ -86,7 +86,11 @@ func bootstrapList() []string {
 func updaterConf() *api.UpdaterConf {
 	return &api.UpdaterConf{
 		RootJSON:          trustRootJSON(),
-		Product:           "lavray-" + runtime.GOOS,
+		Product:           updateProduct(),
 		BootstrapMetadata: bootstrapList(),
 	}
 }
+
+// updateProduct — имя продукта в манифестах и подписях: lavray-windows,
+// lavray-linux, … (одно место для проверки обновления и подкоманды verify-artifact).
+func updateProduct() string { return "lavray-" + runtime.GOOS }

@@ -3,6 +3,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -128,5 +129,18 @@ func TestVerifyLocalUsesManifestWhenNoSigFile(t *testing.T) {
 	got, err := f.verifyLocal(p)
 	if err != nil || !got.Valid || got.Manifest.Version != "0.7.0" {
 		t.Fatalf("подпись из манифеста онлайн-проверки: %+v %v", got, err)
+	}
+}
+
+// Файл подписи читается с пределом: огромный .minisig не тянется в память.
+func TestVerifyLocalOversizedSignatureRejected(t *testing.T) {
+	f := newUpdFix(t, "0.5.0", nil)
+	p := f.stageLocal(t, []byte("installer-0.6.0"), claimsFor(f, "0.6.0"), false)
+	if err := os.WriteFile(p+updates.MinisigSuffix, bytes.Repeat([]byte("a"), 8192), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.verifyLocal(p)
+	if err != nil || got.Valid || len(got.Errors) == 0 {
+		t.Fatalf("подпись больше 4 КиБ: %+v %v", got, err)
 	}
 }

@@ -1018,7 +1018,7 @@ export const enDict: Record<string, string> = {
   "bk.replaceWarn": "All current servers, subscriptions, groups and settings will be replaced with the data from the backup.",
   "bk.replaceBtn": "Replace data…",
   "bk.confirmTitle": "Replace all data?",
-  "bk.confirmText": "The current data will be deleted and replaced with the contents of the backup. This cannot be undone. Make sure this is the backup you want.",
+  "bk.confirmText": "The current data will be deleted and replaced with the contents of the backup. Security-relevant settings are replaced too: the access for AI agents, the web panel address and the core secrets will become those from the file. This cannot be undone. Make sure this is the backup you want.",
   "bk.confirmOk": "Replace",
   "bk.restoring": "Restoring…",
   "bk.done": "Data restored from the backup.",
@@ -1036,4 +1036,5 @@ export const enDict: Record<string, string> = {
   "bk.err.busy": "Another backup operation is in progress — try again shortly",
   "bk.err.read": "Could not read the file",
   "bk.err.save": "Could not save the file",
+  "bk.err.failed": "The backup operation failed. See the core log for details",
 }

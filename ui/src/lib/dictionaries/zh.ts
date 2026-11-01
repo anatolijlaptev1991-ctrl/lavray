@@ -1011,7 +1011,7 @@ export const zhDict: Record<string, string> = {
   "bk.replaceWarn": "当前所有服务器、订阅、分组和设置都将被备份中的数据替换。",
   "bk.replaceBtn": "替换数据…",
   "bk.confirmTitle": "替换所有数据？",
-  "bk.confirmText": "当前数据将被删除，并替换为备份的内容。此操作无法撤销。请确认这是你想要的备份。",
+  "bk.confirmText": "当前数据将被删除，并替换为备份的内容。与安全相关的设置也会一并替换：AI 智能体访问、网页面板地址和内核密钥都将变为文件中的值。此操作无法撤销。请确认这是你想要的备份。",
   "bk.confirmOk": "替换",
   "bk.restoring": "正在恢复…",
   "bk.done": "已从备份恢复数据。",
@@ -1029,4 +1029,5 @@ export const zhDict: Record<string, string> = {
   "bk.err.busy": "正在进行另一项备份操作，请稍后重试",
   "bk.err.read": "无法读取文件",
   "bk.err.save": "无法保存文件",
+  "bk.err.failed": "备份操作失败。详情见内核日志",
 }

@@ -28,6 +28,7 @@ const REASON_KEYS: Readonly<Record<string, MessageKey>> = {
   connection_active: 'bk.err.connected',
   backup_too_large: 'bk.err.tooLarge',
   backup_busy: 'bk.err.busy',
+  backup_failed: 'bk.err.failed',
 };
 
 /** Запасной ключ по коду, если причины в ответе нет (например, лимит транспорта). */

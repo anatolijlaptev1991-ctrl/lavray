@@ -12,7 +12,7 @@ const BK_KEYS = [
   'bk.export', 'bk.exportBtn', 'bk.hint', 'bk.restore', 'bk.restoreD', 'bk.restoreTitle', 'bk.exportTitle',
   'bk.pwHint', 'bk.pwShort', 'bk.pwLong', 'bk.ack', 'bk.file', 'bk.pwRestore', 'bk.check', 'bk.replaceWarn',
   'bk.replaceBtn', 'bk.confirmTitle', 'bk.confirmText', 'bk.confirmOk', 'bk.done', 'bk.reload',
-  'bk.err.wrongPassword', 'bk.err.tampered', 'bk.err.newer', 'bk.err.tooLarge', 'bk.err.busy', 'bk.err.save',
+  'bk.err.wrongPassword', 'bk.err.tampered', 'bk.err.newer', 'bk.err.tooLarge', 'bk.err.busy', 'bk.err.save', 'bk.err.failed',
 ] as const;
 
 describe('T-83: карточка «Резервная копия» в настройках', () => {
@@ -57,6 +57,18 @@ describe('T-83: карточка «Резервная копия» в настр
       restoreBtn?.click();
     });
     expect(document.querySelector('[role="dialog"] h2')?.textContent).toBe(t('bk.restoreTitle'));
+  });
+
+  it('confirm_text_mentions_security_settings', () => {
+    // подтверждение замены предупреждает: настройки безопасности тоже заменяются
+    const en = t('bk.confirmText', 'en');
+    for (const part of [/AI agents/, /web panel/i, /core secrets/i, /cannot be undone/i]) expect(en).toMatch(part);
+    for (const lang of LANGUAGES) {
+      if (lang === 'en') continue;
+      const text = t('bk.confirmText', lang);
+      expect(text, `bk.confirmText (${lang})`).not.toBe(en);
+      expect(text.length, `bk.confirmText (${lang})`).toBeGreaterThan(60);
+    }
   });
 
   it('все строки копии переведены на пять языков', () => {

@@ -3,7 +3,7 @@
 // ImportDialog.test.tsx — импорт: группа назначения (T-07).
 // Диалог, открытый из «Подключения» или меню титлбара, не знает группу и
 // не должен слать targetGroupId=0 (ядро отвечало invalid_argument).
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Mock, MockInstance } from 'vitest';
 import { act, createElement } from 'react';
 import { create } from '@bufbuild/protobuf';
@@ -30,6 +30,7 @@ import {
   mountWithCore,
   profileOf,
   typeInto,
+  warmViews,
 } from '../test-harness';
 import { ImportDialog } from './ImportDialog';
 
@@ -63,6 +64,8 @@ async function importThroughDialog(
   await flush(20);
   return spy.mock.calls.map(([req]) => req).find((req) => req.previewOnly !== true);
 }
+
+beforeAll(warmViews, 60_000);
 
 describe('T-07: импорт без выбранной группы', () => {
   beforeEach(() => {

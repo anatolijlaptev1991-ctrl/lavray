@@ -2,11 +2,12 @@
 
 // units.test.tsx — T-60: единицы и числа берутся из словаря и склоняются
 // по правилам языка (раньше: «0 Б/s», «1 ms», «Сервер: 26», «3 правил»).
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import type { ReactElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { create } from '@bufbuild/protobuf';
+import { warmViews } from '../test-harness';
 import App from '../App';
 import { ConnRight } from '../components/ConnRight';
 import {
@@ -69,6 +70,8 @@ afterEach(() => {
   setLanguage('en');
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
 });
+
+beforeAll(warmViews, 60_000);
 
 describe('T-60: единицы и склонения из словаря', () => {
   it('статус-бар: скорость «0 Б/с» из словаря, а не «0 Б/s»', async () => {

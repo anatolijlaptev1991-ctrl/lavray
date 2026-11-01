@@ -46,29 +46,20 @@ export const NB = '\u00A0';
 // Полные словари перенесены дословно из прототипа v1.2 (машинная генерация):
 // src/lib/dictionaries/<lang>.ts (765 ключей ru; en/zh/es/de — 747–753:
 // различие только в plural-формах pl.* — ru имеет one/few/many, остальные one/other).
-import { deDict } from './dictionaries/de';
-import { enDict } from './dictionaries/en';
-import { esDict } from './dictionaries/es';
-import { ruDict } from './dictionaries/ru';
-import { zhDict } from './dictionaries/zh';
+// D-3: словари живут в dictionaryRegistry.ts (в главном чанке только en).
+import type { ruDict } from './dictionaries/ru';
+import { DICTIONARIES } from './dictionaryRegistry';
+
+export { DICTIONARIES, isDictionaryLoaded, registerDictionary } from './dictionaryRegistry';
+export type { Dictionary } from './dictionaryRegistry';
 
 /**
  * Полный набор ключей — по ru-словарю (самый полный: включает plural few/many).
  * ruDict намеренно объявлен БЕЗ аннотации `Record<string, string>`: с ней
  * `keyof` давал `string`, и компилятор не ловил несуществующие ключи (T-60).
+ * Импорт типовой: словарь ru в главный чанк не попадает.
  */
 export type MessageKey = keyof typeof ruDict;
-
-/** Словарь языка: все ключи этого языка; lookup с фолбеком en→key (см. t). */
-export type Dictionary = Readonly<Record<string, string>>;
-
-export const DICTIONARIES: Readonly<Record<Language, Dictionary>> = {
-  ru: ruDict,
-  en: enDict,
-  zh: zhDict,
-  es: esDict,
-  de: deDict,
-};
 
 /** Current language (module state; React subscribes via `onLanguageChange`). */
 let current: Language = 'en';
@@ -118,15 +109,20 @@ export function resolveStartupLanguage(
   return detected;
 }
 
-/** Apply the startup language to the module state and to <html lang>; returns it. */
-export function initLanguage(win: Window): Language {
+/** Language chosen for this window at startup; applies nothing (main.tsx preloads its dictionary). */
+export function startupLanguage(win: Window): Language {
   let storage: Pick<Storage, 'getItem' | 'setItem'>;
   try {
     storage = win.localStorage;
   } catch {
     storage = { getItem: (): null => null, setItem: (): void => undefined };
   }
-  const lang = resolveStartupLanguage(win.location.search, storage, win.navigator.languages);
+  return resolveStartupLanguage(win.location.search, storage, win.navigator.languages);
+}
+
+/** Apply the startup language to the module state and to <html lang>; returns it. */
+export function initLanguage(win: Window): Language {
+  const lang = startupLanguage(win);
   setLanguage(lang);
   applyDocumentLanguage(win.document, lang);
   return lang;

@@ -4,12 +4,15 @@
 // смене темы ОС. Раньше App.tsx хранил начальные настройки в useState без
 // сеттера, а слушатель темы ОС применял именно их и ещё записывал в
 // localStorage: выбор пользователя затирался навсегда.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode, act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { warmViews } from './test-harness';
 import App from './App';
 
 type Listener = (e: { matches: boolean }) => void;
+
+beforeAll(warmViews, 60_000);
 
 describe('T-37: выбор темы переживает смену темы ОС', () => {
   const darkListeners = new Set<Listener>();

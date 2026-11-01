@@ -4,9 +4,10 @@
 // вкладок был roving tabindex (-1 у неактивных), но обработчика стрелок не
 // было вовсе: «Подписки», «DNS», «Соединения», «Журнал», «Обновления» были
 // недостижимы без мыши. Ожидание — прототип `initTabs`.
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { StrictMode, act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
+import { warmViews } from './test-harness';
 import App from './App';
 import { t } from './lib/i18n';
 
@@ -26,6 +27,8 @@ function setActEnvironment(on: boolean): void {
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+beforeAll(warmViews, 60_000);
 
 describe('T-38: вкладки раздела с клавиатуры', () => {
   let root: Root | null = null;

@@ -97,9 +97,11 @@ python -I "$t\a07_extra.py" $exe "$t\c" 2>&1 | Tee-Object -FilePath C:\lavray-te
 "extra exit=$LASTEXITCODE"
 ```
 
-   Ожидается: `extra exit=0`, `A07-B: проверок 25, провалов 0, наблюдений WARN 1` (число проверок может вырасти). Скрипт сам выбирает адрес основного сетевого интерфейса (не loopback), потому что ядро не считает соединения с `127.0.0.1`. Нет сетевого адреса — проверка `conn.lan_ip_available` падает: итог шага `BLOCKED`.
+   Ожидается: `extra exit=0`, `A07-B: проверок 30, провалов 0, наблюдений WARN 0` (число проверок может вырасти). Скрипт сам выбирает адрес основного сетевого интерфейса (не loopback), потому что ядро не считает соединения с `127.0.0.1`. Нет сетевого адреса — проверка `conn.lan_ip_available` падает: итог шага `BLOCKED`.
 
-   Известное наблюдение (`WARN log.destinations_not_logged`): на коммите `97624d6` в журнал ядра попадают строки sing-box вида `inbound connection to <адрес>:<порт>`, хотя решение плана по T-79 гласит «адреса назначения в журнал не пишутся». Модульный тест `TestDestinationsNeverLogged` проходит, потому что использует подставной источник соединений и не видит собственных строк sing-box. Для ИИ-агентов адреса маскирует `get_logs` (`[addr]`, см. `docs/MCP.md`). Записывайте как дефект `minor`; на итог файла он не влияет, пока остаётся `WARN`. Если строк с адресом в журнале больше нет, это улучшение: отметьте.
+   Адреса назначения в журнале (решение плана по T-79 «адреса назначения не пишутся в журнал» в части собственных сообщений LAVRay):
+   (а) `FAIL log.own_messages_have_no_destinations`: если в строках журнала с источником, отличным от `singbox` (трекер соединений, учёт, статистика, сервис соединений), есть адрес или порт тестового сервера. Дефект `major`.
+   (б) строки самого sing-box вида `inbound connection to <адрес>:<порт>` при `log.level = info` (по умолчанию) **ожидаемы**, как в NekoBox (`cfgbuild/builder.go`, значение по умолчанию `info`); их отсутствие — `WARN log.singbox_inbound_lines_expected_at_info` (допустимо). Затем скрипт задаёт `log.level = warn` через `SetSettings`, переподключается и сверяет, что таких строк больше нет (`log.level_warn.no_connection_lines`, ожидается `PASS`; строка осталась — `FAIL`, `minor`: настройка не снижает шум). Модульный тест `TestDestinationsNeverLogged` работает на подставном источнике и строк sing-box не видит, поэтому живая проверка нужна. Для ИИ-агентов адреса дополнительно маскирует `get_logs` (`[addr]`, `docs/MCP.md`); агентский вид журнала (`GetTail` агентским токеном, тот же вызов, что использует `get_logs`) проверяет A09 (`2.log.agent_view_has_no_destinations`).
 
 6. Что проверяет часть В (для отчёта):
 
@@ -107,6 +109,7 @@ python -I "$t\a07_extra.py" $exe "$t\c" 2>&1 | Tee-Object -FilePath C:\lavray-te
    |---|---|
    | T-08B | профиль без custom-полей не подтверждён; `PreviewCustomFields` без полей → `failed_precondition`; клиентский флаг `customFieldsConfirmed: true` в `UpdateProfile` игнорируется; хэш подтверждения из 64 hex; в diff есть `connect_timeout`, затронутые ключи непусты; `ConfirmCustomFields` с плохим хэшем → `invalid_argument`, с устаревшим → `failed_precondition`, с неизвестным профилем → `not_found`, с верным → профиль подтверждён; переименование сохраняет подтверждение; правка JSON его снимает |
    | T-79 | `ListConnections` без соединений не ошибка; после трёх запросов на 20 000 байт список содержит соединение с `downloadBytes >= 20000` и `network = tcp`; `CloseConnection` с не-UUID → `invalid_argument`, с неизвестным UUID → `not_found`; `GetTrafficTotals` отвечает; `Disconnect` возвращает `finalStats.session.downlinkTotal > 0`; `GetTrafficSummary` по группе даёт `sessionCount >= 1` и `downlinkBytes > 0`; отрицательный `sinceMs` → `invalid_argument` |
+   | Журнал | собственные сообщения LAVRay без адреса назначения; строки sing-box о соединениях при `info`; после `log.level = warn` и переподключения строк о соединениях нет; собственные сообщения и тогда без адреса |
 
 7. Системное состояние не изменилось.
 
@@ -487,9 +490,36 @@ def main():
         check("stats.summary.session_counted", st == 200 and int(g0.get("sessionCount", 0)) >= 1 and int(g0.get("downlinkBytes", 0)) > 0, g0)
         st, resp = rpc("StatsService", "GetTrafficSummary", {"sinceMs": "-1"})
         check("stats.summary.negative_since.invalid_argument", st == 400 and resp.get("code") == "invalid_argument", (st, resp))
-        st, tail = rpc("LogService", "GetTail", {"lines": 500})
-        text = "\n".join(l.get("message", "") for l in tail.get("lines", [])) if isinstance(tail, dict) else ""
-        check("log.destinations_not_logged", f":{origin_port}" not in text, "в журнале есть адрес назначения (строки sing-box 'inbound connection to ...')", warn=True)
+        def log_lines():
+            _, tl = rpc("LogService", "GetTail", {"lines": 2000})
+            return tl.get("lines", []) if isinstance(tl, dict) else []
+
+        # (а) собственные сообщения LAVRay (источник не "singbox": трекер, учёт, статистика, соединения) не содержат адрес назначения
+        own = [l.get("message", "") for l in log_lines() if l.get("source") != "singbox"]
+        leak = [m for m in own if f":{origin_port}" in m or ip in m]
+        check("log.own_messages_have_no_destinations", not leak, leak[:2])
+        # (б) строки sing-box «inbound connection to <адрес>» при log.level=info (по умолчанию) ожидаемы, как в NekoBox
+        sb_info = [l.get("message", "") for l in log_lines() if l.get("source") == "singbox"]
+        check("log.singbox_inbound_lines_expected_at_info",
+              any("inbound connection to" in m and f":{origin_port}" in m for m in sb_info),
+              "при info строк sing-box с адресом не нашлось (допустимо)", warn=True)
+        # log.level=warn + переподключение: таких строк быть не должно
+        t1 = int(time.time() * 1000)
+        st, resp = rpc("SettingsService", "SetSettings", {"values": {"log.level": {"stringValue": "warn"}}})
+        check("log.level_warn.accepted", st == 200, (st, resp))
+        st, cn = rpc("CoreService", "Connect", {"profileId": pid, "mode": "CONNECT_MODE_SYSTEM_PROXY"})
+        check("log.level_warn.reconnect", st == 200 and cn["status"]["state"] == "CORE_STATE_CONNECTED", (st, str(cn)[:150]))
+        for _ in range(2):
+            with opener.open(f"http://{ip}:{origin_port}/", timeout=20) as r:
+                r.read()
+        time.sleep(1.5)
+        sb_warn = [l.get("message", "") for l in log_lines() if l.get("source") == "singbox" and int(l.get("tsMs", 0)) >= t1]
+        check("log.level_warn.no_connection_lines",
+              not any("inbound connection to" in m or "outbound connection to" in m or f":{origin_port}" in m for m in sb_warn), sb_warn[:2])
+        own2 = [l.get("message", "") for l in log_lines() if l.get("source") != "singbox" and int(l.get("tsMs", 0)) >= t1]
+        check("log.level_warn.own_messages_have_no_destinations", not any(f":{origin_port}" in m or ip in m for m in own2), own2[:2])
+        rpc("CoreService", "Disconnect", {})
+        rpc("SettingsService", "SetSettings", {"values": {"log.level": {"stringValue": "info"}}})
     finally:
         pass
     return finish(core)

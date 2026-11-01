@@ -1026,4 +1026,7 @@ export const deDict: Record<string, string> = {
   "web.pw.go": "Passwort ändern",
   "web.pw.done": "Passwort geändert. Andere Sitzungen abgemeldet: {n}",
   "web.pw.wrong": "Das aktuelle Passwort ist falsch",
+  "web.setup.code": "Einrichtungscode",
+  "web.setup.codeHint": "Der Code steht in der Datei web-setup-code im Datenverzeichnis auf dem Router (Modus 0600).",
+  "web.setup.badCode": "Der Einrichtungscode ist falsch",
 }

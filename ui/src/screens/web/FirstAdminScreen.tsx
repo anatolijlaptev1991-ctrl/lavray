@@ -14,20 +14,23 @@ import { messageText } from './messageText';
 export interface FirstAdminScreenProps {
   readonly busy: boolean;
   readonly message: WebMessage | null;
-  readonly onSubmit: (username: string, password: string, confirm: string) => void;
+  /** Нужен код настройки (панель не на loopback). */
+  readonly codeRequired?: boolean;
+  readonly onSubmit: (username: string, password: string, confirm: string, code: string) => void;
 }
 
-export function FirstAdminScreen({ busy, message, onSubmit }: FirstAdminScreenProps): JSX.Element {
+export function FirstAdminScreen({ busy, message, codeRequired = false, onSubmit }: FirstAdminScreenProps): JSX.Element {
   const { t, tf } = useI18n();
-  const ids = { title: useId(), hint: useId(), user: useId(), pw: useId(), pw2: useId(), err: useId() };
+  const ids = { title: useId(), hint: useId(), user: useId(), pw: useId(), pw2: useId(), code: useId(), err: useId() };
   const [username, setUsername] = useState('admin');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [code, setCode] = useState('');
   const invalid = message !== null;
 
   const submit = (e: FormEvent): void => {
     e.preventDefault();
-    onSubmit(username, password, confirm);
+    onSubmit(username, password, confirm, code);
   };
 
   return (
@@ -39,6 +42,27 @@ export function FirstAdminScreen({ busy, message, onSubmit }: FirstAdminScreenPr
           {tf('web.setup.sub', { n: MIN_PASSWORD_LENGTH })}
         </p>
         <InsecureBanner variant="card" />
+        {codeRequired && (
+          <div className={`field${invalid ? ' invalid' : ''}`}>
+            <label htmlFor={ids.code}>{t('web.setup.code')}</label>
+            <input
+              id={ids.code}
+              className="input"
+              value={code}
+              autoComplete="one-time-code"
+              autoCapitalize="characters"
+              spellCheck={false}
+              aria-invalid={invalid}
+              aria-describedby={`${ids.code}-hint ${ids.err}`}
+              onChange={(e) => {
+                setCode(e.target.value);
+              }}
+            />
+            <span id={`${ids.code}-hint`} className="cap">
+              {t('web.setup.codeHint')}
+            </span>
+          </div>
+        )}
         <div className="field">
           <label htmlFor={ids.user}>{t('web.login.user')}</label>
           <input

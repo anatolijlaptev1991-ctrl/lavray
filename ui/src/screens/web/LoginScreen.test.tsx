@@ -80,13 +80,13 @@ describe('экран входа', () => {
 
   it('блокировка лимитером: кнопка недоступна до конца паузы, затем включается сама', async () => {
     const { view } = mountLogin({
-      lockedUntil: Date.now() + 200,
+      lockedUntil: Date.now() + 1500,
       message: { key: 'web.login.wait', params: { n: 1 } },
     });
     const v = await view;
     expect(buttonByText(v.container, 'Sign in')?.disabled).toBe(true);
     expect(v.container.querySelector('[role="alert"]')?.textContent).toBe('Too many sign-in attempts. Try again in 1 s');
-    await flush(400);
+    await flush(1800);
     expect(buttonByText(v.container, 'Sign in')?.disabled).toBe(false);
   });
 

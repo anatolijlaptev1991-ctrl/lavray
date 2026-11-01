@@ -1019,4 +1019,7 @@ export const zhDict: Record<string, string> = {
   "web.pw.go": "修改密码",
   "web.pw.done": "密码已修改，已退出其他会话：{n}",
   "web.pw.wrong": "当前密码不正确",
+  "web.setup.code": "设置代码",
+  "web.setup.codeHint": "代码位于路由器数据目录中的 web-setup-code 文件（权限 0600）。",
+  "web.setup.badCode": "设置代码不正确",
 }

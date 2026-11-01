@@ -24,8 +24,10 @@ export interface WebSessionApi {
   readonly message: WebMessage | null;
   /** До какого момента (мс) вход закрыт лимитером; null — открыт. */
   readonly lockedUntil: number | null;
+  /** Первичная настройка требует код из файла web-setup-code на роутере. */
+  readonly setupCodeRequired: boolean;
   login: (username: string, password: string) => Promise<void>;
-  setup: (username: string, password: string, confirm: string) => Promise<void>;
+  setup: (username: string, password: string, confirm: string, code: string) => Promise<void>;
   logout: () => Promise<void>;
   retry: () => void;
 }
@@ -38,6 +40,7 @@ export function useWebSession(web: CoreClients['web']): WebSessionApi {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<WebMessage | null>(null);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [setupCodeRequired, setCodeRequired] = useState(false);
   const phaseRef = useRef<WebPhase>('loading');
   const alive = useRef(true);
 
@@ -60,8 +63,12 @@ export function useWebSession(web: CoreClients['web']): WebSessionApi {
   const probe = useCallback(async (): Promise<void> => {
     go('loading');
     try {
-      if ((await web.getWebModeStatus({})).firstRunSetupRequired) {
-        if (alive.current) go('setup');
+      const status = await web.getWebModeStatus({});
+      if (status.firstRunSetupRequired) {
+        if (alive.current) {
+          setCodeRequired(status.setupCodeRequired);
+          go('setup');
+        }
         return;
       }
       const me = await web.whoAmI({});
@@ -112,12 +119,15 @@ export function useWebSession(web: CoreClients['web']): WebSessionApi {
   );
 
   const submit = useCallback(
-    async (kind: 'login' | 'setup', name: string, password: string): Promise<void> => {
+    async (kind: 'login' | 'setup', name: string, password: string, code = ''): Promise<void> => {
       setBusy(true);
       setMessage(null);
       try {
         const body = { username: name.trim(), password };
-        const res = kind === 'login' ? await web.login(body) : await web.setupFirstAdmin(body);
+        const res =
+          kind === 'login'
+            ? await web.login(body)
+            : await web.setupFirstAdmin(code.trim() === '' ? body : { ...body, setupCode: code.trim() });
         open(res.username, res.csrfToken);
       } catch (e) {
         await onFailure(kind, e);
@@ -140,13 +150,13 @@ export function useWebSession(web: CoreClients['web']): WebSessionApi {
   );
 
   const setup = useCallback(
-    async (name: string, password: string, confirm: string): Promise<void> => {
+    async (name: string, password: string, confirm: string, code: string): Promise<void> => {
       const problem = name.trim() === '' ? { key: 'web.login.empty' as const } : passwordProblem(password, confirm);
       if (problem !== null) {
         setMessage(problem);
         return;
       }
-      await submit('setup', name, password);
+      await submit('setup', name, password, code);
     },
     [submit],
   );
@@ -167,5 +177,5 @@ export function useWebSession(web: CoreClients['web']): WebSessionApi {
     void probe();
   }, [probe]);
 
-  return { phase, username, busy, message, lockedUntil, login, setup, logout, retry };
+  return { phase, username, busy, message, lockedUntil, setupCodeRequired, login, setup, logout, retry };
 }

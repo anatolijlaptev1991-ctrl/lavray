@@ -78,6 +78,7 @@ export function authFailure(e: unknown, fallback: (e: unknown) => string): WebMe
   const wait = retryAfterSeconds(e);
   if (wait !== null) return { key: 'web.login.wait', params: { n: wait } };
   if (e instanceof ConnectError && e.code === Code.Unauthenticated) return { key: 'web.login.badCreds' };
+  if (e instanceof ConnectError && e.code === Code.PermissionDenied) return { key: 'web.setup.badCode' };
   if (e instanceof ConnectError && e.code === Code.InvalidArgument) {
     return { key: 'web.setup.short', params: { n: MIN_PASSWORD_LENGTH } };
   }

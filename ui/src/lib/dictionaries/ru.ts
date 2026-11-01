@@ -1040,4 +1040,7 @@ export const ruDict = {
   "web.pw.go": "Сменить пароль",
   "web.pw.done": "Пароль изменён. Отозвано других сессий: {n}",
   "web.pw.wrong": "Текущий пароль неверен",
+  "web.setup.code": "Код настройки",
+  "web.setup.codeHint": "Код лежит в файле web-setup-code в каталоге данных на роутере (права 0600).",
+  "web.setup.badCode": "Неверный код настройки",
 }

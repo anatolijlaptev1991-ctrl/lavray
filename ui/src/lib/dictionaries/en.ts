@@ -1026,4 +1026,7 @@ export const enDict: Record<string, string> = {
   "web.pw.go": "Change password",
   "web.pw.done": "Password changed. Other sessions signed out: {n}",
   "web.pw.wrong": "The current password is wrong",
+  "web.setup.code": "Setup code",
+  "web.setup.codeHint": "The code is in the file web-setup-code in the data directory on the router (mode 0600).",
+  "web.setup.badCode": "The setup code is wrong",
 }

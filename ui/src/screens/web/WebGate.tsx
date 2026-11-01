@@ -51,7 +51,14 @@ function Gate({ children }: { readonly children: ReactNode }): JSX.Element {
         </div>
       );
     case 'setup':
-      return <FirstAdminScreen busy={s.busy} message={s.message} onSubmit={(u, p, c) => void s.setup(u, p, c)} />;
+      return (
+        <FirstAdminScreen
+          busy={s.busy}
+          message={s.message}
+          codeRequired={s.setupCodeRequired}
+          onSubmit={(u, p, c, code) => void s.setup(u, p, c, code)}
+        />
+      );
     case 'login':
       return (
         <LoginScreen

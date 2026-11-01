@@ -207,3 +207,51 @@ describe('выход и истёкшая сессия', () => {
     expect(getCsrfToken()).toBe('');
   });
 });
+
+describe('код первичной настройки (панель не на loopback)', () => {
+  const SETUP = 'WebSessionService/SetupFirstAdmin';
+
+  it('поле кода есть только когда ядро его требует; код уходит в SetupFirstAdmin', async () => {
+    const core = stubWebCore({
+      [STATUS]: { body: { firstRunSetupRequired: true, setupCodeRequired: true } },
+      [SETUP]: session('csrf-code'),
+    });
+    const v = await mountGate();
+    const code = fieldByLabel(v.container, 'Setup code');
+    expect(code).not.toBeNull();
+    typeInto(fieldByLabel(v.container, 'Password'), 'correct-horse-1');
+    typeInto(fieldByLabel(v.container, 'Repeat the password'), 'correct-horse-1');
+    typeInto(code, 'ABCDE23456');
+    await click(buttonByText(v.container, 'Create and sign in'));
+    expect(core.calls.find((c) => c.rpc === SETUP)?.body).toEqual({
+      username: 'admin',
+      password: 'correct-horse-1',
+      setupCode: 'ABCDE23456',
+    });
+    expect(v.container.querySelector('#app-child')).not.toBeNull();
+  });
+
+  it('без требования кода поле не показывается и setupCode не отправляется', async () => {
+    const core = stubWebCore({ [STATUS]: { body: { firstRunSetupRequired: true } }, [SETUP]: session() });
+    const v = await mountGate();
+    expect(fieldByLabel(v.container, 'Setup code')).toBeNull();
+    typeInto(fieldByLabel(v.container, 'Password'), 'correct-horse-1');
+    typeInto(fieldByLabel(v.container, 'Repeat the password'), 'correct-horse-1');
+    await click(buttonByText(v.container, 'Create and sign in'));
+    expect(core.calls.find((c) => c.rpc === SETUP)?.body).toEqual({ username: 'admin', password: 'correct-horse-1' });
+  });
+
+  it('неверный код → понятное сообщение, форма остаётся', async () => {
+    stubWebCore({
+      [STATUS]: { body: { firstRunSetupRequired: true, setupCodeRequired: true } },
+      [SETUP]: failure(403, 'permission_denied'),
+    });
+    const v = await mountGate();
+    typeInto(fieldByLabel(v.container, 'Password'), 'correct-horse-1');
+    typeInto(fieldByLabel(v.container, 'Repeat the password'), 'correct-horse-1');
+    typeInto(fieldByLabel(v.container, 'Setup code'), 'WRONG');
+    await click(buttonByText(v.container, 'Create and sign in'));
+    expect(alertText(v.container)).toBe('The setup code is wrong');
+    expect(heading(v.container)).toBe('First-time setup');
+  });
+});

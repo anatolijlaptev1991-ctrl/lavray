@@ -1026,4 +1026,7 @@ export const esDict: Record<string, string> = {
   "web.pw.go": "Cambiar contraseña",
   "web.pw.done": "Contraseña cambiada. Otras sesiones cerradas: {n}",
   "web.pw.wrong": "La contraseña actual es incorrecta",
+  "web.setup.code": "Código de configuración",
+  "web.setup.codeHint": "El código está en el archivo web-setup-code del directorio de datos del router (modo 0600).",
+  "web.setup.badCode": "El código de configuración es incorrecto",
 }

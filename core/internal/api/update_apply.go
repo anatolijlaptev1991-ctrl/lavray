@@ -37,6 +37,10 @@ func (s *Server) ApplyUpdates(ctx context.Context, req *connect.Request[lavrayv1
 			}
 		case lavrayv1.UpdateComponent_UPDATE_COMPONENT_CORE:
 			return failedPrecondition("ядро обновляется вместе с приложением: отдельная доставка ядра не включена")
+		case compPresets, compGeo:
+			if err := s.applyData(comp, stream); err != nil {
+				return err
+			}
 		default:
 			return connect.NewError(connect.CodeUnimplemented, errors.New("применение этого компонента ещё не реализовано"))
 		}
@@ -108,6 +112,8 @@ func (s *Server) Rollback(ctx context.Context, req *connect.Request[lavrayv1.Rol
 		return nil, invalidArg("component обязателен")
 	case lavrayv1.UpdateComponent_UPDATE_COMPONENT_APP:
 		return nil, failedPrecondition("откат выполняет оболочка (update_rollback): ядро не меняет файлы приложения")
+	case compPresets, compGeo:
+		return s.rollbackData(req.Msg.Component)
 	}
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("откат этого компонента ещё не реализован"))
 }

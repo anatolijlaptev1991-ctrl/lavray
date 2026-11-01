@@ -45,6 +45,11 @@ type updaterState struct {
 	phase       lavrayv1.ComponentState_Phase
 	phaseErr    string
 	staged      *stagedUpdate
+
+	// Компоненты-данные (update_comp_state.go): наборы и гео, замок применения.
+	presets, geo compSlot
+	applying     bool
+	hookApply    func() // только тесты: вызывается под замком применения
 }
 
 func newUpdaterState(c *UpdaterConf) updaterState {
@@ -67,14 +72,25 @@ func (u *updaterState) setPhase(p lavrayv1.ComponentState_Phase, errText string)
 	u.mu.Unlock()
 }
 
-// beginDownload занимает «слот» загрузки; false — загрузка уже идёт.
-func (u *updaterState) beginDownload() bool {
+// beginDownload занимает «слот» загрузки; false — загрузка уже идёт. Фаза
+// DOWNLOADING выставляется только у запрошенных компонентов.
+func (u *updaterState) beginDownload(t dlTargets) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
 	if u.downloading {
 		return false
 	}
-	u.downloading, u.phase, u.phaseErr = true, lavrayv1.ComponentState_PHASE_DOWNLOADING, ""
+	u.downloading = true
+	downloading := lavrayv1.ComponentState_PHASE_DOWNLOADING
+	if t.app {
+		u.phase, u.phaseErr = downloading, ""
+	}
+	if t.presets {
+		u.presets.phase, u.presets.err = downloading, ""
+	}
+	if t.geo {
+		u.geo.phase, u.geo.err = downloading, ""
+	}
 	return true
 }
 

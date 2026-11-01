@@ -21,8 +21,9 @@ import (
 const progressEvery = 150 * time.Millisecond
 
 func (s *Server) DownloadUpdates(ctx context.Context, req *connect.Request[lavrayv1.DownloadUpdatesRequest], stream *connect.ServerStream[lavrayv1.UpdateEvent]) error {
-	if len(req.Msg.Components) > 0 && !wantsApp(req.Msg.Components) {
-		return connect.NewError(connect.CodeUnimplemented, errors.New("скачивание поддерживается только для приложения"))
+	targets, ok := downloadTargets(req.Msg.Components)
+	if !ok {
+		return connect.NewError(connect.CodeUnimplemented, errors.New("скачивание поддерживается для приложения, наборов и гео-данных"))
 	}
 	channel := lavrayv1.UpdateChannel_UPDATE_CHANNEL_STABLE
 	if s.settingStr("update.channel") == updates.ChannelBeta {
@@ -32,24 +33,20 @@ func (s *Server) DownloadUpdates(ctx context.Context, req *connect.Request[lavra
 	if err != nil {
 		return updateErr(err)
 	}
-	if !s.upd.beginDownload() {
+	if !s.upd.beginDownload(targets) {
 		return connect.NewError(connect.CodeAborted, errors.New("загрузка уже идёт"))
 	}
 	defer s.upd.endDownload()
 	res, err := c.Check(ctx)
 	if err != nil {
-		s.upd.setPhase(lavrayv1.ComponentState_PHASE_FAILED, err.Error())
+		s.checkFailedPhases(targets, err)
 		return updateErr(err)
 	}
 	s.saveUpdateState(st)
-	if !res.Availability.Available {
-		s.upd.setPhase(lavrayv1.ComponentState_PHASE_IDLE, "")
-		return reasonError(ReasonNoUpdate, "нет проверенного обновления (%s)", res.Availability.Reason)
-	}
 	if err := s.ensureStaging(); err != nil {
 		return mapErr(err)
 	}
-	return s.runDownload(ctx, c, res, stream)
+	return s.runDownloads(ctx, c, res, targets, stream)
 }
 
 func (s *Server) runDownload(ctx context.Context, c *updates.Client, res *updates.Result, stream *connect.ServerStream[lavrayv1.UpdateEvent]) error {

@@ -57,7 +57,7 @@ func TestApplierRollbackOnWatchdogTrip(t *testing.T) {
 	f.clk.Advance(time.Minute)
 	f.svc.Tick()
 	st := f.svc.Status()
-	if st.Active || !st.WatchdogTripped || !strings.Contains(f.lastScript(), "delete table inet lavray") || len(events) != 1 || !events[0] {
+	if st.Active || !st.WatchdogTripped || f.lastScript() != removeScript || len(events) != 1 || !events[0] {
 		t.Fatalf("порог не сработал: %+v events=%v", st, events)
 	}
 	n := len(f.runner.scripts)
@@ -125,7 +125,7 @@ func TestActivateFailureKeepsWatchdogArmed(t *testing.T) {
 
 func TestClearOrphans(t *testing.T) {
 	f := newSvc(t)
-	if err := f.svc.ClearOrphans(); err != nil || !strings.Contains(f.lastScript(), "delete table inet lavray") {
+	if err := f.svc.ClearOrphans(); err != nil || f.lastScript() != removeScript {
 		t.Fatalf("ClearOrphans: %v / %q", err, f.runner.scripts)
 	}
 	f.runner.err = errors.New("boom")

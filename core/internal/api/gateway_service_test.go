@@ -18,6 +18,10 @@ import (
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 )
 
+// removalScript — скрипт снятия правил (gateway.removeScript): apply-скрипт тоже
+// содержит строку delete table, поэтому снятие сверяется целиком.
+const removalScript = "table inet lavray\ndelete table inet lavray\n"
+
 // nftSpy запоминает скрипты, которые получил бы `nft -f -`.
 type nftSpy struct {
 	mu      sync.Mutex
@@ -191,7 +195,7 @@ func TestGatewayConnectAppliesRulesAndDisconnectRemoves(t *testing.T) {
 	defer cancel()
 	go f.srv.RunGateway(ctx)
 	waitFor(t, "снятие осиротевших правил при старте", func() bool { return f.nft.count() >= 1 })
-	if !strings.Contains(f.nft.last(), "delete table inet lavray") {
+	if f.nft.last() != removalScript {
 		t.Fatalf("при старте ждали снятие правил: %q", f.nft.last())
 	}
 
@@ -220,7 +224,7 @@ func TestGatewayConnectAppliesRulesAndDisconnectRemoves(t *testing.T) {
 	if _, err := f.srv.Disconnect(ctx, connect.NewRequest(&lavrayv1.DisconnectRequest{})); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "снятие правил после отключения", func() bool { return strings.Contains(f.nft.last(), "delete table inet lavray") })
+	waitFor(t, "снятие правил после отключения", func() bool { return f.nft.last() == removalScript })
 	st, _ = f.gw.GetGatewayStatus(ctx, connect.NewRequest(&lavrayv1.Empty{}))
 	if st.Msg.Mode != lavrayv1.GatewayStatus_MODE_OFF || st.Msg.NftRulesActive {
 		t.Fatalf("статус после отключения: %+v", st.Msg)
@@ -242,7 +246,7 @@ func TestGatewayRulesRemovedOnProcessExit(t *testing.T) {
 	if err := f.srv.StopInstance(ctx); err != nil {
 		t.Fatal(err)
 	}
-	if f.gw.svc.Status().Active || !strings.Contains(f.nft.last(), "delete table inet lavray") {
+	if f.gw.svc.Status().Active || f.nft.last() != removalScript {
 		t.Fatal("после StopInstance правила остались")
 	}
 }

@@ -4,7 +4,12 @@
 // скриптом e2e/start-core.sh с --web-bind на loopback и встроенным ui/dist.
 import { defineConfig } from '@playwright/test';
 
-const port = process.env.LAVRAY_E2E_PORT ?? '8787';
+// Playwright запускается в Node, но @types/node в проекте нет: окружение
+// берём из globalThis, без глобальных объявлений.
+const env: Readonly<Record<string, string | undefined>> =
+  (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
+
+const port = env.LAVRAY_E2E_PORT ?? '8787';
 
 export default defineConfig({
   testDir: 'e2e',
@@ -12,7 +17,7 @@ export default defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: 0, // повтор не годится: первый сценарий создаёт администратора
-  reporter: process.env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
+  reporter: env.CI ? [['list'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: `http://127.0.0.1:${port}`,
     locale: 'en-US',

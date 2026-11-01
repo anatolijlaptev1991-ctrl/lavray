@@ -6,7 +6,12 @@
 // (`npx playwright install --with-deps chromium`); локально тест не запускают.
 import { expect, test } from '@playwright/test';
 
-const TOKEN = process.env.LAVRAY_E2E_TOKEN ?? 'e2e-core-token-0123456789abcdef0123456789';
+// Playwright запускается в Node, но @types/node в проекте нет: окружение
+// берём из globalThis, без глобальных объявлений.
+const env: Readonly<Record<string, string | undefined>> =
+  (globalThis as { process?: { env: Record<string, string | undefined> } }).process?.env ?? {};
+
+const TOKEN = env.LAVRAY_E2E_TOKEN ?? 'e2e-core-token-0123456789abcdef0123456789';
 const PASSWORD = 'e2e-password-123';
 const SERVER_NAME = 'E2E server';
 

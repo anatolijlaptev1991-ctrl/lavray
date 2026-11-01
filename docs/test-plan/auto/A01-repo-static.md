@@ -139,10 +139,10 @@ test -z "$bad"; echo "eol exit=$?"
 11. Тесты самих скриптов.
 
 ```bash
-python -m unittest discover -s scripts/tests 2>&1 | tail -4; echo "unittest exit=${PIPESTATUS[0]}"
+PYTHONDONTWRITEBYTECODE=1 python -B -m unittest discover -s scripts/tests 2>&1 | tail -4; echo "unittest exit=${PIPESTATUS[0]}"
 ```
 
-    Ожидается: строка `Ran <N> tests` (на `v0.9.0` — 51), строка `OK`, `unittest exit=0`. Набор не должен уменьшиться относительно эталона 51 без объяснения в отчёте.
+    Ожидается: строка `Ran <N> tests` (на `v0.9.0` — 51), строка `OK`, `unittest exit=0`. Набор не должен уменьшиться относительно эталона 51 без объяснения в отчёте. Ключ `-B` (и переменная `PYTHONDONTWRITEBYTECODE=1`) обязателен: без него Python создаёт каталоги `__pycache__` в `scripts/` и `scripts/tests/`, и шаг 16 увидел бы лишние неотслеживаемые файлы.
 
 12. Запрещённые фразы и упоминания в документах.
 
@@ -204,13 +204,14 @@ python scripts/rpc_usage.py --list | head -40
 
     Ожидается: строка `rpc_usage: RPC в proto: <N>, нарушений: 0` (на `main` `773b4e8` — 95 RPC) и `rpc-usage exit=0`. Скрипт требует, чтобы каждый RPC из `proto/lavray.proto` вызывался в `ui/src` (`core.<клиент>.<метод>(`) либо стоял в `ui/src/rpc-unused.allow.ts` с причиной; запись про RPC, который уже вызывается или исчез из proto, — тоже нарушение (устаревшее исключение скрывало бы регресс). `--list` печатает RPC без вызова в интерфейсе: все они обязаны быть в списке разрешённых. Тот же контракт проверяет vitest-файл `ui/src/rpc-usage.test.ts` (A05, шаг 7).
 
-16. Фиксация результата: репозиторий не должен быть изменён шагами 4–5 в части файлов, которые коммитятся.
+16. Фиксация результата: отслеживаемые файлы репозитория не должны быть изменены шагами 4–5 (и остальными).
 
 ```bash
-git status --short
+git diff --exit-code; echo "diff exit=$?"
+git status --short --untracked-files=no; echo "status exit=$?"
 ```
 
-    Ожидается: пусто (генерация шагов 4–5 дала тот же результат, что в репозитории; `node_modules` в `.gitignore`).
+    Ожидается: `diff exit=0`, `git status --short --untracked-files=no` ничего не печатает (генерация шагов 4–5 дала тот же результат, что в репозитории). Неотслеживаемые файлы в проверку не входят: после шага 11 без `-B` (и после любого запуска Python-тестов) `git status --short` не пуст из-за каталогов `__pycache__`, поэтому как критерий используйте только `--untracked-files=no`. Лишние `__pycache__` не ошибка продукта.
 
 ## Критерии PASS/FAIL
 
@@ -231,13 +232,13 @@ git status --short
 | К11 | Шаг 13: все пресеты прошли | нет строк `FAIL`, `presets exit=0` |
 | К12 | Шаг 14: `i18n_check` `errors: 0; warnings: 0`, `token_contrast` шесть `PASS` | коды `0` |
 | К13 | Шаг 15: `rpc_usage.py` печатает `нарушений: 0`, код выхода 0 | `rpc-usage exit=0` |
-| К14 | Шаг 16: `git status --short` пуст | пустой вывод |
+| К14 | Шаг 16: отслеживаемые файлы не изменены | `diff exit=0` и пустой вывод `git status --short --untracked-files=no` |
 
 Пункт, невозможный из-за отсутствия плагина кодогенерации или сети (шаги 4, 5, 7, 14), получает `BLOCKED` с названием отсутствующего; итог файла тогда `PARTIAL`, если остальное прошло.
 
 ## Что собрать
 
-В `C:\lavray-test\results\A01\`: вывод каждого шага в `step-NN.txt` (команды выше с `2>&1 | Tee-Object`), строку коммита, вывод `gofmt -l .`, вывод `git status --short`. Секретов в выводе нет.
+В `C:\lavray-test\results\A01\`: вывод каждого шага в `step-NN.txt` (команды выше с `2>&1 | Tee-Object`), строку коммита, вывод `gofmt -l .`, вывод `git diff --exit-code` и `git status --short --untracked-files=no`. Секретов в выводе нет.
 
 ## Откат / уборка
 

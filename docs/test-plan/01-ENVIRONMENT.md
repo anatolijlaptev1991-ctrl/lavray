@@ -353,11 +353,15 @@ reg export "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" (Join-Path $b 'r
 $LASTEXITCODE
 Get-NetAdapter | Select-Object Name, InterfaceDescription, Status | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $b 'adapters.json')
 Get-NetRoute -AddressFamily IPv4 | Select-Object DestinationPrefix, NextHop, InterfaceIndex, RouteMetric | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $b 'routes.json')
-Get-VpnConnection -ErrorAction SilentlyContinue | Select-Object Name, ServerAddress, TunnelType | ConvertTo-Json | Set-Content -Encoding utf8 (Join-Path $b 'vpn.json')
+# vpn.json пишется всегда: если VPN-подключений нет, получается пустой массив «[]», а не отсутствие файла.
+# (Конвейер «Get-VpnConnection | ConvertTo-Json | Set-Content» при пустом результате не создаёт файл вовсе.)
+$vpn = @(Get-VpnConnection -ErrorAction SilentlyContinue | Select-Object Name, ServerAddress, TunnelType)
+ConvertTo-Json -InputObject $vpn | Set-Content -Encoding utf8 (Join-Path $b 'vpn.json')
 Get-ChildItem $b | Select-Object Name, Length
+"vpn.json - массив: " + (Get-Content (Join-Path $b 'vpn.json') -Raw -Encoding utf8).Trim().StartsWith('[')
 ```
 
-PASS: оба `reg export` вернули `0`, в `baseline\` есть пять файлов, `internet-settings.reg` непустой. Если `Get-VpnConnection` ничего не нашёл, `vpn.json` содержит пустой массив или `null`: это допустимо.
+PASS: оба `reg export` вернули `0`, в `baseline\` есть пять файлов, `internet-settings.reg` непустой, последняя строка `vpn.json - массив: True`. Если VPN-подключений нет, `vpn.json` содержит пустой массив `[]`: это допустимо и проверкой принимается. Отсутствие файла `vpn.json` не допускается (команда создаёт его всегда).
 
 Читать эти файлы можно в любой момент; изменять нельзя.
 
@@ -375,7 +379,7 @@ go env GOPROXY GOFLAGS GOTOOLCHAIN
 
 После последнего файла оркестратор:
 
-1. Проверяет, что процессов `LAVRay`, `lavray-core` нет: `Get-Process LAVRay, lavray-core -ErrorAction SilentlyContinue` ничего не печатает.
+1. Проверяет, что процессов `lavray-shell` (оболочка установленной версии), `LAVRay` (оболочка из portable ZIP), `lavray-core` нет: `Get-Process lavray-shell, LAVRay, lavray-core -ErrorAction SilentlyContinue` ничего не печатает.
 2. Сверяет `Internet Settings` с `baseline\internet-settings.reg` (команда есть в «Откате» файла A11).
 3. Удаляет рабочие копии: `git -C $env:LAVRAY_SRC worktree prune` и `Remove-Item -Recurse -Force C:\lavray-test\wt`.
 4. Удаляет маркер `TESTPC_OK` (чтобы опасные файлы нельзя было запустить случайно позже).

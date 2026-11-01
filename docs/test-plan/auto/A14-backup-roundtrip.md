@@ -43,18 +43,32 @@
    $res.checks | Where-Object { -not $_.pass } | Select-Object id, warn, detail | Format-Table -AutoSize -Wrap
    ```
 
-   Ожидается: `a14 exit=0`, `провалов: 0`; `WARN` не допускаются (до 0.9.1 допускался один: `5.unicode_nfc_vs_nfd_password_equivalent_in_core`, ядро не нормализовало пароль, D-6). Эталон на `main` `9b26be6` (и на `feat/tails-a`, `775a49b`): 27 проверок.
+   Ожидается: `a14 exit=0`, `провалов: 0`; `WARN` не допускаются. На `v0.9.0` проверка `5.unicode_nfc_vs_nfd_password_equivalent_in_core` даёт `FAIL` — известный D-6 (ядро не нормализовало пароль копии, исправлено в 0.9.1). Эталон на теге v0.9.0 (коммит `8093656`): 27 проверок (на более поздних тегах проверок может быть больше, меньше быть не должно).
+
+   Секреты. Скрипт генерирует тестовые секреты (пароль сервера `a14-secret`, токен в адресе подписки, пароль копии) и сам заменяет их значения, а также значения полей `password`, `subscriptionUrl` и `token` в подробностях проверок на `<redacted>` — и в выводе `run.txt`, и в `a14-result.json`. Поэтому в `results\A14\` копируются только `run.txt` и `a14-result.json`. Файл копии `a14.lavbk`, `core-stderr.log` и каталог `data\` остаются в `tmp\A14` и в `results\` не попадают. Проверка перед копированием (должна напечатать `False` дважды):
+
+   ```powershell
+   $leak = Select-String -Path "$t\run\a14-result.json", C:\lavray-test\results\A14\run.txt -Pattern 'A14-SECRET-|A14-SUBTOKEN-|пароль-копии-A14|другой-пароль' -Quiet
+   "секреты в результатах: $leak"
+   ```
+
+   Если напечатано `True`, не копируйте файлы в `results\`, удалите их и запишите дефект плана (`doc`) с именем проверки, чьи подробности содержат секрет.
 
 3. Копия от более новой версии и порча на уровне хранилища (Go-тесты репозитория; создать такой файл из скрипта нельзя: он требует шифрования Argon2id/XChaCha20 с повышенным `schema_version`):
 
+   `src\` только для чтения (`01-ENVIRONMENT.md`, раздел 2, правило 1), поэтому тесты запускаются в собственной рабочей копии `wt\A14`, а не в `src\core`:
+
    ```powershell
-   Set-Location (Join-Path $env:LAVRAY_SRC 'core')
+   $wt = 'C:\lavray-test\wt\A14'
+   if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
+   git -C $env:LAVRAY_SRC worktree add --detach $wt $env:LAVRAY_REF
+   Set-Location (Join-Path $wt 'core')
    go test -count=1 -v -run '^(TestRestoreRejectsNewerSchema|TestRestoreIsAtomicOnCorruptFile|TestRestoreRollbackMidway|TestRestoreKeepsUpdateSerial|TestRestoreCoversEveryTable)$' ./internal/store/ ./internal/backup/ 2>&1 | Select-String -Pattern '^(--- |ok|FAIL)'
    go test -count=1 -v -run '^(TestBackupFromNewerVersionRejected|TestBackupPasswordNeverLogged|TestBackupFileHasNoPlaintextSecrets|TestConcurrentBackupOpsSerialized)$' ./internal/api/ 2>&1 | Select-String -Pattern '^(--- |ok|FAIL)'
    Set-Location C:\lavray-test
    ```
 
-   Ожидается: для каждого найденного имени `--- PASS`, строки `ok`. Имена берутся из плана T-83; тест, которого нет в выбранном коммите (`testing: warning: no tests to run`), запишите в отклонения и сверьтесь с `go test -list 'Backup|Restore' ./internal/...`. Сообщение для пользователя при такой копии: «Копия сделана более новой версией LAVRay. Обновите приложение и повторите» (`bk.err.newer`), код `FAILED_PRECONDITION` с причиной `backup_from_newer_version`.
+   Ожидается: для каждого найденного имени `--- PASS`, строки `ok`; рабочая копия `wt\A14` создана без ошибок. Имена берутся из плана T-83; тест, которого нет в выбранном коммите (`testing: warning: no tests to run`), запишите в отклонения и сверьтесь с `go test -list 'Backup|Restore' ./internal/...`. Сообщение для пользователя при такой копии: «Копия сделана более новой версией LAVRay. Обновите приложение и повторите» (`bk.err.newer`), код `FAILED_PRECONDITION` с причиной `backup_from_newer_version`.
 
 4. Что проверяет скрипт:
 
@@ -86,11 +100,15 @@
 
 ```powershell
 Get-Process lavray-core -ErrorAction SilentlyContinue | Where-Object { $_.Path -like 'C:\lavray-test\*' } | Stop-Process -Force
+Set-Location C:\lavray-test
+git -C $env:LAVRAY_SRC worktree remove --force C:\lavray-test\wt\A14
+git -C $env:LAVRAY_SRC worktree prune
 Remove-Item -Recurse -Force C:\lavray-test\tmp\A14
 Test-Path C:\lavray-test\tmp\A14
+Test-Path C:\lavray-test\wt\A14
 ```
 
-Ожидается `False`.
+Ожидается два `False`. Проверка, что `src\` не изменён: `git -C $env:LAVRAY_SRC status --short` пуст.
 
 ## Отчёт
 
@@ -111,6 +129,7 @@ Test-Path C:\lavray-test\tmp\A14
 import base64
 import json
 import os
+import re
 import secrets
 import shutil
 import sqlite3
@@ -127,11 +146,26 @@ RESULTS = []
 PW = "пароль-копии-A14-12345"
 SECRET = "A14-SECRET-" + secrets.token_hex(8)
 SUBTOKEN = "A14-SUBTOKEN-" + secrets.token_hex(8)
+WRONG_PW = "другой-пароль-123456"
+_SECRET_VALUES = (SECRET, SUBTOKEN, PW, WRONG_PW)
+_SECRET_START = re.compile(r"A14-(?:SECRET|SUBTOKEN)-[0-9a-f]*")  # значение секрета или его обрезанное начало
+_SECRET_FIELD = re.compile(r"""(["']?(?:password|subscriptionUrl|token)["']?\s*:\s*)(["'])(?:(?!\2).)*\2""", re.I)
+
+
+def redact(text):
+    """Секреты (пароль сервера, адрес подписки с токеном, пароли копии) не попадают ни в вывод, ни в a14-result.json
+    (правило 2 из 01-ENVIRONMENT.md, раздел 2: в results\\ секретов нет). Подробности проверок остаются, значения полей заменяются на <redacted>."""
+    s = str(text)
+    for v in _SECRET_VALUES:
+        s = s.replace(v, "<redacted>")
+    s = _SECRET_START.sub("<redacted>", s)
+    return _SECRET_FIELD.sub(r"\1\2<redacted>\2", s)
 
 
 def check(cid, ok, detail="", warn=False):
-    RESULTS.append({"id": cid, "pass": bool(ok), "warn": bool(warn and not ok), "detail": str(detail)[:300]})
-    print(("PASS " if ok else ("WARN " if warn else "FAIL ")) + cid + ("" if ok else " :: " + str(detail)[:220]), flush=True)
+    d = redact(str(detail)[:300])
+    RESULTS.append({"id": cid, "pass": bool(ok), "warn": bool(warn and not ok), "detail": d})
+    print(("PASS " if ok else ("WARN " if warn else "FAIL ")) + cid + ("" if ok else " :: " + d[:220]), flush=True)
 
 
 class Core:
@@ -239,7 +273,7 @@ def main():
         broken = snapshot()
         check("2.state_changed", broken != before, "состояние не изменилось")
         # --- пароль и порча: база не меняется ---
-        st, r = c.rpc("BackupService", "ImportBackup", {"data": b64(data), "password": "другой-пароль-123456", "confirmReplace": True})
+        st, r = c.rpc("BackupService", "ImportBackup", {"data": b64(data), "password": WRONG_PW, "confirmReplace": True})
         check("3.wrong_password.permission_denied", st == 403 and code((st, r)) == "permission_denied", (st, str(r)[:100]))
         check("3.wrong_password.db_unchanged", snapshot() == broken, "база изменилась после неверного пароля")
         positions = [0, 3, 8, 20, 40, 60, 100, len(data) // 2, len(data) - 1]

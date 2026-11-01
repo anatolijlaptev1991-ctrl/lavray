@@ -34,7 +34,7 @@
 
 ## Безопасность
 
-Ключи, корень и «релизы» тестовые: они созданы командой `updsign genkey` на этом ПК и годятся только для проверки. Настоящие ключи выпуска, настоящий `root.json` и секреты CI сюда не передаются. Файл `core/cmd/lavray-core/root.json` в клоне не меняется: ядро с тестовым корнем собирается флагом компоновщика `-X main.rootJSONB64=…` (он сильнее файла), а ядро-заглушка — из копии дерева с заглушкой, поэтому проверка не зависит от того, лежит ли в клоне уже настоящий корень. Ничего не публикуется; зеркала слушают только `127.0.0.1`.
+Ключи, корень и «релизы» тестовые: они созданы командой `updsign genkey` на этом ПК и годятся только для проверки. Настоящие ключи выпуска, настоящий `root.json` и секреты CI сюда не передаются. Файл `core/cmd/lavray-core/root.json` в рабочей копии `wt\A13` (и тем более в клоне `src\`) не меняется: ядро с тестовым корнем собирается флагом компоновщика `-X main.rootJSONB64=…` (он сильнее файла), а ядро-заглушка — из копии дерева с заглушкой, поэтому проверка не зависит от того, лежит ли в клоне уже настоящий корень. Ничего не публикуется; зеркала слушают только `127.0.0.1`.
 
 Зеркала работают по обычному HTTP: адреса bootstrap-источников, вшитые в ядро флагом `-X main.bootstrapURLs=…`, схемой не проверяются, а подписанный `sources.json` обязан содержать только `https` и в тесте указывает на закрытый порт 1 (быстрый отказ). Поэтому тест не нуждается в сертификатах и не трогает хранилище сертификатов. Правила «только `https`» для подписанных источников и редиректа `https → http` проверяют Go-тесты (шаг 4: `TestHttpsToHttpRedirectRejected`); скрипт проверяет, что любой редирект зеркала отвергается и цель редиректа не запрашивается.
 
@@ -45,49 +45,56 @@
    ```powershell
    . C:\lavray-test\env.ps1
    $t = 'C:\lavray-test\tmp\A13'
+   $wt = 'C:\lavray-test\wt\A13'
    New-Item -ItemType Directory -Force -Path $t, C:\lavray-test\results\A13 | Out-Null
    git -C $t rev-parse --is-inside-work-tree 2>&1 | Select-Object -First 1
-   Test-Path (Join-Path $env:LAVRAY_SRC 'core\cmd\lavray-core\root.json')
+   if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
+   git -C $env:LAVRAY_SRC worktree add --detach $wt $env:LAVRAY_REF
+   Test-Path (Join-Path $wt 'core\cmd\lavray-core\root.json')
    ```
 
-   Ожидается: первая строка — `fatal: not a git repository…` (если напечатано `true`, перенесите `tmp\A13` из git-дерева), вторая — `True`.
+   `src\` только для чтения (`01-ENVIRONMENT.md`, раздел 2, правило 1), поэтому весь файл (сборка `updsign` и ядер, Go-тесты, unittest) работает в собственной рабочей копии `wt\A13`; `src\` не используется.
+
+   Ожидается: первая строка — `fatal: not a git repository…` (если напечатано `true`, перенесите `tmp\A13` из git-дерева), рабочая копия создана без ошибок, последняя строка — `True`.
 
 2. Сохраните скрипт из раздела «Скрипт `a13_updater.py`» как `C:\lavray-test\tmp\A13\a13_updater.py` и запустите:
 
    ```powershell
-   python -I "$t\a13_updater.py" (Join-Path $env:LAVRAY_SRC 'core') "$t\run" 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A13\run.txt | Select-Object -Last 12   # третий аргумент: base (разделы 0-11) или data (только §7.5)
+   python -I "$t\a13_updater.py" (Join-Path $wt 'core') "$t\run" 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A13\run.txt | Select-Object -Last 12   # третий аргумент: base (разделы 0-11) или data (только §7.5)
    "a13 exit=$LASTEXITCODE"
    $res = Get-Content "$t\run\a13-result.json" -Raw | ConvertFrom-Json
    "проверок: $($res.total), провалов: $($res.failed), наблюдений: $($res.warnings)"
    $res.checks | Where-Object { -not $_.pass } | Select-Object id, warn, detail | Format-Table -AutoSize -Wrap
    ```
 
-   Ожидается: `a13 exit=0`, `провалов: 0`. Эталон на `dce8ba0` (T-75 с §7.5): **298 проверок** (разделы 0–11: 144, разделы 12.*: 154) и 1 `WARN` в разделах 12.*:
+   Ожидается: `a13 exit=0`, `провалов: 0`. Эталон на теге v0.9.0 (коммит `8093656`): **298 проверок** (разделы 0–11: 144, разделы 12.*: 154) и 1 `WARN` в разделах 12.*:
 
    | `WARN` | Что наблюдается | Серьёзность |
    |---|---|---|
-   | `12.pack.refuses.symlink` | Windows без режима разработчика или прав администратора не даёт создать символическую ссылку: проверка «`geo-pack` отказывает на ссылке в каталоге» пропущена (ограничение ПК). Ссылка внутри архива без прав проверяется в `12.hostile.symlink_entry` | не дефект |
+   | `12.pack.refuses.symlink` | Проверка «`geo-pack` отказывает на ссылке в каталоге» пропущена: создание символической ссылки требует прав. Нужны Режим разработчика Windows или запуск PowerShell от имени администратора; без них это ограничение ПК, не дефект. С правами проверка проходит (`PASS`, `WARN` исчезает). Ссылка внутри архива без прав проверяется в `12.hostile.symlink_entry` | не дефект |
 
-   Ещё два `WARN` (`12.tamper.tampered_preset_file.no_stray_staged_files`: первый проверенный файл пачки наборов оставался в `staging\components` после отказа; `12.norev.has_reason_header`: отказ по манифесту без `geo.rev` шёл без причины) исправлены в 0.9.1 (D-7b, D-7c): теперь это строгие проверки, а отказ несёт причину `metadata_invalid` в сообщении и заголовке `Lavray-Update-Reason` (интерфейс показывает для неё общий текст).
+   Ещё два `WARN` (`12.tamper.tampered_preset_file.no_stray_staged_files`: первый проверенный файл пачки наборов оставался в `staging\components` после отказа; `12.norev.has_reason_header`: отказ по манифесту без `geo.rev` шёл без причины) исправлены в 0.9.1 (D-7b, D-7c): теперь это строгие проверки, а отказ несёт причину `metadata_invalid` в сообщении и заголовке `Lavray-Update-Reason` (интерфейс показывает для неё общий текст). На `v0.9.0` эти две проверки дают `FAIL`: записывайте их как известные D-7b и D-7c со ссылкой «исправлено в 0.9.1».
 
-   Два прежних `WARN` на `80be1e9` (подмена манифеста без причины; `update.channel` принимал любую строку) в `dce8ba0` исправлены: теперь это строгие проверки `3.manifest_swapped_after_timestamp.reason_manifest_mismatch` (`manifest_mismatch` в сообщении и заголовке) и `4.settings.update_channel_is_validated` (`400 invalid_argument`); на сборках до §7.5 они дают `FAIL` серьёзности `minor`. Строка `2.rollback.presets.no_previous` вместо прежней `…unimplemented`: `Rollback(PRESETS)` без прошлой ревизии теперь `failed_precondition` с причиной `no_previous`.
+   Два прежних `WARN` (подмена манифеста без причины; `update.channel` принимал любую строку) в теге v0.9.0 уже исправлены: теперь это строгие проверки `3.manifest_swapped_after_timestamp.reason_manifest_mismatch` (`manifest_mismatch` в сообщении и заголовке) и `4.settings.update_channel_is_validated` (`400 invalid_argument`); на сборках до §7.5 они дают `FAIL` серьёзности `minor`. Строка `2.rollback.presets.no_previous` вместо прежней `…unimplemented`: `Rollback(PRESETS)` без прошлой ревизии теперь `failed_precondition` с причиной `no_previous`.
 
    Если нужен только повтор без пересборки, достаточно запустить тот же скрипт ещё раз: кэш сборки Go сократит подготовку до секунд. Если скрипт остановили на середине, завершите оставшиеся ядра: `Get-Process lavray-core-test, lavray-core-placeholder, lavray-core-data -ErrorAction SilentlyContinue | Stop-Process -Force`.
 
 3. Статические тесты workflow подписи (12 тестов; запрет `${{ inputs.* }}` внутри `run:`, права, Environment для ключей, порядок шагов `meta-refresh` и `meta-resign`):
 
    ```powershell
-   Set-Location $env:LAVRAY_SRC
+   $wt = 'C:\lavray-test\wt\A13'
+   Set-Location $wt
    python -B -m unittest scripts/tests/test_signing_workflows.py -v 2>&1 | Select-Object -Last 6
    Set-Location C:\lavray-test
    ```
 
-   Ожидается: `Ran 12 tests` и `OK`. Ключ `-B` не даёт Python писать `__pycache__` в клон.
+   Ожидается: `Ran 12 tests` и `OK`. Ключ `-B` не даёт Python писать `__pycache__` в рабочую копию.
 
 4. Тесты репозитория, которые скрипт не повторяет (три последние команды go test — защита §7.5: параллельное применение → `aborted`, содержимое наборов отвергается при применении, `dir_busy` без путей, отказ `updsign` на архиве, который клиент не примет):
 
    ```powershell
-   Set-Location (Join-Path $env:LAVRAY_SRC 'core')
+   $wt = 'C:\lavray-test\wt\A13'
+   Set-Location (Join-Path $wt 'core')
    go test -count=1 ./internal/updates/... ./cmd/updsign/ 2>&1 | Select-String -Pattern '^(ok|FAIL|---)'
    go test -count=1 -run 'Update|Verify|Rollback|Staging|Root' ./internal/api/ ./cmd/lavray-core/ 2>&1 | Select-String -Pattern '^(ok|FAIL|---)'
    go test -count=1 -v -run '^(TestHttpsToHttpRedirectRejected|TestRedirectCap|TestRotationSkipRejected|TestRotationRequiresNewKeys|TestRevokedKeyRejectedAfterTwoRotations|TestRotationFailsClosedWhenASourceIsSilent|TestShortStreamKeepsPartAndResumes|TestDownloadRejectsOversizedAsset|TestTimestampClockSkewTolerance|TestGeoZipSlipRejected|TestGeoSymlinkEntryRejected)$' ./internal/updates/ 2>&1 | Select-String -Pattern '^(--- |ok|FAIL)'
@@ -98,7 +105,7 @@
    Set-Location C:\lavray-test
    ```
 
-   Ожидается: строки `ok` для пакетов `internal/updates`, `cmd/updsign`, `internal/api`, `cmd/lavray-core`, для каждого перечисленного имени `--- PASS`. `TestEmbeddedRootValid` на заглушке проходит (корня ещё нет); после церемонии ключей он потребует срок корня больше 180 дней. Тест, которого нет в выбранном коммите (`testing: warning: no tests to run`), запишите в отклонения и сверьтесь с `go test -list 'Update|Root|Rotat' ./internal/...`.
+   Ожидается: строки `ok` для пакетов `internal/updates`, `cmd/updsign`, `internal/api`, `cmd/lavray-core`, для каждого перечисленного имени `--- PASS`, кроме `TestEmbeddedRootValid`. Пока `core/cmd/lavray-core/root.json` является заглушкой (церемония ключей не проведена, как в v0.9.0), `TestEmbeddedRootValid` печатает `--- SKIP` («в этой сборке нет корня доверия»): это ожидаемый результат, не `FAIL` и не пропуск по ошибке. После церемонии ключей (в `root.json` вшит настоящий корень) тест обязан дать `--- PASS` и потребует срок корня больше 180 дней; `--- SKIP` после церемонии — `FAIL`. `TestPlaceholderRootIsNotConfigured` и `TestNoPrivateKeysInTree` дают `--- PASS` всегда. Тест, которого нет в выбранном коммите (`testing: warning: no tests to run`), запишите в отклонения и сверьтесь с `go test -list 'Update|Root|Rotat' ./internal/...`.
 
 5. Что проверяет скрипт (для отчёта и поиска причины; идентификаторы начинаются с номера раздела):
 
@@ -161,7 +168,7 @@ updsign.exe verify -root root1.json -dir site\meta -channel stable -assets site\
 
 | № | Критерий | Шаг |
 |---|---|---|
-| К1 | `a13 exit=0`, провалов 0 (допустим один `WARN` из таблицы шага 2) | 2 |
+| К1 | `a13 exit=0`, провалов 0, проверок не меньше 298 (значение для тега v0.9.0, коммит `8093656`); допустим один `WARN` из таблицы шага 2 (`12.pack.refuses.symlink`, если у PowerShell нет права на символические ссылки). На `v0.9.0` проверки `12.tamper.tampered_preset_file.no_stray_staged_files` и `12.norev.has_reason_header` дают `FAIL` — это известные D-7b и D-7c, исправленные в 0.9.1 | 2 |
 | К2 | При заглушке корня везде `not_configured`, зеркала не получают запросов | 2 (`1.*`) |
 | К3 | Успешный путь: проверка, загрузка, повторная проверка, подмена в staging ловится | 2 (`2.*`) |
 | К4 | Каждый неверный документ даёт свою причину и не обновляет время проверки; подмена принята ни в одном случае | 2 (`3.*`, `7.*`) |
@@ -186,11 +193,16 @@ updsign.exe verify -root root1.json -dir site\meta -channel stable -assets site\
 
 ```powershell
 Get-Process lavray-core-test, lavray-core-placeholder, lavray-core-data -ErrorAction SilentlyContinue | Where-Object { $_.Path -like 'C:\lavray-test\*' } | Stop-Process -Force
+Set-Location C:\lavray-test
+git -C $env:LAVRAY_SRC worktree remove --force C:\lavray-test\wt\A13
+git -C $env:LAVRAY_SRC worktree prune
 Remove-Item -Recurse -Force C:\lavray-test\tmp\A13
 Test-Path C:\lavray-test\tmp\A13
+Test-Path C:\lavray-test\wt\A13
+git -C $env:LAVRAY_SRC status --short
 ```
 
-Ожидается `False`. Клон `LAVRAY_SRC` не менялся: `git -C $env:LAVRAY_SRC status --short` пуст.
+Ожидается два `False` и пустой вывод `git status --short` (клон `LAVRAY_SRC` не менялся).
 
 ## Отчёт
 

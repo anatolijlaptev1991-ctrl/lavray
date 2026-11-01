@@ -5,12 +5,13 @@
 //! подключает этот модуль.
 
 use crate::hotkey::{self, register::HotkeySlot};
+use crate::killswitch::{self, Exit, Outcome};
 use crate::notify::{Notifier, NotifyGate, NotifyKind};
 use crate::prefs::ShellPrefs;
 use crate::window_geometry;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
-use tauri::{AppHandle, Runtime};
+use tauri::{AppHandle, Emitter, Runtime};
 use tauri_plugin_notification::NotificationExt;
 
 /// Каталог данных приложения (там `ui-state.json`) для команд библиотеки.
@@ -33,6 +34,21 @@ pub fn on_setup<R: Runtime>(app: &AppHandle<R>, prefs: &ShellPrefs) {
     use tauri::Manager;
     let slot = app.state::<HotkeySlot>();
     hotkey::register_saved(app, &slot, prefs.hotkey_connect.as_deref());
+}
+
+/// Ядро умерло (T-03, хвосты B): вернуть системный прокси из снимка или, при
+/// включённом kill switch, оставить его и сказать интерфейсу — он покажет
+/// уведомление и пометит трей (тексты на языке интерфейса знает только он).
+pub fn on_core_crash<R: Runtime>(app: &AppHandle<R>, data_dir: &Path) {
+    match killswitch::apply_exit(data_dir, Exit::CoreCrashed) {
+        Outcome::Released => {}
+        Outcome::Kept => {
+            let _ = app.emit_to("main", killswitch::PROXY_KEPT_EVENT, ());
+        }
+        Outcome::Failed(e) => {
+            eprintln!("LAVRay: не удалось снять системный прокси после падения ядра: {e}");
+        }
+    }
 }
 
 struct PluginNotifier<'a, R: Runtime>(&'a AppHandle<R>);

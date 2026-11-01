@@ -18,6 +18,9 @@ pub const START_MINIMIZED: &str = "lavray.startMinimized";
 pub const NOTIFY: &str = "lavray.notify";
 /// Глобальное сочетание «подключить / отключить»; пусто — выключено.
 pub const HOTKEY_CONNECT: &str = "lavray.hotkeyConnect";
+/// Копия настройки ядра `connect.kill_switch_proxy`: не снимать системный прокси
+/// при падении ядра (см. [`crate::killswitch`]).
+pub const KILL_SWITCH_PROXY: &str = "lavray.killSwitchProxy";
 
 /// Наибольшая длина сочетания клавиш в файле, байт: длиннее — мусор.
 const MAX_ACCEL_BYTES: usize = 64;
@@ -30,6 +33,8 @@ pub struct ShellPrefs {
     pub notify: bool,
     /// Сочетание как его сохранил UI; проверяется при регистрации.
     pub hotkey_connect: Option<String>,
+    /// Не снимать системный прокси, когда ядро упало.
+    pub kill_switch_proxy: bool,
 }
 
 impl Default for ShellPrefs {
@@ -39,6 +44,7 @@ impl Default for ShellPrefs {
             start_minimized: false,
             notify: true,
             hotkey_connect: None,
+            kill_switch_proxy: false,
         }
     }
 }
@@ -57,6 +63,7 @@ impl ShellPrefs {
             start_minimized: flag(entries, START_MINIMIZED, d.start_minimized),
             notify: flag(entries, NOTIFY, d.notify),
             hotkey_connect: accel(entries),
+            kill_switch_proxy: flag(entries, KILL_SWITCH_PROXY, d.kill_switch_proxy),
         }
     }
 }
@@ -143,6 +150,18 @@ mod tests {
         crate::ui_state::set(&dir, CLOSE_TO_TRAY, Some("0".into()), None).unwrap();
         assert!(!ShellPrefs::load(&dir).close_to_tray, "записанное значение");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn kill_switch_proxy_defaults_off_and_reads_the_mirror() {
+        assert!(
+            !ShellPrefs::default().kill_switch_proxy,
+            "по умолчанию прокси снимается"
+        );
+        let on = ShellPrefs::from_entries(&entries(&[(KILL_SWITCH_PROXY, "1")]));
+        assert!(on.kill_switch_proxy);
+        let junk = ShellPrefs::from_entries(&entries(&[(KILL_SWITCH_PROXY, "maybe")]));
+        assert!(!junk.kill_switch_proxy, "мусор — умолчание");
     }
 
     #[test]

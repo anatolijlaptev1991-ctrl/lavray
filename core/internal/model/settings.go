@@ -129,6 +129,9 @@ func SettingDescriptors() []SettingDescriptor {
 		// 0.2.1: после подключения ядро один раз запрашивает test.url через исходящее
 		// профиля; неудача — предупреждение «Подключено, но трафик не идёт».
 		{Key: "connect.health_check", Type: SettingBool, GroupID: "core", DefaultValue: `true`},
+		// Хвосты B (7.3): при падении ядра в режиме системного прокси оболочка НЕ снимает
+		// прокси — приложения не уходят напрямую, а получают отказ. Читает оболочка.
+		{Key: "connect.kill_switch_proxy", Type: SettingBool, GroupID: "core", ShellOwned: true, DefaultValue: `false`},
 
 		// ---- Безопасность ----
 		{Key: "security.allow_insecure_default", Type: SettingBool, GroupID: "security", DeprecatedBy: "skip_cert"},

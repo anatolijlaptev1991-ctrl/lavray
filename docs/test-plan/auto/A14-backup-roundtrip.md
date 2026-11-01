@@ -43,7 +43,7 @@
    $res.checks | Where-Object { -not $_.pass } | Select-Object id, warn, detail | Format-Table -AutoSize -Wrap
    ```
 
-   Ожидается: `a14 exit=0`, `провалов: 0`; допустим один `WARN` (`5.unicode_nfc_vs_nfd_password_equivalent_in_core`). Эталон на `main` `9b26be6` (и на `feat/tails-a`, `775a49b`): 27 проверок.
+   Ожидается: `a14 exit=0`, `провалов: 0`; `WARN` не допускаются (до 0.9.1 допускался один: `5.unicode_nfc_vs_nfd_password_equivalent_in_core`, ядро не нормализовало пароль, D-6). Эталон на `main` `9b26be6` (и на `feat/tails-a`, `775a49b`): 27 проверок.
 
 3. Копия от более новой версии и порча на уровне хранилища (Go-тесты репозитория; создать такой файл из скрипта нельзя: он требует шифрования Argon2id/XChaCha20 с повышенным `schema_version`):
 
@@ -278,7 +278,7 @@ def main():
         composed = unicodedata.normalize("NFC", decomposed)
         st, e3 = c.rpc("BackupService", "ExportBackup", {"password": composed})
         st2, r3 = c.rpc("BackupService", "PreviewBackup", {"data": e3["data"], "password": decomposed})
-        check("5.unicode_nfc_vs_nfd_password_equivalent_in_core", st2 == 200, (st2, str(r3)[:80]), warn=True)
+        check("5.unicode_nfc_vs_nfd_password_equivalent_in_core", st2 == 200, (st2, str(r3)[:80]))
     finally:
         c.stop()
     # --- восстановление в пустую базу (потерян lavray.db) ---

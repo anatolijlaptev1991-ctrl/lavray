@@ -247,11 +247,9 @@ func applyStreamFromQuery(st *model.StreamSettings, get func(string) (string, bo
 	if netw == "" {
 		netw = "tcp"
 	}
-	if netw == "h2" {
-		netw = "http"
-	}
+	netw = canonicalNetwork(netw)
 	if !networks[netw] {
-		return fmt.Errorf("тип транспорта %q не поддерживается (tcp, ws, grpc, http, httpupgrade, quic)", netw)
+		return fmt.Errorf("тип транспорта %q не поддерживается (tcp, ws, grpc, http, httpupgrade, quic, xhttp)", netw)
 	}
 	st.Network = netw
 
@@ -303,7 +301,7 @@ func applyStreamFromQuery(st *model.StreamSettings, get func(string) (string, bo
 
 	// поля сети
 	switch st.Network {
-	case "ws", "http", "httpupgrade":
+	case "ws", "http", "httpupgrade", "xhttp":
 		if v, ok := get("path"); ok {
 			st.Path = v
 		}
@@ -574,12 +572,9 @@ func vmessFromJSON(j *vmessJSON) (*model.Profile, error) {
 	}
 
 	st := &model.StreamSettings{}
-	netw := strings.ToLower(strings.TrimSpace(j.Net))
-	if netw == "h2" {
-		netw = "http"
-	}
+	netw := canonicalNetwork(strings.ToLower(strings.TrimSpace(j.Net)))
 	if netw != "" && !networks[netw] {
-		return nil, fmt.Errorf("vmess: сеть %q не поддерживается (tcp, ws, grpc, http, httpupgrade, quic)", netw)
+		return nil, fmt.Errorf("vmess: сеть %q не поддерживается (tcp, ws, grpc, http, httpupgrade, quic, xhttp)", netw)
 	}
 	st.Network = netw
 	st.Host = j.Host

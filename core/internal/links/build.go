@@ -264,7 +264,7 @@ func appendStreamQuery(b *linkBuilder, st *model.StreamSettings, withEncryptionN
 	}
 	b.addQ("type", netw)
 	switch netw {
-	case "ws", "http", "httpupgrade":
+	case "ws", "http", "httpupgrade", "xhttp":
 		if st.Path != "" {
 			b.addQ("path", st.Path)
 		}

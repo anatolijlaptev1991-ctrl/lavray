@@ -146,6 +146,12 @@ var agentTable = map[string]agentDecision{
 	lavrayv1connect.BackupServiceExportBackupProcedure:  agentDeny,
 	lavrayv1connect.BackupServicePreviewBackupProcedure: agentDeny,
 	lavrayv1connect.BackupServiceImportBackupProcedure:  agentDeny,
+
+	// MigrationService (T-78): читает произвольные каталоги диска и пишет в базу —
+	// агентам закрыт весь сервис.
+	lavrayv1connect.MigrationServiceDetectNekoBoxProcedure:        agentDeny,
+	lavrayv1connect.MigrationServicePreviewNekoBoxImportProcedure: agentDeny,
+	lavrayv1connect.MigrationServiceImportNekoBoxProcedure:        agentDeny,
 }
 
 // agentProcedures — множество процедур с решением d.

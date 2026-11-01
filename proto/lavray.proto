@@ -2265,6 +2265,78 @@ message BackupSummary {
 }
 
 // ============================================================================
+// MigrationService (T-78): перенос данных из NekoBox/nekoray
+// ============================================================================
+
+// MigrationService переносит каталог config NekoBox (groups/, profiles/,
+// routes_box/, groups/nekobox.json) в LAVRay. Источник только читается; NekoBox
+// не запускается и не останавливается. Агентам весь сервис закрыт.
+//
+// Коды ошибок Connect:
+//   INVALID_ARGUMENT   — путь пуст, не абсолютный, не каталог или в нём нет ни
+//                        groups, ни profiles
+//   NOT_FOUND          — пути нет
+//   RESOURCE_EXHAUSTED — превышены лимиты разбора (файлов, размера)
+//   ABORTED            — параллельный перенос или гонка с записью в базу
+service MigrationService {
+  // Найти установки NekoBox: %APPDATA% и %LOCALAPPDATA% (nekoray\config), каталог
+  // config рядом с запущенным nekobox.exe/nekoray.exe, а также переданные пути.
+  rpc DetectNekoBox(DetectNekoBoxRequest) returns (DetectNekoBoxResponse);
+  // Сухой прогон: числа и причины пропусков те же, что даст ImportNekoBox.
+  rpc PreviewNekoBoxImport(NekoBoxImportRequest) returns (NekoBoxReport);
+  // Перенести всё одной транзакцией: профили, группы, цепочки, по желанию
+  // маршруты и настройки. Повторный перенос не создаёт дублей.
+  rpc ImportNekoBox(NekoBoxImportRequest) returns (NekoBoxReport);
+}
+
+message DetectNekoBoxRequest {
+  repeated string extra_paths = 1; // дополнительные каталоги config (абсолютные)
+}
+
+message NekoBoxCandidate {
+  string path = 1; // каталог config
+  string source = 2; // manual | appdata | localappdata | process
+  int32 groups = 3;
+  int32 profiles = 4;
+  int32 routes = 5;
+  bool looks_running = 6; // NekoBox запущен: перед переносом его лучше закрыть
+}
+
+message DetectNekoBoxResponse {
+  repeated NekoBoxCandidate candidates = 1;
+}
+
+message NekoBoxImportRequest {
+  string path = 1; // каталог config (или каталог установки, в котором есть config)
+  bool include_routes = 2; // маршруты routes_box/ → пользовательские наборы
+  bool include_settings = 3; // groups/nekobox.json → настройки по таблице соответствия
+}
+
+message NekoBoxSkipped {
+  string file = 1; // относительный путь файла в каталоге config
+  int64 id = 2;
+  string type = 3;
+  string reason = 4;
+}
+
+message NekoBoxReport {
+  int32 groups_imported = 1;
+  map<string, int32> profiles_by_type = 2;
+  int32 already_present = 3; // уже перенесено раньше (группы, профили, наборы)
+  repeated NekoBoxSkipped skipped = 4;
+  repeated string warnings = 5;
+  int32 routes_found = 6;
+  int32 routes_imported = 7;
+  int32 renumbered = 8; // записей, чей id пришлось сменить из-за коллизии
+  repeated string settings_imported = 9; // ключи настроек LAVRay
+  bool dry_run = 10;
+  // id набора LAVRay, которым стал активный маршрут NekoBox (active_routing):
+  // клиент предлагает «Сделать активным». Нет значения — маршрут не найден или
+  // не переносится.
+  optional string nekobox_active_route = 11;
+}
+
+// ============================================================================
 // Reserved (эволюция). Удалённые/переименованные поля фиксируются здесь;
 // номера НЕ переиспользуются. История ведётся в proto/README.md §7.
 // ============================================================================
@@ -2300,3 +2372,7 @@ message BackupSummary {
 //   без `--web-bind`. GatewayService: на десктопе INVALID_ARGUMENT.
 //   Защита первичной настройки: WebModeStatus.setup_code_required=9,
 //   SetupFirstAdminRequest.setup_code=3 (PERMISSION_DENIED при неверном коде).
+//
+// ревизия 6 (0.6.0, T-78):
+//   + MigrationService (DetectNekoBox, PreviewNekoBoxImport, ImportNekoBox) и
+//   сообщения NekoBox*: перенос данных из NekoBox.

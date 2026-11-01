@@ -127,6 +127,11 @@ var migrations = []migration{
 		version: webUsersSchemaVersion,
 		stmts:   webUsersSchema,
 	},
+	{
+		// T-78: что уже перенесено из NekoBox (importmap_schema.go).
+		version: importMapSchemaVersion,
+		stmts:   importMapSchema,
+	},
 }
 
 // schemaVersion читает текущую версию схемы (0 — свежая база).

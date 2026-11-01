@@ -37,11 +37,3 @@ func (s *Server) ResetBuiltinPreset(ctx context.Context, req *connect.Request[la
 func (s *Server) ImportNekoRayRoute(ctx context.Context, req *connect.Request[lavrayv1.ImportNekoRayRouteRequest]) (*connect.Response[lavrayv1.RoutingPreset], error) {
 	return nil, errNotYetW6
 }
-
-func (s *Server) ResetSettings(ctx context.Context, req *connect.Request[lavrayv1.ResetSettingsRequest]) (*connect.Response[lavrayv1.SetSettingsResponse], error) {
-	return nil, errNotYetW6
-}
-
-func (s *Server) SubscribeSettings(ctx context.Context, req *connect.Request[lavrayv1.SubscribeSettingsRequest], stream *connect.ServerStream[lavrayv1.SettingsChanged]) error {
-	return errNotYetW6
-}

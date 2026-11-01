@@ -79,7 +79,7 @@ unsafe fn take_text(ptr: *mut u16) -> Option<String> {
     }
     let text = String::from_utf16_lossy(std::slice::from_raw_parts(ptr, len));
     GlobalFree(ptr.cast());
-    Some(text).filter(|t| !t.is_empty())
+    (!text.is_empty()).then_some(text)
 }
 
 /// Настройки подключения. Флаги — `INTERNET_PER_CONN_FLAGS_UI` (то, что стоит в

@@ -35,8 +35,6 @@ import (
 // реализованную» процедуру остаться в списке.
 var allowUnimplemented = map[string]bool{
 	// unimplemented.go (заглушки W6).
-	// Реализация в Ф3 (T-75).
-	"/lavray.v1.UpdateService/ApplyUpdates": true,
 	// WebSessionService: ПОСТОЯННАЯ запись (T-76). Сервис включается только при
 	// --web-bind (EnableWeb); десктоп без этого флага отвечает UNIMPLEMENTED
 	// намеренно, и ratchet-сервер флага не имеет. Работающие методы проверяют

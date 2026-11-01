@@ -1,0 +1,126 @@
+# meta-resign.yml — T-75: ручное продление manifest-*.json и sources.json без
+# нового релиза (срок 90 суток истекает, а выпускать нечего). Подпись манифеста
+# ключом r1 — решение владельца, поэтому workflow работает в Environment
+# release-signing с обязательным ревьюером и запускается вручную НА ТЕГЕ `v*`
+# (Environment разрешён только для тегов `v*`): в поле «Use workflow from»
+# выберите последний тег. Меняется только expires; версии, активы и подписи
+# minisign остаются, затем перевыпускается timestamp.json.
+name: meta-resign
+on:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Новый срок манифеста и sources, суток"
+        default: "90"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Ввод workflow_dispatch недоверенный (в том числе из-за арифметики bash:
+  # `$(( a[$(cmd)] ))` исполняет cmd). Поэтому он проверяется отдельным заданием
+  # БЕЗ секретов и без Environment, а дальше передаётся только готовым числом.
+  validate:
+    name: "Проверка ввода"
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    outputs:
+      hours: ${{ steps.days.outputs.hours }}
+    steps:
+      - name: "Проверка срока продления (суток)"
+        id: days
+        env:
+          DAYS: ${{ inputs.days }}
+        run: |
+          if ! [[ "$DAYS" =~ ^[0-9]{1,4}$ ]]; then
+            echo "::error title=Неверный срок::days — целое число суток от 1 до 365"
+            exit 1
+          fi
+          days=$((10#$DAYS))
+          if [ "$days" -lt 1 ] || [ "$days" -gt 365 ]; then
+            echo "::error title=Неверный срок::days — целое число суток от 1 до 365"
+            exit 1
+          fi
+          echo "hours=$((days * 24))" >> "$GITHUB_OUTPUT"
+
+  resign:
+    name: "Продление манифестов"
+    needs: validate
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    environment: release-signing
+    permissions:
+      contents: write
+    concurrency:
+      group: release-signing
+      cancel-in-progress: false
+    steps:
+      - name: "Ключи заданы?"
+        id: gate
+        env:
+          HAVE_TIMESTAMP: ${{ secrets.LAVRAY_TIMESTAMP_KEY != '' }}
+          HAVE_MANIFEST: ${{ secrets.LAVRAY_MANIFEST_KEY != '' }}
+        run: |
+          if [ "$HAVE_TIMESTAMP" = true ] && [ "$HAVE_MANIFEST" = true ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "::error title=Продление невозможно::секреты LAVRAY_TIMESTAMP_KEY и LAVRAY_MANIFEST_KEY окружения release-signing не заданы"
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - name: "updsign: сборка утилиты"
+        working-directory: core
+        run: go build -o ../updsign ./cmd/updsign
+
+      - name: "meta/: текущее состояние gh-pages"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          remote="https://github.com/${GITHUB_REPOSITORY}.git"
+          git -c "http.extraheader=AUTHORIZATION: basic $auth" clone --depth 1 --branch gh-pages "$remote" pages
+          ls pages/meta/manifest-*.json
+
+      - name: "Продление manifest и sources (ключ manifest)"
+        env:
+          LAVRAY_MANIFEST_KEY: ${{ secrets.LAVRAY_MANIFEST_KEY }}
+          HOURS: ${{ needs.validate.outputs.hours }} # число, проверенное заданием validate
+        run: |
+          for f in pages/meta/manifest-*.json pages/meta/sources.json; do
+            [ -f "$f" ] || continue
+            ./updsign resign -key env:LAVRAY_MANIFEST_KEY -in "$f" -out "$f" -expires "${HOURS}h"
+          done
+
+      - name: "Подпись timestamp.json (ключ timestamp)"
+        env:
+          LAVRAY_TIMESTAMP_KEY: ${{ secrets.LAVRAY_TIMESTAMP_KEY }}
+        run: ./updsign timestamp -key env:LAVRAY_TIMESTAMP_KEY -dir pages/meta -out pages/meta/timestamp.json
+
+      - name: "updsign verify (до публикации)"
+        run: |
+          for f in pages/meta/manifest-*.json; do
+            ch=$(basename "$f" .json); ch="${ch#manifest-}"
+            ./updsign verify -root core/cmd/lavray-core/root.json -dir pages/meta -channel "$ch" -product lavray-windows
+          done
+
+      - name: "Публикация meta/ в gh-pages"
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          auth=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)
+          echo "::add-mask::$auth"
+          git -C pages config user.name "github-actions[bot]"
+          git -C pages config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C pages add meta
+          git -C pages commit -m "meta: продление manifest и sources" || { echo "метаданные не изменились"; exit 0; }
+          git -C pages -c "http.extraheader=AUTHORIZATION: basic $auth" push origin gh-pages

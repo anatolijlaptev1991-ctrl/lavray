@@ -1836,6 +1836,11 @@ service UpdateService {
   // Порядок сети: сначала через активный туннель, затем напрямую; DNS через
   // DoH ядра; последний рабочий источник запоминается (§5). «Проверка не
   // удалась» ≠ «обновлений нет» (принцип 7) — состояние last_checked_at.
+  // Ошибки: UNAVAILABLE — все источники недоступны (last_checked_at не
+  // меняется); FAILED_PRECONDITION с причиной в начале сообщения («<причина>: …»):
+  // not_configured (в сборке нет корня доверия), bad_signature, expired,
+  // serial_rollback, wrong_product, wrong_channel, root_rotation,
+  // artifact_role_missing.
   rpc CheckUpdates(CheckUpdatesRequest) returns (CheckUpdatesResponse);
 
   // Скачать выбранные компоненты: стрим прогресса (байты, скорость, докачка
@@ -2022,6 +2027,10 @@ message ComponentState {
   Phase phase = 2;
   optional string staged_version = 3;
   optional string error = 4;
+  // Откат доступен, только если оболочка хранит прошлый установщик
+  // (<данные>/updates/previous); его версия — previous_version (T-75).
+  bool rollback_available = 5;
+  optional string previous_version = 6;
 }
 
 message VerifyLocalUpdateRequest {
@@ -2060,11 +2069,15 @@ message DownloadProgress {
 message VerificationPassed {
   UpdateComponent component = 1;
   string version = 2;
+  // Путь проверенной копии в staging-каталоге (<данные>/updates/staging) и её
+  // sha256 (hex): оболочка при установке заново сверяет оба значения (T-75).
+  string staged_path = 3;
+  string sha256 = 4;
 }
 
 message VerificationFailed {
   UpdateComponent component = 1;
-  string reason = 2; // "sha256_mismatch" | "bad_signature" | "truncated" | "serial_rollback" | "wrong_product" | "wrong_channel" | "expired" | ...
+  string reason = 2; // "sha256_mismatch" | "bad_signature" | "truncated" | "serial_rollback" | "wrong_product" | "wrong_channel" | "expired" | "not_configured" | ...
 }
 
 message UpdateFailed {

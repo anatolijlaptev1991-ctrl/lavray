@@ -1,410 +1,274 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-// client_test.go — негативные сценарии UPDATE-SYSTEM §7 + ротация/отзыв
-// ключей SECURITY.md §4. Все метаданные генерируются на лету: ключи ed25519,
-// подписи envelope, строгий порядок проверки.
+// client_test.go — цепочка проверки (UPDATE-SYSTEM §7): корень → sources →
+// timestamp → manifest → решение по версии; негативные сценарии.
 package updates
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
-	"fmt"
-	"strings"
-	"sync"
+	"errors"
+	"os"
 	"testing"
 	"time"
 )
 
-// ---- тестовая инфраструктура ---------------------------------------------------
-
-type memSource struct {
-	mu    sync.Mutex
-	files map[string][]byte
+type env struct {
+	def rootDef
+	src *memSource
+	cl  *Client
 }
 
-func (m *memSource) Fetch(_ context.Context, name string) ([]byte, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if b, ok := m.files[name]; ok {
-		return append([]byte(nil), b...), nil
-	}
-	return nil, fmt.Errorf("нет файла %s", name)
-}
-
-func (m *memSource) put(name string, b []byte) { m.files[name] = b }
-
-type signer struct {
-	priv ed25519.PrivateKey
-}
-
-func newSigner(t *testing.T) signer {
+func newEnv(t *testing.T, appVersion string) *env {
 	t.Helper()
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return signer{priv: priv}
+	d := newRootDef(t, 1, farFuture, "k1")
+	src := newMem()
+	return &env{def: d, src: src, cl: &Client{
+		Trust: mustTrust(t, d.selfSigned(t)), Product: "lavray-windows", AppVersion: appVersion,
+		Platform: "windows-x64", BootstrapSources: []Source{src}, State: &State{},
+		PhaseTimeout: 5 * time.Second, Grace: 50 * time.Millisecond,
+	}}
 }
 
-// signEnv — конверт {"signed":…, "signatures":[…]} по образцу §3; keyid —
-// имя ключа из root.keys (роли ссылаются на эти имена).
-func (s signer) signEnv(signed json.RawMessage, keyid string) []byte {
-	sig := ed25519.Sign(s.priv, signed)
-	env := map[string]any{
-		"signed":     json.RawMessage(signed),
-		"signatures": []any{map[string]any{"keyid": keyid, "sig": base64.StdEncoding.EncodeToString(sig)}},
-	}
-	b, err := json.Marshal(env)
-	if err != nil {
-		panic(err)
-	}
-	return b
-}
-
-// dualSign — конверт с двумя подписями (ротация root: старый+новый порог).
-func dualSign(t *testing.T, signed json.RawMessage, s1 signer, k1 string, s2 signer, k2 string) []byte {
+func (e *env) check(t *testing.T) (*Result, error) {
 	t.Helper()
-	sig1 := ed25519.Sign(s1.priv, signed)
-	sig2 := ed25519.Sign(s2.priv, signed)
-	env := map[string]any{
-		"signed": json.RawMessage(signed),
-		"signatures": []any{
-			map[string]any{"keyid": k1, "sig": base64.StdEncoding.EncodeToString(sig1)},
-			map[string]any{"keyid": k2, "sig": base64.StdEncoding.EncodeToString(sig2)},
-		},
-	}
-	b, err := json.Marshal(env)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
+	return e.cl.Check(context.Background())
 }
-
-func b64pub(t *testing.T, s signer) string {
-	t.Helper()
-	pub := s.priv.Public().(ed25519.PublicKey)
-	return base64.StdEncoding.EncodeToString(pub)
-}
-
-// fixture — генератор валидного набора метаданных для одного trust-набора
-// ключей (root — signers роли).
-type fixture struct {
-	rootS   signer // подписывает root
-	tsS     signer // timestamp
-	manS    signer // manifest+sources
-	srcRole string
-}
-
-func newFixture(t *testing.T) fixture {
-	return fixture{rootS: newSigner(t), tsS: newSigner(t), manS: newSigner(t), srcRole: "r1"}
-}
-
-func (f fixture) rootJSON(t *testing.T) []byte {
-	t.Helper()
-	root := map[string]any{
-		"type": "root", "version": 1, "expires": time.Now().Add(365 * 24 * time.Hour).UTC().Format(time.RFC3339),
-		"keys": map[string]any{
-			"k1": map[string]any{"alg": "ed25519", "pub": b64pub(t, f.rootS)},
-			"t1": map[string]any{"alg": "ed25519", "pub": b64pub(t, f.tsS)},
-			"r1": map[string]any{"alg": "ed25519", "pub": b64pub(t, f.manS)},
-		},
-		"roles": map[string]any{
-			"root":      map[string]any{"keyids": []string{"k1"}, "threshold": 1},
-			"timestamp": map[string]any{"keyids": []string{"t1"}, "threshold": 1},
-			"manifest":  map[string]any{"keyids": []string{f.srcRole}, "threshold": 1},
-			"sources":   map[string]any{"keyids": []string{f.srcRole}, "threshold": 1},
-		},
-	}
-	b, err := json.Marshal(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return f.rootS.signEnv(b, "k1")
-}
-
-func (f fixture) publish(t *testing.T, m *memSource, serial int32, opts pubOpts) {
-	t.Helper()
-	now := time.Now().UTC()
-	fakeSum := sha256.Sum256([]byte("fake-artifact"))
-	man := map[string]any{
-		"type": "manifest", "product": opts.product, "channel": opts.channel,
-		"serial": serial, "expires": now.Add(30 * 24 * time.Hour).Format(time.RFC3339),
-		"app": map[string]any{"version": "1.2.0", "minUpgradeFrom": "1.0.0", "assets": map[string]any{
-			"windows-x64": map[string]any{"path": "v1/app.exe", "sha256": hex.EncodeToString(fakeSum[:]), "length": 12, "minisig": "sig"},
-		}},
-		"core":      map[string]any{"version": "1.14.1-lav.1", "minApp": "1.2.0"},
-		"presets":   map[string]any{},
-		"geo":       map[string]any{"path": "geo/1.tar.zst", "sha256": strings.Repeat("a", 64), "length": 100},
-		"notes":     map[string]any{"ru": "n"},
-		"mandatory": false,
-	}
-	manB, _ := json.Marshal(man)
-	tsEntry := map[string]any{"serial": serial, "sha256": fmt.Sprintf("%x", sha256.Sum256(manB)), "length": len(manB)}
-	ts := map[string]any{
-		"type": "timestamp", "version": 1,
-		"expires": now.Add(time.Duration(opts.tsTTL) * time.Second).Format(time.RFC3339),
-		"meta": map[string]any{
-			"manifest-stable.json": tsEntry,
-			"manifest-beta.json":   tsEntry,
-		},
-	}
-	tsB, _ := json.Marshal(ts)
-	sources := map[string]any{
-		"type": "sources", "version": 3,
-		"expires":   now.Add(180 * 24 * time.Hour).Format(time.RFC3339),
-		"artifacts": []string{"https://updates.example/"},
-		"metadata":  []string{"https://updates.example/meta/"},
-	}
-	sourcesB, _ := json.Marshal(sources)
-	m.put("root.json", f.rootJSON(t))
-	m.put("timestamp.json", f.tsS.signEnv(tsB, "t1"))
-	m.put("manifest-stable.json", f.manS.signEnv(manB, "r1"))
-	m.put("manifest-beta.json", f.manS.signEnv(manB, "r1"))
-	m.put("sources.json", f.manS.signEnv(sourcesB, "r1"))
-}
-
-type pubOpts struct {
-	product string
-	channel string
-	tsTTL   int // секунды до expires timestamp
-}
-
-func validOpts() pubOpts {
-	return pubOpts{product: "lavray-windows", channel: "stable", tsTTL: 7 * 24 * 3600}
-}
-
-func newClient(t *testing.T, f fixture, m *memSource, st *State) *Client {
-	t.Helper()
-	trust, err := NewTrust(f.rootJSON(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return &Client{Trust: trust, State: st, Product: "lavray-windows", BootstrapSources: []Source{m}}
-}
-
-// ---- тесты ---------------------------------------------------------------------
 
 func TestCheckHappyPathNewerAndRepeat(t *testing.T) {
-	f := newFixture(t)
-	m := &memSource{files: map[string][]byte{}}
-	f.publish(t, m, 42, validOpts())
-	st := &State{}
-	c := newClient(t, f, m, st)
-
-	res, err := c.Check(context.Background())
-	if err != nil {
-		t.Fatalf("check: %v", err)
+	e := newEnv(t, "0.5.0")
+	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 4, tsVersion: 100})
+	for i := 0; i < 2; i++ { // повтор того же релиза — не откат метаданных
+		res, err := e.check(t)
+		if err != nil || !res.Availability.Available || res.Availability.Version != "0.6.0" {
+			t.Fatalf("проверка #%d: %+v %v", i, res, err)
+		}
 	}
-	if !res.IsNewer || res.Manifest.Serial != 42 {
-		t.Fatalf("res: newer=%v serial=%d", res.IsNewer, res.Manifest.Serial)
-	}
-	if st.SerialStable != 42 || st.RootVersion != 1 {
-		t.Fatalf("state: %+v", st)
-	}
-
-	// Повтор с тем же serial — не обновление (downgrade/repeat).
-	f.publish(t, m, 42, validOpts())
-	res2, err := c.Check(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res2.IsNewer {
-		t.Fatal("тот же serial не должен быть обновлением")
+	st := e.cl.State
+	if st.SerialStable != 4 || st.TimestampVersion != 100 || st.RootVersion != 1 || st.LastCheckedAt == 0 {
+		t.Fatalf("состояние после проверки: %+v", *st)
 	}
 }
 
 func TestDowngradeSerialRejected(t *testing.T) {
-	f := newFixture(t)
-	m := &memSource{files: map[string][]byte{}}
-	f.publish(t, m, 50, validOpts())
-	st := &State{}
-	c := newClient(t, f, m, st)
-	if _, err := c.Check(context.Background()); err != nil {
-		t.Fatal(err)
+	e := newEnv(t, "0.5.0")
+	e.cl.State.SerialStable = 5
+	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 3, tsVersion: 100})
+	if _, err := e.check(t); !errors.Is(err, ErrSerialRollback) {
+		t.Fatalf("откат serial: %v", err)
 	}
-	f.publish(t, m, 30, validOpts()) // «откат» сервера
-	res, err := c.Check(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if res.IsNewer {
-		t.Fatal("downgrade serial принят как обновление")
+	if e.cl.State.LastCheckedAt != 0 {
+		t.Fatal("неудачная проверка не должна менять last_checked_at")
 	}
 }
 
-func TestWrongProductRejected(t *testing.T) {
-	f := newFixture(t)
-	m := &memSource{files: map[string][]byte{}}
-	opts := validOpts()
-	opts.product = "lavray-linux" // чужой продукт
-	f.publish(t, m, 42, opts)
-	c := newClient(t, f, m, &State{})
-	if _, err := c.Check(context.Background()); err == nil {
-		t.Fatal("чужой product должен быть отвергнут")
+func TestWrongProductAndChannelRejected(t *testing.T) {
+	e := newEnv(t, "0.5.0")
+	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 1, tsVersion: 1, product: "lavray-linux"})
+	if _, err := e.check(t); !errors.Is(err, ErrWrongProduct) {
+		t.Fatalf("чужой product: %v", err)
+	}
+	e = newEnv(t, "0.5.0")
+	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 1, tsVersion: 1, channel: ChannelBeta, fileChannel: ChannelStable})
+	if _, err := e.check(t); !errors.Is(err, ErrWrongChannel) {
+		t.Fatalf("beta-манифест под именем stable: %v", err)
 	}
 }
 
-func TestExpiredTimestampRejected(t *testing.T) {
-	f := newFixture(t)
-	m := &memSource{files: map[string][]byte{}}
-	opts := validOpts()
-	opts.tsTTL = -10 // уже истёк
-	f.publish(t, m, 42, opts)
-	c := newClient(t, f, m, &State{})
-	_, err := c.Check(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "истёк") {
-		t.Fatalf("истёкший timestamp: err=%v", err)
+func TestTimestampExpired(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Second)
+	e := newEnv(t, "0.5.0")
+	e.cl.Now = func() time.Time { return now }
+	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 1, tsVersion: 1, tsExpires: now})
+	if _, err := e.check(t); !errors.Is(err, ErrExpired) {
+		t.Fatalf("timestamp с expires == now просрочен (граница): %v", err)
+	}
+	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 1, tsVersion: 1, tsExpires: now.Add(time.Second)})
+	if _, err := e.check(t); err != nil {
+		t.Fatalf("expires на секунду позже — действителен: %v", err)
+	}
+	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 1, tsVersion: 1, tsExpires: now.Add(9 * 24 * time.Hour)})
+	if _, err := e.check(t); !errors.Is(err, ErrTimestampHorizon) {
+		t.Fatalf("окно свежести > 7 суток: %v", err)
 	}
 }
 
 func TestForeignSignatureRejected(t *testing.T) {
-	f := newFixture(t)
-	m := &memSource{files: map[string][]byte{}}
-	f.publish(t, m, 42, validOpts())
-	// Переподписать timestamp чужим ключом.
-	rogue := newSigner(t)
-	ts := map[string]any{
-		"type": "timestamp", "version": 1,
-		"expires": time.Now().Add(7 * 24 * time.Hour).UTC().Format(time.RFC3339),
-		"meta":    map[string]any{},
-	}
-	b, _ := json.Marshal(ts)
-	m.put("timestamp.json", rogue.signEnv(b, "t1"))
-	c := newClient(t, f, m, &State{})
-	_, err := c.Check(context.Background())
-	if err == nil {
-		t.Fatal("подпись чужим ключом принята")
+	e := newEnv(t, "0.5.0")
+	other := newRootDef(t, 1, farFuture, "k1") // чужие ключи
+	other.publish(t, e.src, relOpts{version: "0.6.0", serial: 1, tsVersion: 1})
+	if _, err := e.check(t); !errors.Is(err, ErrInsufficientSignatures) {
+		t.Fatalf("метаданные чужими ключами: %v", err)
 	}
 }
 
-func TestRootRotationByOldThreshold(t *testing.T) {
-	f := newFixture(t)
-	m := &memSource{files: map[string][]byte{}}
-	f.publish(t, m, 42, validOpts())
-	c := newClient(t, f, m, &State{})
-	if _, err := c.Check(context.Background()); err != nil {
-		t.Fatal(err)
+func TestArtifactRoleMissingFailsClosed(t *testing.T) {
+	d := newRootDef(t, 1, farFuture, "k1")
+	d.art = nil
+	src := newMem()
+	cl := &Client{Trust: mustTrust(t, d.selfSigned(t)), BootstrapSources: []Source{src}}
+	if _, err := cl.Check(context.Background()); !errors.Is(err, ErrArtifactRoleMissing) {
+		t.Fatalf("корень без роли artifact: %v", err)
 	}
-
-	// Ротация: root v2 c НОВЫМ ключом k2, подписан СТАРЫМ k1 (threshold 1).
-	newRootSigner := newSigner(t)
-	root2 := map[string]any{
-		"type": "root", "version": 2, "expires": time.Now().Add(365 * 24 * time.Hour).UTC().Format(time.RFC3339),
-		"keys": map[string]any{
-			"k2": map[string]any{"alg": "ed25519", "pub": b64pub(t, newRootSigner)},
-			"t1": map[string]any{"alg": "ed25519", "pub": b64pub(t, f.tsS)},
-			"r1": map[string]any{"alg": "ed25519", "pub": b64pub(t, f.manS)},
-		},
-		"roles": map[string]any{
-			"root":      map[string]any{"keyids": []string{"k2"}, "threshold": 1},
-			"timestamp": map[string]any{"keyids": []string{"t1"}, "threshold": 1},
-			"manifest":  map[string]any{"keyids": []string{f.srcRole}, "threshold": 1},
-			"sources":   map[string]any{"keyids": []string{f.srcRole}, "threshold": 1},
-		},
-	}
-	b2, _ := json.Marshal(root2)
-	// TUF §5.3: новый root подписывается СТАРЫМ порогом и НОВЫМ порогом.
-	// Одной подписи старым ключом недостаточно (см. M1 аудита round 2).
-	m.put("root.json", dualSign(t, b2, f.rootS, "k1", newRootSigner, "k2"))
-
-	res, err := c.Check(context.Background())
-	if err != nil {
-		t.Fatalf("ротация root: %v", err)
-	}
-	if res.Trust.Root().Version != 2 {
-		t.Fatalf("root остался v%d", res.Trust.Root().Version)
-	}
-
-	// Негативный случай: подпись только старым ключом НЕ переключает доверие
-	// (ошибка ротации не фейлит проверку — старый root остаётся валидным).
-	m.put("root.json", f.rootS.signEnv(b2, "k1"))
-	res2, err := newClient(t, f, m, &State{}).Check(context.Background())
-	if err != nil {
-		t.Fatalf("проверка со старым root: %v", err)
-	}
-	if res2.Trust.Root().Version != 1 {
-		t.Fatalf("ротация без подписи новыми ключами принята: root v%d", res2.Trust.Root().Version)
+	if _, err := (&Client{}).Check(context.Background()); !errors.Is(err, ErrNotConfigured) {
+		t.Fatalf("клиент без корня: %v", err)
 	}
 }
 
-func TestThresholdEnforced(t *testing.T) {
-	// Root с порогом 2 (k1,k2) — подпись только одним не проходит.
-	s1, s2 := newSigner(t), newSigner(t)
-	root := map[string]any{
-		"type": "root", "version": 1, "expires": time.Now().Add(365 * 24 * time.Hour).UTC().Format(time.RFC3339),
-		"keys": map[string]any{
-			"k1": map[string]any{"alg": "ed25519", "pub": b64pub(t, s1)},
-			"k2": map[string]any{"alg": "ed25519", "pub": b64pub(t, s2)},
-		},
-		"roles": map[string]any{"root": map[string]any{"keyids": []string{"k1", "k2"}, "threshold": 2}},
+func TestLargestValidTimestampWins(t *testing.T) {
+	e := newEnv(t, "0.5.0")
+	a, b := newMem(), newMem()
+	e.def.publish(t, a, relOpts{version: "0.6.0", serial: 2, tsVersion: 5})
+	e.def.publish(t, b, relOpts{version: "0.6.0", serial: 2, tsVersion: 9})
+	e.cl.BootstrapSources = []Source{a, b}
+	res, err := e.check(t)
+	if err != nil || res.Timestamp.Version != 9 || res.Metadata != Source(b) {
+		t.Fatalf("побеждает наибольшая версия: %+v %v", res, err)
 	}
-	b, _ := json.Marshal(root)
-	only1 := map[string]any{
-		"signed":     json.RawMessage(b),
-		"signatures": []any{map[string]any{"keyid": "k1", "sig": base64.StdEncoding.EncodeToString(ed25519.Sign(s1.priv, b))}},
-	}
-	one, _ := json.Marshal(only1)
-	if _, err := NewTrust(one); err == nil {
-		t.Fatal("threshold 2 не соблюдён: одна подпись принята")
+	if e.cl.State.TimestampVersion != 9 {
+		t.Fatalf("сохранённая версия timestamp: %d", e.cl.State.TimestampVersion)
 	}
 }
 
-func TestDownloadArtifactShaAndLength(t *testing.T) {
-	f := newFixture(t)
-	m := &memSource{files: map[string][]byte{}}
-	body := []byte("binary-content-here")
-	sum := sha256.Sum256(body)
-	man := map[string]any{
-		"type": "manifest", "product": "lavray-windows", "channel": "stable",
-		"serial": 7, "expires": time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339),
-		"app": map[string]any{"version": "1.2.0", "minUpgradeFrom": "1.0.0",
-			"assets": map[string]any{"windows-x64": map[string]any{
-				"path": "v1.2.0/app.exe", "sha256": hex.EncodeToString(sum[:]), "length": len(body), "minisig": "x",
-			}}},
-		"core":    map[string]any{"version": "1.14.1-lav.1", "minApp": "1.2.0"},
-		"presets": map[string]any{}, "geo": map[string]any{"path": "g", "sha256": strings.Repeat("a", 64), "length": 1},
-		"notes": map[string]any{"ru": "n"}, "mandatory": false,
+func TestTimestampRollbackRejected(t *testing.T) {
+	e := newEnv(t, "0.5.0")
+	e.cl.State.TimestampVersion = 10
+	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 2, tsVersion: 5})
+	if _, err := e.check(t); !errors.Is(err, ErrSerialRollback) {
+		t.Fatalf("откат timestamp: %v", err)
 	}
-	manB, _ := json.Marshal(man)
-	m.put("manifest-stable.json", f.manS.signEnv(manB, "r1"))
-	m.put("v1.2.0/app.exe", body)
-
-	trust, err := NewTrust(f.rootJSON(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := &Client{Trust: trust, BootstrapSources: []Source{m}}
-	if _, err := c.DownloadArtifact(context.Background(), m, mustParseManifest(t, f, manB), "windows-x64", 1<<20); err != nil {
-		t.Fatalf("download ok-case: %v", err)
-	}
-	// Битая длина.
-	m.put("v1.2.0/app.exe", append(body, 'x'))
-	if _, err := c.DownloadArtifact(context.Background(), m, mustParseManifest(t, f, manB), "windows-x64", 1<<20); err == nil {
-		t.Fatal("длина не сверена")
-	}
-	// Битый sha.
-	bad := append([]byte(nil), body...)
-	bad[0] ^= 0xff
-	m.put("v1.2.0/app.exe", bad)
-	if _, err := c.DownloadArtifact(context.Background(), m, mustParseManifest(t, f, manB), "windows-x64", 1<<20); err == nil {
-		t.Fatal("sha256 не сверен")
+	// второй источник со свежим timestamp спасает проверку: откатный источник игнорируется
+	fresh := newMem()
+	e.def.publish(t, fresh, relOpts{version: "0.6.0", serial: 2, tsVersion: 12})
+	e.cl.BootstrapSources = []Source{e.src, fresh}
+	if res, err := e.check(t); err != nil || res.Timestamp.Version != 12 {
+		t.Fatalf("валидный источник побеждает откатный: %v", err)
 	}
 }
 
-func mustParseManifest(t *testing.T, f fixture, signed []byte) *Manifest {
-	t.Helper()
-	env, err := ParseEnvelope(f.manS.signEnv(signed, "r1"))
+func TestAllSourcesFailIsCheckFailed(t *testing.T) {
+	e := newEnv(t, "0.5.0")
+	a, b := newMem(), newMem()
+	a.down, b.down = true, true
+	e.cl.BootstrapSources = []Source{a, b}
+	if _, err := e.check(t); !errors.Is(err, ErrNetwork) {
+		t.Fatalf("все источники недоступны: %v", err)
+	}
+	if e.cl.State.LastCheckedAt != 0 {
+		t.Fatal("last_checked_at меняется только успешной проверкой")
+	}
+}
+
+// X: медленный источник не задерживает выбор timestamp (опрос параллельный,
+// после первого ответа остальным даётся короткая отсрочка).
+func TestSlowSourceTimeout(t *testing.T) {
+	e := newEnv(t, "0.5.0")
+	slow, fast := newMem(), newMem()
+	e.def.publish(t, slow, relOpts{version: "0.6.0", serial: 1, tsVersion: 1})
+	e.def.publish(t, fast, relOpts{version: "0.6.0", serial: 1, tsVersion: 2})
+	slow.delay = time.Minute
+	start := time.Now()
+	res, err := FetchTimestamp(context.Background(), e.cl.Trust, []Source{slow, fast},
+		TimestampPolicy{Now: time.Now(), Timeout: 5 * time.Second, Grace: 100 * time.Millisecond})
+	if err != nil || res.Timestamp.Version != 2 {
+		t.Fatalf("медленный источник не должен блокировать: %v", err)
+	}
+	if time.Since(start) > 3*time.Second {
+		t.Fatalf("ожидание медленного источника: %v", time.Since(start))
+	}
+}
+
+func TestStableUserDoesNotSeeBeta(t *testing.T) {
+	e := newEnv(t, "0.5.0")
+	e.def.publish(t, e.src, relOpts{version: "0.6.0-rc.1", serial: 9, tsVersion: 3, channel: ChannelBeta})
+	res, err := e.check(t)
+	if err != nil || res.Manifest != nil || res.Availability.Available {
+		t.Fatalf("stable не видит beta (и это не ошибка): %+v %v", res, err)
+	}
+	e.cl.Channel = ChannelBeta
+	res, err = e.check(t)
+	if err != nil || !res.Availability.Available || res.Availability.Version != "0.6.0-rc.1" {
+		t.Fatalf("beta видит rc: %+v %v", res, err)
+	}
+	if e.cl.State.SerialBeta != 9 || e.cl.State.SerialStable != 0 {
+		t.Fatalf("serial по каналам: %+v", *e.cl.State)
+	}
+}
+
+func TestCheckPersistsRotatedRoot(t *testing.T) {
+	e := newEnv(t, "0.5.0")
+	r2 := newRootDef(t, 2, farFuture, "k2")
+	e.src.put("2.root.json", r2.rotatedFrom(t, e.def))
+	r2.publish(t, e.src, relOpts{version: "0.6.0", serial: 1, tsVersion: 1})
+	store := &fakeRootStore{}
+	e.cl.RootStore = store
+	if _, err := e.check(t); err != nil {
+		t.Fatalf("после ротации метаданные подписаны новыми ключами: %v", err)
+	}
+	if store.saves != 1 || e.cl.State.RootVersion != 2 {
+		t.Fatalf("принятый root.json сохраняется: saves=%d root=%d", store.saves, e.cl.State.RootVersion)
+	}
+}
+
+func TestThresholdEnforcedOnRotation(t *testing.T) {
+	r1 := newRootDef(t, 1, farFuture, "k1", "k2")
+	r1.threshold = 2
+	r2 := newRootDef(t, 2, farFuture, "k3")
+	src := newMem()
+	start := mustTrust(t, r1.selfSigned(t))
+	one := map[string]signer{"k1": r1.rootKeys["k1"], "k3": r2.rootKeys["k3"]}
+	src.put("2.root.json", envelope(t, r2.signed(t), one))
+	if _, _, err := AdvanceRoot(context.Background(), []Source{src}, start, time.Now()); !errors.Is(err, ErrRootRotation) {
+		t.Fatalf("одной подписи из двух недостаточно: %v", err)
+	}
+	both := map[string]signer{"k1": r1.rootKeys["k1"], "k2": r1.rootKeys["k2"], "k3": r2.rootKeys["k3"]}
+	src.put("2.root.json", envelope(t, r2.signed(t), both))
+	if got, _, err := AdvanceRoot(context.Background(), []Source{src}, start, time.Now()); err != nil || got.Root().Version != 2 {
+		t.Fatalf("порог 2 из 2: %v", err)
+	}
+}
+
+func TestClientDownloadStagesVerifiedInstaller(t *testing.T) {
+	e := newEnv(t, "0.5.0")
+	data := testData(150_000)
+	e.def.publish(t, e.src, relOpts{version: "0.6.0", serial: 1, tsVersion: 1, data: data})
+	res, err := e.check(t)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mf, err := ParseManifest(env.Signed)
-	if err != nil {
-		t.Fatal(err)
+	res.Mirrors = []ArtifactSource{e.src}
+	dir := t.TempDir()
+	var last int64
+	st, err := e.cl.Download(context.Background(), res, dir, func(done, _ int64) { last = done })
+	if err != nil || st.Version != "0.6.0" || last != int64(len(data)) {
+		t.Fatalf("Download: %+v %v last=%d", st, err, last)
 	}
-	return mf
+	if got, _ := os.ReadFile(st.Path); string(got) != string(data) {
+		t.Fatal("содержимое staging")
+	}
+	// подмена trusted comment (другая версия) — установщик отвергается и не остаётся
+	res.Manifest.App.Version = "9.9.9"
+	if _, err := e.cl.Download(context.Background(), res, t.TempDir(), nil); !errors.Is(err, ErrMinisigTrustedComment) {
+		t.Fatalf("версия не совпала с подписанным заявлением: %v", err)
+	}
+	// не доступно — скачивать нечего
+	res.Availability.Available = false
+	if _, err := e.cl.Download(context.Background(), res, t.TempDir(), nil); !errors.Is(err, ErrNoCheck) {
+		t.Fatalf("нет обновления: %v", err)
+	}
+}
+
+func TestSourcesJSONAddsMirrors(t *testing.T) {
+	e := newEnv(t, "0.5.0")
+	doc := []byte(`{"type":"sources","version":1,"expires":"` + farFuture.UTC().Format(time.RFC3339) +
+		`","artifacts":["https://mirror-a.invalid/dl"],"metadata":["https://mirror-m.invalid/meta"]}`)
+	e.src.put("sources.json", envelope(t, doc, map[string]signer{"r1": e.def.man}))
+	srcs, signed := e.cl.fetchSources(context.Background(), time.Now())
+	if signed == nil || len(srcs) != 2 || len(mirrors(signed, e.cl.BootstrapSources, nil)) != 2 {
+		t.Fatalf("подписанный список добавляет зеркала: srcs=%d signed=%v", len(srcs), signed)
+	}
+	// список, подписанный чужим ключом, игнорируется
+	e.src.put("sources.json", envelope(t, doc, map[string]signer{"r1": newSigner(t)}))
+	if srcs, signed = e.cl.fetchSources(context.Background(), time.Now()); signed != nil || len(srcs) != 1 {
+		t.Fatalf("чужой sources.json: srcs=%d", len(srcs))
+	}
 }

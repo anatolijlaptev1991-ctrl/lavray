@@ -3192,6 +3192,11 @@ type UpdateServiceClient interface {
 	// Порядок сети: сначала через активный туннель, затем напрямую; DNS через
 	// DoH ядра; последний рабочий источник запоминается (§5). «Проверка не
 	// удалась» ≠ «обновлений нет» (принцип 7) — состояние last_checked_at.
+	// Ошибки: UNAVAILABLE — все источники недоступны (last_checked_at не
+	// меняется); FAILED_PRECONDITION с причиной в начале сообщения («<причина>: …»):
+	// not_configured (в сборке нет корня доверия), bad_signature, expired,
+	// serial_rollback, wrong_product, wrong_channel, root_rotation,
+	// artifact_role_missing.
 	CheckUpdates(context.Context, *connect.Request[lavrayv1.CheckUpdatesRequest]) (*connect.Response[lavrayv1.CheckUpdatesResponse], error)
 	// Скачать выбранные компоненты: стрим прогресса (байты, скорость, докачка
 	// Range, 2 ретрая; проверка Content-Length/sha256/minisign на КАЖДОМ
@@ -3316,6 +3321,11 @@ type UpdateServiceHandler interface {
 	// Порядок сети: сначала через активный туннель, затем напрямую; DNS через
 	// DoH ядра; последний рабочий источник запоминается (§5). «Проверка не
 	// удалась» ≠ «обновлений нет» (принцип 7) — состояние last_checked_at.
+	// Ошибки: UNAVAILABLE — все источники недоступны (last_checked_at не
+	// меняется); FAILED_PRECONDITION с причиной в начале сообщения («<причина>: …»):
+	// not_configured (в сборке нет корня доверия), bad_signature, expired,
+	// serial_rollback, wrong_product, wrong_channel, root_rotation,
+	// artifact_role_missing.
 	CheckUpdates(context.Context, *connect.Request[lavrayv1.CheckUpdatesRequest]) (*connect.Response[lavrayv1.CheckUpdatesResponse], error)
 	// Скачать выбранные компоненты: стрим прогресса (байты, скорость, докачка
 	// Range, 2 ретрая; проверка Content-Length/sha256/minisign на КАЖДОМ

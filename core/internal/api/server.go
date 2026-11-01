@@ -22,7 +22,6 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/presets"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/subs"
-	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/updates"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/version"
 )
 
@@ -37,6 +36,8 @@ type Deps struct {
 	// возвращается клиенту как есть (cmd подставляет проверку повышения на
 	// Windows; nil — не проверять).
 	TunCheck func() error
+	// Updater — обновления сборки (корень доверия, источники); nil — не настроены.
+	Updater *UpdaterConf
 }
 
 // Server — реализация сервисов W6. Один экземпляр на процесс; горутинно-
@@ -57,10 +58,8 @@ type Server struct {
 	// (W8 headless подставит выход из процесса; здесь — только остановка).
 	OnShutdown func(ctx context.Context)
 
-	// appVersion — версия приложения (оболочка сообщает при старте);
-	// updater — TUF-lite клиент (nil до конфигурации обвязкой W8-релиза).
-	appVersion string
-	updater    *updates.Client
+	// upd — подсистема обновлений (updater_wiring.go).
+	upd updaterState
 	// acct — учёт трафика сессии (traffic_accountant.go, T-79).
 	acct trafficAccountant
 	// presetRepo — пользовательские наборы маршрутов (preset_repo.go, T-80).
@@ -86,9 +85,6 @@ type Server struct {
 	lookupIP    func(ctx context.Context, host string) (netip.Addr, error)
 	// resolve — резолвер и пределы ResolveDomains (resolver.go); нулевой — системный.
 	resolve resolveConfig
-
-	// ---- обновления: доступ к общему клиенту сериализуется ----
-	updMu sync.Mutex
 
 	backup *backupService // зашифрованная копия (backup_service.go)
 	// migration — перенос из NekoBox (migration_service.go).
@@ -140,7 +136,7 @@ func NewServer(d Deps) *Server {
 		ipURL:            publicIPURL,
 		ipProbeURL:       "https://1.1.1.1/",
 		dial:             (&net.Dialer{}).DialContext,
-		appVersion:       version.Version,
+		upd:              newUpdaterState(d.Updater),
 		tunCheck:         d.TunCheck,
 		healthRetryDelay: healthRetryDelay,
 		healthTimeout:    healthCheckTimeout,

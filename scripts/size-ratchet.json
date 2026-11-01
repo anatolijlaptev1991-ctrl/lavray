@@ -1,5 +1,5 @@
 {
-  "core/cmd/lavray-core/main.go": 257,
+  "core/cmd/lavray-core/main.go": 255,
   "core/internal/api/agent.go": 401,
   "core/internal/api/connect_health.go": 290,
   "core/internal/api/convert.go": 852,
@@ -8,12 +8,11 @@
   "core/internal/api/profile_service.go": 445,
   "core/internal/api/routing_settings_service.go": 402,
   "core/internal/api/selfcheck.go": 309,
-  "core/internal/api/server.go": 365,
+  "core/internal/api/server.go": 361,
   "core/internal/api/subscription_service.go": 350,
   "core/internal/api/test_instance.go": 410,
   "core/internal/api/test_probes.go": 239,
   "core/internal/api/test_service.go": 288,
-  "core/internal/api/update_service.go": 312,
   "core/internal/cfgbuild/builder.go": 565,
   "core/internal/cfgbuild/dns.go": 285,
   "core/internal/cfgbuild/merge.go": 286,
@@ -44,8 +43,7 @@
   "core/internal/subs/scheduler.go": 262,
   "core/internal/subs/subscriber.go": 510,
   "core/internal/testsocks/socks.go": 304,
-  "core/internal/updates/client.go": 429,
-  "core/internal/updates/meta.go": 803,
+  "core/internal/updates/meta.go": 470,
   "design/tools/a11y_sweep.py": 276,
   "shell/src/agent.rs": 249,
   "shell/src/autostart.rs": 461,
@@ -80,6 +78,5 @@
   "ui/src/screens/screen_servers.tsx": 1032,
   "ui/src/screens/screen_settings.tsx": 947,
   "ui/src/screens/screen_subscriptions.tsx": 597,
-  "ui/src/screens/screen_updates.tsx": 313,
   "ui/src/test-utils/coreStub.ts": 210
 }

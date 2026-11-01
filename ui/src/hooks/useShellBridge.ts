@@ -2,7 +2,7 @@
 
 // useShellBridge.ts — всё, что UI отдаёт оболочке и получает от неё по
 // состоянию подключения: трей (T-45), системные уведомления и глобальное
-// сочетание «подключить / отключить» (T-82).
+// сочетание «подключить / отключить» (T-82), сигнал здоровья после обновления (T-75).
 import { useEffect, useRef } from 'react';
 import { CoreState } from '../gen/lavray_pb';
 import { listenGlobalHotkey } from '../lib/globalHotkey';
@@ -11,6 +11,7 @@ import { readShellPrefs } from '../lib/shellPrefs';
 import type { TrayAction, TrayStatusInput } from '../lib/tray';
 import { useI18n } from './useI18n';
 import { useTrayBridge } from './useTrayBridge';
+import { isCoreReady, useUpdateHealth } from './useUpdateHealth';
 
 /** Переходное состояние: глобальное сочетание в это время ничего не делает. */
 export function isTransitional(state: CoreState): boolean {
@@ -53,11 +54,13 @@ export function useGlobalHotkey(state: CoreState, onToggle: () => void): void {
 }
 
 export function useShellBridge(
-  status: TrayStatusInput,
+  status: TrayStatusInput & { readonly coreVersion?: string | undefined },
   onTrayAction: (action: TrayAction) => void,
   onToggleConnect: () => void,
 ): void {
   useTrayBridge(status, onTrayAction);
   useNotifications(status.state);
   useGlobalHotkey(status.state, onToggleConnect);
+  // T-75: после обновления оболочка ждёт от новой версии сигнал «здорова».
+  useUpdateHealth(isCoreReady(status));
 }

@@ -12975,8 +12975,12 @@ type ComponentState struct {
 	Phase         ComponentState_Phase   `protobuf:"varint,2,opt,name=phase,proto3,enum=lavray.v1.ComponentState_Phase" json:"phase,omitempty"`
 	StagedVersion *string                `protobuf:"bytes,3,opt,name=staged_version,json=stagedVersion,proto3,oneof" json:"staged_version,omitempty"`
 	Error         *string                `protobuf:"bytes,4,opt,name=error,proto3,oneof" json:"error,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Откат доступен, только если оболочка хранит прошлый установщик
+	// (<данные>/updates/previous); его версия — previous_version (T-75).
+	RollbackAvailable bool    `protobuf:"varint,5,opt,name=rollback_available,json=rollbackAvailable,proto3" json:"rollback_available,omitempty"`
+	PreviousVersion   *string `protobuf:"bytes,6,opt,name=previous_version,json=previousVersion,proto3,oneof" json:"previous_version,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *ComponentState) Reset() {
@@ -13033,6 +13037,20 @@ func (x *ComponentState) GetStagedVersion() string {
 func (x *ComponentState) GetError() string {
 	if x != nil && x.Error != nil {
 		return *x.Error
+	}
+	return ""
+}
+
+func (x *ComponentState) GetRollbackAvailable() bool {
+	if x != nil {
+		return x.RollbackAvailable
+	}
+	return false
+}
+
+func (x *ComponentState) GetPreviousVersion() string {
+	if x != nil && x.PreviousVersion != nil {
+		return *x.PreviousVersion
 	}
 	return ""
 }
@@ -13397,9 +13415,13 @@ func (x *DownloadProgress) GetBps() float64 {
 }
 
 type VerificationPassed struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Component     UpdateComponent        `protobuf:"varint,1,opt,name=component,proto3,enum=lavray.v1.UpdateComponent" json:"component,omitempty"`
-	Version       string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Component UpdateComponent        `protobuf:"varint,1,opt,name=component,proto3,enum=lavray.v1.UpdateComponent" json:"component,omitempty"`
+	Version   string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// Путь проверенной копии в staging-каталоге (<данные>/updates/staging) и её
+	// sha256 (hex): оболочка при установке заново сверяет оба значения (T-75).
+	StagedPath    string `protobuf:"bytes,3,opt,name=staged_path,json=stagedPath,proto3" json:"staged_path,omitempty"`
+	Sha256        string `protobuf:"bytes,4,opt,name=sha256,proto3" json:"sha256,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13448,10 +13470,24 @@ func (x *VerificationPassed) GetVersion() string {
 	return ""
 }
 
+func (x *VerificationPassed) GetStagedPath() string {
+	if x != nil {
+		return x.StagedPath
+	}
+	return ""
+}
+
+func (x *VerificationPassed) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
 type VerificationFailed struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Component     UpdateComponent        `protobuf:"varint,1,opt,name=component,proto3,enum=lavray.v1.UpdateComponent" json:"component,omitempty"`
-	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"` // "sha256_mismatch" | "bad_signature" | "truncated" | "serial_rollback" | "wrong_product" | "wrong_channel" | "expired" | ...
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"` // "sha256_mismatch" | "bad_signature" | "truncated" | "serial_rollback" | "wrong_product" | "wrong_channel" | "expired" | "not_configured" | ...
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -16314,12 +16350,14 @@ const file_lavray_proto_rawDesc = "" +
 	"\x0eMaxSerialEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\x03R\x05value:\x028\x01B\x17\n" +
-	"\x15_timestamp_expires_ms\"\xa0\x03\n" +
+	"\x15_timestamp_expires_ms\"\x94\x04\n" +
 	"\x0eComponentState\x128\n" +
 	"\tcomponent\x18\x01 \x01(\x0e2\x1a.lavray.v1.UpdateComponentR\tcomponent\x125\n" +
 	"\x05phase\x18\x02 \x01(\x0e2\x1f.lavray.v1.ComponentState.PhaseR\x05phase\x12*\n" +
 	"\x0estaged_version\x18\x03 \x01(\tH\x00R\rstagedVersion\x88\x01\x01\x12\x19\n" +
-	"\x05error\x18\x04 \x01(\tH\x01R\x05error\x88\x01\x01\"\xb8\x01\n" +
+	"\x05error\x18\x04 \x01(\tH\x01R\x05error\x88\x01\x01\x12-\n" +
+	"\x12rollback_available\x18\x05 \x01(\bR\x11rollbackAvailable\x12.\n" +
+	"\x10previous_version\x18\x06 \x01(\tH\x02R\x0fpreviousVersion\x88\x01\x01\"\xb8\x01\n" +
 	"\x05Phase\x12\x15\n" +
 	"\x11PHASE_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
@@ -16331,7 +16369,8 @@ const file_lavray_proto_rawDesc = "" +
 	"\x17PHASE_READY_FOR_RESTART\x10\x06\x12\x10\n" +
 	"\fPHASE_FAILED\x10\aB\x11\n" +
 	"\x0f_staged_versionB\b\n" +
-	"\x06_error\"\x89\x01\n" +
+	"\x06_errorB\x13\n" +
+	"\x11_previous_version\"\x89\x01\n" +
 	"\x18VerifyLocalUpdateRequest\x12%\n" +
 	"\x0einstaller_path\x18\x01 \x01(\tR\rinstallerPath\x12!\n" +
 	"\fminisig_path\x18\x02 \x01(\tR\vminisigPath\x12#\n" +
@@ -16357,10 +16396,13 @@ const file_lavray_proto_rawDesc = "" +
 	"\x10downloaded_bytes\x18\x02 \x01(\x03R\x0fdownloadedBytes\x12\x1f\n" +
 	"\vtotal_bytes\x18\x03 \x01(\x03R\n" +
 	"totalBytes\x12\x10\n" +
-	"\x03bps\x18\x04 \x01(\x01R\x03bps\"h\n" +
+	"\x03bps\x18\x04 \x01(\x01R\x03bps\"\xa1\x01\n" +
 	"\x12VerificationPassed\x128\n" +
 	"\tcomponent\x18\x01 \x01(\x0e2\x1a.lavray.v1.UpdateComponentR\tcomponent\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\tR\aversion\"f\n" +
+	"\aversion\x18\x02 \x01(\tR\aversion\x12\x1f\n" +
+	"\vstaged_path\x18\x03 \x01(\tR\n" +
+	"stagedPath\x12\x16\n" +
+	"\x06sha256\x18\x04 \x01(\tR\x06sha256\"f\n" +
 	"\x12VerificationFailed\x128\n" +
 	"\tcomponent\x18\x01 \x01(\x0e2\x1a.lavray.v1.UpdateComponentR\tcomponent\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x98\x01\n" +

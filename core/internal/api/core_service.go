@@ -28,9 +28,9 @@ import (
 // Connect / Disconnect / Restart
 // ============================================================================
 
-// startRun — общая логика запуска Connect и RestartProfile: сборка конфига,
+// startRunLocked — общая логика запуска Connect и RestartProfile: сборка конфига,
 // валидаторы, старт менеджера. Возвращает статус и предупреждения сборки.
-func (s *Server) startRun(ctx context.Context, profile *model.Profile, mode lavrayv1.ConnectMode) (*lavrayv1.CoreStatus, []string, error) {
+func (s *Server) startRunLocked(ctx context.Context, profile *model.Profile, mode lavrayv1.ConnectMode) (*lavrayv1.CoreStatus, []string, error) {
 	// Гейт внешних ядер (решение №5): naive/custom-external off по умолчанию.
 	if profile.Type == model.TypeNaive || profile.Type == model.TypeCustomExternal {
 		if !s.settingBool("enable_external_cores") {

@@ -13209,8 +13209,13 @@ type WebModeStatus struct {
 	SessionTtlMinutes         int32   `protobuf:"varint,6,opt,name=session_ttl_minutes,json=sessionTtlMinutes,proto3" json:"session_ttl_minutes,omitempty"` // простой (сессия гаснет без запросов)
 	ActiveSessions            int32   `protobuf:"varint,7,opt,name=active_sessions,json=activeSessions,proto3" json:"active_sessions,omitempty"`
 	SessionAbsoluteTtlMinutes int32   `protobuf:"varint,8,opt,name=session_absolute_ttl_minutes,json=sessionAbsoluteTtlMinutes,proto3" json:"session_absolute_ttl_minutes,omitempty"` // предел жизни сессии (7 суток)
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	// Первичная настройка требует код (SetupFirstAdminRequest.setup_code): панель
+	// слушает не loopback, и без кода администратора создал бы первый, кто её открыл.
+	// Код лежит в файле web-setup-code каталога данных (права 0600) и в журнале ядра
+	// указан только путь к нему.
+	SetupCodeRequired bool `protobuf:"varint,9,opt,name=setup_code_required,json=setupCodeRequired,proto3" json:"setup_code_required,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *WebModeStatus) Reset() {
@@ -13299,10 +13304,18 @@ func (x *WebModeStatus) GetSessionAbsoluteTtlMinutes() int32 {
 	return 0
 }
 
+func (x *WebModeStatus) GetSetupCodeRequired() bool {
+	if x != nil {
+		return x.SetupCodeRequired
+	}
+	return false
+}
+
 type SetupFirstAdminRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Username      string                 `protobuf:"bytes,1,opt,name=username,proto3" json:"username,omitempty"`
-	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"` // политика минимальной длины — в валидаторе ядра
+	Password      string                 `protobuf:"bytes,2,opt,name=password,proto3" json:"password,omitempty"`                          // политика минимальной длины — в валидаторе ядра
+	SetupCode     *string                `protobuf:"bytes,3,opt,name=setup_code,json=setupCode,proto3,oneof" json:"setup_code,omitempty"` // обязателен при WebModeStatus.setup_code_required
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -13347,6 +13360,13 @@ func (x *SetupFirstAdminRequest) GetUsername() string {
 func (x *SetupFirstAdminRequest) GetPassword() string {
 	if x != nil {
 		return x.Password
+	}
+	return ""
+}
+
+func (x *SetupFirstAdminRequest) GetSetupCode() string {
+	if x != nil && x.SetupCode != nil {
+		return *x.SetupCode
 	}
 	return ""
 }
@@ -15119,7 +15139,7 @@ const file_lavray_proto_rawDesc = "" +
 	"\x04code\x18\x02 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12 \n" +
 	"\vrecoverable\x18\x04 \x01(\bR\vrecoverable\"\x19\n" +
-	"\x17GetWebModeStatusRequest\"\xa6\x03\n" +
+	"\x17GetWebModeStatusRequest\"\xd6\x03\n" +
 	"\rWebModeStatus\x12(\n" +
 	"\x10web_mode_enabled\x18\x01 \x01(\bR\x0ewebModeEnabled\x127\n" +
 	"\x18first_run_setup_required\x18\x02 \x01(\bR\x15firstRunSetupRequired\x12!\n" +
@@ -15129,11 +15149,15 @@ const file_lavray_proto_rawDesc = "" +
 	"\x16tls_fingerprint_sha256\x18\x05 \x01(\tH\x00R\x14tlsFingerprintSha256\x88\x01\x01\x12.\n" +
 	"\x13session_ttl_minutes\x18\x06 \x01(\x05R\x11sessionTtlMinutes\x12'\n" +
 	"\x0factive_sessions\x18\a \x01(\x05R\x0eactiveSessions\x12?\n" +
-	"\x1csession_absolute_ttl_minutes\x18\b \x01(\x05R\x19sessionAbsoluteTtlMinutesB\x19\n" +
-	"\x17_tls_fingerprint_sha256\"P\n" +
+	"\x1csession_absolute_ttl_minutes\x18\b \x01(\x05R\x19sessionAbsoluteTtlMinutes\x12.\n" +
+	"\x13setup_code_required\x18\t \x01(\bR\x11setupCodeRequiredB\x19\n" +
+	"\x17_tls_fingerprint_sha256\"\x83\x01\n" +
 	"\x16SetupFirstAdminRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
-	"\bpassword\x18\x02 \x01(\tR\bpassword\"\x7f\n" +
+	"\bpassword\x18\x02 \x01(\tR\bpassword\x12\"\n" +
+	"\n" +
+	"setup_code\x18\x03 \x01(\tH\x00R\tsetupCode\x88\x01\x01B\r\n" +
+	"\v_setup_code\"\x7f\n" +
 	"\fLoginRequest\x12\x1a\n" +
 	"\busername\x18\x01 \x01(\tR\busername\x12\x1a\n" +
 	"\bpassword\x18\x02 \x01(\tR\bpassword\x12&\n" +
@@ -16021,6 +16045,7 @@ func file_lavray_proto_init() {
 		(*UpdateEvent_RolledBack)(nil),
 	}
 	file_lavray_proto_msgTypes[173].OneofWrappers = []any{}
+	file_lavray_proto_msgTypes[174].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[175].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[176].OneofWrappers = []any{}
 	file_lavray_proto_msgTypes[183].OneofWrappers = []any{}

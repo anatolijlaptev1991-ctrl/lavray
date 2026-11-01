@@ -2068,11 +2068,17 @@ message WebModeStatus {
   int32 session_ttl_minutes = 6; // простой (сессия гаснет без запросов)
   int32 active_sessions = 7;
   int32 session_absolute_ttl_minutes = 8; // предел жизни сессии (7 суток)
+  // Первичная настройка требует код (SetupFirstAdminRequest.setup_code): панель
+  // слушает не loopback, и без кода администратора создал бы первый, кто её открыл.
+  // Код лежит в файле web-setup-code каталога данных (права 0600) и в журнале ядра
+  // указан только путь к нему.
+  bool setup_code_required = 9;
 }
 
 message SetupFirstAdminRequest {
   string username = 1;
   string password = 2; // политика минимальной длины — в валидаторе ядра
+  optional string setup_code = 3; // обязателен при WebModeStatus.setup_code_required
 }
 
 message LoginRequest {
@@ -2156,3 +2162,5 @@ message RevokeSessionRequest {
 //   WebModeStatus: + session_absolute_ttl_minutes=8. SessionInfo: + last_seen_ms=6,
 //   current=7, remote_addr=8. WebSession.token всегда пуст. Сервис UNIMPLEMENTED
 //   без `--web-bind`. GatewayService: на десктопе INVALID_ARGUMENT.
+//   Защита первичной настройки: WebModeStatus.setup_code_required=9,
+//   SetupFirstAdminRequest.setup_code=3 (PERMISSION_DENIED при неверном коде).

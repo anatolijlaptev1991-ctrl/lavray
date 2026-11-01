@@ -386,7 +386,10 @@ jobs:
         working-directory: core
         env:
           CGO_ENABLED: '0'
-        run: go build -tags with_webui -o ../lavray-core ./cmd/lavray-core
+        # Только with_webui: для входа в панель sing-box не нужен (NopRunner).
+        run: |
+          tags=with_webui
+          go build -tags "$tags" -o ../lavray-core ./cmd/lavray-core
       - name: "Chromium для Playwright"
         working-directory: ui
         run: npx playwright install --with-deps chromium

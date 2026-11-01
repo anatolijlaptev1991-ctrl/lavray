@@ -8727,6 +8727,8 @@ export const WebSessionService: GenService<{
  *                         connection_active
  *   RESOURCE_EXHAUSTED  — backup_too_large
  *   ABORTED             — backup_busy (идёт другая операция с копией)
+ *   INTERNAL            — backup_failed (прочий сбой; подробности только в журнале
+ *                         ядра, в ответе пути и тексты ошибок ОС не передаются)
  *
  * @generated from service lavray.v1.BackupService
  */

@@ -9,6 +9,7 @@ package api
 import (
 	"context"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/backup"
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
 
 // backupWireLimit — предел одного сообщения BackupService на проводе. Копия до
@@ -35,13 +37,29 @@ type backupService struct {
 	// sealOpts — параметры Seal; нулевые = боевые (тесты ставят быстрые).
 	sealOpts backup.Options
 	now      func() time.Time
-	// onAcquired вызывается сразу после захвата семафора (точка синхронизации
-	// для тестов).
+	// maxSnapshot — предел размера снимка БД; 0 = backup.MaxSnapshotBytes
+	// (тесты ставят малый).
+	maxSnapshot int64
+	// guard: замена данных держит его на запись, запуск подключения — на чтение
+	// (connect_guard.go). Подключение не может начаться посреди замены.
+	guard sync.RWMutex
+	// onAcquired вызывается сразу после захвата семафора, onReplacing — под
+	// guard перед заменой данных (точки синхронизации для тестов).
 	onAcquired func()
+	// beforeLock — перед захватом guard (между проверкой копии и заменой).
+	beforeLock func()
+	// onReplacing: ошибка прерывает замену (инъекция сбоя в тестах).
+	onReplacing func() error
+	// removeDir удаляет временный каталог; тест подставляет сбой.
+	removeDir func(dir string) error
 }
 
+// newBackupService создаёт сервис и подметает временные каталоги прошлых
+// запусков (backup_tempdir.go).
 func newBackupService(s *Server) *backupService {
-	return &backupService{srv: s, now: time.Now}
+	b := &backupService{srv: s, now: time.Now, removeDir: store.RemoveTempDir}
+	b.startupCleanup()
+	return b
 }
 
 // handlerOptions — общие опции хендлеров плюс свой, более высокий предел
@@ -76,7 +94,7 @@ func (b *backupService) ExportBackup(ctx context.Context, req *connect.Request[l
 	defer release()
 	data, doc, err := b.buildBackup(ctx, req.Msg.Password)
 	if err != nil {
-		return nil, err
+		return nil, b.failed("создание", err)
 	}
 	b.srv.logs.Logf(logs.LevelInfo, logs.SourceAPI,
 		"резервная копия создана: групп %d, профилей %d, подписок %d, %d байт", doc.Groups, doc.Profiles, doc.Subscriptions, len(data))
@@ -102,7 +120,7 @@ func (b *backupService) PreviewBackup(ctx context.Context, req *connect.Request[
 	defer release()
 	opened, cleanup, err := b.openBackup(ctx, req.Msg.Data, req.Msg.Password)
 	if err != nil {
-		return nil, err
+		return nil, b.failed("просмотр", err)
 	}
 	defer cleanup()
 	return connect.NewResponse(opened.doc.summaryProto()), nil
@@ -134,12 +152,12 @@ func (b *backupService) ImportBackup(ctx context.Context, req *connect.Request[l
 	}
 	opened, cleanup, err := b.openBackup(ctx, m.Data, m.Password)
 	if err != nil {
-		return nil, err
+		return nil, b.failed("восстановление", err)
 	}
 	defer cleanup()
 	res, err := b.replaceAll(ctx, opened)
 	if err != nil {
-		return nil, err
+		return nil, b.failed("восстановление", err)
 	}
 	b.srv.logs.Logf(logs.LevelInfo, logs.SourceAPI,
 		"резервная копия восстановлена: групп %d, профилей %d, подписок %d", res.Restored.Groups, res.Restored.Profiles, res.Restored.Subscriptions)

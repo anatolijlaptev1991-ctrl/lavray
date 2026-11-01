@@ -25,9 +25,14 @@ func RootName(v int64) string { return fmt.Sprintf("%d.root.json", v) }
 // ErrExpired (просроченный встроенный корень, у которого есть валидный
 // преемник, не мешает).
 func AdvanceRoot(ctx context.Context, srcs []Source, start *Trust, now time.Time) (*Trust, int, error) {
+	return AdvanceRootWith(ctx, srcs, start, now, QueryPolicy{})
+}
+
+// AdvanceRootWith — AdvanceRoot с явными пределами опроса источников.
+func AdvanceRootWith(ctx context.Context, srcs []Source, start *Trust, now time.Time, p QueryPolicy) (*Trust, int, error) {
 	cur, steps := start, 0
 	for steps < MaxRootSteps {
-		next, err := nextRoot(ctx, srcs, cur)
+		next, err := nextRoot(ctx, srcs, cur, p)
 		if err != nil {
 			return nil, steps, err
 		}
@@ -44,24 +49,23 @@ func AdvanceRoot(ctx context.Context, srcs []Source, start *Trust, now time.Time
 }
 
 // nextRoot — следующий корень или nil, если ни у одного источника его нет.
-func nextRoot(ctx context.Context, srcs []Source, cur *Trust) (*Trust, error) {
-	name := RootName(cur.Root().Version + 1)
+// Источники опрашиваются параллельно; побеждает первый (по порядку списка)
+// кандидат, прошедший проверку.
+func nextRoot(ctx context.Context, srcs []Source, cur *Trust, p QueryPolicy) (*Trust, error) {
+	answers := queryAll(ctx, srcs, RootName(cur.Root().Version+1), p)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	var rejected error
-	for _, s := range srcs {
-		raw, err := s.Fetch(ctx, name)
-		if err != nil || len(raw) == 0 {
-			if ctx.Err() != nil {
-				return nil, ctx.Err()
-			}
-			continue // 404 или сеть: проверим остальные источники
+	for _, a := range answers {
+		if a.err != nil || len(a.body) == 0 {
+			continue // 404 или сеть: смотрим остальные источники
 		}
-		next, verr := cur.VerifyRootUpdate(raw)
+		next, verr := cur.VerifyRootUpdate(a.body)
 		if verr == nil {
 			return next, nil
 		}
-		if rejected == nil {
-			rejected = verr
-		}
+		rejected = firstErr(rejected, verr)
 	}
 	if rejected != nil {
 		return nil, fmt.Errorf("%w: %v", ErrRootRotation, rejected)

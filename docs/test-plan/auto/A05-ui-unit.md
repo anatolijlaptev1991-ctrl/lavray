@@ -10,7 +10,7 @@
 
 ## Цель
 
-Выполнить задание `node` CI: установить зависимости строго по `package-lock.json`, проверить типы, линтер, все тесты vitest и сборку. Покрывает весь UI релиза (до 0.9.0 включительно), в том числе: подтверждение custom-полей (`CustomFieldsDiffDialog`, `no-client-confirmed`), экран «Соединения» и хуки трафика (T-79), настройки окна, трея, уведомлений и глобального сочетания (T-82), показ и импорт QR (T-77), «Сохранить как», режим агентов MCP, следование окна за состоянием ядра (`proxyFollow`), словари пяти языков, доступность диалогов и порядок Tab.
+Выполнить задание `node` CI: установить зависимости строго по `package-lock.json`, проверить типы, линтер, все тесты vitest и сборку. Покрывает весь UI релиза (до 0.9.1 включительно, в том числе ленивую загрузку экранов, диалога импорта и словарей), в том числе: подтверждение custom-полей (`CustomFieldsDiffDialog`, `no-client-confirmed`), экран «Соединения» и хуки трафика (T-79), настройки окна, трея, уведомлений и глобального сочетания (T-82), показ и импорт QR (T-77), «Сохранить как», режим агентов MCP, следование окна за состоянием ядра (`proxyFollow`), словари пяти языков, доступность диалогов и порядок Tab.
 
 ## Предусловия
 
@@ -81,7 +81,7 @@ npx vitest run 2>&1 | Tee-Object -FilePath C:\lavray-test\results\A05-vitest.txt
 "vitest exit=$LASTEXITCODE"
 ```
 
-   Ожидается: `vitest exit=0`; строки `Test Files  173 passed (173)` и `Tests  1444 passed (1444)` (эталон на `v0.9.0`; числа в цветном выводе окружены кодами цвета, ищите подстроки `173 passed` и `1444 passed`). Меньше эталона — запишите разницу; провалы и `skipped` — `FAIL`/`WARN` ниже.
+   Ожидается: `vitest exit=0`; строки `Test Files  173 passed (173)` и `Tests  1444 passed (1444)` (эталон на `v0.9.0`, на `v0.9.1` не меньше: добавлены тесты ленивой загрузки; числа в цветном выводе окружены кодами цвета, ищите подстроки `173 passed` и `1444 passed`). Меньше эталона — запишите разницу; провалы и `skipped` — `FAIL`/`WARN` ниже.
 
    Проверка отсутствия пропущенных и упавших:
 
@@ -102,12 +102,15 @@ $guards = 'src/no-client-confirmed.test.ts','src/dead-code.test.ts','src/build-c
           'src/components/settings/GlobalHotkeyRow.test.tsx','src/components/settings/ShellPrefRows.test.tsx',
           'src/components/AgentsSettings.test.tsx','src/components/dialog-a11y.test.tsx','src/components/a11y-controls.test.tsx',
           'src/components/WindowChrome.tab-order.test.tsx','src/rpc-usage.test.ts'
+# Охранные файлы 0.9.1 (ленивые экраны, диалог импорта и словари, D-3); в теге v0.9.0 их нет.
+$guards091 = 'src/app/lazyViews.test.ts','src/app/bootError.test.ts','src/components/LazyBoundary.test.tsx','src/lib/i18nLoad.test.ts','src/main.langload.test.tsx'
+if ($env:LAVRAY_REF -ne 'v0.9.0') { $guards = $guards + $guards091 }
 $missing = $guards | Where-Object { -not (Test-Path $_) }
 "отсутствуют: " + $(if ($missing) { $missing -join ', ' } else { 'нет' })
 npx vitest run $guards 2>&1 | Select-String -Pattern 'Test Files|Tests ' | ForEach-Object { $_.Line.Trim() }
 ```
 
-   Ожидается: `отсутствуют: нет`; в итоговых строках `24 passed (24)` файлов и ни одного `failed`. Отсутствующий файл — `FAIL` (его удалили или переименовали: сверьтесь с `git log --diff-filter=D --name-only -- ui/src`).
+   Ожидается: `отсутствуют: нет`; в итоговых строках `24 passed (24)` файлов (на `v0.9.1` и позже `29 passed (29)`: добавлены пять файлов `$guards091`) и ни одного `failed`. Отсутствующий файл — `FAIL` (его удалили или переименовали: сверьтесь с `git log --diff-filter=D --name-only -- ui/src`).
 
 8. Словари пяти языков содержат одни и те же ключи (отдельно от прототипа, который проверяет A01).
 
@@ -118,6 +121,8 @@ foreach ($d in $dicts) { '{0}: {1} строк' -f $d, (Get-Content "src/lib/dict
 $banned = 'Ha' + 'pp'   # слово собрано из частей: scripts/check-public-docs.sh запрещает его в документах
 Select-String -Path src/lib/dictionaries/*.ts -Pattern $banned -CaseSensitive -Quiet
 ```
+
+   Словари загружаются лениво (`dictionaryRegistry.ts`, `i18nLoad.ts`): на `v0.9.1` загрузку проверяют `src/lib/i18nLoad.test.ts` и `src/main.langload.test.tsx` из шага 7, а файлы `src/lib/dictionaries/<язык>.ts` по-прежнему лежат в дереве.
 
    Ожидается: оба теста `passed`; пять словарей непустые; последняя команда `False` (запрещённого слова, которое собирает переменная `$banned`, в видимых текстах словарей нет; ключ в нижнем регистре в этой проверке не считается).
 
@@ -141,7 +146,7 @@ if (Test-Path scripts\check_bundle_budget.py) {
   python scripts\check_bundle_budget.py
   "bundle-budget exit=$LASTEXITCODE"
 } else {
-  'в теге нет scripts/check_bundle_budget.py: бюджет меряем по строкам vite'
+  'в теге v0.9.0 нет scripts/check_bundle_budget.py: бюджет меряем по строкам vite'
   $line = Select-String -Path C:\lavray-test\results\A05-build.txt -Pattern 'assets/index-\S+\.js' | Select-Object -First 1
   $line.Line
   if ($line.Line -match 'gzip:\s*([\d.,]+)\s*kB') {
@@ -153,9 +158,9 @@ if (Test-Path scripts\check_bundle_budget.py) {
 Set-Location (Join-Path $wt 'ui')
 ```
 
-   Если в теге есть `scripts/check_bundle_budget.py`, запустите его (`python scripts\check_bundle_budget.py --help` покажет аргументы): код выхода `0` означает «в бюджете». Иначе меряйте по строке vite для `assets/index-*.js` (`gzip: <N> kB`) и прибавьте gzip-размеры чанков, перечисленных в `modulepreload` (их строки vite печатает там же; если `modulepreload` в `index.html` нет, считается только входной чанк).
+   Для `v0.9.1` и позже скрипт `scripts/check_bundle_budget.py` есть в теге, и запускать нужно именно его (аргументы по умолчанию меряют `ui/dist` после `npm run build`; `python scripts\check_bundle_budget.py --help` покажет остальные). Он считает gzip всех JS-файлов, которые `index.html` тянет сразу (`<script type="module">`, `modulepreload` и их статические импорты), а динамические `import()` (экраны, диалог импорта, словари) в сумму не входят. Код выхода `0` — в бюджете, `1` — превышен, `2` — `ui/dist` не читается или в `index.html` нет модульных скриптов (это ошибка проверки, не успех). На `v0.9.1` ожидается около 146 КиБ gzip для главного чанка при бюджете 250 (строка `check_bundle_budget: JS до первого кадра <N> KiB gzip при бюджете 250 — …`).
 
-   Вердикт К9 зависит от тега. Для `v0.9.0` (коммит `8093656`) превышение известно: входной чанк `index-*.js` 360,33 КБ gzip, это известный дефект D-3 (исправлен в 0.9.1 разделением кода), записывается как `FAIL-known` (серьёзность `minor`, новым дефектом не заводится). Для более поздних тегов бюджет обязан выполняться: превышение 250 КБ gzip — `FAIL`. Вывод vite о слишком большом чанке (`Some chunks are larger than 500 kB`) сам по себе вердикта не определяет: решает измеренный gzip.
+   Вердикт К9 зависит от тега. На `v0.9.1` и позже бюджет обязан выполняться: код выхода `0`, превышение или ошибка проверки — `FAIL`. Для `v0.9.0` (коммит `8093656`) скрипта нет, измерение идёт по строке vite, и превышение известно: входной чанк `index-*.js` 360,33 КБ gzip, это известный дефект D-3 (исправлен в 0.9.1 ленивой загрузкой), на v0.9.0 записывается как `FAIL-known` (серьёзность `minor`, новым дефектом не заводится). Вывод vite о слишком большом чанке (`Some chunks are larger than 500 kB`) сам по себе вердикта не определяет: решает измеренный gzip.
 
 10. Обязательные запреты репозитория на уровне исходников UI.
 
@@ -175,11 +180,11 @@ git grep -n "customFieldsConfirmed: true" -- ui/src ':!*.test.ts' ':!*.test.tsx'
 | К2 | `npx tsc --noEmit` вернул 0 | `tsc exit=0` |
 | К3 | `npx eslint . --max-warnings=0` вернул 0 | `eslint exit=0` |
 | К4 | `npx vitest run` вернул 0; не меньше 173 файлов и 1444 тестов; пропущенных нет | шаг 6 |
-| К5 | Все 24 охранных файла существуют и проходят (в том числе `src/rpc-usage.test.ts`: каждый RPC из proto вызывается в интерфейсе или внесён в `rpc-unused.allow.ts` с причиной, 6 тестов) | шаг 7 |
+| К5 | Все 24 охранных файла (на `v0.9.1` и позже 29) существуют и проходят (в том числе `src/rpc-usage.test.ts`: каждый RPC из proto вызывается в интерфейсе или внесён в `rpc-unused.allow.ts` с причиной, 6 тестов) | шаг 7 |
 | К6 | Тесты словарей `passed`; запрещённого слова в словарях нет | шаг 8 |
 | К7 | `npm run build` вернул 0, файлов `.map` нет | шаг 9 |
 | К8 | В `ui/src` нет `customFieldsConfirmed: true` | шаг 10 |
-| К9 | Загружаемый сразу JS (входной чанк + `modulepreload`) не больше 250 КБ gzip. На `v0.9.0` — известное превышение D-3 (360,33 КБ gzip): `FAIL-known`; на более поздних тегах обязано проходить | шаг 9 |
+| К9 | Загружаемый сразу JS (входной чанк + `modulepreload`) не больше 250 КБ gzip. На `v0.9.0` было известное превышение D-3 (360,33 КБ gzip): `FAIL-known`; на `v0.9.1` и позже обязано проходить (около 146 КиБ), код выхода `check_bundle_budget.py` `0` | шаг 9 |
 
 ## Что собрать
 
@@ -198,4 +203,4 @@ Test-Path C:\lavray-test\wt\A05
 
 ## Отчёт
 
-`results/A05.md` по `templates/REPORT.md`: статусы 10 шагов, К1–К9, итоговые числа vitest, фактический gzip-размер входного чанка и чанков `modulepreload`. Провал К2–К5 — `major`; К6 — `major` (расхождение переводов); К7 — `major`; К8 — `critical` (клиент может выставить подтверждение custom-полей); К9 — `minor` (на `v0.9.0` это известный D-3).
+`results/A05.md` по `templates/REPORT.md`: статусы 10 шагов, К1–К9, итоговые числа vitest, фактический gzip-размер входного чанка и чанков `modulepreload`. Провал К2–К5 — `major`; К6 — `major` (расхождение переводов); К7 — `major`; К8 — `critical` (клиент может выставить подтверждение custom-полей); К9 — `major` на `v0.9.1` и позже (бюджет бандла блокирует merge, `docs/TEST-PLAN.md`, раздел 2) и `minor` на `v0.9.0` (там это известный D-3).

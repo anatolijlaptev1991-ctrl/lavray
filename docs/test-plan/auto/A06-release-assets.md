@@ -5,7 +5,7 @@
 | ID | A06 |
 | Слой | авто |
 | Время | 8–12 минут (скачивание около 150 МБ: два Linux-ядра по 55–60 МБ) |
-| Зависимости | `01-ENVIRONMENT.md`, разделы 4–7 (релиз скачивается из публичного `lavray-windows` без входа; вход `gh` нужен только для клона `src\`); для шага 16 — WSL2 с Ubuntu (на ПК без WSL только этот шаг получает `BLOCKED`) |
+| Зависимости | `01-ENVIRONMENT.md`, разделы 4–7 (релиз скачивается из публичного `lavray-windows`; GitHub CLI работает только после `gh auth login` или с `GH_TOKEN`); для шага 16 — WSL2 с Ubuntu (на ПК без WSL только этот шаг получает `BLOCKED`) |
 | Опасность | нет: файлы только скачиваются и читаются. Из скачанного запускаются `go version -m` (читает метаданные) и, в шаге 16, Linux-ядро внутри WSL на loopback в `/tmp` (без сети, без прав администратора) |
 
 ## Цель
@@ -14,7 +14,8 @@
 
 ## Предусловия
 
-- Релиз лежит в публичном репозитории `anatolijlaptev1991-ctrl/lavray-windows` (`$env:LAVRAY_RELEASES_REPO`): `gh release view` и `gh release download` работают и без входа. `gh auth status` нужен для клона `lavray` (`src\`; приватный): без него не получить коммит тега для шагов 8 и 14 (`BLOCKED` для этих шагов, остальные идут).
+- Релиз лежит в публичном репозитории `anatolijlaptev1991-ctrl/lavray-windows` (`$env:LAVRAY_RELEASES_REPO`). GitHub CLI без входа не работает даже с публичными репозиториями: без `gh auth login` (или `GH_TOKEN`) нельзя ни скачать ассеты, ни склонировать `src\`, и файл получает `BLOCKED`.
+- Выпуски до `v0.9.1` включительно собраны до перезаписи истории (`docs/HISTORY-REWRITE.md`): в `vcs.revision` их ядер записан прежний хэш коммита тега, он указан в таблице этого документа.
 - Go (для `go version -m`), PowerShell 7, Git.
 - Релиз `v0.9.1` может быть ещё не опубликован. Тогда шаги 2–17 для этой версии получают `BLOCKED` (причина: релиз не найден; снять может владелец, выпустив тег). В этом случае для проверки самого файла выполните «репетицию» на `v0.3.0` (шаги 1–12, только Windows: Linux-ассетов у неё нет): те же шаги с `$ver = '0.3.0'`; результат репетиции в итог файла не входит, но показывает, что команды рабочие.
 - Ожидаемые значения ниже заданы для версии 0.9.1; для репетиции подставляются `0.3.0` и размеры из шага 4. Теги ядра берутся из `core/BUILD_TAGS` клона на коммите тега (на `773b4e8`: `singbox_run,with_quic,with_gvisor,with_utls`).
@@ -161,13 +162,17 @@ $rev = [regex]::Match($info, 'vcs\.revision=([0-9a-f]{40})').Groups[1].Value
 "vcs.revision:       $rev"
 $tagCommit = (git -C $env:LAVRAY_SRC rev-parse "v$ver^{commit}" 2>$null)
 "коммит тега v${ver}:  $tagCommit"
-"ядро из коммита тега: " + ($rev -eq $tagCommit)
+# До v0.9.1 включительно: прежний хэш тега из таблицы docs/HISTORY-REWRITE.md (план клонирован с main)
+$history = Get-Content (Join-Path $env:LAVRAY_PLAN 'docs\HISTORY-REWRITE.md') -Raw -ErrorAction SilentlyContinue
+$legacy = [regex]::Match("$history", "\| v$([regex]::Escape($ver)) \| ([0-9a-f]{40}) \|").Groups[1].Value
+"прежний хэш тега:   $legacy"
+"ядро из коммита тега: " + [bool]($rev -and ($rev -eq $tagCommit -or $rev -eq $legacy))
 "vcs.modified:       " + [regex]::Match($info, 'vcs\.modified=(\w+)').Groups[1].Value + '   (INFO: true ожидаемо, см. ниже)'
 ```
 
-   Ожидается: все пять строк `True`; `vcs.revision` равен коммиту тега `v0.9.1` (не `HEAD` клона; тег подтянул `git fetch --tags` шага 1). Версию форка в строке `форк закреплён` сверяйте с `replace` в `core/go.mod` на теге: если пин другой, подставьте его (запишите в отклонения).
+   Ожидается: все пять строк `True`; `vcs.revision` равен коммиту тега `v0.9.1` (не `HEAD` клона; тег подтянул `git fetch --tags` шага 1) или прежнему хэшу этого тега из `docs/HISTORY-REWRITE.md`: ядра 0.9.1 собраны до перезаписи истории. Версию форка в строке `форк закреплён` сверяйте с `replace` в `core/go.mod` на теге: если пин другой, подставьте его (запишите в отклонения).
 
-   **`vcs.modified` — только `INFO`**, не `WARN` и не `FAIL`: `true` у всех трёх ядер ожидаемо. Перед сборкой оба workflow выполняют `go mod tidy` с `GOFLAGS=-mod=mod` (так подтягивается приватный форк sing-box; `release-windows.yml`, `release-linux.yml`), а это правит `go.mod` и `go.sum`; Linux-сборка ещё копирует `ui/dist` в `core/internal/web/dist`. Дерево поэтому считается изменённым. Обязательно совпадение `vcs.revision` с коммитом тега.
+   **`vcs.modified` — только `INFO`**, не `WARN` и не `FAIL`: `true` у всех трёх ядер ожидаемо. Перед сборкой оба workflow выполняют `go mod tidy` с `GOFLAGS=-mod=mod` (так подтягивается приватный форк sing-box; `release-windows.yml`, `release-linux.yml`), а это правит `go.mod` и `go.sum`; Linux-сборка ещё копирует `ui/dist` в `core/internal/web/dist`. Дерево поэтому считается изменённым. Обязательно совпадение `vcs.revision` с коммитом тега (или его прежним хэшем, см. предусловия).
 
    **Флаг версии `-X …/internal/version.Version=<версия>` здесь не проверяется.** Оба workflow передают его через `-ldflags`, но при `-trimpath` Go не записывает `-ldflags` в метаданные сборки (go.dev/issue/52372), поэтому `go version -m` его не показывает, и проверка «версия в ldflags» не может быть `True` (ложный `FAIL`, проверено на релизе). Версию доказывают: шаг 9 (строка версии в бинарнике), шаг 16 (Linux-ядро в WSL, `coreVersion` = `0.9.1`) и A07 (Windows-ядро из этого же ZIP: `coreVersion` из `GetStatus`, часть А шаг `status.initial` и часть Б `ci_smoke.sh`).
 
@@ -200,7 +205,7 @@ if (-not $sigs) { 'minisig: нет (ожидаемо для 0.9.1, ключей 
 
     Ожидается для 0.9.1: `minisig: нет ... SKIPPED`. Если подписи есть, проверьте каждую `minisign -Vm <файл> -P <публичный ключ из SECURITY.md>`; публичный ключ берите из репозитория (`docs/SECURITY.md`), не из релиза.
 
-12. Копия релиза в основном репозитории `lavray` (необязательно; он приватный, нужен вход `gh`). Основной источник ассетов теперь публичный `lavray-windows` (шаги 2–4), поэтому этот шаг только сверяет размеры, если копия есть.
+12. Копия релиза в основном репозитории `lavray` (необязательно). Основной источник ассетов теперь публичный `lavray-windows` (шаги 2–4), поэтому этот шаг только сверяет размеры, если копия есть.
 
 ```powershell
 $mirror = gh release view "v$ver" -R $env:LAVRAY_REPO --json assets 2>&1
@@ -234,6 +239,8 @@ foreach ($pair in @(@('lavray-core-linux-amd64', '0x3e'), @('lavray-core-linux-a
 $base = (Get-Content (Join-Path $env:LAVRAY_SRC 'core\BUILD_TAGS') -Raw).Trim()
 $want = "$base,with_webui"
 $tagCommit = (git -C $env:LAVRAY_SRC rev-parse "v$ver^{commit}" 2>$null)
+$history = Get-Content (Join-Path $env:LAVRAY_PLAN 'docs\HISTORY-REWRITE.md') -Raw -ErrorAction SilentlyContinue
+$legacy = [regex]::Match("$history", "\| v$([regex]::Escape($ver)) \| ([0-9a-f]{40}) \|").Groups[1].Value
 foreach ($arch in 'amd64', 'arm64') {
   $f = Join-Path $dir "lavray-core-linux-$arch"
   $info = (go version -m $f) -join "`n"
@@ -246,12 +253,12 @@ foreach ($arch in 'amd64', 'arm64') {
   "[$arch] GOOS=linux GOARCH=${arch}: " + [bool]($info -match 'GOOS=linux' -and $info -match "GOARCH=$arch")
   "[$arch] trimpath, без cgo: " + [bool]($info -match '-trimpath=true' -and $info -match 'CGO_ENABLED=0')
   $rev = [regex]::Match($info, 'vcs\.revision=([0-9a-f]{40})').Groups[1].Value
-  "[$arch] vcs.revision: $rev; равен коммиту тега: " + ($rev -eq $tagCommit)
+  "[$arch] vcs.revision: $rev; равен коммиту тега: " + [bool]($rev -and ($rev -eq $tagCommit -or $rev -eq $legacy))
   "[$arch] vcs.modified (INFO, true ожидаемо): " + [regex]::Match($info, 'vcs\.modified=(\w+)').Groups[1].Value
 }
 ```
 
-    Ожидается: у обеих архитектур все строки `True`, `vcs.revision` равен коммиту тега; `vcs.modified=true` — `INFO` (см. шаг 8: `go mod tidy` и копия `ui/dist` в сборке). Теги обязаны содержать `with_webui` и **каждый** тег из `core/BUILD_TAGS`: ядро без `with_webui` покажет вместо веб-панели страницу «панель не встроена» (`FAIL`, `major`); без `singbox_run` — ядро без настоящего sing-box (`FAIL`, `critical`).
+    Ожидается: у обеих архитектур все строки `True`, `vcs.revision` равен коммиту тега или его прежнему хэшу (шаг 8); `vcs.modified=true` — `INFO` (см. шаг 8: `go mod tidy` и копия `ui/dist` в сборке). Теги обязаны содержать `with_webui` и **каждый** тег из `core/BUILD_TAGS`: ядро без `with_webui` покажет вместо веб-панели страницу «панель не встроена» (`FAIL`, `major`); без `singbox_run` — ядро без настоящего sing-box (`FAIL`, `critical`).
 
 15. `ui-dist.tar.gz`: содержимое интерфейса веб-панели.
 
@@ -329,7 +336,7 @@ $assetsMeta = Get-ChildItem $dir -Recurse -Include 'timestamp.json', 'manifest-*
 | К7 | Ядро: теги из `BUILD_TAGS`, `-trimpath`, без cgo, форк закреплён, ревизия равна коммиту тега (`vcs.modified=true` — `INFO`) | шаг 8, все пять строк `True` |
 | К8 | В Windows-ядре есть строка версии 0.9.1 (шаг 9), а `coreVersion` через API равна `0.9.1` (A07, К6); флаг `-X` через `go version -m` не проверяется: `-trimpath` скрывает `-ldflags` | шаг 9, A07 |
 | К9 | Подписи: `NotSigned` или `Valid`, без `HashMismatch`/`NotTrusted` | шаг 10 |
-| К10 | Linux-ядра: ELF нужной архитектуры, теги `BUILD_TAGS` + `with_webui` точно, `trimpath`, без cgo, `vcs.revision` равен коммиту тега | шаги 13–14 |
+| К10 | Linux-ядра: ELF нужной архитектуры, теги `BUILD_TAGS` + `with_webui` точно, `trimpath`, без cgo, `vcs.revision` равен коммиту тега или его прежнему хэшу | шаги 13–14 |
 | К11 | `ui-dist.tar.gz`: `index.html` есть, все ссылки на `assets/` разрешаются, карт нет | шаг 15 |
 | К12 | Linux-ядро запускается (справка с кодом 2, `GetStatus`, `healthz=200`, без токена `401`) и сообщает `coreVersion = 0.9.1` | шаг 16 (`BLOCKED` без WSL) |
 | К13 | Отсутствие `meta/` зафиксировано и не считается провалом | шаг 17 |

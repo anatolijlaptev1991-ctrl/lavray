@@ -134,7 +134,7 @@ PASS: код выхода `0` и существует файл `C:\lavray-test\T
 # env.ps1: переменные плана. Секреты здесь НЕ хранятся.
 $env:LAVRAY_TP_ROOT   = 'C:\lavray-test'
 $env:LAVRAY_REPO      = 'anatolijlaptev1991-ctrl/lavray'
-# Релизы (ассеты) лежат в публичном lavray-windows: gh release download работает без входа. Клон lavray приватный: gh auth login.
+# Оба репозитория (lavray, lavray-windows) публичные, но GitHub CLI без входа не работает: нужен gh auth login или GH_TOKEN.
 $env:LAVRAY_RELEASES_REPO = 'anatolijlaptev1991-ctrl/lavray-windows'
 $env:LAVRAY_VERSION   = '0.9.1'
 $env:LAVRAY_FROM_VERSION = '0.3.0'
@@ -176,7 +176,7 @@ function Test-TestPc {
 | `LAVRAY_TESTPC_CONFIRMED` | `YES-DISPOSABLE`: «это тестовый ПК» | страж (раздел 3) |
 | `LAVRAY_TEST_SUB_URL` | ссылка тестовой подписки провайдера (секрет) | M02, часть шагов M03 |
 | `LAVRAY_ALLOW_TUN` | `1`: разрешить включение TUN на этом ПК (сеть пропадёт на время теста) | часть D файла A11, M03 (TUN) |
-| `GH_TOKEN` | токен GitHub только для чтения репозитория; либо владелец заранее выполнил `gh auth login` | клонирование приватного `lavray` (скачивание ассетов из публичного `lavray-windows` входа не требует) |
+| `GH_TOKEN` | токен GitHub только для чтения; либо владелец заранее выполнил `gh auth login` | все команды `gh`: клон `src\` и `plan\`, скачивание ассетов. GitHub CLI без входа не работает даже с публичными репозиториями |
 
 Проверка наличия без печати значений:
 
@@ -188,7 +188,7 @@ foreach ($n in 'LAVRAY_TESTPC_CONFIRMED','LAVRAY_TEST_SUB_URL','LAVRAY_ALLOW_TUN
 
 ## 5. Установка инструментов
 
-Репозиторий `lavray` приватный, поэтому доступ к нему нужен для клонирования `src\` и `plan\` (на них держатся почти все файлы): если `gh auth status` завершается кодом, отличным от нуля, и `GH_TOKEN` не задан, прогон получает итог `BLOCKED` с просьбой к владельцу выполнить `gh auth login`. Релизы публикуются в публичном `anatolijlaptev1991-ctrl/lavray-windows`: `gh release download v0.9.1 --repo anatolijlaptev1991-ctrl/lavray-windows` работает и без входа (оркестратор не вводит и не запрашивает пароли и токены).
+Репозитории `lavray` и `lavray-windows` публичные, но GitHub CLI без входа не выполняет ни одной команды: ни клон `src\` и `plan\` (на них держатся почти все файлы), ни `gh release download`. Если `gh auth status` завершается кодом, отличным от нуля, и `GH_TOKEN` не задан, прогон получает итог `BLOCKED` с просьбой к владельцу выполнить `gh auth login` (оркестратор не вводит и не запрашивает пароли и токены). Релизы публикуются в `anatolijlaptev1991-ctrl/lavray-windows`.
 
 ```powershell
 gh auth status

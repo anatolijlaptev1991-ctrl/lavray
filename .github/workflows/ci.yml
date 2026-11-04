@@ -429,6 +429,8 @@ jobs:
         run: python scripts/size_ratchet.py
       - name: SPDX-заголовки
         run: python scripts/add-spdx.py --check
+      - name: "README без опровергнутых и устаревших утверждений"
+        run: sh scripts/check-readme-claims.sh
       - name: "RPC без интерфейса (каждый RPC вызывается в ui/src или внесён с причиной)"
         run: python scripts/rpc_usage.py
       - name: "Окончания строк: в индексе только LF"

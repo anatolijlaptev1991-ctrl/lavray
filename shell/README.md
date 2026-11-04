@@ -9,18 +9,17 @@ Rust-оболочка на **Tauri 2**: нативный каркас прило
   здоровья (heartbeat), перезапуск с экспоненциальной задержкой, гарантированное завершение
   (никаких осиротевших процессов), передача порта/токена ConnectRPC.
 - **Нативный каркас:** окно (мин. 880×560, стартовое 960×640), кастомный титл-бар, трей-иконка (шеврон-глиф 16px),
-  системный прокси. В разработке: автозапуск, deep-link `lavray://`, обновления приложения
-  (автомат состояний `src/updater.rs` без сети; см. `../docs/UPDATE-SYSTEM.md`).
+  системный прокси (включая VPN-подключения Windows), автозапуск, горячие клавиши, уведомления,
+  системные диалоги, снимок экрана для QR, установка обновлений и откат (`src/update/`, см.
+  `../docs/UPDATE-SYSTEM.md` §12). В разработке: deep-link `lavray://`.
 - **Шлюз IPC:** UI (React) ↔ команды Tauri ↔ ConnectRPC ядра; стриминг статистики/логов.
 
 ## Платформенная упаковка — вне этого репозитория
 
 Оболочка и сборка приложения общие, но упаковка/CI/релизы живут в платформенных репозиториях:
-[lavray-windows](https://github.com/anatolijlaptev1991-ctrl/lavray-windows),
-[lavray-linux](https://github.com/anatolijlaptev1991-ctrl/lavray-linux),
-[lavray-macos](https://github.com/anatolijlaptev1991-ctrl/lavray-macos),
-[lavray-openwrt](https://github.com/anatolijlaptev1991-ctrl/lavray-openwrt)
-(там оболочка не нужна — веб-панель из `../ui/`).
+[lavray-windows](https://github.com/anatolijlaptev1991-ctrl/lavray-windows) (публичный),
+lavray-linux, lavray-macos и lavray-openwrt (закрытые, в разработке; в OpenWrt оболочка
+не нужна — веб-панель из `../ui/`).
 
 ## Справочные документы
 
@@ -35,8 +34,9 @@ Rust-оболочка на **Tauri 2**: нативный каркас прило
 UI↔shell, версия в константе; имя `ipc` свободно под Connect-клиент ядра),
 `src/updater.rs` (автомат обновлений §8.3). Интеграция с Go-ядром — `coreproc::driver`
 (запуск реального процесса `lavray-core`; `MockCoreProcess` — для тестов); окно грузит
-собранный UI (`build.frontendDist = ../ui/dist` в `tauri.conf.json`). `src/tray.rs` и
-`src/updater.rs` — спецификация меню и автомат состояний, к рантайму пока не подключены.
+собранный UI (`build.frontendDist = ../ui/dist` в `tauri.conf.json`). Меню `src/tray.rs`
+подключено к рантайму через `src/tray_ui.rs`; `src/updater.rs` — автомат состояний и константы,
+которые использует установщик обновлений `src/update/`.
 
 ```sh
 cargo build                      # отладочная сборка

@@ -15,18 +15,30 @@
 
 ## 2. Защита веток (при переводе в публичный режим; на бесплатном плане для приватных недоступно)
 
-Для каждого из 5 репо, ветка `main`:
+**Сделано 2026-11-04 для `lavray` и `lavray-windows`** (Settings → Rules → Rulesets), без обходов:
+
+- `main: no force-push, no deletion` — ветка по умолчанию, правила `deletion` и `non_fast_forward`;
+- `release tags v*: no deletion, no move` — теги `refs/tags/v*`, правила `deletion` и `update`
+  (тег можно создать, но нельзя удалить или перенести).
 
 ```bash
-gh api -X POST repos/anatolijlaptev1991-ctrl/<repo>/rulesets -f name='main-protection' \
-  -F target=branch -F 'conditions[ref_name][includes][]=refs/heads/main' \
-  -F 'rules[][type]=required_status_checks' -F 'rules[][parameters][strict]=true' \
-  -f 'rules[][parameters][check_contexts][]=CI' \
-  -F 'rules[][type]=pull_request' -F 'rules[][parameters][required_approving_review_count]=1' \
-  -F 'rules[][type]=no_force_pushes' -F 'rules[][type]=delete_allowance'
+gh api -X POST repos/anatolijlaptev1991-ctrl/<repo>/rulesets --input - <<'EOF'
+{"name":"main: no force-push, no deletion","target":"branch","enforcement":"active","bypass_actors":[],
+ "conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"],"exclude":[]}},
+ "rules":[{"type":"deletion"},{"type":"non_fast_forward"}]}
+EOF
+gh api -X POST repos/anatolijlaptev1991-ctrl/<repo>/rulesets --input - <<'EOF'
+{"name":"release tags v*: no deletion, no move","target":"tag","enforcement":"active","bypass_actors":[],
+ "conditions":{"ref_name":{"include":["refs/tags/v*"],"exclude":[]}},
+ "rules":[{"type":"deletion"},{"type":"update"}]}
+EOF
 ```
 
-(Или через UI: Settings → Rules → Rulesets.) Смысл: прямой push в main закрыт (работа через PR + зелёный CI), force-push и удаление запрещены.CODEOWNERS — после появления второго контрибьютора.
+Обязательные PR с одобрением и зелёный CI как правило пока не включены: мейнтейнер один (своё PR
+не одобрить), слияние в `main` идёт только на зелёном CI по процессу. Включить `pull_request` и
+`required_status_checks`, когда появится второй мейнтейнер; тогда же CODEOWNERS. Остальные
+3 репо — при переводе в публичные. Ограничение Environment `release-signing` тегами `v*` —
+шаг церемонии ключей (`UPDATE-SYSTEM.md` §12.4 п.6).
 
 ## 3. Имя и товарный знак
 
@@ -66,6 +78,9 @@ gh api -X POST repos/anatolijlaptev1991-ctrl/<repo>/rulesets -f name='main-prote
 - [ ] CI-матрица зелёная во всех 5 репо; бенчмарки с бюджетами подключены.
 - [ ] Первый `root.json` сгенерирован и зашит в сборки; тест «обновление поверх старой версии» и «битое обновление → откат» зелёные (UPDATE-SYSTEM §7).
 - [ ] Нейтральный язык README (без «обход блокировок» — LICENSES §2, формулировки для РФ).
+- [ ] README (корневой, `core/`, `shell/`, `ui/`) сверен с выпуском в обе стороны: нет
+  преувеличений (`sh scripts/check-readme-claims.sh`, джоб `hygiene`) и нет занижений — всё,
+  что вошло в выпуск, убрано из «В разработке» и есть в «Возможностях».
 - [ ] Пресет RU переименован внутри («LAV Preset RU» — без «bypass» в именах файлов).
 
 ---

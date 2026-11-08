@@ -486,3 +486,10 @@ fn update_commands_need_no_extra_capability() {
     .unwrap();
     assert!(!caps.contains("update"), "лишнее право на обновление");
 }
+
+/// `LaunchArgs` копируется побитово: `from_env()` передаётся дальше по значению.
+#[test]
+fn launch_args_is_copy() {
+    fn assert_copy<T: Copy>() {}
+    assert_copy::<lavray_shell::launch::LaunchArgs>();
+}

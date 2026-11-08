@@ -897,3 +897,27 @@ fn a_failed_task_creation_keeps_the_run_value() {
         "состояние не испорчено"
     );
 }
+
+#[test]
+fn task_file_encoding_is_bom_plus_utf16_le_with_exact_capacity_bound() {
+    // 1, 2, 3 и 4 байта UTF-8; последний — суррогатная пара UTF-16.
+    let xml = "aы€😀";
+    let bytes = encode_task_file(xml);
+    assert_eq!(
+        bytes,
+        [
+            0xFF, 0xFE, // BOM
+            0x61, 0x00, // a
+            0x4B, 0x04, // ы
+            0xAC, 0x20, // €
+            0x3D, 0xD8, 0x00, 0xDE, // 😀
+        ]
+    );
+    assert!(bytes.capacity() >= bytes.len());
+    assert_eq!(
+        bytes.capacity(),
+        2 + xml.len() * 2,
+        "ёмкость заказана заранее"
+    );
+    assert_eq!(encode_task_file("").as_slice(), [0xFF, 0xFE]);
+}

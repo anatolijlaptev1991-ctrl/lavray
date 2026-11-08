@@ -27,14 +27,14 @@ impl WindowControl for FakeWindow {
 }
 
 struct FakeScreen {
-    result: Result<Frame, String>,
+    result: RefCell<Option<Result<Frame, String>>>,
     log: RefCell<Vec<&'static str>>,
 }
 
 impl FakeScreen {
     fn answering(result: Result<Frame, String>) -> Self {
         Self {
-            result,
+            result: RefCell::new(Some(result)),
             log: RefCell::new(Vec::new()),
         }
     }
@@ -43,7 +43,10 @@ impl FakeScreen {
 impl ScreenCapturer for FakeScreen {
     fn capture(&self) -> Result<Frame, String> {
         self.log.borrow_mut().push("capture");
-        self.result.clone()
+        self.result
+            .borrow_mut()
+            .take()
+            .expect("кадр отдают один раз")
     }
 }
 
@@ -65,7 +68,7 @@ fn hides_waits_captures_then_shows() {
     let frame = scan_screen(&screen, &win, HIDE_DELAY, |d| slept.borrow_mut().push(d)).unwrap();
     assert_eq!(*win.log.borrow(), ["hide", "show"]);
     assert_eq!(*screen.log.borrow(), ["capture"]);
-    assert_eq!(frame, solid(4, 2, [1, 2, 3, 255]));
+    assert_eq!(frame, encode_payload(&solid(4, 2, [1, 2, 3, 255])));
     assert_eq!(*slept.borrow(), [HIDE_DELAY]);
 }
 
@@ -112,19 +115,22 @@ fn failed_hide_does_not_capture() {
 #[test]
 fn downscale_max_side() {
     let big = solid(3840, 2160, [10, 20, 30, 255]);
-    let small = downscale(&big, MAX_SIDE);
+    let small = downscale(big, MAX_SIDE);
     assert_eq!((small.width, small.height), (1920, 1080));
     assert_eq!(small.rgba.len(), 1920 * 1080 * 4);
     assert_eq!(&small.rgba[..4], &[10, 20, 30, 255]);
-    let odd = downscale(&solid(4001, 10, [0; 4]), MAX_SIDE);
+    let odd = downscale(solid(4001, 10, [0; 4]), MAX_SIDE);
     assert!(odd.width <= MAX_SIDE, "{}", odd.width);
 }
 
 #[test]
 fn downscale_keeps_small_frames() {
     let f = solid(2000, 1000, [1; 4]);
-    assert_eq!(downscale(&f, MAX_SIDE), f, "ровно на пределе");
-    assert_eq!(downscale(&solid(5, 5, [1; 4]), MAX_SIDE).width, 5);
+    let ptr = f.rgba.as_ptr();
+    let same = downscale(f, MAX_SIDE);
+    assert_eq!(same, solid(2000, 1000, [1; 4]), "ровно на пределе");
+    assert_eq!(same.rgba.as_ptr(), ptr, "буфер перемещён, не скопирован");
+    assert_eq!(downscale(solid(5, 5, [1; 4]), MAX_SIDE).width, 5);
 }
 
 #[test]
@@ -141,7 +147,7 @@ fn downscale_averages_blocks() {
         ]
         .concat(),
     };
-    assert_eq!(downscale(&f, 1).rgba, vec![127, 127, 127, 255]);
+    assert_eq!(downscale(f, 1).rgba, vec![127, 127, 127, 255]);
 }
 
 #[test]
@@ -172,5 +178,46 @@ fn gdi_capture_nonzero_dimensions() {
             assert_eq!(f.rgba.len(), (f.width * f.height * 4) as usize);
         }
         Err(e) => assert!(!e.is_empty()),
+    }
+}
+
+/// Градиентный кадр: блоки усреднения различаются, ошибка индексации видна.
+fn gradient(width: u32, height: u32) -> Frame {
+    let rgba = (0..width * height * 4)
+        .map(|i| (i * 7 % 251) as u8)
+        .collect();
+    Frame {
+        width,
+        height,
+        rgba,
+    }
+}
+
+#[test]
+fn payload_golden_bytes_when_downscaled() {
+    // 4×2 при max_side=2: k=2, результат 2×1; блоки усредняются по каналам.
+    let f = Frame {
+        width: 4,
+        height: 2,
+        rgba: vec![
+            0, 0, 0, 255, 4, 8, 12, 255, 100, 0, 0, 255, 100, 0, 0, 255, //
+            0, 0, 0, 255, 4, 8, 12, 255, 100, 0, 0, 255, 100, 0, 0, 255,
+        ],
+    };
+    let out = downscale_payload(f, 2);
+    assert_eq!(
+        out,
+        [2, 0, 0, 0, 1, 0, 0, 0, 2, 4, 6, 255, 100, 0, 0, 255],
+        "заголовок LE + усреднённые пиксели"
+    );
+}
+
+#[test]
+fn payload_matches_downscale_then_encode() {
+    for (w, h, max) in [(9, 7, 4), (13, 3, 5), (6, 6, 6), (5, 4, 100), (7, 11, 0)] {
+        let expected = encode_payload(&downscale(gradient(w, h), max));
+        let got = downscale_payload(gradient(w, h), max);
+        assert_eq!(got, expected, "{w}x{h} max={max}");
+        assert_eq!(got.capacity(), got.len(), "ёмкость точная");
     }
 }

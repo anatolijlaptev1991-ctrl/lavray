@@ -118,3 +118,35 @@ fn a_corrupt_file_reads_as_no_heartbeat() {
     std::fs::write(dir.join("health.json"), b"{not json").unwrap();
     assert_eq!(HealthStore::new(&Layout::new(tmp.path())).read(), None);
 }
+
+/// Годный JSON, раздутый пробелами сверх предела, — испорченный файл; ровно
+/// на пределе файл ещё читается.
+#[test]
+fn an_oversized_file_reads_as_no_heartbeat() {
+    let tmp = TempDir::new("health-oversized");
+    let dir = tmp.path().join("updates");
+    std::fs::create_dir_all(&dir).unwrap();
+    let json = br#"{"version":"0.5.1","ok_at":7}"#;
+    let padded = |total: u64| {
+        let mut raw = json.to_vec();
+        raw.resize(usize::try_from(total).unwrap(), b' ');
+        raw
+    };
+    let store = HealthStore::new(&Layout::new(tmp.path()));
+    std::fs::write(dir.join("health.json"), padded(MAX_HEALTH_BYTES)).unwrap();
+    assert_eq!(store.read(), Some(health("0.5.1", 7)));
+    std::fs::write(dir.join("health.json"), padded(MAX_HEALTH_BYTES + 1)).unwrap();
+    assert_eq!(store.read(), None);
+}
+
+/// Заимствующая запись даёт тот же JSON, что владеющая `Health`.
+#[test]
+fn borrowed_health_serializes_like_the_owned_one() {
+    let owned = serde_json::to_string(&health("0.5.1", 42)).unwrap();
+    let borrowed = serde_json::to_string(&HealthRef {
+        version: "0.5.1",
+        ok_at: 42,
+    })
+    .unwrap();
+    assert_eq!(owned, borrowed);
+}

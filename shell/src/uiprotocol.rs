@@ -21,7 +21,7 @@ use crate::updater::UpdateState;
 pub const IPC_PROTOCOL_VERSION: u32 = 1;
 
 /// Команды UI → shell.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ShellCommand {
     /// Опросить текущее состояние ядра (FSM §2.2).
@@ -53,7 +53,7 @@ pub enum ShellCommand {
 }
 
 /// События shell → UI.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum ShellEvent {
     /// Состояние FSM ядра изменилось.
@@ -81,7 +81,7 @@ pub enum ShellEvent {
 }
 
 /// Сообщение протокола: команда или событие.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "direction", rename_all = "snake_case")]
 pub enum IpcMessage {
     /// Команда UI → shell.
@@ -91,12 +91,20 @@ pub enum IpcMessage {
 }
 
 /// Конверт протокола: версия + полезная нагрузка.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Envelope {
     /// Версия протокола отправителя.
     pub version: u32,
     /// Полезная нагрузка.
     pub message: IpcMessage,
+}
+
+/// Конверт для кодирования: те же поля, что у [`Envelope`], но сообщение
+/// заимствовано — кодирование не клонирует нагрузку.
+#[derive(Serialize)]
+struct EnvelopeRef<'a> {
+    version: u32,
+    message: &'a IpcMessage,
 }
 
 /// Ошибки декодирования.
@@ -117,9 +125,9 @@ pub enum IpcError {
 
 /// Закодировать сообщение в JSON-конверт с текущей версией протокола.
 pub fn encode(message: &IpcMessage) -> Result<String, serde_json::Error> {
-    serde_json::to_string(&Envelope {
+    serde_json::to_string(&EnvelopeRef {
         version: IPC_PROTOCOL_VERSION,
-        message: message.clone(),
+        message,
     })
 }
 
@@ -136,100 +144,4 @@ pub fn decode(json: &str) -> Result<IpcMessage, IpcError> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// Полное покрытие вариатов: каждая команда и каждое событие.
-    fn all_messages() -> Vec<IpcMessage> {
-        let commands = vec![
-            ShellCommand::GetCoreState,
-            ShellCommand::StartCore,
-            ShellCommand::StopCore,
-            ShellCommand::RestartCore,
-            ShellCommand::ConnectProfile {
-                profile_id: "profile-42".to_owned(),
-            },
-            ShellCommand::Disconnect,
-            ShellCommand::SetSystemProxy { enabled: true },
-            ShellCommand::SetSystemProxy { enabled: false },
-            ShellCommand::ImportDeepLink {
-                url: "https://example.invalid/sub?token=secret".to_owned(),
-            },
-        ];
-        let events = vec![
-            ShellEvent::CoreStateChanged {
-                state: CoreState::Connected,
-            },
-            ShellEvent::CoreStateChanged {
-                state: CoreState::RateLimited,
-            },
-            ShellEvent::CoreLogLine {
-                seq: 7,
-                text: "LAVRAY_CORE_READY unix:///tmp/x".to_owned(),
-            },
-            ShellEvent::UpdateStateChanged {
-                state: UpdateState::Available {
-                    serial: 12,
-                    version: "0.2.0".to_owned(),
-                },
-            },
-            ShellEvent::UpdateStateChanged {
-                state: UpdateState::Error {
-                    reason: "signature invalid".to_owned(),
-                },
-            },
-            ShellEvent::DeepLinkImportRequested {
-                url: "https://example.invalid/sub".to_owned(),
-            },
-        ];
-        commands
-            .into_iter()
-            .map(IpcMessage::Command)
-            .chain(events.into_iter().map(IpcMessage::Event))
-            .collect()
-    }
-
-    /// Roundtrip encode → decode для каждого варианта (serde-тэг «kind»).
-    #[test]
-    fn roundtrip_every_variant() {
-        for message in all_messages() {
-            let json = encode(&message).expect("encode");
-            let decoded = decode(&json).expect("decode");
-            assert_eq!(decoded, message, "roundtrip failed for: {json}");
-        }
-    }
-
-    /// Конверт несёт текущую версию протокола.
-    #[test]
-    fn envelope_carries_protocol_version() {
-        let json = encode(&IpcMessage::Command(ShellCommand::GetCoreState)).unwrap();
-        let envelope: Envelope = serde_json::from_str(&json).unwrap();
-        assert_eq!(envelope.version, IPC_PROTOCOL_VERSION);
-        assert!(json.contains("\"version\":1"));
-    }
-
-    /// Чужая версия протокола → отказ (не молчаливый).
-    #[test]
-    fn version_mismatch_is_rejected() {
-        let json = r#"{"version":99,"message":{"direction":"command","kind":"get_core_state"}}"#;
-        let err = decode(json).unwrap_err();
-        assert!(matches!(
-            err,
-            IpcError::VersionMismatch {
-                expected: 1,
-                got: 99
-            }
-        ));
-    }
-
-    /// Битый JSON и неизвестные тэги — ошибки декодирования.
-    #[test]
-    fn malformed_input_is_rejected() {
-        assert!(matches!(decode("not json"), Err(IpcError::Json(_))));
-        let unknown = r#"{"version":1,"message":{"direction":"command","kind":"no_such_command"}}"#;
-        assert!(matches!(decode(unknown), Err(IpcError::Json(_))));
-        let bad_direction =
-            r#"{"version":1,"message":{"direction":"sideways","kind":"get_core_state"}}"#;
-        assert!(matches!(decode(bad_direction), Err(IpcError::Json(_))));
-    }
-}
+mod tests;

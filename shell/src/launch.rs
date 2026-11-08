@@ -28,7 +28,7 @@ pub const WAIT_PID_POLL: Duration = Duration::from_millis(100);
 pub const WAIT_PID_SETTLE: Duration = Duration::from_millis(500);
 
 /// Разобранные аргументы командной строки.
-#[derive(Debug, Default, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub struct LaunchArgs {
     /// Скрыть окно при старте (`--tray`).
     pub tray: bool,

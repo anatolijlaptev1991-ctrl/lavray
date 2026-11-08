@@ -12,7 +12,6 @@ use super::watchdog_args::WatchdogArgs;
 use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
-use std::time::Duration;
 
 #[cfg(windows)]
 pub use super::proc_win::ProcessWaiter;
@@ -138,40 +137,26 @@ impl WatchdogLauncher for CopyWatchdog {
     }
 }
 
+/// Наибольший ответ `verify-artifact`, байт: настоящий — JSON из версии и
+/// суммы (~100 байт); больше — неверный ответ.
+const VERIFY_STDOUT_MAX: u64 = 4 * 1024;
+
 /// Настоящий запуск: процесс без окна консоли, с ожиданием не дольше [`super::core_verify::VERIFY_TIMEOUT`].
 pub struct ProcessRunner;
 
 impl super::core_verify::CoreRunner for ProcessRunner {
     fn run(&self, exe: &Path, args: &[OsString]) -> io::Result<super::core_verify::RunOutput> {
-        use std::process::{Command, Stdio};
-        let mut command = Command::new(exe);
-        command
-            .args(args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null());
+        let mut command = std::process::Command::new(exe);
+        command.args(args);
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
             command.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
         }
-        let mut child = command.spawn()?;
-        let deadline = std::time::Instant::now() + super::core_verify::VERIFY_TIMEOUT;
-        loop {
-            if child.try_wait()?.is_some() {
-                break;
-            }
-            if std::time::Instant::now() >= deadline {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(io::Error::from(io::ErrorKind::TimedOut));
-            }
-            std::thread::sleep(Duration::from_millis(50));
-        }
-        let output = child.wait_with_output()?;
-        Ok(super::core_verify::RunOutput {
-            success: output.status.success(),
-            stdout: output.stdout,
-        })
+        super::proc_run::run_bounded(
+            command,
+            super::core_verify::VERIFY_TIMEOUT,
+            VERIFY_STDOUT_MAX,
+        )
     }
 }

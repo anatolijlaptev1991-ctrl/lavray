@@ -312,3 +312,44 @@ fn rejected_enable_leaves_a_running_session_alone() {
     sp.disable().unwrap();
     assert_eq!(mem.dump(), before);
 }
+
+fn stored(server: &str) -> StoredSnapshot {
+    StoredSnapshot {
+        original: ProxySnapshot {
+            version: 1,
+            os: "test".into(),
+            data: serde_json::json!({ "ProxyServer": server }),
+        },
+        applied: None,
+    }
+}
+
+/// Файл снимка больше предела — испорченный, даже если JSON годный; ровно на
+/// пределе читается.
+#[test]
+fn oversized_snapshot_file_is_not_loaded() {
+    let path = fresh_dir("snapshot-oversized").join("s.json");
+    let mut raw = serde_json::to_vec(&stored("1.2.3.4:80")).unwrap();
+    raw.resize(usize::try_from(snapshot::MAX_SNAPSHOT_BYTES).unwrap(), b' ');
+    std::fs::write(&path, &raw).unwrap();
+    assert!(StoredSnapshot::load(&path).is_some(), "ровно на пределе");
+    raw.push(b' ');
+    std::fs::write(&path, &raw).unwrap();
+    assert!(StoredSnapshot::load(&path).is_none());
+}
+
+/// Повторная запись заменяет файл, временный файл не остаётся.
+#[test]
+fn snapshot_save_replaces_and_leaves_no_temp_file() {
+    let dir = fresh_dir("snapshot-save");
+    let path = dir.join("s.json");
+    stored("a:1").save(&path).unwrap();
+    stored("b:2").save(&path).unwrap();
+    let back = StoredSnapshot::load(&path).unwrap();
+    assert_eq!(back.original.data["ProxyServer"], "b:2");
+    let names: Vec<_> = std::fs::read_dir(&dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(names, [std::ffi::OsString::from("s.json")]);
+}

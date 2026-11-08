@@ -53,6 +53,7 @@ pub mod watchdog_entry;
 pub mod wiring;
 
 mod app_adapters;
+mod proc_run;
 #[cfg(windows)]
 mod proc_win;
 #[cfg(windows)]

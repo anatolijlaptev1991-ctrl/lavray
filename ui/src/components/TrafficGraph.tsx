@@ -10,8 +10,7 @@ import { useTrafficStats } from '../hooks/useTraffic';
 import type { Speed } from '../hooks/useTraffic';
 import { formatBytes, formatSpeed } from '../lib/i18n';
 import { Icon } from '../components/Icon';
-
-const POINTS = 64;
+import { drawTraffic, POINTS } from './trafficGraphDraw';
 
 interface Props {
   readonly active: boolean;
@@ -41,94 +40,30 @@ export function TrafficGraph({ active }: Props): JSX.Element {
     upRef.current = [];
   }, [active]);
 
-  // Перерисовка: сетка, заливка загрузки, пунктир отдачи (как в прототипе).
-  useEffect(() => {
+  // Перерисовка: на каждый кадр и по таймеру; слушатель resize и интервал
+  // создаются один раз, а не на каждый кадр статистики.
+  const redraw = useCallback((): void => {
     const cv = canvasRef.current;
-    if (cv === null) return undefined;
-    const draw = (): void => {
-      const dpr = window.devicePixelRatio > 0 ? window.devicePixelRatio : 1;
-      const w = cv.clientWidth > 0 ? cv.clientWidth : 600;
-      const h = cv.clientHeight > 0 ? cv.clientHeight : 170;
-      if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(h * dpr)) {
-        cv.width = Math.round(w * dpr);
-        cv.height = Math.round(h * dpr);
-      }
-      // jsdom/старые webview не умеют canvas — график просто не рисуется
-      // (иначе монтирование экрана падает в тестах и на урезанных webview).
-      let ctx: CanvasRenderingContext2D | null = null;
-      try {
-        ctx = cv.getContext('2d');
-      } catch {
-        return;
-      }
-      if (ctx === null) return;
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      ctx.clearRect(0, 0, w, h);
-      const css = getComputedStyle(document.documentElement);
-      const accent = css.getPropertyValue('--accent').trim() || '#E0A03A';
-      const info = css.getPropertyValue('--info').trim() || '#6E9BD1';
-      const subtle = css.getPropertyValue('--b-subtle').trim() || 'rgba(255,255,255,.08)';
-
-      const padR = 10;
-      const padL = 2;
-      const step = (w - padR - padL) / (POINTS - 1);
-      const dn = downRef.current;
-      const up = upRef.current;
-      const peak = Math.max(1e5, ...dn, ...up) * 1.15;
-      const y = (v: number): number => h - 4 - (v / peak) * (h - 14);
-
-      ctx.strokeStyle = subtle;
-      ctx.lineWidth = 1;
-      for (let i = 1; i < 4; i++) {
-        ctx.beginPath();
-        ctx.moveTo(0, (h * i) / 4);
-        ctx.lineTo(w, (h * i) / 4);
-        ctx.stroke();
-      }
-      if (dn.length === 0) return;
-
-      // Заливка загрузки.
-      ctx.beginPath();
-      ctx.moveTo(padL, h);
-      dn.forEach((v, i) => {
-        ctx.lineTo(padL + i * step, y(v));
-      });
-      ctx.lineTo(padL + (dn.length - 1) * step, h);
-      ctx.closePath();
-      ctx.fillStyle = `${accent}33`;
-      ctx.fill();
-
-      // Линия загрузки.
-      ctx.beginPath();
-      dn.forEach((v, i) => {
-        if (i === 0) ctx.moveTo(padL, y(v));
-        else ctx.lineTo(padL + i * step, y(v));
-      });
-      ctx.strokeStyle = accent;
-      ctx.lineWidth = 1.8;
-      ctx.stroke();
-
-      // Линия отдачи.
-      ctx.beginPath();
-      up.forEach((v, i) => {
-        if (i === 0) ctx.moveTo(padL, y(v));
-        else ctx.lineTo(padL + i * step, y(v));
-      });
-      ctx.strokeStyle = info;
-      ctx.lineWidth = 1.2;
-      ctx.setLineDash([3, 3]);
-      ctx.stroke();
-      ctx.setLineDash([]);
+    if (cv !== null) drawTraffic(cv, downRef.current, upRef.current);
+  }, []);
+  const redrawRef = useRef(redraw);
+  useEffect(() => {
+    redrawRef.current = redraw;
+  });
+  useEffect(() => {
+    const run = (): void => {
+      redrawRef.current();
     };
-    draw();
-    const onResize = (): void => { draw(); };
-    window.addEventListener('resize', onResize);
-    const id = window.setInterval(draw, 900);
+    window.addEventListener('resize', run);
+    const id = window.setInterval(run, 900);
     return (): void => {
-      window.removeEventListener('resize', onResize);
+      window.removeEventListener('resize', run);
       window.clearInterval(id);
     };
-  }, [speed, t]);
+  }, []);
+  useEffect(() => {
+    redraw();
+  }, [speed, redraw]);
 
   return (
     <div className="card traffic-card">

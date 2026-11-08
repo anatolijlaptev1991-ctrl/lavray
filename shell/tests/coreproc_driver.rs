@@ -414,3 +414,47 @@ fn sigterm_ignoring_core_is_killed_by_sigkill_escalation() {
     );
     cleanup(&config);
 }
+
+/// Ядро закрыло stdout без ready-строки, но живо (Unix): отдельная ошибка
+/// сразу, а не `ReadyTimeout` после всего бюджета; процесс убран.
+#[cfg(unix)]
+#[test]
+fn closed_stdout_without_ready_fails_fast_with_its_own_error() {
+    let mut driver = test_driver();
+    let argv = vec!["-c".to_owned(), "exec 1>&-; cat > /dev/null".to_owned()];
+    let config = fake_config("closed-stdout", argv);
+
+    driver.spawn(&config).unwrap();
+    let started = std::time::Instant::now();
+    let err = driver.wait_ready(Duration::from_secs(20)).unwrap_err();
+    assert_eq!(err, CoreProcessError::ReadyChannelClosed);
+    assert!(started.elapsed() < Duration::from_secs(5), "не весь бюджет");
+    assert!(!driver.is_running(), "инвариант SpawnErr: процесса нет");
+    cleanup(&config);
+}
+
+/// Stop через общий флаг прерывает `wait_ready` за миллисекунды (бюджет 20 с),
+/// процесс остаётся живым для единственного shutdown лестницы §5.
+#[test]
+fn cancel_flag_interrupts_wait_ready_and_leaves_the_process_for_one_kill() {
+    let flag = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut driver = test_driver().with_cancel(std::sync::Arc::clone(&flag));
+    let config = fake_config("cancel", silent_hold_argv());
+    driver.spawn(&config).unwrap();
+
+    let setter = std::sync::Arc::clone(&flag);
+    let t = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(70));
+        setter.store(true, std::sync::atomic::Ordering::SeqCst);
+    });
+    let started = std::time::Instant::now();
+    let err = driver.wait_ready(Duration::from_secs(20)).unwrap_err();
+    t.join().unwrap();
+    assert_eq!(err, CoreProcessError::Cancelled);
+    assert!(driver.is_cancelled());
+    assert!(started.elapsed() < Duration::from_secs(3));
+    assert!(driver.is_running(), "гасит его shutdown, а не wait_ready");
+    driver.kill(KILL_BUDGET).unwrap();
+    assert!(!driver.is_running());
+    cleanup(&config);
+}

@@ -26,6 +26,7 @@
 
 use std::io::{self, Write};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -34,7 +35,7 @@ use std::time::{Duration, Instant};
 use super::logs::{LogLine, LogRing};
 use super::pipe::spawn_pipe_reader;
 use super::ready::{wait_ready_loop, WaitOutcome};
-use super::reap::{abort_child, wait_exit_until};
+use super::reap::{abort_child, reap_or_hand_off, wait_exit_until, Reaped};
 use super::{
     CoreEndpoint, CoreProcess, CoreProcessError, CoreSpawnConfig, SecretToken, AUTH_TOKEN_B64_LEN,
     AUTH_TOKEN_BYTES, T_EOF_GRACE, T_KILL_GRACE, T_SIGTERM_WAIT,
@@ -161,6 +162,8 @@ pub struct RealCoreProcess {
     last_exit: Option<ExitStatus>,
     /// Ring диагностических строк §4 (общий для обоих пайпов).
     ring: Arc<Mutex<LogRing>>,
+    /// Флаг отмены, общий с `SupervisorHandle`: Stop прерывает `wait_ready`.
+    cancel: Arc<AtomicBool>,
 }
 
 impl Default for RealCoreProcess {
@@ -172,13 +175,7 @@ impl Default for RealCoreProcess {
 impl RealCoreProcess {
     /// Драйвер с таймингами §2.2/§5 и антифлудом по умолчанию.
     pub fn new() -> Self {
-        Self {
-            timeouts: DriverTimeouts::default(),
-            max_log_lines_per_sec: DEFAULT_MAX_LOG_LINES_PER_SEC,
-            running: None,
-            last_exit: None,
-            ring: Arc::new(Mutex::new(LogRing::with_default_capacity())),
-        }
+        Self::with_timeouts(DriverTimeouts::default())
     }
 
     /// Драйвер с переопределёнными таймингами лестницы §5 (тесты).
@@ -189,7 +186,14 @@ impl RealCoreProcess {
             running: None,
             last_exit: None,
             ring: Arc::new(Mutex::new(LogRing::with_default_capacity())),
+            cancel: Arc::new(AtomicBool::new(false)),
         }
+    }
+
+    /// Подключить общий флаг отмены (Stop из `SupervisorHandle`).
+    pub fn with_cancel(mut self, cancel: Arc<AtomicBool>) -> Self {
+        self.cancel = cancel;
+        self
     }
 
     /// Текущие тайминги лестницы §5.
@@ -271,6 +275,15 @@ impl RealCoreProcess {
             return Ok(());
         }
 
+        self.force_and_reap(run, poll)
+    }
+
+    /// Шаг 3 §5 (force) и финальный reap за пределами `shutdown`.
+    fn force_and_reap(
+        &mut self,
+        mut run: RunningProcess,
+        poll: Duration,
+    ) -> Result<(), CoreProcessError> {
         // Шаг 3 §5: жив ещё T_KILL_GRACE → SIGKILL по pgid /
         // TerminateProcess по хэндлу (force). Последний страховочный шаг —
         // child.kill() напрямую (D1): живого процесса в драйвере не остаётся
@@ -278,21 +291,23 @@ impl RealCoreProcess {
         if let Err(e) = run.kill_tree() {
             run.term_err.get_or_insert(e);
         }
-        if let Some(status) = wait_exit_until(&mut run.child, deadline, poll) {
-            self.last_exit = Some(status);
-            if let Some(e) = run.term_err.take() {
-                return Err(e);
-            }
-            Ok(())
-        } else {
-            let _ = run.child.kill();
-            let _ = run.child.wait();
-            Err(run.term_err.take().unwrap_or(CoreProcessError::Kill(
-                "core survived SIGTERM+SIGKILL/TerminateProcess".to_owned(),
-            )))
-        }
-        // `run` дропается здесь: Windows — CloseHandle(job) добивает хвосты
+        let _ = run.child.kill();
+        // Ожидание после force ограничено именно `kill_grace` (а не общим
+        // дедлайном); по истечении reap уходит отдельному потоку — супервизор
+        // не виснет на `wait()`, зомби не остаётся.
+        let kill_deadline = Instant::now() + self.timeouts.kill_grace;
+        // `run` дропается в конце: Windows — CloseHandle(job) добивает хвосты
         // KILL_ON_JOB_CLOSE; Unix — SIGKILL группе уже отправлен.
+        match reap_or_hand_off(run.child, kill_deadline, poll) {
+            Reaped::Exited(status) => {
+                self.last_exit = Some(status);
+                run.term_err.take().map_or(Ok(()), Err)
+            }
+            Reaped::HandedOff => Err(run.term_err.take().unwrap_or(CoreProcessError::Kill(
+                "core survived SIGTERM+SIGKILL/TerminateProcess; reap handed to a reaper thread"
+                    .to_owned(),
+            ))),
+        }
     }
 }
 
@@ -412,7 +427,7 @@ impl CoreProcess for RealCoreProcess {
         let poll = self.timeouts.poll_interval;
         let outcome = match self.running.as_mut() {
             None => return Err(CoreProcessError::NotRunning),
-            Some(run) => wait_ready_loop(&run.ready_rx, &mut run.child, budget, poll),
+            Some(run) => wait_ready_loop(&run.ready_rx, &mut run.child, budget, poll, &self.cancel),
         };
         match outcome {
             WaitOutcome::Ready(url) => Ok(CoreEndpoint { transport_url: url }),
@@ -432,6 +447,14 @@ impl CoreProcess for RealCoreProcess {
                 let budget = self.timeouts.sigterm_wait + self.timeouts.kill_grace;
                 let _ = self.shutdown(budget, Duration::ZERO); // молчащее ядро stdin не читает
                 Err(err)
+            }
+            // Stop: процесс остаётся живым — его погасит единственный
+            // shutdown лестницы §5 из цикла надзирателя (без retry/spawn).
+            WaitOutcome::Cancelled => Err(CoreProcessError::Cancelled),
+            WaitOutcome::ChannelClosed => {
+                let budget = self.timeouts.sigterm_wait + self.timeouts.kill_grace;
+                let _ = self.shutdown(budget, Duration::ZERO);
+                Err(CoreProcessError::ReadyChannelClosed)
             }
             WaitOutcome::Poll(err) => {
                 // D5 (ревью): «не могу опросить статус» ≠ «не готов» —
@@ -463,6 +486,10 @@ impl CoreProcess for RealCoreProcess {
 
     fn exit_info(&self) -> Option<String> {
         self.exit_status().map(|status| status.to_string())
+    }
+
+    fn is_cancelled(&self) -> bool {
+        self.cancel.load(Ordering::SeqCst)
     }
 }
 

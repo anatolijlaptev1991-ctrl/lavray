@@ -21,8 +21,9 @@ use std::time::{Duration, Instant};
 use super::backoff::JitterSource;
 use super::driver::RealCoreProcess;
 use super::{
-    Clock, CoreEndpoint, CoreProcess, CoreSpawnConfig, CoreState, CoreSupervisor, CrashDecision,
-    SecretToken, SupervisorError, SystemClock, GRACEFUL_SHUTDOWN_TOTAL, SPAWN_ATTEMPTS_TOTAL,
+    Clock, CoreEndpoint, CoreProcess, CoreProcessError, CoreSpawnConfig, CoreState, CoreSupervisor,
+    CrashDecision, SecretToken, SupervisorError, SystemClock, GRACEFUL_SHUTDOWN_TOTAL,
+    SPAWN_ATTEMPTS_TOTAL,
 };
 
 /// Период опроса «ядро живо» и реакции на команды.
@@ -60,6 +61,11 @@ pub trait Observer {
     /// умолчания.
     fn on_agent_token(&mut self, _token: &SecretToken) {}
     fn on_failure(&mut self, failure: &Failure);
+    /// Ядро остановлено, но чистота сети НЕ подтверждена (§6: проба
+    /// `Unchecked`/`Stale`, частичный отчёт либо kill не удался): состояние
+    /// `Stopped` не объявляется. Выход приложения продолжается — это
+    /// предупреждение, не сбой запуска (`on_failure` не вызывается).
+    fn on_teardown_unconfirmed(&mut self, _detail: &str) {}
 }
 
 /// Ожидание, прерываемое командой: остановка срабатывает сразу, а не на
@@ -228,6 +234,12 @@ where
 
     fn wait_ready(&mut self) -> Phase {
         match self.sup.wait_ready() {
+            // Stop пришёл во время ожидания: не сбой запуска, ретрая и нового
+            // spawn нет — единственный shutdown выполнит `stop()`.
+            Err(SupervisorError::Process(CoreProcessError::Cancelled)) => Phase::Stop,
+            // Вторая проверка на границе READY → публикация: если Stop выиграл
+            // гонку у READY, endpoint и токены не публикуются.
+            Ok(_) if self.sup.process().is_cancelled() => Phase::Stop,
             Ok(endpoint) => {
                 if let Some(config) = &self.config {
                     if let Some(agent) = &config.agent_token {
@@ -334,15 +346,33 @@ where
         self.started(config, result)
     }
 
+    /// `Stopped` — только при `Clean` по ВСЕМ обязательным пробам §6 и удачном
+    /// kill. Иначе состояние остаётся `Stopping`, наблюдатель получает
+    /// предупреждение (выход приложения продолжается).
+    fn confirm_teardown(&mut self, kill_error: Option<SupervisorError>) {
+        if let Some(err) = kill_error {
+            return self
+                .observer
+                .on_teardown_unconfirmed(&format!("ядро не остановлено: {err}"));
+        }
+        let report = self.sup.process_mut().verify_teardown();
+        if report.is_clean() {
+            let _ = self.sup.mark_teardown_verified();
+        } else {
+            let detail = report.unconfirmed_summary();
+            self.observer.on_teardown_unconfirmed(&detail);
+        }
+    }
+
     /// Остановка по команде: лестница §5 для живого ядра, иначе идемпотентный kill.
     fn stop(&mut self) {
         if matches!(
             self.sup.state(),
             CoreState::Spawning | CoreState::Ready | CoreState::Connected
         ) {
-            let _ = self.sup.request_stop();
+            let stopped = self.sup.request_stop();
             self.publish(self.sup.state());
-            let _ = self.sup.mark_teardown_verified();
+            self.confirm_teardown(stopped.err());
         } else {
             let _ = self.sup.process_mut().kill(GRACEFUL_SHUTDOWN_TOTAL);
         }
@@ -355,11 +385,15 @@ where
 pub struct SupervisorHandle {
     tx: Sender<Command>,
     stopped: Arc<AtomicBool>,
+    /// Флаг отмены, общий с драйвером процесса: прерывает `wait_ready`.
+    cancel: Arc<AtomicBool>,
 }
 
 impl SupervisorHandle {
     /// Остановить ядро и завершить надзор. Не блокирует.
     pub fn stop(&self) {
+        // Флаг раньше команды: ожидание ready замечает его в пределах опроса.
+        self.cancel.store(true, Ordering::SeqCst);
         let _ = self.tx.send(Command::Stop);
     }
 
@@ -394,11 +428,14 @@ where
     let (tx, rx) = channel();
     let stopped = Arc::new(AtomicBool::new(false));
     let flag = StoppedFlag(Arc::clone(&stopped));
+    let cancel = Arc::new(AtomicBool::new(false));
+    let process_cancel = Arc::clone(&cancel);
     thread::Builder::new()
         .name("lavray-core-supervisor".to_owned())
         .spawn(move || {
             let _flag = flag;
-            let mut sup = CoreSupervisor::new(RealCoreProcess::new(), SystemClock);
+            let process = RealCoreProcess::new().with_cancel(process_cancel);
+            let mut sup = CoreSupervisor::new(process, SystemClock);
             let mut waiter = ChannelWaiter(rx);
             run(
                 &mut sup,
@@ -408,241 +445,12 @@ where
                 &mut OsJitter,
             );
         })?;
-    Ok(SupervisorHandle { tx, stopped })
+    Ok(SupervisorHandle {
+        tx,
+        stopped,
+        cancel,
+    })
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::coreproc::backoff::FixedJitter;
-    use crate::coreproc::{CoreProcessError, MockClock, MockCoreProcess, BACKOFF_RESET_AFTER};
-    use std::cell::RefCell;
-    use std::path::PathBuf;
-    use std::rc::Rc;
-
-    #[derive(Default)]
-    struct Events {
-        states: Vec<CoreState>,
-        tokens: Vec<String>,
-        failures: Vec<Failure>,
-    }
-
-    impl Events {
-        fn saw(&self, state: CoreState) -> bool {
-            self.states.contains(&state)
-        }
-    }
-
-    struct Recorder(Rc<RefCell<Events>>);
-
-    impl Observer for Recorder {
-        fn on_state(&mut self, state: CoreState) {
-            self.0.borrow_mut().states.push(state);
-        }
-        fn on_ready(&mut self, _endpoint: &CoreEndpoint, token: &SecretToken) {
-            self.0.borrow_mut().tokens.push(token.expose().to_owned());
-        }
-        fn on_failure(&mut self, failure: &Failure) {
-            self.0.borrow_mut().failures.push(failure.clone());
-        }
-    }
-
-    /// Ожидание без сна: двигает управляемые часы, пишет паузы, команду выбирает `decide`.
-    struct ScriptWaiter<D> {
-        clock: MockClock,
-        waits: Vec<Duration>,
-        events: Rc<RefCell<Events>>,
-        decide: D,
-    }
-
-    impl<D: FnMut(&Events) -> Option<Command>> Waiter for ScriptWaiter<D> {
-        fn wait(&mut self, delay: Duration) -> Option<Command> {
-            self.waits.push(delay);
-            assert!(self.waits.len() < 20_000, "цикл не останавливается");
-            self.clock.advance(delay);
-            (self.decide)(&self.events.borrow())
-        }
-    }
-
-    struct Outcome {
-        sup: CoreSupervisor<MockCoreProcess, MockClock>,
-        events: Events,
-        /// Паузы backoff: без опроса живости и без ожидания ручного перезапуска.
-        pauses: Vec<Duration>,
-    }
-
-    /// Прогон цикла на моке; токен у каждого запуска свой (по номеру вызова
-    /// фабрики), первые `factory_failures` вызовов фабрики возвращают ошибку.
-    fn simulate(
-        process: MockCoreProcess,
-        factory_failures: usize,
-        decide: impl FnMut(&Events) -> Option<Command>,
-    ) -> Outcome {
-        let clock = MockClock::at(Instant::now());
-        let mut sup = CoreSupervisor::new(process, clock.clone());
-        let events = Rc::new(RefCell::new(Events::default()));
-        let mut calls = 0usize;
-        let mut factory = move || {
-            calls += 1;
-            if calls <= factory_failures {
-                return Err("ядро lavray-core не найдено".to_owned());
-            }
-            Ok(CoreSpawnConfig {
-                binary: PathBuf::from("lavray-core"),
-                listen_socket: PathBuf::from("127.0.0.1:0"),
-                data_dir: PathBuf::from("data"),
-                auth_token: SecretToken::from_base64url(format!("{calls:A>43}")).unwrap(),
-                agent_token: None,
-                extra_args: Vec::new(),
-            })
-        };
-        let mut waiter = ScriptWaiter {
-            clock,
-            waits: Vec::new(),
-            events: Rc::clone(&events),
-            decide,
-        };
-        run(
-            &mut sup,
-            &mut factory,
-            &mut Recorder(Rc::clone(&events)),
-            &mut waiter,
-            &mut FixedJitter { value: 0.5 },
-        );
-        let pauses = waiter
-            .waits
-            .iter()
-            .copied()
-            .filter(|d| *d != POLL_INTERVAL && *d != AWAIT_MANUAL_WAIT)
-            .collect();
-        drop(waiter);
-        let events = Rc::try_unwrap(events).ok().unwrap().into_inner();
-        Outcome {
-            sup,
-            events,
-            pauses,
-        }
-    }
-
-    fn secs(list: &[u64]) -> Vec<Duration> {
-        list.iter().copied().map(Duration::from_secs).collect()
-    }
-
-    /// A2-11: ядро, умирающее сразу после READY, перезапускается с растущей
-    /// паузой 1 с → 2 с и после 3 падений за минуту больше не перезапускается
-    /// (раньше пауза сбрасывалась в 1 с, и перезапуски шли вечно); ручной
-    /// «Перезапустить» выводит из RateLimited; токен у каждого запуска новый;
-    /// к сбою прикладывается хвост кольца логов ядра.
-    #[test]
-    fn crash_loop_stops_after_three_crashes_and_manual_restart_resumes() {
-        let process = MockCoreProcess {
-            alive_results: vec![false; 20],
-            log_lines: (1..=100).map(|i| format!("line {i}")).collect(),
-            ..MockCoreProcess::default()
-        };
-        let mut asked = false;
-        let out = simulate(process, 0, |events| {
-            if events.tokens.len() >= 4 {
-                Some(Command::Stop)
-            } else if events.saw(CoreState::RateLimited) && !asked {
-                asked = true;
-                Some(Command::ManualRestart)
-            } else {
-                None
-            }
-        });
-
-        assert_eq!(
-            out.pauses,
-            secs(&[1, 2]),
-            "пауза растёт, а не «1 с каждый раз»"
-        );
-        // 3 запуска до лимита + 1 после ручного перезапуска
-        assert_eq!(out.sup.process().spawn_calls.len(), 4);
-        let unique: std::collections::HashSet<_> = out.events.tokens.iter().collect();
-        assert_eq!(unique.len(), 4, "токены не повторяются");
-        let tail = &out.events.failures[0].log_tail;
-        assert_eq!(
-            (tail.len(), tail.last().map(String::as_str)),
-            (FAILURE_LOG_LINES, Some("line 100"))
-        );
-    }
-
-    /// Ядро не стартует: 4 попытки с паузами 1/2/4/8 с, затем RateLimited.
-    #[test]
-    fn spawn_failures_back_off_and_end_in_rate_limited() {
-        let fail = || Err(CoreProcessError::Spawn("нет такого файла".to_owned()));
-        let process = MockCoreProcess {
-            spawn_results: vec![fail(), fail(), fail(), fail()],
-            ..MockCoreProcess::default()
-        };
-        let out = simulate(process, 0, |events| {
-            events.saw(CoreState::RateLimited).then_some(Command::Stop)
-        });
-        assert_eq!(out.sup.process().spawn_calls.len(), 4);
-        assert_eq!(out.pauses, secs(&[1, 2, 4, 8]));
-        assert!(out.events.tokens.is_empty(), "ядро так и не стало готовым");
-    }
-
-    /// «Остановить» прерывает наблюдение сразу и запускает лестницу §5.
-    #[test]
-    fn stop_command_runs_the_graceful_ladder() {
-        let mut polls = 0;
-        let out = simulate(MockCoreProcess::default(), 0, |_| {
-            polls += 1;
-            (polls == 3).then_some(Command::Stop)
-        });
-        assert_eq!(out.sup.process().kill_calls, [GRACEFUL_SHUTDOWN_TOTAL]);
-        let states = [
-            CoreState::Spawning,
-            CoreState::Ready,
-            CoreState::Stopping,
-            CoreState::Stopped,
-        ];
-        assert_eq!(out.events.states, states);
-    }
-
-    /// Нет бинарника ядра: сбой передан наблюдателю, запуска нет; после ручного
-    /// «Перезапустить» ядро стартует.
-    #[test]
-    fn missing_core_binary_waits_for_a_manual_restart() {
-        let mut asked = false;
-        let out = simulate(MockCoreProcess::default(), 1, |events| {
-            if !events.tokens.is_empty() {
-                Some(Command::Stop)
-            } else if !asked {
-                asked = true;
-                Some(Command::ManualRestart)
-            } else {
-                None
-            }
-        });
-        assert_eq!(
-            out.events.failures[0].message,
-            "ядро lavray-core не найдено"
-        );
-        assert_eq!(out.events.states[0], CoreState::SpawnErr);
-        assert_eq!(out.sup.process().spawn_calls.len(), 1);
-    }
-
-    /// Стабильная работа ≥ 300 с сбрасывает эскалацию: следующий крах снова ждёт 1 с.
-    #[test]
-    fn stable_uptime_resets_the_backoff_escalation() {
-        let polls = (BACKOFF_RESET_AFTER.as_millis() / POLL_INTERVAL.as_millis()) as usize + 2;
-        let mut alive = vec![false]; // поколение 1 падает сразу
-        alive.extend(std::iter::repeat_n(true, polls)); // поколение 2 живёт дольше сброса
-        alive.push(false);
-        let process = MockCoreProcess {
-            alive_results: alive,
-            ..MockCoreProcess::default()
-        };
-        let out = simulate(process, 0, |events| {
-            (events.tokens.len() >= 3).then_some(Command::Stop)
-        });
-        assert_eq!(
-            out.pauses,
-            secs(&[1, 1]),
-            "после стабильной работы пауза снова 1 с"
-        );
-    }
-}
+mod tests;

@@ -103,13 +103,39 @@ impl TeardownReport {
             })
     }
 
-    /// Нет найденных хвостов (`Unchecked` чистотой не считается — см.
-    /// [`ProbeOutcome::Unchecked`]; полный ответ даёт только отсутствие
-    /// `Stale` при реализованных пробах).
-    pub fn is_clean(&self) -> bool {
-        self.findings
+    /// Отчёт из готовых исходов проб (мок-вывод тестов, будущие пробы).
+    pub fn from_findings(findings: Vec<(StaleResource, ProbeOutcome)>) -> Self {
+        Self { findings }
+    }
+
+    /// Что мешает объявить сеть чистой (для предупреждения): детектор и
+    /// причина — `stale: …`, `unchecked`, `нет пробы`.
+    pub fn unconfirmed_summary(&self) -> String {
+        let parts: Vec<String> = StaleResource::ALL
             .iter()
-            .all(|(_, outcome)| !matches!(outcome, ProbeOutcome::Stale(_)))
+            .filter_map(|&resource| {
+                let outcome = self.findings.iter().find(|(r, _)| *r == resource);
+                let why = match outcome.map(|(_, o)| o) {
+                    Some(ProbeOutcome::Clean) => return None,
+                    Some(ProbeOutcome::Stale(detail)) => format!("stale: {detail}"),
+                    Some(ProbeOutcome::Unchecked) => "unchecked".to_owned(),
+                    None => "нет пробы".to_owned(),
+                };
+                Some(format!("{}: {why}", resource.as_str()))
+            })
+            .collect();
+        format!("чистота сети не подтверждена ({})", parts.join(", "))
+    }
+
+    /// Сеть подтверждена чистой: КАЖДЫЙ из пяти обязательных детекторов §6
+    /// дал `Clean`. `Unchecked`, `Stale` и частичный/пустой отчёт чистотой
+    /// не считаются — только по такому отчёту FSM вправе сказать `Stopped`.
+    pub fn is_clean(&self) -> bool {
+        StaleResource::ALL.iter().all(|resource| {
+            self.findings
+                .iter()
+                .any(|(r, outcome)| r == resource && *outcome == ProbeOutcome::Clean)
+        }) && self.stale().next().is_none()
     }
 }
 
@@ -137,73 +163,4 @@ pub fn verify_all() -> TeardownReport {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::collections::HashSet;
-
-    /// Перечень детекторов — точно таблица §6: пять строк, без пропусков
-    /// и дублей, в порядке таблицы.
-    #[test]
-    fn detector_list_covers_spec_section6_table() {
-        assert_eq!(
-            StaleResource::ALL.len(),
-            5,
-            "ровно пять проверок таблицы §6"
-        );
-
-        // Уникальность и канонические имена.
-        let names: HashSet<&str> = StaleResource::ALL.iter().map(|r| r.as_str()).collect();
-        assert_eq!(names.len(), 5, "канонические имена уникальны");
-
-        let expected = [
-            StaleResource::TunAdapter,
-            StaleResource::Routes,
-            StaleResource::SystemProxy,
-            StaleResource::DnsState,
-            StaleResource::ExtProcesses,
-        ];
-        for (want, got) in expected.iter().zip(StaleResource::ALL) {
-            assert_eq!(want, &got, "порядок детекторов = порядок таблицы §6");
-        }
-
-        // Имя адаптера из §6 (свои ресурсы ищем строго по нему).
-        assert_eq!(TUN_ADAPTER_NAME, "lavray-tun");
-    }
-
-    /// Заглушки честно сообщают `Unchecked` (не «чисто» и не «хвост»), и
-    /// полный прогон строит отчёт на все пять детекторов.
-    #[test]
-    fn stub_probes_report_unchecked_for_all_detectors() {
-        for resource in StaleResource::ALL {
-            assert_eq!(probe(resource), ProbeOutcome::Unchecked, "{resource:?}");
-        }
-        let report = verify_all();
-        assert_eq!(report.findings().len(), 5);
-        assert!(
-            report.stale().next().is_none(),
-            "заглушка не придумывает хвосты"
-        );
-        // Unchecked не считается находкой, но и не должен считаться Clean
-        // после реализации — здесь фиксируем только отсутствие Stale.
-        assert!(report.is_clean());
-    }
-
-    /// Отчёт умеет отличать найденные хвосты (мок наполнения).
-    #[test]
-    fn report_exposes_stale_findings() {
-        let report = TeardownReport {
-            findings: vec![
-                (StaleResource::TunAdapter, ProbeOutcome::Clean),
-                (
-                    StaleResource::Routes,
-                    ProbeOutcome::Stale("10.0.0.0/24 dev lavray-tun".to_owned()),
-                ),
-            ],
-        };
-        assert!(!report.is_clean());
-        let stale: Vec<(StaleResource, &str)> = report.stale().collect();
-        assert_eq!(stale.len(), 1);
-        assert_eq!(stale[0].0, StaleResource::Routes);
-        assert!(stale[0].1.contains("lavray-tun"));
-    }
-}
+mod tests;

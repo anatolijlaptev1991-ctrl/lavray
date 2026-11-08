@@ -57,3 +57,36 @@ pub fn abort_child(mut child: Child) {
     let _ = child.kill();
     let _ = child.wait_exit();
 }
+
+/// Исход финального ожидания после force-kill.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Reaped {
+    /// Процесс завершился в срок, статус получен.
+    Exited(ExitStatus),
+    /// Срок вышел: reap передан отдельному потоку, supervisor не ждёт.
+    HandedOff,
+}
+
+/// Дождаться выхода до `deadline`; по истечении срока НЕ блокироваться на
+/// `wait()` вечно, но и не оставлять zombie: процесс уходит в отдельный
+/// поток-reaper (`wait_exit` там блокирует только его). Если поток создать
+/// не удалось, `child` дропается (std не ждёт на drop; зомби-запись живёт до
+/// выхода оболочки — лучше, чем вечный стоп), результат тот же — `HandedOff`.
+pub fn reap_or_hand_off<C: ChildHandle + Send + 'static>(
+    mut child: C,
+    deadline: Instant,
+    poll: Duration,
+) -> Reaped {
+    if let Some(status) = wait_exit_until(&mut child, deadline, poll) {
+        return Reaped::Exited(status);
+    }
+    let _ = thread::Builder::new()
+        .name("lavray-core-reaper".to_owned())
+        .spawn(move || {
+            let _ = child.wait_exit();
+        });
+    Reaped::HandedOff
+}
+
+#[cfg(test)]
+mod tests;

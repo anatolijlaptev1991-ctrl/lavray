@@ -379,6 +379,7 @@ export const esDict: Record<string, string> = {
   "imp.drop": "Suelta el archivo aquí",
   "imp.dropOr": "o haz clic para elegir",
   "imp.fileHint": "Arrastra un archivo a cualquier parte de la ventana o elígelo: YAML, base64, lista de enlaces",
+  "imp.fileTooLarge": "El archivo es demasiado grande: el límite de importación es {mb} MB",
   "imp.happErrCtx": "No se pudo descifrar el enlace: está truncado o caducado. Copia el enlace completo y vuelve a intentarlo.",
   "imp.happErrT": "No se pudo descifrar el enlace",
   "imp.hint": "Pega cualquier enlace: los enlaces cifrados se descifran automáticamente",

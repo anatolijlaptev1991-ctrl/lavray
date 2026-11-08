@@ -1,0 +1,26 @@
+# cargo-deny для rust/ (CI: job rust-core). Лицензии — совместимые с GPL-3.0-only.
+[licenses]
+allow = [
+  "GPL-3.0-only", # собственные крейты workspace
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "0BSD",
+  "CC0-1.0",
+  "Unlicense",
+  "Unicode-3.0",
+  "MPL-2.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

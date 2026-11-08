@@ -1,0 +1,96 @@
+{
+  "description": "TUF-lite: подписи ed25519 по ролям root.json; все ключи выводятся из фиксированных seed",
+  "reference_time": "2026-06-01T00:00:00Z",
+  "trust_root": "root.json",
+  "stored_state": {
+    "manifest_serial": 9,
+    "root_version": 1,
+    "timestamp_version": 4
+  },
+  "timestamp_meta_key": "manifest-stable.json",
+  "artifact_claims": {
+    "installer": "lavray-setup.bin",
+    "minisig": "lavray-setup.bin.minisig",
+    "trusted_comment": "lavray-windows;windows-x64;stable;1.2.0;10"
+  },
+  "cases": [
+    {
+      "file": "root.json",
+      "kind": "root",
+      "expect": "ok",
+      "note": "порог 1, самоподпись k1"
+    },
+    {
+      "file": "root-expired.json",
+      "kind": "root",
+      "expect": "expired",
+      "note": "подпись верна, срок истёк на момент reference_time"
+    },
+    {
+      "file": "root-insufficient.json",
+      "kind": "root",
+      "expect": "insufficient_signatures",
+      "note": "роль root: порог 2, подпись одна"
+    },
+    {
+      "file": "timestamp-valid.json",
+      "kind": "timestamp",
+      "expect": "ok",
+      "note": "версия выше сохранённой"
+    },
+    {
+      "file": "timestamp-expired.json",
+      "kind": "timestamp",
+      "expect": "expired",
+      "note": "срок истёк"
+    },
+    {
+      "file": "timestamp-rollback.json",
+      "kind": "timestamp",
+      "expect": "rollback",
+      "note": "версия ниже сохранённой"
+    },
+    {
+      "file": "timestamp-insufficient.json",
+      "kind": "timestamp",
+      "expect": "insufficient_signatures",
+      "note": "подпись чужим ключом под keyid t1"
+    },
+    {
+      "file": "manifest-stable-valid.json",
+      "kind": "manifest",
+      "expect": "ok",
+      "note": "serial выше сохранённого"
+    },
+    {
+      "file": "manifest-stable-expired.json",
+      "kind": "manifest",
+      "expect": "expired",
+      "note": "срок истёк"
+    },
+    {
+      "file": "manifest-stable-rollback.json",
+      "kind": "manifest",
+      "expect": "rollback",
+      "note": "serial ниже сохранённого"
+    },
+    {
+      "file": "manifest-stable-insufficient.json",
+      "kind": "manifest",
+      "expect": "insufficient_signatures",
+      "note": "подпись чужим ключом под keyid r1"
+    },
+    {
+      "file": "lavray-setup.bin",
+      "kind": "artifact",
+      "expect": "ok",
+      "note": "minisign prehashed, trusted comment из artifact_claims"
+    },
+    {
+      "file": "lavray-setup.bin.tampered",
+      "kind": "artifact",
+      "expect": "bad_signature",
+      "note": "изменён первый байт установщика"
+    }
+  ]
+}

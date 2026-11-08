@@ -1,0 +1,10 @@
+[package]
+name = "lavray-model"
+description = "Модель данных LAVRay (заготовка Rust-ядра)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

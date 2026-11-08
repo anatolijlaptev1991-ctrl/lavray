@@ -1,0 +1,48 @@
+{
+  "description": "Образцы LAVBK1: argon2 облегчён (t=1, m=8 МиБ, p=1); соль и nonce из фиксированного seed",
+  "argon2": {
+    "t": 1,
+    "m_kib": 8192,
+    "p": 1
+  },
+  "payload_file": "backup/payload.bin",
+  "payload_sha256": "99430dc0350c365ca526894d2bba1c59dc30cc107080b66b8069f29e34159888",
+  "cases": [
+    {
+      "file": "valid.lavbk",
+      "password": "conformance-password-1",
+      "expect": "ok",
+      "note": "расшифровка даёт payload.bin"
+    },
+    {
+      "file": "other-password.lavbk",
+      "password": "conformance-password-1",
+      "expect": "wrong_password",
+      "note": "файл запечатан другим паролем"
+    },
+    {
+      "file": "tampered.lavbk",
+      "password": "conformance-password-1",
+      "expect": "tampered",
+      "note": "изменён байт шифртекста"
+    },
+    {
+      "file": "truncated.lavbk",
+      "password": "conformance-password-1",
+      "expect": "tampered",
+      "note": "отрезаны последние 5 байт"
+    },
+    {
+      "file": "truncated-short.lavbk",
+      "password": "conformance-password-1",
+      "expect": "corrupt",
+      "note": "файл короче заголовка с тегом"
+    },
+    {
+      "file": "bad-magic.lavbk",
+      "password": "conformance-password-1",
+      "expect": "corrupt",
+      "note": "изменён первый байт сигнатуры"
+    }
+  ]
+}

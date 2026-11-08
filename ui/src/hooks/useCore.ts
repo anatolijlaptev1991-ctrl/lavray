@@ -52,7 +52,28 @@ export function useCoreStatus(): CoreStatus {
   return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 }
 
-/** Профили (с поиском на стороне ядра). */
+/** Пауза набора перед запросом поиска к ядру. */
+export const SEARCH_DEBOUNCE_MS = 200;
+
+/** Значение, которое следует за `value` с задержкой; первое значение — сразу. */
+function useDebounced(value: string, ms: number): string {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setSettled(value);
+    }, ms);
+    return (): void => {
+      clearTimeout(id);
+    };
+  }, [value, ms]);
+  return settled;
+}
+
+/**
+ * Профили (с поиском на стороне ядра). Поиск уходит в ядро после паузы набора
+ * (debounce), и учитывается только ответ на последний запрос: устаревший
+ * отменяется через AbortSignal и в состояние не попадает.
+ */
 export function useProfiles(search: string): {
   profiles: Profile[];
   total: bigint;
@@ -62,21 +83,24 @@ export function useProfiles(search: string): {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [total, setTotal] = useState<bigint>(0n);
   const [nonce, setNonce] = useState(0);
+  const query = useDebounced(search, SEARCH_DEBOUNCE_MS);
   useEffect(() => {
+    const ac = new AbortController();
     void (async (): Promise<void> => {
       try {
-        const req = search === '' ? {} : { search };
-        const res = await core.profiles.listProfiles(req);
+        const req = query === '' ? {} : { search: query };
+        const res = await core.profiles.listProfiles(req, { signal: ac.signal });
+        if (ac.signal.aborted) return;
         setProfiles(res.profiles);
         setTotal(res.total);
       } catch {
-        /* offline */
+        /* offline или запрос отменён более новым */
       }
     })();
     return (): void => {
-      /* unmount: setState в React 18 — no-op */
+      ac.abort();
     };
-  }, [core, search, nonce]);
+  }, [core, query, nonce]);
   const refresh = (): void => {
     setNonce((n) => n + 1);
   };

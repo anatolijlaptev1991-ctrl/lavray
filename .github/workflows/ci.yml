@@ -27,9 +27,11 @@ jobs:
     runs-on: ubuntu-24.04 # ПИН ОС раннера: обновлять сознательно
     steps:
       - uses: actions/checkout@v4 # при переходе в прод пинить по SHA
+        with:
+          fetch-depth: 0 # buf breaking читает базу из истории git
       - uses: bufbuild/buf-setup-action@v1
         with:
-          buf_version: "1.75.0" # пин версии buf
+          version: "1.75.0" # пин версии buf
       - name: buf lint
         working-directory: proto
         run: buf lint
@@ -39,8 +41,29 @@ jobs:
       - name: buf build
         working-directory: proto
         run: buf build -o /dev/null
-      # breaking против main включается после первого мержа контракта
-      # (baseline) — отдельным коммитом, чтобы не блокировать начальный пуш.
+      # Обратная совместимость контракта (R0, docs/rust-migration/README.md).
+      # PR — против базовой ветки; push в main — против SHA main до пуша
+      # (github.event.before). Правила FILE строже WIRE_JSON: UI ходит в ядро
+      # по Connect JSON, поэтому имена полей (json_name) — часть контракта.
+      - name: buf breaking (против базы)
+        working-directory: proto
+        env:
+          BASE_REF: ${{ github.base_ref }}
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [ "$EVENT" = "pull_request" ]; then
+            against="../.git#ref=origin/${BASE_REF},subdir=proto"
+          elif [ "$EVENT" = "push" ]; then
+            if [ -z "$BEFORE" ] || [ -z "${BEFORE//0/}" ]; then
+              echo "buf breaking пропущен: нет базового SHA (создание ветки)"; exit 0
+            fi
+            # SHA main до пуша: покрывает fast-forward сразу на несколько коммитов
+            against="../.git#ref=${BEFORE},subdir=proto"
+          else
+            echo "buf breaking пропущен для события $EVENT"; exit 0
+          fi
+          buf breaking --against "$against"
 
   # --------------------------------------------------------------------------
   # design: приёмочные скрипты, не требующие браузера (полный a11y_sweep и

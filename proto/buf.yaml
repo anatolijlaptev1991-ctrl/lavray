@@ -23,6 +23,8 @@ lint:
     - RPC_REQUEST_STANDARD_NAME
     - RPC_RESPONSE_STANDARD_NAME
     - RPC_REQUEST_RESPONSE_UNIQUE
+# breaking: FILE строже WIRE_JSON (включает проверку имён полей/json_name — UI
+# говорит с ядром по Connect JSON). Проверяется в CI против базы (job proto).
 breaking:
   use:
     - FILE

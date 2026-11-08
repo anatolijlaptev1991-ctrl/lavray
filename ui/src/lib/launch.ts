@@ -6,6 +6,8 @@
 // `localStorage`: у повышенного экземпляра свой профиль WebView.
 
 let relaunched = false;
+// Не сбрасывается: старт был перезапуском от администратора (для pendingConnect).
+let relaunchedAtStart = false;
 
 function inShell(): boolean {
   return (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
@@ -24,6 +26,7 @@ export async function loadLaunchInfo(): Promise<void> {
       typeof answer === 'object' &&
       answer !== null &&
       (answer as { elevated_relaunch?: unknown }).elevated_relaunch === true;
+    relaunchedAtStart = relaunched;
   } catch {
     /* оболочка без команды — подсказка после перезапуска не покажется */
   }
@@ -34,4 +37,9 @@ export function takeRelaunched(): boolean {
   const was = relaunched;
   relaunched = false;
   return was;
+}
+
+/** Этот экземпляр запущен перезапуском от администратора (в отличие от `takeRelaunched` не сбрасывается). */
+export function wasRelaunchedAtStart(): boolean {
+  return relaunchedAtStart;
 }

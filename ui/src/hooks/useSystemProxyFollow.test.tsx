@@ -172,4 +172,27 @@ describe('useSystemProxyFollow', () => {
     await render(status(CoreState.CONNECTED));
     expect(shell.invoke).not.toHaveBeenCalled();
   });
+
+  // Автоподключение ядра (--connect-last): окно не нажимало "Подключить", но
+  // системный прокси должен появиться, а при сбое не остаться на мёртвом порту.
+  it('автоподключение ядра в режиме системного прокси: прокси ставится, при падении снимается', async () => {
+    await render(status(CoreState.IDLE)); // заглушка до первого ответа ядра
+    await render(status(CoreState.CONNECTING));
+    expect(proxyCalls()).toEqual([]);
+    await render(status(CoreState.CONNECTED));
+    expect(proxyCalls()).toEqual([{ enabled: true, port: 2080 }]);
+    await render(status(CoreState.ERROR));
+    expect(proxyCalls()).toEqual([
+      { enabled: true, port: 2080 },
+      { enabled: false, port: 1 },
+    ]);
+  });
+
+  it('сбой автоподключения: прокси не включается ни разу', async () => {
+    await render(status(CoreState.IDLE));
+    await render(status(CoreState.CONNECTING));
+    await render(status(CoreState.ERROR));
+    await render(status(CoreState.ERROR));
+    expect(proxyCalls()).toEqual([]);
+  });
 });

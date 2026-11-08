@@ -34,9 +34,9 @@ import {
   saveSelectedProfileId,
   trackOwnChange,
 } from '../lib/connection';
-import { relaunchElevated, tunNeedsElevation } from '../lib/elevation';
+import { tunNeedsElevation } from '../lib/elevation';
 import { takeRelaunched } from '../lib/launch';
-import { saveUiStateNow } from '../lib/uiState';
+import { relaunchForTun } from '../lib/tunRelaunch';
 import { onTunDialogRequest, takeTunDialogRequest } from '../lib/tunRequest';
 import type { RelaunchOutcome } from '../lib/elevation';
 import { ConnRight } from '../components/ConnRight';
@@ -354,28 +354,11 @@ export function ConnectionScreen(): JSX.Element {
   // T-81: «Перезапустить от администратора». Выбор TUN записывается заранее
   // (localStorage и ядро), чтобы новый экземпляр открылся уже в режиме TUN; отказ
   // в UAC или сбой возвращают прежний выбор: приложение остаётся как было.
-  const relaunchForTun = useCallback(async (): Promise<RelaunchOutcome> => {
-    const prev = { sysProxy, tunMode };
-    const next = { sysProxy, tunMode: true };
-    const revert = (): void => {
-      saveModes(window.localStorage, prev);
-      void rememberModes(core, prev);
-    };
-    saveModes(window.localStorage, next);
-    await rememberModes(core, next);
-    // У повышенного экземпляра свой профиль WebView: общие настройки (режимы,
-    // язык, тема, выбор сервера) он читает из файла оболочки, поэтому запись
-    // должна завершиться до запуска нового экземпляра.
-    await saveUiStateNow(window.localStorage);
-    try {
-      const outcome = await relaunchElevated();
-      if (outcome === 'cancelled') revert();
-      return outcome;
-    } catch (e) {
-      revert();
-      throw e;
-    }
-  }, [core, sysProxy, tunMode]);
+  const relaunchTun = useCallback(
+    (): Promise<RelaunchOutcome> =>
+      relaunchForTun({ core, prev: { sysProxy, tunMode }, profileId: active?.id }),
+    [core, sysProxy, tunMode, active],
+  );
 
   // Состояние карточки (прототип renderConn): ошибка важнее остальных.
   const phase = coreFailed ? 'err' : ready ? 'on' : connecting ? 'connecting' : 'off';
@@ -708,7 +691,7 @@ export function ConnectionScreen(): JSX.Element {
           onClose={() => {
             setTunDialog(false);
           }}
-          onRelaunch={relaunchForTun}
+          onRelaunch={relaunchTun}
         />
       )}
       {importOpen && (

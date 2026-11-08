@@ -3,7 +3,7 @@
 package api
 
 // test_flight_test.go — single-flight пакетного теста: профиль, который уже
-// проверяется, второй вызов не умножает нагрузкой (ALREADY_EXISTS), а
+// проверяется, второй вызов не умножает нагрузкой (побеждает последний), а
 // StopTests отменяет все идущие батчи.
 
 import (
@@ -68,7 +68,37 @@ func drainErr(t *testing.T, ch <-chan error) error {
 	}
 }
 
-func TestRepeatedBatchRejectedWhileRunning(t *testing.T) {
+// Новый батч, пересекающийся по профилям, отменяет старый (побеждает последний)
+// и завершается без ошибки; непересекающиеся батчи идут параллельно.
+func TestOverlappingBatchCancelsPrevious(t *testing.T) {
+	e := newStopEnv(t, 1001, 1002, 1003)
+	var hung, total atomic.Int32
+	entered := make(chan struct{}, 8)
+	e.s.dial = func(ctx context.Context, _, addr string) (net.Conn, error) {
+		total.Add(1)
+		if portOf(addr) == "1001" && hung.Add(1) == 1 {
+			entered <- struct{}{}
+			<-ctx.Done() // первое измерение 1001 висит, пока батч не отменят
+			return nil, ctx.Err()
+		}
+		c, peer := net.Pipe()
+		_ = peer.Close()
+		return c, nil
+	}
+
+	first := e.startBatch(t, e.ids[1001], e.ids[1002])
+	waitEntered(t, entered)
+
+	second := e.startBatch(t, e.ids[1001], e.ids[1003])
+	if err := drainErr(t, second); err != nil {
+		t.Fatalf("пересекающийся батч должен завершиться без ошибки: %v", err)
+	}
+	if err := drainErr(t, first); err != nil {
+		t.Fatalf("отменённый батч: %v", err)
+	}
+}
+
+func TestDisjointBatchesRunInParallel(t *testing.T) {
 	e := newStopEnv(t, 1001, 1002)
 	var calls atomic.Int32
 	entered := make(chan struct{}, 8)
@@ -76,19 +106,11 @@ func TestRepeatedBatchRejectedWhileRunning(t *testing.T) {
 
 	first := e.startBatch(t, e.ids[1001])
 	waitEntered(t, entered)
-
-	// Тот же профиль: повтор не запускает второе измерение.
-	err := drainErr(t, e.startBatch(t, e.ids[1001], e.ids[1002]))
-	if connect.CodeOf(err) != connect.CodeAlreadyExists {
-		t.Fatalf("повтор: %v, ожидался ALREADY_EXISTS", err)
-	}
-	if n := calls.Load(); n != 1 {
-		t.Fatalf("dial вызван %d раз, ожидался 1", n)
-	}
-
-	// Другой профиль — отдельный батч, не пересекается.
 	second := e.startBatch(t, e.ids[1002])
-	waitEntered(t, entered)
+	waitEntered(t, entered) // второй не отменил первый и не ждёт его
+	if calls.Load() != 2 {
+		t.Fatalf("dial вызван %d раз, ожидалось 2", calls.Load())
+	}
 
 	// StopTests отменяет оба батча, а не только последний.
 	if _, err := e.profile.StopTests(context.Background(), connect.NewRequest(&lavrayv1.StopTestsRequest{})); err != nil {

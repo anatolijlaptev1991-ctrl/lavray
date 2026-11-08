@@ -99,13 +99,9 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// Single-flight: профиль, который уже проверяется другим батчем, повторно
-	// не запускаем (иначе нагрузка умножается), StopTests отменит все батчи.
-	finish, err := s.beginTestBatch(items, cancel)
-	if err != nil {
-		return err
-	}
-	defer finish()
+	// Single-flight «побеждает последний»: идущие батчи с теми же профилями
+	// отменяются (нагрузка не умножается), StopTests отменит все батчи.
+	defer s.beginTestBatch(items, cancel)()
 
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup

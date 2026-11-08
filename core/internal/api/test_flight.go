@@ -3,17 +3,13 @@
 package api
 
 // test_flight.go — учёт идущих пакетных тестов (single-flight по профилю).
-// Повторный TestLatency по профилю, который уже проверяется, получает
-// ALREADY_EXISTS: измерение не запускается второй раз, нагрузка не
-// умножается. Батчи с непересекающимися профилями идут независимо, а
-// StopTests отменяет все (раньше отмена хранилась одна на процесс, и второй
+// Новый TestLatency по профилю, который уже проверяется, отменяет старый
+// батч («побеждает последний»), нагрузка не умножается. Батчи с
+// непересекающимися профилями идут независимо, а StopTests отменяет все (раньше отмена хранилась одна на процесс, и второй
 // батч затирал её у первого).
 
 import (
 	"context"
-	"fmt"
-
-	"connectrpc.com/connect"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 )
@@ -30,9 +26,13 @@ type testRun struct {
 	busy    map[int64]int
 }
 
-// beginTestBatch регистрирует батч. Пересечение с идущим батчем по профилям —
-// ALREADY_EXISTS без побочных эффектов. finish снимает только свои записи.
-func (s *Server) beginTestBatch(items []testItem, cancel context.CancelFunc) (func(), error) {
+// beginTestBatch регистрирует батч по правилу «побеждает последний»: идущие
+// батчи, пересекающиеся с новым по профилям, отменяются, их профили
+// освобождаются сразу (как в StopTests), новый стартует без ошибки. Так UI,
+// который отменяет запрос и тут же шлёт новый, не упирается в разматывающийся
+// старый, а нагрузка не умножается: старые измерения прерваны. finish снимает
+// только свои записи.
+func (s *Server) beginTestBatch(items []testItem, cancel context.CancelFunc) func() {
 	s.testsMu.Lock()
 	defer s.testsMu.Unlock()
 	if s.testsRunning == nil {
@@ -43,9 +43,8 @@ func (s *Server) beginTestBatch(items []testItem, cancel context.CancelFunc) (fu
 		r.cancels, r.busy = map[int]context.CancelFunc{}, map[int64]int{}
 	}
 	for _, it := range items {
-		if _, taken := r.busy[it.p.ID]; taken {
-			return nil, connect.NewError(connect.CodeAlreadyExists,
-				fmt.Errorf("профиль %d уже проверяется: дождитесь конца теста или остановите его (StopTests)", it.p.ID))
+		if old, taken := r.busy[it.p.ID]; taken {
+			r.dropLocked(old)
 		}
 	}
 	r.next++
@@ -63,7 +62,20 @@ func (s *Server) beginTestBatch(items []testItem, cancel context.CancelFunc) (fu
 				delete(r.busy, it.p.ID)
 			}
 		}
-	}, nil
+	}
+}
+
+// dropLocked отменяет батч и освобождает его профили.
+func (r *testRun) dropLocked(id int) {
+	if c := r.cancels[id]; c != nil {
+		c()
+	}
+	delete(r.cancels, id)
+	for pid, owner := range r.busy {
+		if owner == id {
+			delete(r.busy, pid)
+		}
+	}
 }
 
 // cancelTestBatches — StopTests: отменяет все батчи и сразу освобождает

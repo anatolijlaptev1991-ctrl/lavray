@@ -17,7 +17,7 @@
 ## Предусловия
 
 - **Тестовый ПК подтверждён.** Первая команда файла: `. C:\lavray-test\env.ps1; Test-TestPc` должна напечатать `True` (маркер `C:\lavray-test\TESTPC_OK` есть, создан на этом ПК, не старше 30 суток; `01-ENVIRONMENT.md`, раздел 3). `False` — итог файла `BLOCKED`, ни одного действия.
-- Установленная версия 0.9.1 (путь ядра `C:\Program Files\LAVRay\binaries\lavray-core.exe`); добавлено не менее двух рабочих серверов (M02/M03).
+- Установленная версия 0.9.2 (путь ядра `C:\Program Files\LAVRay\binaries\lavray-core.exe`); добавлено не менее двух рабочих серверов (M02/M03).
 - Установлен Claude Code (`claude --version`) либо Claude Desktop. Если ни того ни другого нет, части 4–6 получают `BLOCKED`; часть 1–3 выполняются без клиента, а вместо клиента используйте `lavray-core.exe mcp` вручную (A08, шаг 2) или скрипт A11 `a11_mcp.py`.
 - Исходное состояние реестра сохранено (`reg export "HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings" C:\lavray-test\tmp\M17-before.reg /y`).
 - Режим доступа агентов в приложении «Выключено» (по умолчанию).

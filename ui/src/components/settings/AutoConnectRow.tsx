@@ -19,30 +19,21 @@ function inShell(): boolean {
   return (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
 }
 
-export function AutoConnectRow(): JSX.Element | null {
+interface Props {
+  /** Значение `remember.enable`, уже прочитанное экраном настроек (отдельного запроса нет). */
+  readonly value: boolean;
+}
+
+export function AutoConnectRow({ value }: Props): JSX.Element | null {
   const { t } = useI18n();
   const core = useCore();
-  // null — значение ещё не прочитано: переключатель недоступен.
-  const [on, setOn] = useState<boolean | null>(null);
+  const [on, setOn] = useState(value);
   const [failed, setFailed] = useState(false);
-  const shell = inShell();
 
+  // Экран перечитал настройки (импорт, откат) — следуем за ядром.
   useEffect(() => {
-    if (!shell) return;
-    const guard = { live: true };
-    core.settings
-      .getSettings({ keys: [REMEMBER_ENABLE_KEY] })
-      .then((res) => {
-        const value = res.values[REMEMBER_ENABLE_KEY]?.value;
-        if (guard.live) setOn(value?.case === 'boolValue' && value.value);
-      })
-      .catch(() => {
-        if (guard.live) setOn(null);
-      });
-    return (): void => {
-      guard.live = false;
-    };
-  }, [core, shell]);
+    setOn(value);
+  }, [value]);
 
   const toggle = useCallback(
     async (next: boolean): Promise<void> => {
@@ -59,7 +50,7 @@ export function AutoConnectRow(): JSX.Element | null {
     [core],
   );
 
-  if (!shell) return null;
+  if (!inShell()) return null;
   return (
     <>
       <div className="set-row" id="autoConnectRow">
@@ -73,14 +64,13 @@ export function AutoConnectRow(): JSX.Element | null {
         </div>
         <div className="set-ctl">
           <button
-            className={`sw${on === true ? ' on' : ''}`}
+            className={`sw${on ? ' on' : ''}`}
             role="switch"
-            aria-checked={on === true}
+            aria-checked={on}
             aria-labelledby="autoConnectLabel"
             aria-describedby="autoConnectDesc"
-            disabled={on === null}
             onClick={() => {
-              void toggle(on !== true);
+              void toggle(!on);
             }}
           />
         </div>

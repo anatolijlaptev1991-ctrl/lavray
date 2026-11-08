@@ -10,11 +10,11 @@ import { AutostartRow } from '../AutostartRow';
 import { AutoConnectRow } from './AutoConnectRow';
 import { ShellPrefRows } from './ShellPrefRows';
 
-export function PlatformRows(): JSX.Element {
+export function PlatformRows({ rememberEnable = false }: { readonly rememberEnable?: boolean }): JSX.Element {
   return (
     <>
       <AutostartRow />
-      <AutoConnectRow />
+      <AutoConnectRow value={rememberEnable} />
       <ShellPrefRows />
       <SessionsPanel />
     </>

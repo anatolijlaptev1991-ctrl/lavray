@@ -11,13 +11,12 @@ import {
   useState,
   useSyncExternalStore,
 } from 'react';
-import { create } from '@bufbuild/protobuf';
 import type { CoreClients } from '../lib/core';
-import { createCoreClients, friendlyCoreError } from '../lib/core';
+import { createCoreClients } from '../lib/core';
+import { coreStatusStore } from '../lib/coreStatusStore';
 import { getCoreEndpoint, subscribeCoreEndpoint } from '../lib/coreEndpoint';
 import { getCsrfToken, isWebShell } from '../lib/webSession';
 import type { CoreStatus, Profile } from '../gen/lavray_pb';
-import { CoreState, CoreStatusSchema } from '../gen/lavray_pb';
 
 export const CoreContext = createContext<CoreClients | null>(null);
 
@@ -47,44 +46,10 @@ export function useCoreClients(): CoreClients {
 // сессии (started_at_ms), режима, имени активного профиля и версии.
 export type { CoreStatus };
 
-function initialStatus(): CoreStatus {
-  return create(CoreStatusSchema, {
-    state: CoreState.IDLE,
-    activeProfileId: 0n,
-    lastError: '',
-  });
-}
-
-/** Опрос статуса ядра раз в секунду (дешёвый unary RPC). */
+/** Статус ядра: общий для всех потребителей, опрос один (lib/coreStatusStore.ts). */
 export function useCoreStatus(): CoreStatus {
-  const core = useCore();
-  const [status, setStatus] = useState<CoreStatus>(initialStatus);
-  useEffect(() => {
-    // Новые клиенты — другой адрес, возможно другой процесс ядра: статус
-    // прежнего («Подключено») не переносим (T-03).
-    setStatus(initialStatus());
-    const tick = async (): Promise<void> => {
-      try {
-        const st = await core.core.getStatus({});
-        // D9/D15 (аудит round 2): раньше хук выкидывал started_at_ms, mode,
-        // имя профиля и версию ядра — таймер сессии сбрасывался, а причина
-        // падения нигде не показывалась. Теперь статус передаётся целиком.
-        setStatus(st);
-      } catch (e) {
-        setStatus((prev) =>
-          create(CoreStatusSchema, { ...prev, lastError: friendlyCoreError(e) }),
-        );
-      }
-    };
-    void tick();
-    const id = setInterval(() => {
-      void tick();
-    }, 1000);
-    return (): void => {
-      clearInterval(id);
-    };
-  }, [core]);
-  return status;
+  const store = coreStatusStore(useCore());
+  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 }
 
 /** Профили (с поиском на стороне ядра). */

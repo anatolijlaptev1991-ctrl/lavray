@@ -4,9 +4,10 @@
 //! имя на пользователя, XML с дескриптором безопасности, временный файл,
 //! проверка «exe установлен».
 
+use crate::files::bounded::same_content;
 use crate::launch::ARG_TRAY;
 use std::fs::File;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Component, Path, PathBuf, Prefix};
 
 /// Общее начало имени задач LAVRay; установщик удаляет все `LAVRay-*`.
@@ -107,7 +108,8 @@ pub fn task_xml(exe: &Path, sid: &str) -> String {
 /// XML в виде, который понимает `schtasks /XML`: UTF-16 LE с BOM (кодировка
 /// объявлена в заголовке; пути с кириллицей не теряются).
 pub fn encode_task_file(xml: &str) -> Vec<u8> {
-    let mut bytes = vec![0xFF, 0xFE];
+    let mut bytes = Vec::with_capacity(2 + xml.len() * 2); // UTF-16 ≤ 2 байт на байт UTF-8
+    bytes.extend_from_slice(&[0xFF, 0xFE]);
     for unit in xml.encode_utf16() {
         bytes.extend_from_slice(&unit.to_le_bytes());
     }
@@ -159,11 +161,9 @@ impl TaskFile {
         let mut locked = reader
             .open(&task_file.path)
             .map_err(|e| format!("блокировка {}: {e}", task_file.path.display()))?;
-        let mut stored = Vec::with_capacity(bytes.len());
-        locked
-            .read_to_end(&mut stored)
+        let same = same_content(&mut locked, bytes)
             .map_err(|e| format!("чтение {}: {e}", task_file.path.display()))?;
-        if stored != bytes {
+        if !same {
             return Err(format!(
                 "файл {} изменён сторонним процессом",
                 task_file.path.display()

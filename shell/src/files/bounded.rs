@@ -25,6 +25,17 @@ pub fn read_bounded(path: &Path, max: u64) -> io::Result<Vec<u8>> {
     Ok(raw)
 }
 
+/// Совпадает ли содержимое `reader` с `expected`. Читается не больше
+/// `expected.len() + 1` байт: файл, который вырос, отличается уже по лишнему
+/// байту, и читать его дальше незачем.
+pub fn same_content(reader: impl Read, expected: &[u8]) -> std::io::Result<bool> {
+    let mut stored = Vec::with_capacity(expected.len() + 1);
+    reader
+        .take(expected.len() as u64 + 1)
+        .read_to_end(&mut stored)?;
+    Ok(stored == expected)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -59,5 +70,20 @@ mod tests {
             read_bounded(&p, 16).unwrap_err().kind(),
             io::ErrorKind::NotFound
         );
+    }
+
+    #[test]
+    fn same_content_reads_at_most_one_byte_over() {
+        let expected = "<Task/>".as_bytes().to_vec();
+        assert!(same_content(expected.as_slice(), &expected).unwrap());
+        let mut grown = expected.clone();
+        grown.push(0);
+        assert!(!same_content(grown.as_slice(), &expected).unwrap());
+        let mut shorter = expected.clone();
+        shorter.pop();
+        assert!(!same_content(shorter.as_slice(), &expected).unwrap());
+        // бесконечный файл: чтение ограничено (на неограниченном зависло бы)
+        let endless = std::io::repeat(b'x');
+        assert!(!same_content(endless, &expected).unwrap());
     }
 }

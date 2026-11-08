@@ -78,3 +78,8 @@ windows-sys = { version = "0.61", features = [
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 sha2 = "0.10"
+
+# Релизная сборка: тонкий LTO и один codegen-unit. Без strip и panic=abort.
+[profile.release]
+lto = "thin"
+codegen-units = 1

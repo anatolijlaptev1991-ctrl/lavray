@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 )
 
 // T-33: разбор строк журнала sing-box и писатель для SetLogWritter.
@@ -138,5 +139,37 @@ func TestLogWriterCompleteLinesSkipBuffer(t *testing.T) {
 	_, _ = w.Write([]byte("INFO[0000] a\nINFO[0000] b\n"))
 	if len(lines()) != 2 || w.buf != nil {
 		t.Fatalf("полные строки прошли через буфер: %v", w.buf)
+	}
+}
+
+// Порция в предел не режет символ UTF-8: «я» (2 байта) на границе переносится
+// целиком в следующую строку, склейка порций даёт исходный текст.
+func TestLogWriterKeepsRuneAtBoundary(t *testing.T) {
+	sink, lines := collect()
+	w := newLogWriter(sink)
+	in := strings.Repeat("x", maxPendingLine-1) + "яя"
+	_, _ = w.Write([]byte(in))
+	_, _ = w.Write([]byte("\n"))
+	got := lines()
+	if len(got) != 2 {
+		t.Fatalf("строк %d, ожидалось 2", len(got))
+	}
+	for _, c := range got {
+		if !utf8.ValidString(c.msg) {
+			t.Fatalf("порция разрезала символ: %q", c.msg[len(c.msg)-4:])
+		}
+	}
+	if got[0].msg+got[1].msg != in {
+		t.Fatal("после склейки порций текст изменился")
+	}
+}
+
+func TestLogWriterReplacesInvalidUTF8(t *testing.T) {
+	sink, lines := collect()
+	w := newLogWriter(sink)
+	_, _ = w.Write([]byte("INFO[0000] bad \xff\xfe byte\n"))
+	got := lines()
+	if len(got) != 1 || !utf8.ValidString(got[0].msg) || !strings.HasPrefix(got[0].msg, "bad ") {
+		t.Fatalf("невалидный UTF-8 дошёл до приёмника: %q", got)
 	}
 }

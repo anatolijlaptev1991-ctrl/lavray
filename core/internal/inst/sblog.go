@@ -10,7 +10,9 @@ import (
 	"bytes"
 	"io"
 	"regexp"
+	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
 )
@@ -98,11 +100,30 @@ func (w *logWriter) accumulate(chunk []byte) {
 	for len(w.buf)+len(chunk) > maxPendingLine {
 		take := maxPendingLine - len(w.buf)
 		w.buf = append(w.buf, chunk[:take]...)
-		w.emit(w.buf)
-		w.buf = w.buf[:0]
 		chunk = chunk[take:]
+		cut := runeBoundary(w.buf, chunk[0])
+		var carry [utf8.UTFMax]byte
+		n := copy(carry[:], w.buf[cut:])
+		w.emit(w.buf[:cut])
+		w.buf = append(w.buf[:0], carry[:n]...)
 	}
 	w.buf = append(w.buf, chunk...)
+}
+
+// runeBoundary — длина части buf, которую можно выдать, не разрезав символ
+// UTF-8: next — первый байт остатка. Если он продолжение символа, начатого в
+// конце buf, неполный символ остаётся для следующей порции (не больше
+// UTFMax-1 байт; на мусорных данных режем как есть).
+func runeBoundary(buf []byte, next byte) int {
+	if utf8.RuneStart(next) {
+		return len(buf)
+	}
+	for k := 1; k < utf8.UTFMax && k <= len(buf); k++ {
+		if utf8.RuneStart(buf[len(buf)-k]) {
+			return len(buf) - k
+		}
+	}
+	return len(buf)
 }
 
 func (w *logWriter) emit(line []byte) {
@@ -110,6 +131,6 @@ func (w *logWriter) emit(line []byte) {
 	if len(line) == 0 {
 		return
 	}
-	level, msg := parseSingBoxLine(string(line))
+	level, msg := parseSingBoxLine(strings.ToValidUTF8(string(line), "�"))
 	w.sink(level, msg)
 }

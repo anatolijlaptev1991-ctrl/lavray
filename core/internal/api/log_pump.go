@@ -20,7 +20,7 @@ import (
 // канала подписчика) сообщает сводка: перед первой прошедшей строкой после
 // всплеска либо по tick, когда всплеск затих (секунда без отбросов).
 func pumpLogs(ctx context.Context, sub *logs.Subscription, gate *logs.FloodGate, now func() time.Time,
-	tick <-chan time.Time, send func(logs.Line) error) error {
+	tick <-chan time.Time, keep func(logs.Line) bool, send func(logs.Line) error) error {
 	var seenOverflow uint64
 	report := func(passed bool) error {
 		t := now()
@@ -30,10 +30,14 @@ func pumpLogs(ctx context.Context, sub *logs.Subscription, gate *logs.FloodGate,
 		if n == 0 {
 			return nil
 		}
-		return send(logs.Line{
+		sum := logs.Line{
 			TsMs: t.UnixMilli(), Level: logs.LevelWarn, Source: logs.SourceCore,
 			Message: fmt.Sprintf("журнал: пропущено строк: %d (антифлуд, лимит строк в секунду)", n),
-		})
+		}
+		if keep != nil && !keep(sum) { // сводка проходит те же фильтры, что и строки
+			return nil
+		}
+		return send(sum)
 	}
 	for {
 		select {

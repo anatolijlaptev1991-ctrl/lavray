@@ -36,12 +36,16 @@ func logLevelToProto(l string) lavrayv1.LogLevel {
 	}
 }
 
+// utf8Repl — замена невалидных байт: proto3 string с невалидным UTF-8 не
+// маршалится, и один такой кадр оборвал бы весь поток журнала.
+const utf8Repl = "?"
+
 func logLineToProto(l logs.Line) *lavrayv1.LogLine {
 	return &lavrayv1.LogLine{
 		TsMs:    l.TsMs,
 		Level:   logLevelToProto(l.Level),
-		Source:  l.Source,
-		Message: l.Message,
+		Source:  strings.ToValidUTF8(l.Source, utf8Repl),
+		Message: strings.ToValidUTF8(l.Message, utf8Repl),
 	}
 }
 
@@ -70,7 +74,8 @@ func (s *Server) Subscribe(ctx context.Context, req *connect.Request[lavrayv1.Su
 	// T-70: tail_lines — «сколько истории отдать сразу (0 = нет)», те же
 	// фильтры, что у живого потока. История и регистрация подписчика берутся
 	// атомарно (Mux.Open): строка на стыке не дублируется и не теряется.
-	sub := s.logs.Open(256, tailN, logFilter(msg))
+	keep := logFilter(msg)
+	sub := s.logs.Open(256, tailN, keep)
 	defer sub.Close()
 	for _, l := range sub.History {
 		if err := stream.Send(logLineToProto(l)); err != nil {
@@ -83,7 +88,7 @@ func (s *Server) Subscribe(ctx context.Context, req *connect.Request[lavrayv1.Su
 	}
 	tick := time.NewTicker(time.Second)
 	defer tick.Stop()
-	return pumpLogs(ctx, sub, logs.NewFloodGate(maxPS), time.Now, tick.C, func(l logs.Line) error {
+	return pumpLogs(ctx, sub, logs.NewFloodGate(maxPS), time.Now, tick.C, keep, func(l logs.Line) error {
 		return stream.Send(logLineToProto(l))
 	})
 }

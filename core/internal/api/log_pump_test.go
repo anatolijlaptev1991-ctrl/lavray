@@ -13,15 +13,18 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	lavrayv1 "github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
+	"google.golang.org/protobuf/proto"
 )
 
 type pumpRig struct {
 	mux  *logs.Mux
 	sub  *logs.Subscription
 	gate *logs.FloodGate
+	keep func(logs.Line) bool
 	now  atomic.Pointer[time.Time]
 	tick chan time.Time
 	got  []logs.Line
@@ -41,7 +44,7 @@ func (r *pumpRig) clock() time.Time   { return *r.now.Load() }
 func (r *pumpRig) run(ctx context.Context, done chan<- struct{}) {
 	go func() {
 		defer close(done)
-		_ = pumpLogs(ctx, r.sub, r.gate, r.clock, r.tick,
+		_ = pumpLogs(ctx, r.sub, r.gate, r.clock, r.tick, r.keep,
 			func(l logs.Line) error { r.got = append(r.got, l); return nil })
 	}()
 }
@@ -140,5 +143,49 @@ func TestSubscribeRPCHonoursMaxLinesPerSecond(t *testing.T) {
 	}
 	if !strings.Contains(got[3], "пропущено") || got[4] != "live" {
 		t.Fatalf("после лимита ожидалась сводка и строка: %v", got)
+	}
+}
+
+// Сводка проходит те же фильтры: при min_level=ERROR или чужом source она не
+// приходит, строки лимит по-прежнему режет.
+func TestPumpSummaryHonoursFilters(t *testing.T) {
+	errLvl := lavrayv1.LogLevel_LOG_LEVEL_ERROR
+	for name, req := range map[string]*lavrayv1.SubscribeLogsRequest{
+		"min_level": {MinLevel: &errLvl},
+		"sources":   {Sources: []string{"subs"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := newPumpRig(1)
+			r.keep = logFilter(req)
+			for i := 0; i < 5; i++ {
+				r.mux.Logf("error", "subs", "m%d", i)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			r.run(ctx, done)
+			pumpWait(t, func() bool { return len(r.sub.C) == 0 })
+			r.setNow(r.clock().Add(2 * time.Second))
+			r.tick <- r.clock()
+			cancel()
+			<-done
+			for _, l := range r.got {
+				if strings.Contains(l.Message, "пропущено") {
+					t.Fatalf("сводка прошла фильтр: %+v", l)
+				}
+			}
+			if len(r.got) != 1 {
+				t.Fatalf("строк %d, ожидалась одна (лимит 1): %v", len(r.got), r.got)
+			}
+		})
+	}
+}
+
+func TestLogLineToProtoValidUTF8(t *testing.T) {
+	l := logLineToProto(logs.Line{Level: "info", Source: "core", Message: "a\xffb"})
+	if !utf8.ValidString(l.Message) {
+		t.Fatalf("невалидный UTF-8 в кадре: %q", l.Message)
+	}
+	if _, err := proto.Marshal(l); err != nil {
+		t.Fatal(err)
 	}
 }

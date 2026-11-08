@@ -13,7 +13,7 @@ use lavray_shell::agent::{AgentAccess, AgentMode};
 use lavray_shell::autostart::{self, AutostartState};
 use lavray_shell::coreproc::driver::generate_auth_token;
 use lavray_shell::coreproc::runner::{spawn_supervisor, Failure, SupervisorHandle};
-use lavray_shell::coreproc::{CoreSpawnConfig, CoreState};
+use lavray_shell::coreproc::{connect_last, CoreSpawnConfig, CoreState};
 use lavray_shell::elevation::{
     is_elevated as process_is_elevated, relaunch_elevated as relaunch, RelaunchOutcome,
     RelaunchRequest, Runas,
@@ -457,7 +457,7 @@ fn core_spawn_config() -> Result<CoreSpawnConfig, String> {
     let data_dir = data_dir();
     std::fs::create_dir_all(&data_dir)
         .map_err(|e| format!("каталог данных {}: {e}", data_dir.display()))?;
-    Ok(CoreSpawnConfig {
+    Ok(connect_last::apply(CoreSpawnConfig {
         binary: core_bin,
         data_dir,
         // §3.1: порт выделяет ОС («127.0.0.1:0»).
@@ -465,7 +465,7 @@ fn core_spawn_config() -> Result<CoreSpawnConfig, String> {
         auth_token: generate_auth_token().map_err(|e| format!("токен ядра: {e}"))?,
         agent_token: Some(generate_auth_token().map_err(|e| format!("агентский токен: {e}"))?),
         extra_args: vec![],
-    })
+    }))
 }
 
 /// Окружение надзирателя: состояние оболочки, событие UI, системный прокси.

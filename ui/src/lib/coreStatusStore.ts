@@ -4,8 +4,8 @@
 // на набор клиентов ядра, сколько бы компонентов ни подписалось (App, экраны).
 //
 // Следующий запрос уходит только после завершения предыдущего (медленный RPC
-// не копит очередь); пока окно скрыто, опрос стоит, при возврате — сразу
-// обновление. Снимок заменяется только при изменении полей статуса, поэтому
+// не копит очередь); пока окно скрыто, опрос не останавливается (фоновые
+// потребители живут в трее), а лишь замедляется; при возврате — сразу запрос. Снимок заменяется только при изменении полей статуса, поэтому
 // одинаковый ответ не вызывает рендера подписчиков.
 import { create, equals } from '@bufbuild/protobuf';
 import type { CoreClients } from './core';
@@ -15,6 +15,8 @@ import { CoreState, CoreStatusSchema } from '../gen/lavray_pb';
 
 /** Пауза между опросами, считается от завершения предыдущего запроса. */
 export const STATUS_POLL_MS = 1000;
+/** В скрытом окне (трей) опрос продолжается, но реже: от статуса зависят системный прокси, трей и уведомления. */
+export const STATUS_POLL_HIDDEN_MS = 2000;
 
 export interface CoreStatusStore {
   readonly subscribe: (listener: () => void) => () => void;
@@ -41,10 +43,10 @@ function createStore(core: CoreClients): CoreStatusStore {
     });
   };
   const schedule = (): void => {
-    if (!running || isHidden()) return;
+    if (!running) return;
     timer = setTimeout(() => {
-      if (!isHidden()) void tick();
-    }, STATUS_POLL_MS);
+      void tick();
+    }, isHidden() ? STATUS_POLL_HIDDEN_MS : STATUS_POLL_MS);
   };
   async function tick(): Promise<void> {
     if (inFlight) return;
@@ -67,7 +69,7 @@ function createStore(core: CoreClients): CoreStatusStore {
   const start = (): void => {
     running = true;
     document.addEventListener('visibilitychange', onVisibility);
-    if (!isHidden()) void tick();
+    void tick();
   };
   const stop = (): void => {
     running = false;

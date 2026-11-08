@@ -7,7 +7,7 @@ import { create } from '@bufbuild/protobuf';
 import { CoreState, CoreStatusSchema } from '../gen/lavray_pb';
 import type { CoreStatus } from '../gen/lavray_pb';
 import type { CoreClients } from './core';
-import { coreStatusStore, STATUS_POLL_MS } from './coreStatusStore';
+import { coreStatusStore, STATUS_POLL_HIDDEN_MS, STATUS_POLL_MS } from './coreStatusStore';
 
 const st = (state: CoreState): CoreStatus => create(CoreStatusSchema, { state, coreVersion: '1' });
 
@@ -81,19 +81,36 @@ describe('coreStatusStore', () => {
     unsub();
   });
 
-  it('скрытое окно ставит опрос на паузу, возврат обновляет сразу', async () => {
+  it('скрытое окно: опрос идёт реже, но не стоит; возврат обновляет сразу', async () => {
     const { core, calls } = fakeCore(() => Promise.resolve(st(CoreState.IDLE)));
     const unsub = coreStatusStore(core).subscribe(() => undefined);
     await vi.advanceTimersByTimeAsync(0);
     expect(calls()).toBe(1);
     setHidden(true);
-    await vi.advanceTimersByTimeAsync(STATUS_POLL_MS * 5);
-    expect(calls()).toBe(1);
+    await vi.advanceTimersByTimeAsync(STATUS_POLL_HIDDEN_MS * 5);
+    // Реже, чем при видимом окне (там было бы 11), но опрос идёт.
+    expect(calls()).toBeGreaterThanOrEqual(5);
+    expect(calls()).toBeLessThanOrEqual(7);
+    const before = calls();
     setHidden(false);
     await vi.advanceTimersByTimeAsync(0);
-    expect(calls()).toBe(2);
-    await vi.advanceTimersByTimeAsync(STATUS_POLL_MS);
-    expect(calls()).toBe(3);
+    expect(calls()).toBe(before + 1);
+    unsub();
+  });
+
+  it('переход подключено → отключено в скрытом окне доходит до подписчика', async () => {
+    let next = st(CoreState.CONNECTED);
+    const { core } = fakeCore(() => Promise.resolve(create(CoreStatusSchema, next)));
+    const store = coreStatusStore(core);
+    setHidden(true);
+    const listener = vi.fn();
+    const unsub = store.subscribe(listener);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(store.getSnapshot().state).toBe(CoreState.CONNECTED);
+    next = st(CoreState.IDLE);
+    await vi.advanceTimersByTimeAsync(STATUS_POLL_HIDDEN_MS);
+    expect(store.getSnapshot().state).toBe(CoreState.IDLE);
+    expect(listener).toHaveBeenCalledTimes(2);
     unsub();
   });
 

@@ -13,6 +13,9 @@ use std::collections::VecDeque;
 /// Ёмкость ring-буфера диагностических строк (§4: «ring 200 строк»).
 pub const RING_CAPACITY: usize = 200;
 
+/// Потолок предварительной ёмкости окна [`FloodGate`] (меток времени).
+const WINDOW_PREALLOC_MAX: usize = 4096;
+
 /// Одна строка пайпа ядра с порядковым номером.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogLine {
@@ -50,16 +53,37 @@ impl LogRing {
     }
 
     /// Добавить сырую строку: ANSI вырезается, seq растёт, старейшая строка
-    /// вытесняется при переполнении. Возвращает seq строки.
+    /// вытесняется при переполнении. Возвращает seq строки. Удобная форма для
+    /// тестов и холодных путей; горячий путь читателей — [`LogRing::push_reusing`].
     pub fn push(&mut self, raw: &str) -> u64 {
+        let mut text = String::with_capacity(raw.len());
+        strip_ansi_into(raw, &mut text);
+        self.push_reusing(&mut text)
+    }
+
+    /// Добавить уже очищенную от ANSI строку, обменяв её буфер на буфер
+    /// вытесняемой записи (0 аллокаций в устоявшемся режиме).
+    ///
+    /// Очистку (`strip_ansi_into`) вызывающий делает ВНЕ мьютекса ring в своём
+    /// рабочем буфере; под замком остаются только seq, `mem::swap` и
+    /// `VecDeque`. После вызова `text` содержит прежний текст вытесненной
+    /// строки (или пуст, пока ring не заполнен) — его нужно `clear()` перед
+    /// следующим использованием. Ёмкость растёт один раз на новой максимальной
+    /// длине строки и сохраняется.
+    pub fn push_reusing(&mut self, text: &mut String) -> u64 {
         let seq = self.next_seq;
         self.next_seq = self.next_seq.saturating_add(1);
         if self.lines.len() == self.capacity {
-            self.lines.pop_front();
+            if let Some(mut slot) = self.lines.pop_front() {
+                std::mem::swap(&mut slot.text, text);
+                slot.seq = seq;
+                self.lines.push_back(slot);
+                return seq;
+            }
         }
         self.lines.push_back(LogLine {
             seq,
-            text: strip_ansi(raw),
+            text: std::mem::take(text),
         });
         seq
     }
@@ -95,69 +119,85 @@ impl LogRing {
     }
 }
 
+/// Состояние автомата разбора VT100/ANSI.
+#[derive(Clone, Copy, PartialEq)]
+enum St {
+    Ground,
+    Esc,
+    EscInter,
+    Csi,
+    Osc,
+    OscEsc,
+}
+
+/// Переход автомата по символу `ch`.
+fn advance(state: St, ch: char) -> St {
+    match state {
+        St::Ground if ch == '\x1b' => St::Esc,
+        St::Ground => St::Ground,
+        St::Esc => match ch {
+            '[' => St::Csi,
+            ']' => St::Osc,
+            // Промежуточные байты 0x20–0x2F ( '(' , '#' , '%' … ):
+            // последовательность продолжается, финал придёт позже.
+            '\x20'..='\x2f' => St::EscInter,
+            _ => St::Ground,
+        },
+        // Промежуточные байты накапливаются; любой другой байт — финальный,
+        // съедаем его и выходим в Ground.
+        St::EscInter if matches!(ch, '\x20'..='\x2f') => St::EscInter,
+        St::EscInter => St::Ground,
+        St::Csi if matches!(ch, '\x40'..='\x7e') => St::Ground,
+        St::Csi => St::Csi,
+        St::Osc => match ch {
+            '\x07' => St::Ground,
+            '\x1b' => St::OscEsc,
+            _ => St::Osc,
+        },
+        St::OscEsc if ch == '\\' => St::Ground,
+        St::OscEsc => St::Osc,
+    }
+}
+
 /// Вырезать VT100/ANSI-последовательности: CSI `ESC [ … <final @..~>`,
 /// OSC `ESC ] … (BEL | ESC \)`, escape-последовательности ECMA-48 с
 /// промежуточными байтами 0x20–0x2F (`ESC ( B`, `ESC # 8`, `ESC % G` … —
 /// финальный байт съедается) и прочие двухсимвольные ESC-коды.
 pub fn strip_ansi(input: &str) -> String {
-    #[derive(Clone, Copy, PartialEq)]
-    enum St {
-        Ground,
-        Esc,
-        EscInter,
-        Csi,
-        Osc,
-        OscEsc,
-    }
-
-    let mut state = St::Ground;
     let mut out = String::with_capacity(input.len());
-    for ch in input.chars() {
-        match state {
-            St::Ground => {
-                if ch == '\x1b' {
-                    state = St::Esc;
-                } else {
-                    out.push(ch);
-                }
-            }
-            St::Esc => match ch {
-                '[' => state = St::Csi,
-                ']' => state = St::Osc,
-                // Промежуточные байты 0x20–0x2F ( '(' , '#' , '%' … ):
-                // последовательность продолжается, финал придёт позже.
-                '\x20'..='\x2f' => state = St::EscInter,
-                _ => state = St::Ground,
-            },
-            St::EscInter => {
-                // Промежуточные байты накапливаются; любой другой байт —
-                // финальный, съедаем его и выходим в Ground.
-                if !matches!(ch, '\x20'..='\x2f') {
-                    state = St::Ground;
-                }
-            }
-            St::Csi => {
-                if matches!(ch, '\x40'..='\x7e') {
-                    state = St::Ground;
-                }
-            }
-            St::Osc => match ch {
-                '\x07' => state = St::Ground,
-                '\x1b' => state = St::OscEsc,
-                _ => {}
-            },
-            St::OscEsc => {
-                state = if ch == '\\' { St::Ground } else { St::Osc };
-            }
-        }
-    }
+    strip_ansi_into(input, &mut out);
     out
+}
+
+/// То же, что [`strip_ansi`], но ДОПИСЫВАЕТ результат в `out` (буфер читателя
+/// переиспользуется; перед вызовом его очищает вызывающий). Строка без ESC —
+/// быстрый путь: `memchr` и одно копирование.
+pub fn strip_ansi_into(input: &str, out: &mut String) {
+    let Some(first_esc) = memchr::memchr(0x1b, input.as_bytes()) else {
+        out.push_str(input);
+        return;
+    };
+    // ESC — ASCII, поэтому `first_esc` лежит на границе символа.
+    out.push_str(&input[..first_esc]);
+    let mut state = St::Ground;
+    for ch in input[first_esc..].chars() {
+        if state == St::Ground && ch != '\x1b' {
+            out.push(ch);
+        }
+        state = advance(state, ch);
+    }
 }
 
 /// Антифлуд-фильтр: не более `max_per_second` строк в СКОЛЬЗЯЩУЮ секунду
 /// (окно `(now−1000, now]`, а не тумблинг-окно: всплеск на стыке секунд не
 /// проходит удвоенный лимит; §4 «антифлуд max_log_line строк/с», значение
 /// задаётся конфигом).
+///
+/// Контракт лимита — НА ПАЙП: у stdout и у stderr свой `FloodGate`, поэтому
+/// суммарно ядро может провести в ring до `2 × max_per_second` строк в
+/// секунду (оба пайпа шумят одновременно); один активный пайп ограничен
+/// ровно `max_per_second`. Часы — монотонные (миллисекунды от старта
+/// читателя), не `SystemTime`: скачок системного времени окно не ломает.
 #[derive(Debug, Clone)]
 pub struct FloodGate {
     max_per_second: usize,
@@ -170,7 +210,9 @@ impl FloodGate {
     pub fn new(max_per_second: usize) -> Self {
         Self {
             max_per_second,
-            window: VecDeque::new(),
+            // Предвыделение под полный лимит; потолок защищает от
+            // чрезмерного конфигурируемого значения.
+            window: VecDeque::with_capacity(max_per_second.min(WINDOW_PREALLOC_MAX)),
         }
     }
 
@@ -199,110 +241,4 @@ impl FloodGate {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ring_keeps_last_capacity_lines_and_monotonic_seq() {
-        let mut ring = LogRing::new(3);
-        for i in 0..5 {
-            ring.push(&format!("line-{i}"));
-        }
-        assert_eq!(ring.len(), 3);
-        let texts: Vec<&str> = ring.lines().map(|l| l.text.as_str()).collect();
-        assert_eq!(texts, vec!["line-2", "line-3", "line-4"]);
-        let seqs: Vec<u64> = ring.lines().map(|l| l.seq).collect();
-        assert_eq!(seqs, vec![2, 3, 4], "seq не сбрасывается при вытеснении");
-        assert_eq!(ring.last().unwrap().text, "line-4");
-        assert!(!ring.is_empty());
-        assert_eq!(ring.capacity(), 3);
-    }
-
-    #[test]
-    fn default_capacity_is_two_hundred() {
-        let mut ring = LogRing::with_default_capacity();
-        for i in 0..(RING_CAPACITY + 50) {
-            ring.push(&format!("p{i}"));
-        }
-        assert_eq!(ring.len(), RING_CAPACITY);
-        assert_eq!(
-            ring.lines().next().unwrap().seq,
-            50,
-            "старейшая строка вытеснена"
-        );
-    }
-
-    #[test]
-    fn tail_returns_last_n_in_order() {
-        let mut ring = LogRing::new(10);
-        for i in 0..10 {
-            ring.push(&format!("l{i}"));
-        }
-        let tail: Vec<&str> = ring.tail(3).map(|l| l.text.as_str()).collect();
-        assert_eq!(tail, vec!["l7", "l8", "l9"]);
-    }
-
-    #[test]
-    fn push_strips_ansi() {
-        let mut ring = LogRing::with_default_capacity();
-        ring.push("\x1b[31mERR\x1b[0m proxy \x1b[1;32mup\x1b[0m");
-        assert_eq!(ring.last().unwrap().text, "ERR proxy up");
-    }
-
-    #[test]
-    fn strip_ansi_variants() {
-        // CSI с параметрами.
-        assert_eq!(strip_ansi("\x1b[2Kdone"), "done");
-        // OSC с BEL (заголовок терминала).
-        assert_eq!(strip_ansi("a\x1b]0;title\x07b"), "ab");
-        // OSC со ST (ESC \).
-        assert_eq!(
-            strip_ansi("a\x1b]8;;http://x\x1b\\link\x1b]8;;\x1b\\b"),
-            "alinkb"
-        );
-        // Двухсимвольная ESC-последовательность.
-        assert_eq!(strip_ansi("x\x1bMy"), "xy");
-        // Трёхсимвольные ECMA-48 c промежуточным байтом 0x20–0x2F:
-        // финальный байт съедается.
-        assert_eq!(strip_ansi("x\x1b(By"), "xy", "ESC ( B — выбор charset");
-        assert_eq!(strip_ansi("x\x1b#8y"), "xy", "ESC # 8 — DECALN");
-        assert_eq!(strip_ansi("x\x1b%Gy"), "xy", "ESC % G — выбор кодировки");
-        // Несколько промежуточных байтов — тоже валидная последовательность.
-        assert_eq!(strip_ansi("x\x1b(0\x1b(By"), "xy");
-        // Незакрытая последовательность не теряет данные молча — её нет.
-        assert_eq!(strip_ansi("ok"), "ok");
-    }
-
-    #[test]
-    fn flood_gate_limits_sliding_window() {
-        let mut gate = FloodGate::new(3);
-        assert!(gate.allow(0));
-        assert!(gate.allow(100));
-        assert!(gate.allow(200));
-        assert!(!gate.allow(300), "лимит 3 в скользящую секунду превышен");
-        assert!(!gate.allow(999));
-        // Метка t=0 покидает окно (1000−0 ≥ 1000) — снова можно.
-        assert!(gate.allow(1000));
-        assert_eq!(gate.max_per_second(), 3);
-    }
-
-    /// Стык секунд: 6 строк на границе (3 + 3) при max 3/с — tumbling-окно
-    /// пропустило бы все шесть, скользящее режет лишние и отпускает по мере
-    /// вытеснения старых меток.
-    #[test]
-    fn flood_gate_sliding_window_at_second_boundary() {
-        let mut gate = FloodGate::new(3);
-        // Три строки в конце первой секунды.
-        assert!(gate.allow(700));
-        assert!(gate.allow(800));
-        assert!(gate.allow(900));
-        // Три строки в начале второй секунды: 700/800/900 всё ещё в окне
-        // (в скользящей секунде уже есть 3 строки) — режем.
-        assert!(!gate.allow(1000));
-        assert!(!gate.allow(1100));
-        assert!(!gate.allow(1200));
-        // К t=1700 метка 700 вытеснена (1700−700 ≥ 1000) — окно освободилось.
-        assert!(gate.allow(1700));
-        assert!(!gate.allow(1750), "снова 3 строки в окне (800/900/1700)");
-    }
-}
+mod tests;

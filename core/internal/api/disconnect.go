@@ -20,6 +20,7 @@ import (
 // закрывается и когда остановка не удалась: инстанс упал, а счётчики, набранные
 // до этого, пропасть не должны.
 func (s *Server) Disconnect(ctx context.Context, req *connect.Request[lavrayv1.DisconnectRequest]) (*connect.Response[lavrayv1.DisconnectResponse], error) {
+	s.auto.noteUserOp()
 	s.resetHealth()
 	// Запуск, источник и сессия учёта берутся до остановки: потом менеджер их уже
 	// не отдаёт, а счётчики источника читаются и после остановки. Завершается

@@ -95,9 +95,9 @@ type Server struct {
 	agentMu    sync.RWMutex
 	agentToken string
 
-	// tunCheck — проверка прав на TUN перед стартом (nil — не проверять).
-	tunCheck func() error
-	ext      serverExt // веб-режим и шлюз (server_ext.go)
+	tunCheck func() error     // проверка прав на TUN перед стартом (nil — не проверять)
+	ext      serverExt        // веб-режим и шлюз (server_ext.go)
+	auto     autoConnectState // счётчик ручных действий для --connect-last (connect_last.go)
 
 	// health — итог проверки связи после подключения (connect_health.go).
 	health connHealth

@@ -23,9 +23,7 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
 )
 
-// ============================================================================
-// Connect / Disconnect / Restart
-// ============================================================================
+// ---- Connect / Disconnect / Restart ----
 
 // startRunLocked — общая логика запуска Connect и RestartProfile: сборка конфига,
 // валидаторы, старт менеджера. Возвращает статус и предупреждения сборки.
@@ -148,6 +146,7 @@ func (s *Server) Connect(ctx context.Context, req *connect.Request[lavrayv1.Conn
 		}), nil
 	}
 
+	s.auto.noteUserOp()
 	status, warnings, err := s.startRun(ctx, profile, in.GetMode())
 	if err != nil {
 		if errors.Is(err, inst.ErrAlreadyRunning) {
@@ -215,6 +214,7 @@ func (s *Server) RestartProfile(ctx context.Context, req *connect.Request[lavray
 	if _, err := s.dryRunBuild(profile, mode); err != nil {
 		return nil, err
 	}
+	s.auto.noteUserOp()
 	stopCtx, cancel := context.WithTimeout(ctx, inst.StopTimeout)
 	defer cancel()
 	if err := s.inst.Stop(stopCtx); err != nil {

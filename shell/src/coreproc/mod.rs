@@ -12,8 +12,14 @@ pub mod backoff;
 pub mod connect_last;
 pub mod driver;
 pub mod logs;
+mod mock;
+mod pipe;
+mod ready;
+mod reap;
 pub mod runner;
 pub mod teardown;
+
+pub use mock::{MockCoreProcess, SpawnCall};
 
 use std::cell::RefCell;
 use std::fmt;
@@ -214,7 +220,7 @@ pub struct InvalidAuthToken(
 ///
 /// Генерация (32 байта CSPRNG → base64url) — [`driver::generate_auth_token`];
 /// здесь — валидирующий конструктор и редактирующее хранение.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct SecretToken(String);
 
 impl SecretToken {
@@ -253,7 +259,7 @@ impl fmt::Display for SecretToken {
 
 /// Параметры запуска ядра (§3): binary, `--listen-socket`, cwd = каталог
 /// данных, auth-токен (только stdin — §3.2).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct CoreSpawnConfig {
     /// Путь к бинарнику `lavray-core`.
     pub binary: PathBuf,
@@ -291,6 +297,12 @@ pub enum CoreProcessError {
     /// Операция требует живого процесса.
     #[error("core process is not running")]
     NotRunning,
+    /// Ожидание готовности прервано командой Stop (не сбой запуска).
+    #[error("core start cancelled by stop")]
+    Cancelled,
+    /// stdout ядра закрылся без ready-строки, хотя процесс ещё жив.
+    #[error("core closed stdout without a ready line")]
+    ReadyChannelClosed,
 }
 
 /// Точка интеграции с реальным процессом `lavray-core` (трейт; продакшн-реализация —
@@ -317,118 +329,16 @@ pub trait CoreProcess {
     fn exit_info(&self) -> Option<String> {
         None
     }
-}
-
-/// transport-url endpoint'а мока по умолчанию (`MockCoreProcess`).
-const MOCK_ENDPOINT_URL: &str = "unix:///mock/lavray-core";
-
-/// Мок процесса ядра: сценарии результатов + запись вызовов (для юнит-тестов).
-///
-/// Очереди `*_results` — честный FIFO (первым потребляется первый элемент);
-/// пустая очередь отдаёт успех, а `wait_ready` при пустой `ready_results`
-/// возвращает `default_ready_endpoint` (у [`MockCoreProcess::always_ok`] —
-/// его endpoint на ВСЕ вызовы, не только на первый).
-#[derive(Debug)]
-pub struct MockCoreProcess {
-    /// Очередь результатов `spawn` в порядке вызовов (FIFO; пусто — успех).
-    pub spawn_results: Vec<Result<(), CoreProcessError>>,
-    /// Очередь результатов `wait_ready` в порядке вызовов (FIFO; пусто —
-    /// успех с `default_ready_endpoint`).
-    pub ready_results: Vec<Result<CoreEndpoint, CoreProcessError>>,
-    /// Очередь результатов `kill` в порядке вызовов (FIFO; пусто — успех).
-    pub kill_results: Vec<Result<(), CoreProcessError>>,
-    /// Endpoint для `wait_ready`, когда `ready_results` пуст.
-    pub default_ready_endpoint: CoreEndpoint,
-    /// Очередь ответов `is_alive` (FIFO); когда пуста, процесс считается живым.
-    pub alive_results: Vec<bool>,
-    /// Строки «кольца логов» для `log_lines`.
-    pub log_lines: Vec<String>,
-    /// Все конфиги, переданные в `spawn`.
-    pub spawn_calls: Vec<CoreSpawnConfig>,
-    /// Бюджеты всех вызовов `wait_ready`.
-    pub ready_calls: Vec<Duration>,
-    /// Дедлайны всех вызовов `kill`.
-    pub kill_calls: Vec<Duration>,
-}
-
-impl Default for MockCoreProcess {
-    fn default() -> Self {
-        Self {
-            spawn_results: Vec::new(),
-            ready_results: Vec::new(),
-            kill_results: Vec::new(),
-            default_ready_endpoint: CoreEndpoint {
-                transport_url: MOCK_ENDPOINT_URL.to_owned(),
-            },
-            alive_results: Vec::new(),
-            log_lines: Vec::new(),
-            spawn_calls: Vec::new(),
-            ready_calls: Vec::new(),
-            kill_calls: Vec::new(),
-        }
+    /// Пришёл Stop (общий флаг с `SupervisorHandle`): новых публикаций
+    /// endpoint'а и новых запусков быть не должно.
+    fn is_cancelled(&self) -> bool {
+        false
     }
-}
-
-impl MockCoreProcess {
-    /// Мок, у которого всё успешно; КАЖДЫЙ `wait_ready` возвращает endpoint
-    /// с данным `transport_url`.
-    pub fn always_ok(transport_url: &str) -> Self {
-        Self {
-            default_ready_endpoint: CoreEndpoint {
-                transport_url: transport_url.to_owned(),
-            },
-            ..Self::default()
-        }
-    }
-}
-
-impl CoreProcess for MockCoreProcess {
-    fn spawn(&mut self, config: &CoreSpawnConfig) -> Result<(), CoreProcessError> {
-        self.spawn_calls.push(config.clone());
-        self.spawn_results.pop_front_or_default_ok()
-    }
-
-    fn wait_ready(&mut self, budget: Duration) -> Result<CoreEndpoint, CoreProcessError> {
-        self.ready_calls.push(budget);
-        // FIFO-очередь сценариев; пустая — успех с endpoint'ом мока
-        // (`default_ready_endpoint`, у `always_ok` — его transport_url).
-        if self.ready_results.is_empty() {
-            Ok(self.default_ready_endpoint.clone())
-        } else {
-            self.ready_results.remove(0)
-        }
-    }
-
-    fn kill(&mut self, graceful_deadline: Duration) -> Result<(), CoreProcessError> {
-        self.kill_calls.push(graceful_deadline);
-        self.kill_results.pop_front_or_default_ok()
-    }
-
-    fn is_alive(&mut self) -> bool {
-        self.alive_results.is_empty() || self.alive_results.remove(0)
-    }
-
-    fn log_lines(&self, n: usize) -> Vec<String> {
-        self.log_lines[self.log_lines.len().saturating_sub(n)..].to_vec()
-    }
-}
-
-/// Хелпер мока: достать СЛЕДУЮЩИЙ по порядку запланированный результат
-/// (FIFO, `remove(0)`); пустая очередь — успех по умолчанию.
-trait PopFrontOrDefaultOk {
-    type Ok;
-    fn pop_front_or_default_ok(&mut self) -> Result<Self::Ok, CoreProcessError>;
-}
-
-impl PopFrontOrDefaultOk for Vec<Result<(), CoreProcessError>> {
-    type Ok = ();
-
-    fn pop_front_or_default_ok(&mut self) -> Result<(), CoreProcessError> {
-        if self.is_empty() {
-            Ok(())
-        } else {
-            self.remove(0)
-        }
+    /// Проверка сети после смерти процесса (§6). По умолчанию — реальные
+    /// детекторы [`teardown::verify_all`]; пока они заглушки, отчёт
+    /// `Unchecked` и состояние `Stopped` не подтверждается.
+    fn verify_teardown(&mut self) -> teardown::TeardownReport {
+        teardown::verify_all()
     }
 }
 
@@ -520,6 +430,7 @@ pub struct CoreSupervisor<P, C = SystemClock> {
     clock: C,
     state: CoreState,
     spawn_failures: u32,
+    network_verified: bool,
     crash_times: Vec<Instant>,
     backoff: backoff::BackoffSchedule,
 }
@@ -532,6 +443,7 @@ impl<P: CoreProcess, C: Clock> CoreSupervisor<P, C> {
             clock,
             state: CoreState::Idle,
             spawn_failures: 0,
+            network_verified: false,
             crash_times: Vec::new(),
             backoff: backoff::BackoffSchedule::new(),
         }
@@ -598,6 +510,11 @@ impl<P: CoreProcess, C: Clock> CoreSupervisor<P, C> {
                 self.apply(CoreEvent::ReadyConfirmed)?;
                 Ok(endpoint)
             }
+            // Stop — не сбой запуска: ни backoff, ни SpawnErr, состояние Spawning
+            // остаётся, чтобы стоп прошёл обычной лестницей (§5).
+            Err(CoreProcessError::Cancelled) => {
+                Err(SupervisorError::Process(CoreProcessError::Cancelled))
+            }
             Err(err) => {
                 self.register_failed_attempt();
                 Err(SupervisorError::Process(err))
@@ -648,14 +565,30 @@ impl<P: CoreProcess, C: Clock> CoreSupervisor<P, C> {
         Ok(self.state)
     }
 
-    /// §6: teardown-верификация прошла → Stopped.
-    pub fn mark_teardown_verified(&mut self) -> Result<CoreState, SupervisorError> {
+    /// Процесс ядра остановлен (kill/выход подтверждён) → Stopped. Это факт
+    /// про процесс; «сеть чиста» он НЕ утверждает (см. [`Self::network_verified`]).
+    pub fn mark_stopped(&mut self) -> Result<CoreState, SupervisorError> {
         self.apply(CoreEvent::TeardownVerified)
+    }
+
+    /// §6: teardown-верификация прошла (все пробы `Clean`) → Stopped и отметка
+    /// «сеть проверена».
+    pub fn mark_teardown_verified(&mut self) -> Result<CoreState, SupervisorError> {
+        let state = self.apply(CoreEvent::TeardownVerified)?;
+        self.network_verified = true;
+        Ok(state)
+    }
+
+    /// Подтверждена ли чистота сети в этом цикле (только `mark_teardown_verified`).
+    /// Ничего в оболочке от неё не зависит: ни выход, ни рестарт.
+    pub fn network_verified(&self) -> bool {
+        self.network_verified
     }
 
     /// Stopped → Idle (сброс счётчиков ретраев/крахов).
     pub fn reset(&mut self) -> Result<CoreState, SupervisorError> {
         let state = self.apply(CoreEvent::Reset)?;
+        self.network_verified = false;
         self.spawn_failures = 0;
         self.backoff.reset();
         self.crash_times.clear();
@@ -759,6 +692,7 @@ impl CoreSupervisor<MockCoreProcess, MockClock> {
 
 #[cfg(test)]
 mod tests {
+    use super::mock::MOCK_ENDPOINT_URL;
     use super::*;
 
     /// Полная легальная таблица переходов §2.1–2.2 (параметризованно).

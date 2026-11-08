@@ -31,7 +31,7 @@ func (s *Server) ListProfiles(ctx context.Context, req *connect.Request[lavrayv1
 		search = strings.ToLower(*msg.Search)
 	}
 	// Фильтры и страница применяются в хранилище до декодирования JSON (R0-D).
-	offset, limit := pageOf(msg.Page, 0)
+	offset, limit := pageOf(msg.Page)
 	list, total, err := s.st.ListProfilesPage(store.ProfileQuery{
 		GroupID: groupID, SearchLower: search, FavoritesOnly: optBool(msg.FavoritesOnly),
 		TagsAnyOf: msg.TagsAnyOf, Offset: offset, Limit: limit,
@@ -46,7 +46,7 @@ func (s *Server) ListProfiles(ctx context.Context, req *connect.Request[lavrayv1
 	return connect.NewResponse(&lavrayv1.ListProfilesResponse{Profiles: out, Total: total}), nil
 }
 
-func pageOf(p *lavrayv1.Page, total int64) (offset, limit int64) {
+func pageOf(p *lavrayv1.Page) (offset, limit int64) {
 	if p == nil {
 		return 0, -1 // без пагинации
 	}

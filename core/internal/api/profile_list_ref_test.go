@@ -56,7 +56,7 @@ func refListProfiles(s *Server, req *lavrayv1.ListProfilesRequest) (*lavrayv1.Li
 		total++
 		out = append(out, profileToProto(p))
 	}
-	offset, limit := pageOf(msg.Page, total)
+	offset, limit := pageOf(msg.Page)
 	if offset > int64(len(out)) {
 		offset = int64(len(out))
 	}

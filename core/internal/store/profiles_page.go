@@ -33,15 +33,29 @@ type lightProfile struct {
 	tagsJSON           sql.NullString
 }
 
-const pageIDChunk = 500
-
 // ListProfilesPage возвращает страницу профилей и общее число подходящих.
+// Все чтения идут в одной транзакции: счёт и страница видят один снимок БД.
 func (s *Store) ListProfilesPage(q ProfileQuery) ([]*model.Profile, int64, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, 0, err
+	}
+	defer func() { _ = tx.Rollback() }() // только чтение: фиксировать нечего
+	return s.listProfilesPage(tx, q)
+}
+
+// queryer — общее у *sql.Tx и *sql.DB.
+type queryer interface {
+	Query(query string, args ...any) (*sql.Rows, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+func (s *Store) listProfilesPage(db queryer, q ProfileQuery) ([]*model.Profile, int64, error) {
 	where, args := q.sqlWhere()
 	if q.SearchLower == "" && len(q.TagsAnyOf) == 0 {
-		return s.pageBySQL(where, args, q)
+		return pageBySQL(db, where, args, q)
 	}
-	ids, err := s.matchIDs(where, args, q)
+	ids, err := matchIDs(db, where, args, q)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -51,7 +65,7 @@ func (s *Store) ListProfilesPage(q ProfileQuery) ([]*model.Profile, int64, error
 	if q.Limit >= 0 && from+q.Limit < to {
 		to = from + q.Limit
 	}
-	out, err := s.profilesByIDs(ids[from:to])
+	out, err := s.profilesByIDs(db, ids[from:to])
 	return out, total, err
 }
 
@@ -74,13 +88,13 @@ func (q ProfileQuery) sqlWhere() (string, []any) {
 const profileOrder = ` ORDER BY group_id, sort_key, id`
 
 // pageBySQL — без поиска и тегов: счёт и страница целиком в SQL.
-func (s *Store) pageBySQL(where string, args []any, q ProfileQuery) ([]*model.Profile, int64, error) {
+func pageBySQL(db queryer, where string, args []any, q ProfileQuery) ([]*model.Profile, int64, error) {
 	var total int64
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM profiles`+where, args...).Scan(&total); err != nil {
+	if err := db.QueryRow(`SELECT COUNT(*) FROM profiles`+where, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 	pageArgs := append(append([]any{}, args...), q.Limit, max(q.Offset, 0))
-	rows, err := s.db.Query(`SELECT `+profileCols+` FROM profiles`+where+profileOrder+` LIMIT ? OFFSET ?`, pageArgs...)
+	rows, err := db.Query(`SELECT `+profileCols+` FROM profiles`+where+profileOrder+` LIMIT ? OFFSET ?`, pageArgs...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -92,12 +106,12 @@ func (s *Store) pageBySQL(where string, args []any, q ProfileQuery) ([]*model.Pr
 // matchIDs — id подходящих профилей в каноническом порядке. Теги берутся из
 // data одним json_extract и разбираются как []string — та же семантика, что и
 // у полного Unmarshal, но без разбора остальной модели.
-func (s *Store) matchIDs(where string, args []any, q ProfileQuery) ([]int64, error) {
+func matchIDs(db queryer, where string, args []any, q ProfileQuery) ([]int64, error) {
 	tagsCol := `NULL`
 	if len(q.TagsAnyOf) > 0 {
 		tagsCol = `json_extract(data, '$.tags')`
 	}
-	rows, err := s.db.Query(`SELECT id, name, address, type, `+tagsCol+` FROM profiles`+where+profileOrder, args...)
+	rows, err := db.Query(`SELECT id, name, address, type, `+tagsCol+` FROM profiles`+where+profileOrder, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -143,47 +157,4 @@ func (lp lightProfile) matches(q ProfileQuery) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-// profilesByIDs читает полные профили страницы, сохраняя порядок ids.
-func (s *Store) profilesByIDs(ids []int64) ([]*model.Profile, error) {
-	byID := make(map[int64]*model.Profile, len(ids))
-	for start := 0; start < len(ids); start += pageIDChunk {
-		chunk := ids[start:min(len(ids), start+pageIDChunk)]
-		args := make([]any, len(chunk))
-		for i, id := range chunk {
-			args[i] = id
-		}
-		rows, err := s.db.Query(`SELECT `+profileCols+` FROM profiles WHERE id IN (?`+strings.Repeat(`,?`, len(chunk)-1)+`)`, args...)
-		if err != nil {
-			return nil, err
-		}
-		ps, err := scanProfiles(rows)
-		rows.Close()
-		if err != nil {
-			return nil, err
-		}
-		for _, p := range ps {
-			byID[p.ID] = p
-		}
-	}
-	out := make([]*model.Profile, 0, len(ids))
-	for _, id := range ids {
-		if p := byID[id]; p != nil {
-			out = append(out, p)
-		}
-	}
-	return out, nil
-}
-
-func scanProfiles(rows *sql.Rows) ([]*model.Profile, error) {
-	var out []*model.Profile
-	for rows.Next() {
-		p, err := scanProfile(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, p)
-	}
-	return out, rows.Err()
 }

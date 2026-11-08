@@ -263,3 +263,21 @@ fn a_missing_signature_is_not_invented() {
     );
     assert!(store.available().is_some());
 }
+
+/// Описание больше предела — повреждённое, даже если это годный JSON.
+#[test]
+fn an_oversized_previous_json_is_not_offered() {
+    let tmp = TempDir::new("prev-oversized");
+    let store = store(&tmp);
+    apply(&store, &tmp, 'a', "0.5.0");
+    apply(&store, &tmp, 'b', "0.5.1");
+    let path = Layout::new(tmp.path()).previous_dir().join(INFO_FILE);
+    let mut raw = std::fs::read(&path).unwrap();
+    let limit = usize::try_from(MAX_INFO_BYTES).unwrap();
+    raw.resize(limit, b' ');
+    std::fs::write(&path, &raw).unwrap();
+    assert!(store.available().is_some(), "ровно на пределе читается");
+    raw.push(b' ');
+    std::fs::write(&path, &raw).unwrap();
+    assert_eq!(store.available(), None);
+}

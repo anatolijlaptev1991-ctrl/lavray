@@ -10,6 +10,7 @@
 use super::hash::parse_sha256_hex;
 use super::layout::Layout;
 use super::paths::parse_staged_name;
+use crate::files::bounded::read_bounded;
 use crate::files::io::write_atomic;
 use serde::{Deserialize, Serialize};
 use std::io;
@@ -19,6 +20,9 @@ use std::path::{Path, PathBuf};
 pub const INFO_FILE: &str = "previous.json";
 /// То же описание, пока установщик ещё «текущий».
 pub const APPLIED_FILE: &str = "applied.json";
+
+/// Наибольший размер `previous.json`/`applied.json`, байт (настоящий — ~300).
+pub const MAX_INFO_BYTES: u64 = 4 * 1024;
 
 /// Описание одного хранимого установщика.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,7 +56,7 @@ pub struct PreviousStore {
 /// `<сумма>-…` без разделителей, файл установщика на месте. Сама сумма
 /// сверяется с содержимым при запуске (`verify_locked`), не здесь.
 fn read_info(dir: &Path, file_name: &str) -> Option<PreviousInfo> {
-    let raw = std::fs::read(dir.join(file_name)).ok()?;
+    let raw = read_bounded(&dir.join(file_name), MAX_INFO_BYTES).ok()?;
     let info: PreviousInfo = serde_json::from_slice(&raw).ok()?;
     parse_sha256_hex(&info.sha256)?;
     parse_staged_name(&info.file)?;

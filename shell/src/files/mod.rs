@@ -9,6 +9,7 @@
 //! системный диалог и читает выбранный файл. Выбор папки (`pick`) нужен
 //! переносу из NekoBox: `<input webkitdirectory>` не отдаёт путь.
 
+pub mod bounded;
 pub mod io;
 pub mod pick;
 pub mod save;

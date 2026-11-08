@@ -43,7 +43,10 @@ impl FakeScreen {
 impl ScreenCapturer for FakeScreen {
     fn capture(&self) -> Result<Frame, String> {
         self.log.borrow_mut().push("capture");
-        self.result.borrow_mut().take().expect("кадр отдают один раз")
+        self.result
+            .borrow_mut()
+            .take()
+            .expect("кадр отдают один раз")
     }
 }
 
@@ -180,7 +183,9 @@ fn gdi_capture_nonzero_dimensions() {
 
 /// Градиентный кадр: блоки усреднения различаются, ошибка индексации видна.
 fn gradient(width: u32, height: u32) -> Frame {
-    let rgba = (0..width * height * 4).map(|i| (i * 7 % 251) as u8).collect();
+    let rgba = (0..width * height * 4)
+        .map(|i| (i * 7 % 251) as u8)
+        .collect();
     Frame {
         width,
         height,

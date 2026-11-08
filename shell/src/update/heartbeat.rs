@@ -6,6 +6,7 @@
 //! ли свежеустановленная версия.
 
 use super::layout::Layout;
+use crate::files::bounded::read_bounded;
 use crate::files::io::write_atomic;
 use crate::updater::HEARTBEAT_GRACE;
 use serde::{Deserialize, Serialize};
@@ -20,6 +21,16 @@ pub struct Health {
     /// Когда, миллисекунды Unix.
     pub ok_at: u64,
 }
+
+/// Тот же `health.json` для записи: версия заимствована, без копии строки.
+#[derive(Serialize)]
+struct HealthRef<'a> {
+    version: &'a str,
+    ok_at: u64,
+}
+
+/// Наибольший размер `health.json`, байт: настоящий файл — десятки байт.
+pub const MAX_HEALTH_BYTES: u64 = 4 * 1024;
 
 /// Что показывает отметка здоровья на момент `now`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,8 +90,8 @@ impl HealthStore {
 
     /// Записать отметку атомарно; повторный вызов просто обновляет время.
     pub fn write_ok(&self, version: &str, now_ms: u64) -> io::Result<()> {
-        let health = Health {
-            version: version.to_string(),
+        let health = HealthRef {
+            version,
             ok_at: now_ms,
         };
         if let Some(dir) = self.path.parent() {
@@ -92,9 +103,9 @@ impl HealthStore {
 }
 
 impl HealthSource for HealthStore {
-    /// Нет файла или он испорчен — отметки нет.
+    /// Нет файла, он испорчен или больше предела — отметки нет.
     fn read(&self) -> Option<Health> {
-        let raw = std::fs::read(&self.path).ok()?;
+        let raw = read_bounded(&self.path, MAX_HEALTH_BYTES).ok()?;
         serde_json::from_slice(&raw).ok()
     }
 }

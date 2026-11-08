@@ -351,3 +351,28 @@ describe('строка «Автозапуск» (T-82)', () => {
     expect(invokeMock).not.toHaveBeenCalled();
   });
 });
+
+describe('миграция Run -> задача не удалась (повышенный экземпляр, обычный автозапуск)', () => {
+  const stuck = (v: { container: HTMLElement }): string =>
+    v.container.querySelector('#autostartStuck')?.textContent ?? '';
+
+  it('elevated + installed + registry: предупреждение с причиной и советом', async () => {
+    invokeMock.mockResolvedValue(os({ enabled: true, method: 'registry', elevated: true, installed: true }));
+    const v = await mountBare(createElement(AutostartRow));
+    expect(stuck(v)).toContain('could not be moved to a scheduler task');
+    expect(stuck(v)).toContain('Turn autostart off and on again');
+    expect(v.container.querySelector('#autostartStuck')?.getAttribute('role')).toBe('alert');
+    expect(detail(v)).not.toContain('needs a restart as administrator');
+  });
+
+  it.each([
+    ['без прав', { enabled: true, method: 'registry', elevated: false, installed: true }],
+    ['portable', { enabled: true, method: 'registry', elevated: true, installed: false }],
+    ['задача', { enabled: true, method: 'task', elevated: true, installed: true }],
+    ['выключен', { enabled: false, method: null, elevated: true, installed: true }],
+  ])('предупреждения нет: %s', async (_name, state) => {
+    invokeMock.mockResolvedValue(os(state));
+    const v = await mountBare(createElement(AutostartRow));
+    expect(v.container.querySelector('#autostartStuck')).toBeNull();
+  });
+});

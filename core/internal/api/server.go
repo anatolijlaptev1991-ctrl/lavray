@@ -105,6 +105,8 @@ type Server struct {
 	// healthTimeout — время ожидания ответа; тесты подменяют оба.
 	healthRetryDelay time.Duration
 	healthTimeout    time.Duration
+	// onSettingRead — счётчик чтений настроек (тесты бюджета SQL); nil в работе.
+	onSettingRead func(key string)
 }
 
 // NewServer создаёт сервер зависимостями (Deps.Store обязателен).
@@ -346,16 +348,6 @@ func (s *Server) coreStatus() *lavrayv1.CoreStatus {
 	if st.State == inst.StateReady {
 		cs.HealthError = strpIf(s.healthFailure())
 	}
-	inb := s.buildSettings(false).Inbound
-	cs.Inbound = &lavrayv1.InboundInfo{
-		Listen:      inb.Address,
-		Port:        int32(inb.Port),
-		AuthEnabled: inb.AuthUser != "" && inb.AuthPass != "",
-	}
-	tun := s.buildSettings(false).Tun
-	cs.Tun = &lavrayv1.TunInfo{Enabled: tun.Enabled}
-	if tun.InterfaceName != "" {
-		cs.Tun.InterfaceName = strp(tun.InterfaceName)
-	}
+	cs.Inbound, cs.Tun = s.statusInboundTun()
 	return cs
 }

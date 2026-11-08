@@ -24,6 +24,9 @@ var descriptorMap = func() map[string]model.SettingDescriptor {
 // settingJSON — значение ключа из таблицы settings или дефолт дескриптора
 // ("" если ключа нет вообще — такого не бывает для известных ключей).
 func (s *Server) settingJSON(key string) string {
+	if s.onSettingRead != nil {
+		s.onSettingRead(key)
+	}
 	if v, ok, err := s.st.GetSetting(key); err == nil && ok {
 		return v
 	}

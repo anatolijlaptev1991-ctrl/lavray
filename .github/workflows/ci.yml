@@ -42,19 +42,24 @@ jobs:
         working-directory: proto
         run: buf build -o /dev/null
       # Обратная совместимость контракта (R0, docs/rust-migration/README.md).
-      # PR — против базовой ветки; push в main — против предыдущего коммита
-      # main (первый родитель). Правила FILE строже WIRE_JSON: UI ходит в ядро
+      # PR — против базовой ветки; push в main — против SHA main до пуша
+      # (github.event.before). Правила FILE строже WIRE_JSON: UI ходит в ядро
       # по Connect JSON, поэтому имена полей (json_name) — часть контракта.
       - name: buf breaking (против базы)
         working-directory: proto
         env:
           BASE_REF: ${{ github.base_ref }}
           EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
         run: |
           if [ "$EVENT" = "pull_request" ]; then
             against="../.git#ref=origin/${BASE_REF},subdir=proto"
           elif [ "$EVENT" = "push" ]; then
-            against="../.git#ref=HEAD~1,subdir=proto"
+            if [ -z "$BEFORE" ] || [ -z "${BEFORE//0/}" ]; then
+              echo "buf breaking пропущен: нет базового SHA (создание ветки)"; exit 0
+            fi
+            # SHA main до пуша: покрывает fast-forward сразу на несколько коммитов
+            against="../.git#ref=${BEFORE},subdir=proto"
           else
             echo "buf breaking пропущен для события $EVENT"; exit 0
           fi

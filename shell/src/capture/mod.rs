@@ -19,7 +19,7 @@ pub const MAX_SIDE: u32 = 2000;
 pub const HIDE_DELAY: Duration = Duration::from_secs(1);
 
 /// Кадр RGBA, строки сверху вниз без выравнивания.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct Frame {
     pub width: u32,
     pub height: u32,
@@ -37,13 +37,14 @@ pub trait WindowControl {
     fn show(&self) -> Result<(), String>;
 }
 
-/// Спрятать окно, подождать, снять экран, вернуть окно, уменьшить кадр.
+/// Спрятать окно, подождать, снять экран, вернуть окно, уменьшить кадр и
+/// упаковать его в бинарный ответ UI (кадр не копируется лишний раз).
 pub fn scan_screen<C, W>(
     capturer: &C,
     window: &W,
     delay: Duration,
     sleep: impl Fn(Duration),
-) -> Result<Frame, String>
+) -> Result<Vec<u8>, String>
 where
     C: ScreenCapturer,
     W: WindowControl,
@@ -54,29 +55,54 @@ where
     let shown = window.show();
     let frame = frame?;
     shown?;
-    Ok(downscale(&frame, MAX_SIDE))
+    Ok(downscale_payload(frame, MAX_SIDE))
+}
+
+/// Размеры результата и шаг усреднения; `None` — уменьшать не нужно.
+fn plan(frame: &Frame, max_side: u32) -> Option<(u32, u32, u32)> {
+    let longest = frame.width.max(frame.height);
+    if longest <= max_side || max_side == 0 {
+        return None;
+    }
+    let k = longest.div_ceil(max_side);
+    Some((k, (frame.width / k).max(1), (frame.height / k).max(1)))
+}
+
+/// Дописать в `out` уменьшенные в k раз пиксели (w×h результата).
+fn push_scaled(frame: &Frame, (k, w, h): (u32, u32, u32), out: &mut Vec<u8>) {
+    for y in 0..h {
+        for x in 0..w {
+            out.extend_from_slice(&average(frame, x * k, y * k, k));
+        }
+    }
 }
 
 /// Уменьшить кадр усреднением квадратов k×k так, чтобы длинная сторона была не
-/// больше `max_side`. Кадр меньше — без изменений.
-pub fn downscale(frame: &Frame, max_side: u32) -> Frame {
-    let longest = frame.width.max(frame.height);
-    if longest <= max_side || max_side == 0 {
-        return frame.clone();
-    }
-    let k = longest.div_ceil(max_side);
-    let (w, h) = ((frame.width / k).max(1), (frame.height / k).max(1));
-    let mut rgba = Vec::with_capacity((w * h * 4) as usize);
-    for y in 0..h {
-        for x in 0..w {
-            rgba.extend_from_slice(&average(frame, x * k, y * k, k));
-        }
-    }
+/// больше `max_side`. Кадр меньше — возвращается тот же, без копии.
+pub fn downscale(frame: Frame, max_side: u32) -> Frame {
+    let Some(p) = plan(&frame, max_side) else {
+        return frame;
+    };
+    let mut rgba = Vec::with_capacity((p.1 * p.2 * 4) as usize);
+    push_scaled(&frame, p, &mut rgba);
     Frame {
-        width: w,
-        height: h,
+        width: p.1,
+        height: p.2,
         rgba,
     }
+}
+
+/// Уменьшить кадр и сразу собрать бинарный ответ: итоговый буфер точной
+/// ёмкости, без промежуточного уменьшенного кадра.
+pub fn downscale_payload(frame: Frame, max_side: u32) -> Vec<u8> {
+    let Some(p) = plan(&frame, max_side) else {
+        return encode_payload(&frame);
+    };
+    let mut out = Vec::with_capacity(8 + (p.1 * p.2 * 4) as usize);
+    out.extend_from_slice(&p.1.to_le_bytes());
+    out.extend_from_slice(&p.2.to_le_bytes());
+    push_scaled(&frame, p, &mut out);
+    out
 }
 
 fn average(frame: &Frame, x0: u32, y0: u32, k: u32) -> [u8; 4] {
@@ -137,7 +163,7 @@ impl WindowControl for TauriWindow {
 pub async fn qr_capture_screen(
     window: tauri::WebviewWindow,
 ) -> Result<tauri::ipc::Response, String> {
-    let frame = tauri::async_runtime::spawn_blocking(move || {
+    let payload = tauri::async_runtime::spawn_blocking(move || {
         scan_screen(
             &SystemCapturer,
             &TauriWindow(window),
@@ -147,7 +173,7 @@ pub async fn qr_capture_screen(
     })
     .await
     .map_err(|e| e.to_string())??;
-    Ok(tauri::ipc::Response::new(encode_payload(&frame)))
+    Ok(tauri::ipc::Response::new(payload))
 }
 
 #[cfg(test)]

@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { Icon } from './Icon';
+import { latestOnly } from '../lib/latestOnly';
 import { useI18n } from '../hooks/useI18n';
 
 interface WinApi {
@@ -109,16 +110,17 @@ function ChromeButtons({ platform }: { readonly platform: 'win' | 'mac' | 'linux
         const api = await loadWinApi();
         if (api === null || !alive.current) return;
         setMaximized(await api.isMaximized());
-        const stop = await api.onResized(() => {
-          void api
-            .isMaximized()
-            .then((m) => {
-              if (alive.current) setMaximized(m);
-            })
-            .catch(() => {
-              /* окно закрывается — состояние уже не важно */
-            });
+        // Resize сыплется пачкой: один запрос в полёте, а после него — одна
+        // обязательная финальная проверка (latestOnly), ответ применяется последним.
+        const check = latestOnly(async () => {
+          try {
+            const m = await api.isMaximized();
+            if (alive.current) setMaximized(m);
+          } catch {
+            /* окно закрывается — состояние уже не важно */
+          }
         });
+        const stop = await api.onResized(check);
         // Компонент мог размонтироваться, пока подписка оформлялась: cleanup
         // уже отработал, отписаться нужно здесь, иначе слушатель утечёт.
         if (isAlive()) unlisten = stop;

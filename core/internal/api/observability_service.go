@@ -144,16 +144,9 @@ func lastMatching(lines []logs.Line, n int, keep func(logs.Line) bool) []logs.Li
 
 func (s *Server) GetTrafficTotals(ctx context.Context, req *connect.Request[lavrayv1.GetTrafficTotalsRequest]) (*connect.Response[lavrayv1.GetTrafficTotalsResponse], error) {
 	s.flushAccounting() // T-79: идущая сессия видна сразу, а не после таймера
-	profiles, err := s.st.ListProfiles(-1)
+	totals, err := s.trafficTotals(req.Msg.ProfileIds)
 	if err != nil {
 		return nil, mapErr(err)
-	}
-	totals := make(map[int64]*lavrayv1.TrafficCounters, len(profiles))
-	for _, p := range profiles {
-		totals[p.ID] = &lavrayv1.TrafficCounters{
-			UplinkBytes:   p.Traffic.UplinkBytes,
-			DownlinkBytes: p.Traffic.DownlinkBytes,
-		}
 	}
 	return connect.NewResponse(&lavrayv1.GetTrafficTotalsResponse{Totals: totals}), nil
 }

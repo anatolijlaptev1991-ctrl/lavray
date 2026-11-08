@@ -10,7 +10,9 @@ import (
 	"bytes"
 	"io"
 	"regexp"
+	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
 )
@@ -71,20 +73,57 @@ func newLogWriter(sink LogSink) io.Writer { return &logWriter{sink: sink} }
 func (w *logWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.buf = append(w.buf, p...)
-	for {
-		i := bytes.IndexByte(w.buf, '\n')
+	n := len(p)
+	for len(p) > 0 {
+		i := bytes.IndexByte(p, '\n')
 		if i < 0 {
+			w.accumulate(p)
 			break
 		}
-		w.emit(w.buf[:i])
-		w.buf = w.buf[i+1:]
+		if len(w.buf) == 0 && i <= maxPendingLine {
+			w.emit(p[:i]) // полная строка целиком в записи: без копии в буфер
+		} else {
+			w.accumulate(p[:i])
+			w.emit(w.buf)
+			w.buf = w.buf[:0]
+		}
+		p = p[i+1:]
 	}
-	if len(w.buf) > maxPendingLine {
-		w.emit(w.buf)
-		w.buf = nil
+	return n, nil
+}
+
+// accumulate дописывает кусок строки без перевода строки. Предел
+// maxPendingLine проверяется ДО append: переполнение выдаётся порцией ровно в
+// предел, поэтому буфер не раздувается даже от одной огромной записи. Буфер
+// переиспользуется между строками.
+func (w *logWriter) accumulate(chunk []byte) {
+	for len(w.buf)+len(chunk) > maxPendingLine {
+		take := maxPendingLine - len(w.buf)
+		w.buf = append(w.buf, chunk[:take]...)
+		chunk = chunk[take:]
+		cut := runeBoundary(w.buf, chunk[0])
+		var carry [utf8.UTFMax]byte
+		n := copy(carry[:], w.buf[cut:])
+		w.emit(w.buf[:cut])
+		w.buf = append(w.buf[:0], carry[:n]...)
 	}
-	return len(p), nil
+	w.buf = append(w.buf, chunk...)
+}
+
+// runeBoundary — длина части buf, которую можно выдать, не разрезав символ
+// UTF-8: next — первый байт остатка. Если он продолжение символа, начатого в
+// конце buf, неполный символ остаётся для следующей порции (не больше
+// UTFMax-1 байт; на мусорных данных режем как есть).
+func runeBoundary(buf []byte, next byte) int {
+	if utf8.RuneStart(next) {
+		return len(buf)
+	}
+	for k := 1; k < utf8.UTFMax && k <= len(buf); k++ {
+		if utf8.RuneStart(buf[len(buf)-k]) {
+			return len(buf) - k
+		}
+	}
+	return len(buf)
 }
 
 func (w *logWriter) emit(line []byte) {
@@ -92,6 +131,6 @@ func (w *logWriter) emit(line []byte) {
 	if len(line) == 0 {
 		return
 	}
-	level, msg := parseSingBoxLine(string(line))
+	level, msg := parseSingBoxLine(strings.ToValidUTF8(string(line), "�"))
 	w.sink(level, msg)
 }

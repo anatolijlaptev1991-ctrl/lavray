@@ -25,6 +25,7 @@ package logs
 import (
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -70,8 +71,9 @@ type Mux struct {
 }
 
 type subscription struct {
-	ch     chan Line
-	filter func(Line) bool
+	ch      chan Line
+	filter  func(Line) bool
+	dropped atomic.Uint64 // строки, не поместившиеся в канал подписчика
 }
 
 // NewMux создаёт мультиплексор с ring-буфером capacity (<=0 → 1000).
@@ -119,38 +121,8 @@ func (m *Mux) publish(l Line) {
 		select {
 		case s.ch <- l:
 		default:
+			s.dropped.Add(1)
 		}
 	}
 	m.mu.Unlock()
-}
-
-// Tail возвращает последние n строк (от старых к новым); n<=0 — весь буфер.
-func (m *Mux) Tail(n int) []Line {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	ring := make([]Line, len(m.ring))
-	copy(ring, m.ring)
-	if n <= 0 || n >= len(ring) {
-		return ring
-	}
-	return ring[len(ring)-n:]
-}
-
-// Subscribe подписывается на новые строки. Возвращает канал (буфер buf),
-// функцию отписки и текущий хвост (tail строк — для переподключения клиента).
-// filter nil = все строки.
-func (m *Mux) Subscribe(buf int, tail int, filter func(Line) bool) (<-chan Line, func(), []Line) {
-	if buf <= 0 {
-		buf = 64
-	}
-	s := &subscription{ch: make(chan Line, buf), filter: filter}
-	m.mu.Lock()
-	m.subs[s] = struct{}{}
-	m.mu.Unlock()
-	cancel := func() {
-		m.mu.Lock()
-		delete(m.subs, s)
-		m.mu.Unlock()
-	}
-	return s.ch, cancel, m.Tail(tail)
 }

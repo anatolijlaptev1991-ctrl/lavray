@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"unicode/utf8"
 )
 
 // T-33: разбор строк журнала sing-box и писатель для SetLogWritter.
@@ -79,11 +80,96 @@ func TestLogWriterSplitsAndJoinsLines(t *testing.T) {
 	}
 }
 
-func TestLogWriterFlushesOverlongLine(t *testing.T) {
+func TestLogWriterSplitsOverlongLine(t *testing.T) {
 	sink, lines := collect()
 	w := newLogWriter(sink)
 	_, _ = w.Write([]byte("INFO[0000] " + strings.Repeat("x", maxPendingLine)))
-	if got := lines(); len(got) != 1 || got[0].level != "info" || len(got[0].msg) != maxPendingLine {
-		t.Fatalf("строка без перевода строки не выдана: %d записей", len(got))
+	got := lines()
+	if len(got) != 1 || got[0].level != "info" || len(got[0].msg)+len("INFO[0000] ") != maxPendingLine {
+		t.Fatalf("строка без перевода строки не выдана порцией в предел: %d записей", len(got))
+	}
+	_, _ = w.Write([]byte("\n"))
+	if got := lines(); len(got) != 2 || got[1].msg != strings.Repeat("x", 11) {
+		t.Fatalf("остаток после предела потерян: %v", got)
+	}
+}
+
+// Одна огромная запись без перевода строк не раздувает буфер сверх предела,
+// а строки режутся порциями не больше maxPendingLine.
+func TestLogWriterBoundsHugeWrite(t *testing.T) {
+	sink, lines := collect()
+	w := newLogWriter(sink).(*logWriter)
+	huge := []byte(strings.Repeat("y", 5*maxPendingLine+100))
+	_, _ = w.Write(huge)
+	if cap(w.buf) > 2*maxPendingLine {
+		t.Fatalf("буфер раздулся до %d байт", cap(w.buf))
+	}
+	got := lines()
+	if len(got) != 5 {
+		t.Fatalf("порций %d, ожидалось 5", len(got))
+	}
+	for _, c := range got {
+		if len(c.msg) > maxPendingLine {
+			t.Fatalf("порция %d байт больше предела", len(c.msg))
+		}
+	}
+	if len(w.buf) != 100 {
+		t.Fatalf("в буфере %d байт остатка, ожидалось 100", len(w.buf))
+	}
+}
+
+// Буфер незавершённой строки переиспользуется: после выдачи строки память не
+// отдаётся и не растёт при повторных записях.
+func TestLogWriterReusesBuffer(t *testing.T) {
+	sink, _ := collect()
+	w := newLogWriter(sink).(*logWriter)
+	_, _ = w.Write([]byte("INFO[0000] часть"))
+	_, _ = w.Write([]byte(" строки\n"))
+	first := &w.buf[:1][0] // буфер пуст, но память выдержана
+	_, _ = w.Write([]byte("INFO[0000] "))
+	if &w.buf[0] != first {
+		t.Fatal("буфер пересоздан вместо переиспользования")
+	}
+}
+
+// Две полные строки в одной записи без накопления не копируются в буфер.
+func TestLogWriterCompleteLinesSkipBuffer(t *testing.T) {
+	sink, lines := collect()
+	w := newLogWriter(sink).(*logWriter)
+	_, _ = w.Write([]byte("INFO[0000] a\nINFO[0000] b\n"))
+	if len(lines()) != 2 || w.buf != nil {
+		t.Fatalf("полные строки прошли через буфер: %v", w.buf)
+	}
+}
+
+// Порция в предел не режет символ UTF-8: «я» (2 байта) на границе переносится
+// целиком в следующую строку, склейка порций даёт исходный текст.
+func TestLogWriterKeepsRuneAtBoundary(t *testing.T) {
+	sink, lines := collect()
+	w := newLogWriter(sink)
+	in := strings.Repeat("x", maxPendingLine-1) + "яя"
+	_, _ = w.Write([]byte(in))
+	_, _ = w.Write([]byte("\n"))
+	got := lines()
+	if len(got) != 2 {
+		t.Fatalf("строк %d, ожидалось 2", len(got))
+	}
+	for _, c := range got {
+		if !utf8.ValidString(c.msg) {
+			t.Fatalf("порция разрезала символ: %q", c.msg[len(c.msg)-4:])
+		}
+	}
+	if got[0].msg+got[1].msg != in {
+		t.Fatal("после склейки порций текст изменился")
+	}
+}
+
+func TestLogWriterReplacesInvalidUTF8(t *testing.T) {
+	sink, lines := collect()
+	w := newLogWriter(sink)
+	_, _ = w.Write([]byte("INFO[0000] bad \xff\xfe byte\n"))
+	got := lines()
+	if len(got) != 1 || !utf8.ValidString(got[0].msg) || !strings.HasPrefix(got[0].msg, "bad ") {
+		t.Fatalf("невалидный UTF-8 дошёл до приёмника: %q", got)
 	}
 }

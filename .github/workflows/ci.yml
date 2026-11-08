@@ -143,6 +143,29 @@ jobs:
         run: go build ./...
 
   # --------------------------------------------------------------------------
+  # go-race: гонки в новом конкурентном коде журнала и батчей теста. Весь
+  # internal/api под -race не гоняем: старые гонки вне этого PR.
+  # --------------------------------------------------------------------------
+  go-race:
+    runs-on: ubuntu-24.04 # ПИН ОС раннера: обновлять сознательно
+    defaults:
+      run:
+        working-directory: core
+    env:
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+      - name: go test -race (logs)
+        run: go test -race -count=1 ./internal/logs/
+      - name: go test -race (журнал и батчи теста в api)
+        run: |
+          go test -race -count=1 -tags "$(tr -d '[:space:]' < BUILD_TAGS)" ./internal/api/             -run 'TestPump|TestSubscribeRPC|TestSubscribeTailLive|TestLogLineToProto|TestOverlappingBatch|TestDisjointBatches|TestBatchAllowed|TestCoreStatus'
+
+  # --------------------------------------------------------------------------
   # core-run: РЕАЛЬНАЯ сборка ядра с работающим sing-box (тег singbox_run).
   # Без этого «Подключиться» в приложении = NopRunner (ничего не подключает).
   # Сеть CI скачивает форк и его зависимости; локально это недостижимо (DPI).

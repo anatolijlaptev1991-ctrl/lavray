@@ -107,11 +107,8 @@ fn stop_shortly_after_spawn_cancels_the_ready_wait() {
     for bad in [CoreState::Ready, CoreState::SpawnErr, CoreState::Crashed] {
         assert!(!states.contains(&bad), "{bad:?} в {states:?}");
     }
-    // Пока пробы §6 — заглушки (Unchecked), Stopped не объявляется.
-    assert_eq!(
-        states.contains(&CoreState::Stopped),
-        seen.unconfirmed.is_empty(),
-        "Stopped и предупреждение взаимоисключающи: {states:?} / {:?}",
-        seen.unconfirmed
-    );
+    // Процесс остановлен -> Stopped; пробы §6 — заглушки (Unchecked), поэтому
+    // «сеть проверена» не утверждается и есть предупреждение.
+    assert_eq!(states.last(), Some(&CoreState::Stopped), "{states:?}");
+    assert_eq!(seen.unconfirmed.len(), 1, "{:?}", seen.unconfirmed);
 }

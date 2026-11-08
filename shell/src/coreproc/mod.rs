@@ -430,6 +430,7 @@ pub struct CoreSupervisor<P, C = SystemClock> {
     clock: C,
     state: CoreState,
     spawn_failures: u32,
+    network_verified: bool,
     crash_times: Vec<Instant>,
     backoff: backoff::BackoffSchedule,
 }
@@ -442,6 +443,7 @@ impl<P: CoreProcess, C: Clock> CoreSupervisor<P, C> {
             clock,
             state: CoreState::Idle,
             spawn_failures: 0,
+            network_verified: false,
             crash_times: Vec::new(),
             backoff: backoff::BackoffSchedule::new(),
         }
@@ -563,14 +565,30 @@ impl<P: CoreProcess, C: Clock> CoreSupervisor<P, C> {
         Ok(self.state)
     }
 
-    /// §6: teardown-верификация прошла → Stopped.
-    pub fn mark_teardown_verified(&mut self) -> Result<CoreState, SupervisorError> {
+    /// Процесс ядра остановлен (kill/выход подтверждён) → Stopped. Это факт
+    /// про процесс; «сеть чиста» он НЕ утверждает (см. [`Self::network_verified`]).
+    pub fn mark_stopped(&mut self) -> Result<CoreState, SupervisorError> {
         self.apply(CoreEvent::TeardownVerified)
+    }
+
+    /// §6: teardown-верификация прошла (все пробы `Clean`) → Stopped и отметка
+    /// «сеть проверена».
+    pub fn mark_teardown_verified(&mut self) -> Result<CoreState, SupervisorError> {
+        let state = self.apply(CoreEvent::TeardownVerified)?;
+        self.network_verified = true;
+        Ok(state)
+    }
+
+    /// Подтверждена ли чистота сети в этом цикле (только `mark_teardown_verified`).
+    /// Ничего в оболочке от неё не зависит: ни выход, ни рестарт.
+    pub fn network_verified(&self) -> bool {
+        self.network_verified
     }
 
     /// Stopped → Idle (сброс счётчиков ретраев/крахов).
     pub fn reset(&mut self) -> Result<CoreState, SupervisorError> {
         let state = self.apply(CoreEvent::Reset)?;
+        self.network_verified = false;
         self.spawn_failures = 0;
         self.backoff.reset();
         self.crash_times.clear();

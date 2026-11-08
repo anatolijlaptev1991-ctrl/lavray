@@ -346,9 +346,10 @@ where
         self.started(config, result)
     }
 
-    /// `Stopped` — только при `Clean` по ВСЕМ обязательным пробам §6 и удачном
-    /// kill. Иначе состояние остаётся `Stopping`, наблюдатель получает
-    /// предупреждение (выход приложения продолжается).
+    /// Жизненный цикл процесса и чистота сети — раздельно. Kill удался →
+    /// `Stopped` (факт про процесс). «Сеть чиста» (`mark_teardown_verified`) —
+    /// только при `Clean` по ВСЕМ пробам §6; иначе `on_teardown_unconfirmed`
+    /// без отметки (выход продолжается). Kill не удался → `Stopped` нет.
     fn confirm_teardown(&mut self, kill_error: Option<SupervisorError>) {
         if let Some(err) = kill_error {
             return self
@@ -359,6 +360,7 @@ where
         if report.is_clean() {
             let _ = self.sup.mark_teardown_verified();
         } else {
+            let _ = self.sup.mark_stopped();
             let detail = report.unconfirmed_summary();
             self.observer.on_teardown_unconfirmed(&detail);
         }

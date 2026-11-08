@@ -283,10 +283,11 @@ fn report_with(outcome: ProbeOutcome) -> TeardownReport {
     TeardownReport::from_findings(findings)
 }
 
-/// `Stopped` — только при Clean по всем пробам: Unchecked/Stale/частичный
-/// отчёт оставляют `Stopping` и дают предупреждение, а не сбой запуска.
+/// Процесс остановлен → `Stopped`; но при Unchecked/Stale/частичном отчёте
+/// отметки «сеть проверена» нет, есть предупреждение (не сбой запуска), а после
+/// reset новый spawn возможен, как раньше.
 #[test]
-fn unconfirmed_teardown_does_not_claim_stopped() {
+fn unconfirmed_teardown_stops_without_the_verified_mark() {
     let partial =
         TeardownReport::from_findings(vec![(StaleResource::TunAdapter, ProbeOutcome::Clean)]);
     let cases = [
@@ -307,8 +308,12 @@ fn unconfirmed_teardown_does_not_claim_stopped() {
             polls += 1;
             (polls == 2).then_some(Command::Stop)
         });
-        assert!(!out.events.saw(CoreState::Stopped), "{expected}");
-        assert_eq!(out.events.states.last(), Some(&CoreState::Stopping));
+        assert_eq!(
+            out.events.states.last(),
+            Some(&CoreState::Stopped),
+            "{expected}"
+        );
+        assert!(!out.sup.network_verified(), "{expected}");
         assert!(
             out.events.unconfirmed[0].contains(expected),
             "{:?}",
@@ -316,7 +321,55 @@ fn unconfirmed_teardown_does_not_claim_stopped() {
         );
         assert!(out.events.failures.is_empty(), "предупреждение, не сбой");
         assert_eq!(out.sup.process().kill_calls.len(), 1);
+        let mut sup = out.sup;
+        sup.reset().unwrap();
+        sup.start(&spawn_config()).unwrap();
+        assert_eq!(sup.process().spawn_calls.len(), 2, "новый spawn после Stop");
     }
+}
+
+fn spawn_config() -> CoreSpawnConfig {
+    CoreSpawnConfig {
+        binary: PathBuf::from("lavray-core"),
+        listen_socket: PathBuf::from("127.0.0.1:0"),
+        data_dir: PathBuf::from("data"),
+        auth_token: SecretToken::from_base64url("A".repeat(43)).unwrap(),
+        agent_token: None,
+        extra_args: Vec::new(),
+    }
+}
+
+/// Все пробы Clean → Stopped и отметка «сеть проверена», без предупреждений.
+#[test]
+fn clean_teardown_marks_the_network_verified() {
+    let mut polls = 0;
+    let out = simulate(MockCoreProcess::default(), 0, |_| {
+        polls += 1;
+        (polls == 2).then_some(Command::Stop)
+    });
+    assert_eq!(out.events.states.last(), Some(&CoreState::Stopped));
+    assert!(out.sup.network_verified());
+    assert!(out.events.unconfirmed.is_empty());
+}
+
+/// ManualRestart из RateLimited не зависит от отметки: spawn происходит.
+#[test]
+fn manual_restart_does_not_need_the_verified_mark() {
+    let mut sup = CoreSupervisor::new(MockCoreProcess::default(), MockClock::at(Instant::now()));
+    let cfg = spawn_config();
+    sup.start(&cfg).unwrap();
+    sup.wait_ready().unwrap();
+    for _ in 0..3 {
+        sup.notify_unexpected_exit().ok();
+        if sup.state() == CoreState::RateLimited {
+            break;
+        }
+        sup.restart_after_crash(&cfg).unwrap();
+        sup.wait_ready().unwrap();
+    }
+    assert_eq!(sup.state(), CoreState::RateLimited);
+    assert!(!sup.network_verified());
+    assert_eq!(sup.manual_restart(&cfg).unwrap(), CoreState::Spawning);
 }
 
 /// Не удался kill — сеть не проверяем и `Stopped` не объявляем.
@@ -331,7 +384,7 @@ fn a_failed_kill_is_not_confirmed_either() {
         polls += 1;
         (polls == 2).then_some(Command::Stop)
     });
-    assert!(!out.events.saw(CoreState::Stopped));
+    assert!(!out.events.saw(CoreState::Stopped), "kill не удался");
     assert!(out.events.unconfirmed[0].contains("ядро не остановлено"));
     assert_eq!(out.sup.process().teardown_calls, 0, "сеть не проверяли");
 }

@@ -26,58 +26,24 @@ func (s *Server) ListProfiles(ctx context.Context, req *connect.Request[lavrayv1
 	if msg.GroupId != nil {
 		groupID = *msg.GroupId
 	}
-	list, err := s.st.ListProfiles(groupID)
-	if err != nil {
-		return nil, mapErr(err)
-	}
 	search := ""
 	if msg.Search != nil {
 		search = strings.ToLower(*msg.Search)
 	}
-	favOnly := optBool(msg.FavoritesOnly)
-	tags := msg.TagsAnyOf
-
+	// Фильтры и страница применяются в хранилище до декодирования JSON (R0-D).
+	offset, limit := pageOf(msg.Page, 0)
+	list, total, err := s.st.ListProfilesPage(store.ProfileQuery{
+		GroupID: groupID, SearchLower: search, FavoritesOnly: optBool(msg.FavoritesOnly),
+		TagsAnyOf: msg.TagsAnyOf, Offset: offset, Limit: limit,
+	})
+	if err != nil {
+		return nil, mapErr(err)
+	}
 	out := make([]*lavrayv1.Profile, 0, len(list))
-	total := int64(0)
 	for _, p := range list {
-		if search != "" &&
-			!strings.Contains(strings.ToLower(p.Name), search) &&
-			!strings.Contains(strings.ToLower(p.Address), search) &&
-			!strings.Contains(strings.ToLower(string(p.Type)), search) {
-			continue
-		}
-		if favOnly && !p.Favorite {
-			continue
-		}
-		if len(tags) > 0 && !hasAnyTag(p.Tags, tags) {
-			continue
-		}
-		total++
 		out = append(out, profileToProto(p))
 	}
-	offset, limit := pageOf(msg.Page, total)
-	if offset > int64(len(out)) {
-		offset = int64(len(out))
-	}
-	end := int64(len(out))
-	if limit >= 0 && offset+limit < end {
-		end = offset + limit
-	}
-	out = out[offset:end]
 	return connect.NewResponse(&lavrayv1.ListProfilesResponse{Profiles: out, Total: total}), nil
-}
-
-func hasAnyTag(have, want []string) bool {
-	set := map[string]bool{}
-	for _, t := range have {
-		set[t] = true
-	}
-	for _, t := range want {
-		if set[t] {
-			return true
-		}
-	}
-	return false
 }
 
 func pageOf(p *lavrayv1.Page, total int64) (offset, limit int64) {

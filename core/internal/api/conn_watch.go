@@ -84,7 +84,10 @@ func newConnWatch(msg *lavrayv1.WatchConnectionsRequest) (*connWatch, time.Durat
 func (w *connWatch) frame(src traffic.Source) *lavrayv1.ConnectionSnapshot {
 	var all []traffic.ConnInfo
 	if src != nil {
-		all = sortedActive(src, w.filter)
+		all = src.Active()
+		if w.filter != (connFilter{}) {
+			all = filterConns(all, w.filter)
+		}
 	}
 	cur := make(map[string]struct{}, len(all))
 	for _, c := range all {
@@ -92,10 +95,10 @@ func (w *connWatch) frame(src traffic.Source) *lavrayv1.ConnectionSnapshot {
 	}
 	snap := &lavrayv1.ConnectionSnapshot{ClosedIds: w.closedIDs(cur)}
 	w.prev = cur
-	if len(all) > w.limit {
-		all, snap.Truncated = all[:w.limit], true
-	}
-	for _, c := range all {
+	snap.Truncated = len(all) > w.limit
+	// Порядок нужен только первым limit строкам: частичный отбор вместо
+	// сортировки всего списка (R0-D).
+	for _, c := range firstConns(all, w.limit) {
 		snap.Active = append(snap.Active, connToProto(c))
 	}
 	return snap

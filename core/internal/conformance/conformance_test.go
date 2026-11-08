@@ -31,7 +31,11 @@ func repoRoot(t testing.TB) string {
 // С флагом -update пересобирает generated/ и manifest.json.
 func TestManifest(t *testing.T) {
 	root := repoRoot(t)
-	gen, err := Generate()
+	var payload []byte
+	if !*update {
+		payload = CommittedPayload(root)
+	}
+	gen, err := Generate(payload)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -75,13 +79,13 @@ func TestManifest(t *testing.T) {
 	}
 }
 
-// TestGenerateDeterministic: две генерации подряд дают одни и те же байты.
+// TestGenerateDeterministic: две генерации подряд (одной версией Go) дают одни и те же байты.
 func TestGenerateDeterministic(t *testing.T) {
-	a, err := Generate()
+	a, err := Generate(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := Generate()
+	b, err := Generate(nil)
 	if err != nil {
 		t.Fatal(err)
 	}

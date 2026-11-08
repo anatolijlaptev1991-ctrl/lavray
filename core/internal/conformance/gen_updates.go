@@ -16,9 +16,13 @@ import (
 // Фиксированное «сейчас» образцов TUF-lite и состояние клиента, относительно
 // которого считаются откат и срок: версии/serial в документах «valid» выше.
 var (
-	refTime      = time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-	farFuture    = time.Date(2036, 1, 1, 0, 0, 0, 0, time.UTC)
-	longPast     = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	refTime   = time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	farFuture = time.Date(2036, 1, 1, 0, 0, 0, 0, time.UTC)
+	longPast  = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	// tsFresh — срок timestamp внутри окна свежести клиента (7 суток + допуск 1 сутки);
+	// tsFar — за окном (updates.ErrTimestampHorizon).
+	tsFresh      = refTime.Add(24 * time.Hour)
+	tsFar        = refTime.Add(30 * 24 * time.Hour)
 	storedTS     = int64(4) // сохранённая версия timestamp
 	storedSerial = int64(9) // сохранённый serial манифеста stable
 )
@@ -31,8 +35,8 @@ const (
 )
 
 type updKeys struct {
-	root, root2, ts, man, art, other ed25519.PrivateKey
-	artID                            [8]byte
+	root, root2, ts, man, man2, art, other ed25519.PrivateKey
+	artID                                  [8]byte
 }
 
 func detKey(label string) ed25519.PrivateKey {
@@ -42,7 +46,7 @@ func detKey(label string) ed25519.PrivateKey {
 
 func newUpdKeys() updKeys {
 	k := updKeys{root: detKey("root"), root2: detKey("root2"), ts: detKey("timestamp"),
-		man: detKey("manifest"), art: detKey("artifact"), other: detKey("other")}
+		man: detKey("manifest"), man2: detKey("manifest2"), art: detKey("artifact"), other: detKey("other")}
 	id := sha256.Sum256([]byte("lavray-conformance/updates/artifact-id"))
 	copy(k.artID[:], id[:])
 	return k
@@ -71,7 +75,7 @@ func envelope(signed map[string]any, signers ...any) ([]byte, error) {
 	return append(b, '\n'), err
 }
 
-func rootDoc(k updKeys, expires time.Time, rootRole map[string]any) map[string]any {
+func rootDoc(k updKeys, expires time.Time, rootRole, manRole map[string]any) map[string]any {
 	role := func(id string) map[string]any { return map[string]any{"keyids": []string{id}, "threshold": 1} }
 	art := updates.MinisignKey{KeyID: k.artID, Pub: k.art.Public().(ed25519.PublicKey)}
 	return map[string]any{"type": "root", "version": 1, "expires": rfc(expires),
@@ -80,9 +84,10 @@ func rootDoc(k updKeys, expires time.Time, rootRole map[string]any) map[string]a
 			"k2": map[string]any{"alg": "ed25519", "pub": pubOf(k.root2)},
 			"t1": map[string]any{"alg": "ed25519", "pub": pubOf(k.ts)},
 			"r1": map[string]any{"alg": "ed25519", "pub": pubOf(k.man)},
+			"r2": map[string]any{"alg": "ed25519", "pub": pubOf(k.man2)},
 			"a1": map[string]any{"alg": "minisign", "pub": art.Base64()},
 		},
-		"roles": map[string]any{"root": rootRole, "timestamp": role("t1"), "manifest": role("r1"),
+		"roles": map[string]any{"root": rootRole, "timestamp": role("t1"), "manifest": manRole,
 			"sources": role("r1"), "artifact": role("a1")}}
 }
 
@@ -95,8 +100,8 @@ func manifestDoc(k updKeys, serial int64, expires time.Time, installer []byte) m
 			"path": updAsset, "sha256": hexSum(installer), "length": len(installer), "minisig": string(sig)}}}}
 }
 
-func timestampDoc(version int64, expires time.Time, serial int64, manifest []byte) map[string]any {
+func timestampDoc(version int64, expires time.Time, serial int64, sha string, length int) map[string]any {
 	return map[string]any{"type": "timestamp", "version": version, "expires": rfc(expires),
 		"meta": map[string]any{updates.ManifestName("stable"): map[string]any{
-			"serial": serial, "sha256": hexSum(manifest), "length": len(manifest)}}}
+			"serial": serial, "sha256": sha, "length": length}}}
 }

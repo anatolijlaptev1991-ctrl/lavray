@@ -3,7 +3,7 @@
   "description": "Нейтральные данные для conformance-тестов Go и Rust; файлы не копируются, ссылки — от корня репозитория",
   "regenerate": "cd core \u0026\u0026 CGO_ENABLED=0 GOPROXY=off go test ./internal/conformance/ -run TestManifest -update",
   "nondeterminism": [
-    "generated-backup: тело копии содержит gzip (compress/flate); байты зависят от версии Go, поэтому Rust сверяет расшифровку и payload_sha256, а не байты шифртекста"
+    "generated-backup: тело копии содержит gzip (compress/flate); байты зависят от версии Go: проверка не перепаковывает payload, а читает закоммиченный payload.bin и запечатывает его; Rust сверяет расшифровку и payload_sha256"
   ],
   "categories": {
     "cfgbuild-deviations": {
@@ -456,8 +456,8 @@
       "files": [
         {
           "path": "conformance/generated/updates/cases.json",
-          "size": 2809,
-          "sha256": "d6c1ca062effa1c1ec75627641b87a780a5533afc0fddfea3d0f55bc5fedb86b"
+          "size": 6760,
+          "sha256": "150945e496af21d5958bd904f04f7304595c49e911886bd098e7cb710e9168b5"
         },
         {
           "path": "conformance/generated/updates/lavray-setup.bin",
@@ -470,9 +470,24 @@
           "sha256": "5d6928f5540e8428c08499183b4789b151bde7a1104bc59b9d6ab21c68f4db20"
         },
         {
+          "path": "conformance/generated/updates/lavray-setup.bin.minisig-wrong-claims",
+          "size": 299,
+          "sha256": "0f97515ef7be2e13139ed4906415ce00a31194326d664f0043e3265e0a1aa796"
+        },
+        {
           "path": "conformance/generated/updates/lavray-setup.bin.tampered",
           "size": 28,
           "sha256": "c84ef0076a4d4e6499ad598e3e88f7985b911f73715c09d9b848123bef6dc3d4"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-bad-signature.json",
+          "size": 750,
+          "sha256": "da015f3536db83d7d567dac20f40b5d9823753d28caa2737d8139e18892ffab8"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-equal-serial.json",
+          "size": 748,
+          "sha256": "e16f5ddea2e08c919b671b969dbed96f7d3de204ef7cd2db6dc04dea50b4318e"
         },
         {
           "path": "conformance/generated/updates/manifest-stable-expired.json",
@@ -480,14 +495,24 @@
           "sha256": "a52c36426852f9e805e3ee58d98009c38b1573e7442e4f063645897f540fd5f0"
         },
         {
-          "path": "conformance/generated/updates/manifest-stable-insufficient.json",
-          "size": 750,
-          "sha256": "da015f3536db83d7d567dac20f40b5d9823753d28caa2737d8139e18892ffab8"
-        },
-        {
           "path": "conformance/generated/updates/manifest-stable-rollback.json",
           "size": 748,
           "sha256": "f10389ea66166e78fa162c2db5dcca2f20d71cf106b13dec9fc1410dbb5c7330"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-threshold2-one-signature.json",
+          "size": 750,
+          "sha256": "6c5ad73bea0ae1f73e860949fbf4c9b7a06573c9448ac666501557fb9cff757c"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-threshold2-two-signatures.json",
+          "size": 862,
+          "sha256": "8fbecb22fdbe62554a4cebbff42a55876407722430f0650de1c313f618010938"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-unknown-keyid.json",
+          "size": 750,
+          "sha256": "7e8147c6b7e46464b73c16317f12ce1fd761670569b76cc5a7021d2cfd675ad0"
         },
         {
           "path": "conformance/generated/updates/manifest-stable-valid.json",
@@ -495,19 +520,44 @@
           "sha256": "6c5ad73bea0ae1f73e860949fbf4c9b7a06573c9448ac666501557fb9cff757c"
         },
         {
+          "path": "conformance/generated/updates/manifest-stable-wrong-channel.json",
+          "size": 748,
+          "sha256": "a7d5886f750f62d7c54e998b033f82b578d74cc788532d8cf7dffd99b0506343"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-wrong-product.json",
+          "size": 748,
+          "sha256": "f7bc2574d564866c0a8535fb022059b82a716db138a3e753bc65647e004738de"
+        },
+        {
           "path": "conformance/generated/updates/root-expired.json",
-          "size": 822,
-          "sha256": "c7193065a4f46ab348407754396b4d5740db354fd651293c8d55ba72cc8fe4ad"
+          "size": 898,
+          "sha256": "629b52306b3bc18bc55d7562112d7a3b4f150e84b1b31eac3425e0e2e2f982f7"
         },
         {
           "path": "conformance/generated/updates/root-insufficient.json",
-          "size": 827,
-          "sha256": "bf147aa42fb25200f99cb862eb18db7e6e89b319c9a6259b335592b7d78e4f5c"
+          "size": 903,
+          "sha256": "60096a9abb6be23ea44939370a309456315b7a021df3689a4586cc9e59ebb875"
+        },
+        {
+          "path": "conformance/generated/updates/root-threshold2.json",
+          "size": 903,
+          "sha256": "4e3b08ef271fb0c7a38574bd59e2c2cfc9f45c5def07ab197c5df0f47f793305"
         },
         {
           "path": "conformance/generated/updates/root.json",
-          "size": 822,
-          "sha256": "a140bd2d08b9168986152b1243ebc5e829e47d1364234d18047825ca8b60bc23"
+          "size": 898,
+          "sha256": "0114cd90046c589b376510aec8194cacbfd620983a3c2936fb437d35e0a68157"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-bad-signature.json",
+          "size": 339,
+          "sha256": "926eaff9e3bdd8ddd2a21106ce4794383ba19a6e83a75954109c28dad38ea060"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-equal-version.json",
+          "size": 339,
+          "sha256": "ce1a97829fee9b3d2e862cbefac98ab5499457d16cccfc6171085cc16680553f"
         },
         {
           "path": "conformance/generated/updates/timestamp-expired.json",
@@ -515,19 +565,89 @@
           "sha256": "a1dbb9e4a1bc6ac206823291f54385689cbfe4d9a08155d9d4a925c43e1f7fa3"
         },
         {
-          "path": "conformance/generated/updates/timestamp-insufficient.json",
+          "path": "conformance/generated/updates/timestamp-horizon.json",
           "size": 339,
-          "sha256": "b7c1b9f29985be3f4a385b718cde2ed54af8e4739fb333e034ba126c9b4baffe"
+          "sha256": "78a03f16d2611e5238d48729498946e3b9ac8383f19fa1ac5f83d7986da11d64"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-bad-signature.json",
+          "size": 339,
+          "sha256": "774349fefeadd80ce6ebaeaa5a3461f5f480e0b2cb328f4f552d27c61b0450b6"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-equal-serial.json",
+          "size": 338,
+          "sha256": "47397329bcca581c54c21f6e7bebcc09c3be8965c731b273e3577176022f1336"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-expired.json",
+          "size": 339,
+          "sha256": "267165f717369defea54d9c30a79f505ecd84c871f96672f04089e0789ab2c74"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-rollback.json",
+          "size": 338,
+          "sha256": "33d564187efd960e40a6126e12aa97d6295ff9bf5e521a9846ae262e179360ad"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-threshold2-one-signature.json",
+          "size": 339,
+          "sha256": "774349fefeadd80ce6ebaeaa5a3461f5f480e0b2cb328f4f552d27c61b0450b6"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-threshold2-two-signatures.json",
+          "size": 339,
+          "sha256": "774349fefeadd80ce6ebaeaa5a3461f5f480e0b2cb328f4f552d27c61b0450b6"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-unknown-keyid.json",
+          "size": 339,
+          "sha256": "774349fefeadd80ce6ebaeaa5a3461f5f480e0b2cb328f4f552d27c61b0450b6"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-valid.json",
+          "size": 339,
+          "sha256": "774349fefeadd80ce6ebaeaa5a3461f5f480e0b2cb328f4f552d27c61b0450b6"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-wrong-channel.json",
+          "size": 339,
+          "sha256": "afc5c402d53b54e212d091207ec9de11f0eb936fdd1acdfac04d6e7ebabf0e8f"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-wrong-length.json",
+          "size": 339,
+          "sha256": "fac49cfbbb280d56382e71c51bd41e6353bd3b155e1e4bbb3ec475f5044e66b7"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-wrong-product.json",
+          "size": 339,
+          "sha256": "595838f74d95365f6b29ab204084464b84878c81944043876324836e0c647b48"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-wrong-serial.json",
+          "size": 339,
+          "sha256": "9a4ed8530ae4cf43a5796e60c4bda11418d71da9bad084347ef4c2ca0acb739f"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-wrong-sha.json",
+          "size": 339,
+          "sha256": "ae126c250a703f234aad888dfb6ec99b6a0f066ac27964ce5375410766f578bd"
         },
         {
           "path": "conformance/generated/updates/timestamp-rollback.json",
           "size": 339,
-          "sha256": "2878aa528fda13534c5a243b1c90ca4c44ccf7f92cd6ecec7d4dad275bd094ab"
+          "sha256": "d731c2816398a0b4355d125349f59866658b33e3f4276d1182d8066af088b9bb"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-unknown-keyid.json",
+          "size": 339,
+          "sha256": "4dad17d8ea0f5330f365610ffcf8011eb00cfc807e661a7ba02c0fbac8dd4baf"
         },
         {
           "path": "conformance/generated/updates/timestamp-valid.json",
           "size": 339,
-          "sha256": "c4e6608975bfb5ae4900a4f93b7d8e32a7c920a13fb6f9c91f568447abd35100"
+          "sha256": "774349fefeadd80ce6ebaeaa5a3461f5f480e0b2cb328f4f552d27c61b0450b6"
         }
       ]
     },

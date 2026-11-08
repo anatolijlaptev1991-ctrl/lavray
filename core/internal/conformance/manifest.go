@@ -112,7 +112,7 @@ func Collect(root string) (Manifest, error) {
 		Description: "Нейтральные данные для conformance-тестов Go и Rust; файлы не копируются, ссылки — от корня репозитория",
 		Regenerate:  "cd core && CGO_ENABLED=0 GOPROXY=off go test ./internal/conformance/ -run TestManifest -update",
 		Nondeterminism: []string{
-			"generated-backup: тело копии содержит gzip (compress/flate); байты зависят от версии Go, поэтому Rust сверяет расшифровку и payload_sha256, а не байты шифртекста",
+			"generated-backup: тело копии содержит gzip (compress/flate); байты зависят от версии Go: проверка не перепаковывает payload, а читает закоммиченный payload.bin и запечатывает его; Rust сверяет расшифровку и payload_sha256",
 		},
 		Categories: map[string]Category{},
 	}
@@ -150,7 +150,7 @@ func Diff(want, got Manifest) []string {
 		case !ok:
 			out = append(out, "нет в manifest: "+p)
 		case old != e:
-			out = append(out, "изменён: "+p)
+			out = append(out, fmt.Sprintf("изменён: %s (было %d байт %s, стало %d байт %s)", p, old.Size, old.SHA256, e.Size, e.SHA256))
 		}
 	}
 	for p := range w {

@@ -30,9 +30,12 @@ func jsonDoc(v any) ([]byte, error) {
 }
 
 // Generate строит все сгенерированные файлы в памяти: путь от корня → байты.
-func Generate() (map[string][]byte, error) {
+// backupPayload — готовое тело резервных копий (закоммиченный payload.bin);
+// nil — упаковать заново (режим -update).
+func Generate(backupPayload []byte) (map[string][]byte, error) {
 	out := map[string][]byte{}
-	for _, g := range []func() (map[string][]byte, error){genBackup, genUpdates} {
+	gens := []func() (map[string][]byte, error){func() (map[string][]byte, error) { return genBackup(backupPayload) }, genUpdates}
+	for _, g := range gens {
 		files, err := g()
 		if err != nil {
 			return nil, err
@@ -42,6 +45,15 @@ func Generate() (map[string][]byte, error) {
 		}
 	}
 	return out, nil
+}
+
+// CommittedPayload читает закоммиченный backup/payload.bin (nil, если его нет).
+func CommittedPayload(root string) []byte {
+	b, err := os.ReadFile(filepath.Join(root, GeneratedDir, "backup", "payload.bin"))
+	if err != nil {
+		return nil
+	}
+	return b
 }
 
 // WriteGenerated заменяет conformance/generated/ содержимым files.

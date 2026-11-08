@@ -67,10 +67,14 @@ func samplePayload() ([]byte, error) {
 	return backup.Pack(summary, bytes.NewReader(snapshot))
 }
 
-func genBackup() (map[string][]byte, error) {
-	payload, err := samplePayload()
-	if err != nil {
-		return nil, err
+// genBackup запечатывает payload; nil — собрать заново (gzip зависит от версии
+// Go, поэтому проверка читает закоммиченный payload.bin и не перепаковывает его).
+func genBackup(payload []byte) (map[string][]byte, error) {
+	var err error
+	if payload == nil {
+		if payload, err = samplePayload(); err != nil {
+			return nil, err
+		}
 	}
 	params := backup.Params{T: 1, MKiB: backup.MinMKiB, P: 1}
 	opts := backup.Options{Params: params, Rand: newRand("backup-seal")}

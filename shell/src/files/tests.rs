@@ -133,3 +133,13 @@ fn cancelled_folder_dialog_is_none() {
     assert_eq!(pick::pick_with(&dialog), None);
     assert_eq!(dialog.asked.get(), 1);
 }
+
+#[test]
+fn early_size_check_boundary() {
+    assert_eq!(ensure_size(0), Ok(()));
+    assert_eq!(ensure_size(save::MAX_SAVE_BYTES), Ok(()));
+    assert_eq!(
+        ensure_size(save::MAX_SAVE_BYTES + 1),
+        Err("too_large".to_string())
+    );
+}

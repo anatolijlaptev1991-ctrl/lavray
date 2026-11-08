@@ -43,6 +43,14 @@ impl<R: Runtime> SaveDialog for PluginDialog<'_, R> {
     }
 }
 
+/// Ранний отказ по размеру: до копирования тела и до диалога.
+pub fn ensure_size(len: usize) -> Result<(), String> {
+    if len > save::MAX_SAVE_BYTES {
+        return Err(save::SaveError::TooLarge.code().to_string());
+    }
+    Ok(())
+}
+
 /// Сохранить: проверить запрос, спросить путь, записать атомарно.
 /// `Ok(false)` — пользователь отменил диалог.
 pub fn save_with<D: SaveDialog>(
@@ -96,6 +104,7 @@ pub async fn file_save(app: AppHandle, request: Request<'_>) -> Result<bool, Str
     let InvokeBody::Raw(data) = request.body() else {
         return Err("bad_request".into());
     };
+    ensure_size(data.len())?;
     let data = data.clone();
     tauri::async_runtime::spawn_blocking(move || save_with(&PluginDialog(&app), &name, &ext, &data))
         .await

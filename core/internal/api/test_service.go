@@ -48,36 +48,6 @@ func tcpPingNotApplicable(p *model.Profile) string {
 	return ""
 }
 
-// testRun — отмена текущего батча (StopTests, FR-UI-203).
-type testRun struct {
-	mu     sync.Mutex
-	cancel context.CancelFunc
-}
-
-func (s *Server) testCancel() context.CancelFunc {
-	s.testsMu.Lock()
-	defer s.testsMu.Unlock()
-	if s.testsRunning == nil {
-		s.testsRunning = &testRun{}
-	}
-	return func() {
-		s.testsMu.Lock()
-		defer s.testsMu.Unlock()
-		if s.testsRunning.cancel != nil {
-			s.testsRunning.cancel()
-		}
-	}
-}
-
-func (s *Server) setTestCancel(cancel context.CancelFunc) {
-	s.testsMu.Lock()
-	defer s.testsMu.Unlock()
-	if s.testsRunning == nil {
-		s.testsRunning = &testRun{}
-	}
-	s.testsRunning.cancel = cancel
-}
-
 // TestLatency — стрим результатов по профилям (один кадр на профиль).
 func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.TestLatencyRequest], stream *connect.ServerStream[lavrayv1.LatencyResult]) error {
 	msg := req.Msg
@@ -115,16 +85,13 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 
 	// Профили читаем заранее: стрим не должен падать на середине из-за
 	// удалённого во время теста профиля.
-	type item struct {
-		p *model.Profile
-	}
-	items := make([]item, 0, len(msg.ProfileIds))
+	items := make([]testItem, 0, len(msg.ProfileIds))
 	for _, id := range msg.ProfileIds {
 		p, err := s.st.GetProfile(id)
 		if err != nil {
 			continue // удалённый профиль пропускаем, а не валим весь батч
 		}
-		items = append(items, item{p: p})
+		items = append(items, testItem{p: p})
 	}
 	if len(items) == 0 {
 		return invalidArg("ни одного профиля из списка не существует")
@@ -132,8 +99,13 @@ func (s *Server) TestLatency(ctx context.Context, req *connect.Request[lavrayv1.
 
 	runCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	s.setTestCancel(cancel)
-	defer s.setTestCancel(nil)
+	// Single-flight: профиль, который уже проверяется другим батчем, повторно
+	// не запускаем (иначе нагрузка умножается), StopTests отменит все батчи.
+	finish, err := s.beginTestBatch(items, cancel)
+	if err != nil {
+		return err
+	}
+	defer finish()
 
 	sem := make(chan struct{}, concurrency)
 	var wg sync.WaitGroup
@@ -244,7 +216,7 @@ func (s *Server) tcpPing(ctx context.Context, p *model.Profile, timeout time.Dur
 
 // StopTests — прерывает текущий батч (FR-UI-203).
 func (s *Server) StopTests(ctx context.Context, req *connect.Request[lavrayv1.StopTestsRequest]) (*connect.Response[lavrayv1.Empty], error) {
-	s.testCancel()()
+	s.cancelTestBatches()
 	return connect.NewResponse(&lavrayv1.Empty{}), nil
 }
 

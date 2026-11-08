@@ -71,20 +71,38 @@ func newLogWriter(sink LogSink) io.Writer { return &logWriter{sink: sink} }
 func (w *logWriter) Write(p []byte) (int, error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.buf = append(w.buf, p...)
-	for {
-		i := bytes.IndexByte(w.buf, '\n')
+	n := len(p)
+	for len(p) > 0 {
+		i := bytes.IndexByte(p, '\n')
 		if i < 0 {
+			w.accumulate(p)
 			break
 		}
-		w.emit(w.buf[:i])
-		w.buf = w.buf[i+1:]
+		if len(w.buf) == 0 && i <= maxPendingLine {
+			w.emit(p[:i]) // полная строка целиком в записи: без копии в буфер
+		} else {
+			w.accumulate(p[:i])
+			w.emit(w.buf)
+			w.buf = w.buf[:0]
+		}
+		p = p[i+1:]
 	}
-	if len(w.buf) > maxPendingLine {
+	return n, nil
+}
+
+// accumulate дописывает кусок строки без перевода строки. Предел
+// maxPendingLine проверяется ДО append: переполнение выдаётся порцией ровно в
+// предел, поэтому буфер не раздувается даже от одной огромной записи. Буфер
+// переиспользуется между строками.
+func (w *logWriter) accumulate(chunk []byte) {
+	for len(w.buf)+len(chunk) > maxPendingLine {
+		take := maxPendingLine - len(w.buf)
+		w.buf = append(w.buf, chunk[:take]...)
 		w.emit(w.buf)
-		w.buf = nil
+		w.buf = w.buf[:0]
+		chunk = chunk[take:]
 	}
-	return len(p), nil
+	w.buf = append(w.buf, chunk...)
 }
 
 func (w *logWriter) emit(line []byte) {

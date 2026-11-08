@@ -79,11 +79,64 @@ func TestLogWriterSplitsAndJoinsLines(t *testing.T) {
 	}
 }
 
-func TestLogWriterFlushesOverlongLine(t *testing.T) {
+func TestLogWriterSplitsOverlongLine(t *testing.T) {
 	sink, lines := collect()
 	w := newLogWriter(sink)
 	_, _ = w.Write([]byte("INFO[0000] " + strings.Repeat("x", maxPendingLine)))
-	if got := lines(); len(got) != 1 || got[0].level != "info" || len(got[0].msg) != maxPendingLine {
-		t.Fatalf("строка без перевода строки не выдана: %d записей", len(got))
+	got := lines()
+	if len(got) != 1 || got[0].level != "info" || len(got[0].msg)+len("INFO[0000] ") != maxPendingLine {
+		t.Fatalf("строка без перевода строки не выдана порцией в предел: %d записей", len(got))
+	}
+	_, _ = w.Write([]byte("\n"))
+	if got := lines(); len(got) != 2 || got[1].msg != strings.Repeat("x", 11) {
+		t.Fatalf("остаток после предела потерян: %v", got)
+	}
+}
+
+// Одна огромная запись без перевода строк не раздувает буфер сверх предела,
+// а строки режутся порциями не больше maxPendingLine.
+func TestLogWriterBoundsHugeWrite(t *testing.T) {
+	sink, lines := collect()
+	w := newLogWriter(sink).(*logWriter)
+	huge := []byte(strings.Repeat("y", 5*maxPendingLine+100))
+	_, _ = w.Write(huge)
+	if cap(w.buf) > 2*maxPendingLine {
+		t.Fatalf("буфер раздулся до %d байт", cap(w.buf))
+	}
+	got := lines()
+	if len(got) != 5 {
+		t.Fatalf("порций %d, ожидалось 5", len(got))
+	}
+	for _, c := range got {
+		if len(c.msg) > maxPendingLine {
+			t.Fatalf("порция %d байт больше предела", len(c.msg))
+		}
+	}
+	if len(w.buf) != 100 {
+		t.Fatalf("в буфере %d байт остатка, ожидалось 100", len(w.buf))
+	}
+}
+
+// Буфер незавершённой строки переиспользуется: после выдачи строки память не
+// отдаётся и не растёт при повторных записях.
+func TestLogWriterReusesBuffer(t *testing.T) {
+	sink, _ := collect()
+	w := newLogWriter(sink).(*logWriter)
+	_, _ = w.Write([]byte("INFO[0000] часть"))
+	_, _ = w.Write([]byte(" строки\n"))
+	first := &w.buf[:1][0] // буфер пуст, но память выдержана
+	_, _ = w.Write([]byte("INFO[0000] "))
+	if &w.buf[0] != first {
+		t.Fatal("буфер пересоздан вместо переиспользования")
+	}
+}
+
+// Две полные строки в одной записи без накопления не копируются в буфер.
+func TestLogWriterCompleteLinesSkipBuffer(t *testing.T) {
+	sink, lines := collect()
+	w := newLogWriter(sink).(*logWriter)
+	_, _ = w.Write([]byte("INFO[0000] a\nINFO[0000] b\n"))
+	if len(lines()) != 2 || w.buf != nil {
+		t.Fatalf("полные строки прошли через буфер: %v", w.buf)
 	}
 }

@@ -43,7 +43,13 @@ pub struct Manifest {
 
 /// Корень репозитория: три уровня вверх от `rust/crates/lavray-conformance`.
 pub fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    assert!(
+        root.join("conformance").is_dir(),
+        "нет каталога conformance/ в {}: крейт должен лежать в rust/crates/",
+        root.display()
+    );
+    root
 }
 
 /// Читает и разбирает `conformance/manifest.json`.

@@ -1,4 +1,7 @@
 # cargo-deny для rust/ (CI: job rust-core). Лицензии — совместимые с GPL-3.0-only.
+[graph]
+all-features = true
+
 [licenses]
 allow = [
   "GPL-3.0-only", # собственные крейты workspace

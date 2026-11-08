@@ -110,16 +110,10 @@ function ChromeButtons({ platform }: { readonly platform: 'win' | 'mac' | 'linux
         const api = await loadWinApi();
         if (api === null || !alive.current) return;
         setMaximized(await api.isMaximized());
-        // Resize сыплется пачкой: один запрос в полёте, а после него — одна
-        // обязательная финальная проверка (latestOnly), ответ применяется последним.
-        const check = latestOnly(async () => {
-          try {
-            const m = await api.isMaximized();
-            if (alive.current) setMaximized(m);
-          } catch {
-            /* окно закрывается — состояние уже не важно */
-          }
-        });
+        // Resize сыплется пачкой: один запрос в полёте + обязательная финальная проверка.
+        const check = latestOnly(() =>
+          api.isMaximized().then((m) => { if (alive.current) setMaximized(m); }, () => undefined),
+        );
         const stop = await api.onResized(check);
         // Компонент мог размонтироваться, пока подписка оформлялась: cleanup
         // уже отработал, отписаться нужно здесь, иначе слушатель утечёт.

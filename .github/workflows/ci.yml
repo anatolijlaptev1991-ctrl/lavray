@@ -312,6 +312,42 @@ jobs:
         run: cargo build
 
   # --------------------------------------------------------------------------
+  # rust-core: workspace rust/ (будущее Rust-ядро, docs/rust-migration/PLAN.md R0).
+  # Отдельный от shell/ Cargo-проект: Tauri, UI и системные библиотеки не нужны.
+  # Крейт lavray-conformance читает conformance/ (те же файлы, что Go-тест
+  # core/internal/conformance, который попадает в job go через go test ./...).
+  # --------------------------------------------------------------------------
+  rust-core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.96.0 # как в rust/rust-toolchain.toml
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+      - name: cargo clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: cargo test
+        run: cargo test --locked
+      - name: "Установка cargo-deny и cargo-audit (версии закреплены)"
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.19.9,cargo-audit@0.22.2
+      - name: "cargo-deny: лицензии, источники, запреты (rust/deny.toml)"
+        run: cargo deny check licenses bans sources
+      - name: "cargo-audit: известные уязвимости зависимостей"
+        run: cargo audit --file Cargo.lock
+
+  # --------------------------------------------------------------------------
   # rust-windows: код оболочки под #[cfg(windows)] (WinINET и RAS системного
   # прокси, снимок экрана GDI, Job Object, реестр) на ubuntu не компилируется
   # вовсе (T-82). Раннер одноразовый: настоящий WinINET на выдуманной записи

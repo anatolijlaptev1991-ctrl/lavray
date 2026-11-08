@@ -1,0 +1,30 @@
+# Отдельный от shell/ Cargo-проект: будущее Rust-ядро LAVRay (docs/rust-migration/PLAN.md,
+# R0). Сборку Tauri-оболочки не затрагивает; общие зависимости с shell/ не делятся.
+[workspace]
+resolver = "2"
+members = [
+  "crates/lavray-model",
+  "crates/lavray-links",
+  "crates/lavray-cfgbuild",
+  "crates/lavray-proc",
+  "crates/lavray-conformance",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+license = "GPL-3.0-only"
+publish = false
+rust-version = "1.96"
+
+[workspace.dependencies]
+sha2 = "0.10"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }

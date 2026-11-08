@@ -1,0 +1,201 @@
+{
+  "description": "TUF-lite: подписи ed25519 по ролям root.json; ключи выводятся из фиксированных seed",
+  "reference_time": "2026-06-01T00:00:00Z",
+  "trust_root": "root.json",
+  "stored_state": {
+    "manifest_serial": 9,
+    "root_version": 1,
+    "timestamp_version": 4
+  },
+  "manifest_query": {
+    "channel": "stable",
+    "product": "lavray-windows"
+  },
+  "artifact_claims": {
+    "installer": "lavray-setup.bin",
+    "trusted_comment": "lavray-windows;windows-x64;stable;1.2.0;10"
+  },
+  "rules": [
+    "now = reference_time; срок: now \u003e= expires — истёк (в том числе равенство)",
+    "timestamp.expires не дальше now + 8 суток (7 + 1 допуск часов), иначе horizon",
+    "откат строго: timestamp.version \u003c сохранённой, manifest.serial \u003c сохранённого; равенство допустимо",
+    "manifest сверяется с закрепляющим timestamp: sha256, длина, serial",
+    "исход — по ошибке функций пакета updates (AdvanceRoot, FetchTimestamp, FetchManifest, VerifyArtifactSignature)"
+  ],
+  "cases": [
+    {
+      "file": "root.json",
+      "kind": "root",
+      "expect": "ok",
+      "note": "порог 1, самоподпись k1"
+    },
+    {
+      "file": "root-expired.json",
+      "kind": "root",
+      "expect": "expired",
+      "note": "подпись верна, срок истёк"
+    },
+    {
+      "file": "root-insufficient.json",
+      "kind": "root",
+      "expect": "insufficient_signatures",
+      "note": "роль root: порог 2, подпись одна"
+    },
+    {
+      "file": "timestamp-valid.json",
+      "kind": "timestamp",
+      "expect": "ok",
+      "note": "версия выше сохранённой, срок в окне свежести"
+    },
+    {
+      "file": "timestamp-equal-version.json",
+      "kind": "timestamp",
+      "expect": "ok",
+      "note": "версия равна сохранённой — допустима"
+    },
+    {
+      "file": "timestamp-rollback.json",
+      "kind": "timestamp",
+      "expect": "rollback",
+      "note": "версия ниже сохранённой"
+    },
+    {
+      "file": "timestamp-expired.json",
+      "kind": "timestamp",
+      "expect": "expired",
+      "note": "срок истёк"
+    },
+    {
+      "file": "timestamp-horizon.json",
+      "kind": "timestamp",
+      "expect": "horizon",
+      "note": "срок дальше окна свежести"
+    },
+    {
+      "file": "timestamp-bad-signature.json",
+      "kind": "timestamp",
+      "expect": "bad_signature",
+      "note": "подпись чужим ключом под keyid t1"
+    },
+    {
+      "file": "timestamp-unknown-keyid.json",
+      "kind": "timestamp",
+      "expect": "bad_signature",
+      "note": "keyid t9 нет в root.json"
+    },
+    {
+      "file": "manifest-stable-valid.json",
+      "kind": "manifest",
+      "expect": "ok",
+      "timestamp": "timestamp-pin-valid.json",
+      "note": "serial выше сохранённого"
+    },
+    {
+      "file": "manifest-stable-equal-serial.json",
+      "kind": "manifest",
+      "expect": "ok",
+      "timestamp": "timestamp-pin-equal-serial.json",
+      "note": "serial равен сохранённому — допустим"
+    },
+    {
+      "file": "manifest-stable-rollback.json",
+      "kind": "manifest",
+      "expect": "rollback",
+      "timestamp": "timestamp-pin-rollback.json",
+      "note": "serial ниже сохранённого"
+    },
+    {
+      "file": "manifest-stable-expired.json",
+      "kind": "manifest",
+      "expect": "expired",
+      "timestamp": "timestamp-pin-expired.json",
+      "note": "срок истёк"
+    },
+    {
+      "file": "manifest-stable-bad-signature.json",
+      "kind": "manifest",
+      "expect": "bad_signature",
+      "timestamp": "timestamp-pin-bad-signature.json",
+      "note": "подпись чужим ключом под keyid r1"
+    },
+    {
+      "file": "manifest-stable-unknown-keyid.json",
+      "kind": "manifest",
+      "expect": "bad_signature",
+      "timestamp": "timestamp-pin-unknown-keyid.json",
+      "note": "keyid r9 нет в root.json"
+    },
+    {
+      "file": "manifest-stable-wrong-product.json",
+      "kind": "manifest",
+      "expect": "wrong_product",
+      "timestamp": "timestamp-pin-wrong-product.json",
+      "note": "product не lavray-windows"
+    },
+    {
+      "file": "manifest-stable-wrong-channel.json",
+      "kind": "manifest",
+      "expect": "wrong_channel",
+      "timestamp": "timestamp-pin-wrong-channel.json",
+      "note": "channel beta вместо stable"
+    },
+    {
+      "file": "manifest-stable-valid.json",
+      "kind": "manifest",
+      "expect": "hash_mismatch",
+      "timestamp": "timestamp-pin-wrong-sha.json",
+      "note": "sha256 в timestamp не совпал"
+    },
+    {
+      "file": "manifest-stable-valid.json",
+      "kind": "manifest",
+      "expect": "length_mismatch",
+      "timestamp": "timestamp-pin-wrong-length.json",
+      "note": "длина в timestamp не совпала"
+    },
+    {
+      "file": "manifest-stable-valid.json",
+      "kind": "manifest",
+      "expect": "serial_mismatch",
+      "timestamp": "timestamp-pin-wrong-serial.json",
+      "note": "serial в timestamp не совпал"
+    },
+    {
+      "file": "manifest-stable-threshold2-one-signature.json",
+      "kind": "manifest",
+      "expect": "insufficient_signatures",
+      "trust_root": "root-threshold2.json",
+      "timestamp": "timestamp-pin-threshold2-one-signature.json",
+      "note": "роль manifest: порог 2, подпись одна"
+    },
+    {
+      "file": "manifest-stable-threshold2-two-signatures.json",
+      "kind": "manifest",
+      "expect": "ok",
+      "trust_root": "root-threshold2.json",
+      "timestamp": "timestamp-pin-threshold2-two-signatures.json",
+      "note": "роль manifest: порог 2, обе подписи"
+    },
+    {
+      "file": "lavray-setup.bin",
+      "kind": "artifact",
+      "expect": "ok",
+      "minisig": "lavray-setup.bin.minisig",
+      "note": "minisign prehashed, trusted comment из artifact_claims"
+    },
+    {
+      "file": "lavray-setup.bin.tampered",
+      "kind": "artifact",
+      "expect": "artifact_bad_signature",
+      "minisig": "lavray-setup.bin.minisig",
+      "note": "изменён первый байт установщика"
+    },
+    {
+      "file": "lavray-setup.bin",
+      "kind": "artifact",
+      "expect": "claims_mismatch",
+      "minisig": "lavray-setup.bin.minisig-wrong-claims",
+      "note": "подпись верна, trusted comment другой версии"
+    }
+  ]
+}

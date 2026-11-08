@@ -1,0 +1,875 @@
+{
+  "schema": 1,
+  "description": "Нейтральные данные для conformance-тестов Go и Rust; файлы не копируются, ссылки — от корня репозитория",
+  "regenerate": "cd core \u0026\u0026 CGO_ENABLED=0 GOPROXY=off go test ./internal/conformance/ -run TestManifest -update",
+  "nondeterminism": [
+    "generated-backup: тело копии содержит gzip (compress/flate); байты зависят от версии Go: проверка не перепаковывает payload, а читает закоммиченный payload.bin и запечатывает его; Rust сверяет расшифровку и payload_sha256"
+  ],
+  "categories": {
+    "cfgbuild-deviations": {
+      "description": "Заявленные отличия golden от эталонного вывода",
+      "files": [
+        {
+          "path": "core/internal/cfgbuild/testdata/deviations.yaml",
+          "size": 5432,
+          "sha256": "bd17745b5b25bf3ff6275b8f68675329b39acd4617c52166782a2bf6758dcddf"
+        }
+      ]
+    },
+    "cfgbuild-golden": {
+      "description": "Golden-эталоны сборщика конфигурации sing-box",
+      "files": [
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G01.in.json",
+          "size": 188,
+          "sha256": "8ff584bb44778722689784c2b2df9f1f59b865300ebe6be099112bd234c42652"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G01.want.json",
+          "size": 2005,
+          "sha256": "60b886f47c73158061b0d3148be9e651fe813016fcc56b96382a2997ec41244b"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G02.in.json",
+          "size": 546,
+          "sha256": "788de8933be9e2d78b4b97625e71f2e78c8856875ef1b2225201ad05e72542ab"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G02.want.json",
+          "size": 2219,
+          "sha256": "ecc1743b81f8d0ad4b09119204d130c7b1b6a6756bafc115b486aca2119745df"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G03.in.json",
+          "size": 233,
+          "sha256": "91fe10823c7c138f0a75aa2aca07ad20188c5c296d30dabb50a1d9f4046c996c"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G03.want.json",
+          "size": 2238,
+          "sha256": "82687039081d39cec9044cf026874dcaf69982a24344d8d19a88f1f8a1760674"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G04.in.json",
+          "size": 295,
+          "sha256": "16b9af4dcaee044402027cf9be3283cc013b923757b41bba3ed536a353fd9913"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G04.want.json",
+          "size": 2316,
+          "sha256": "7d1051d08f5e9187c5d934cc45dafd15dfd2e2233e418f708c59584bc88b2faa"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G05.in.json",
+          "size": 299,
+          "sha256": "d7d5dc4bf6ab7ac18a38042e68016eec07ff0607aa110a81e2e5d8688dd2bc54"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G05.want.json",
+          "size": 2322,
+          "sha256": "c1b0cb6a50de4ca738235a46003c6d61817db7549babd7ce6e4a8ba998c78f93"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G06.in.json",
+          "size": 464,
+          "sha256": "3f9df84bbdaf248b6760c6d8031733461000031a859aa99b4584d93a771801bc"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G06.want.json",
+          "size": 2614,
+          "sha256": "18a5233f82d12bff3aa481cadf576e6ec3de5746ae67ca1207e7535b19962e24"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G07.in.json",
+          "size": 519,
+          "sha256": "f53b95860502ec2e9a6d35a5db2eb27189fe75e68f82275d6405ec03b50e9870"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G07.want.json",
+          "size": 2408,
+          "sha256": "4303cb55dd2d66fab38c6e7998e16107d087551a581a1fb29c2afe9b8ddca369"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G08.in.json",
+          "size": 856,
+          "sha256": "74c224f46bcd5e4e9c0dc2904b91e940b8fc2c2511b65b07ea2dcd539ce54740"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G08.want.json",
+          "size": 2746,
+          "sha256": "aa23f335d147efa1de423e9600e7cb9f2672bc542348a942cc4cb732ae5f08aa"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G09.in.json",
+          "size": 385,
+          "sha256": "720535ccd121a3c96a90659ff9f8fdccaaa0ecf868480623cdf22738d1e0496c"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G09.want.json",
+          "size": 2435,
+          "sha256": "316594cb587f8461adcf5da90ff3a23f118d8ff121510c7b6c587741e481bb73"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G10.in.json",
+          "size": 486,
+          "sha256": "7a9b79e8a4db1630a793d17f431ce6ad080ceeabccdb45b6f21242ebd4b5da46"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G10.want.json",
+          "size": 2574,
+          "sha256": "6abad233a221de965b1b8eb3051bdc769172766c8b3d0e8943bbed134767a969"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G11.in.json",
+          "size": 380,
+          "sha256": "702a29138b78c035827971d945ecf8754b134e51be8d1b22be5ac23a6c350ab2"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G11.want.json",
+          "size": 2418,
+          "sha256": "ed86555ca5e700ee6bd314d75ae2bdd85e9ca23b80a9cf99ffb2155808cdbf92"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G12.in.json",
+          "size": 2448,
+          "sha256": "bef7ca26954cc60c409f4d289976ee0a24846d0d8415a0c8df2984370eb2d0d6"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G12.want.json",
+          "size": 4398,
+          "sha256": "c6a715ad14156e788552675b5d4ae9399eea2e71e758984d61d26945e86567bf"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G13.in.json",
+          "size": 313,
+          "sha256": "5003299761bb3ce4a997defc72896708eff962583dcff4017a3564d7611a82ef"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G13.want.json",
+          "size": 2318,
+          "sha256": "dda1083f04fd67cc9b321fdb89e8d17ddbc95319371e372cc0515745005b7a67"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G14.in.json",
+          "size": 403,
+          "sha256": "de990b780bb157c15762517a69ff122141b231af18616264129c2348f9325ba0"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G14.want.json",
+          "size": 2560,
+          "sha256": "a46ac2d06163a44d9748fcecad6e0e0be0ff512d2b2b35729dd8d4d2edfc94f6"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G15.in.json",
+          "size": 1061,
+          "sha256": "51efaec7df1b9d02454dbc12a076dbb69db8cf809d265f50bdb5a643df236fb6"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G15.want.json",
+          "size": 3183,
+          "sha256": "d4341d0d06c4df8ab915d59909326c6a5328e2c0f5a110beecc8503c7e904308"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G16.in.json",
+          "size": 1016,
+          "sha256": "fab1096cec8121b3dfa2cda0de41a840137033fb46f185f341f91fb8c19f7f04"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G16.want.json",
+          "size": 2857,
+          "sha256": "b70183d8936a56ef3cc532a7844b8491697fce51b5b2f7abf78a604680eaad97"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G17.in.json",
+          "size": 409,
+          "sha256": "4c5241e2543f10fc67aa0b20b2fe723c794c5996cb3eb507158a99ad6808e8c2"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G17.want.json",
+          "size": 2044,
+          "sha256": "05f724af344d0da2eaed09ee4d90563561c5f0fa8b30b60ac7d9fad24ce721fd"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G18.in.json",
+          "size": 833,
+          "sha256": "2c54983bf28d0466f1a00340c9dc9b97b389bc9ce469f86deabbfe3fb0bd345f"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G18.want.json",
+          "size": 634,
+          "sha256": "de264e9fe2226b3f39fadca661c3646a031cd9102d69d0215c10a967b97c058c"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G20.in.json",
+          "size": 349,
+          "sha256": "454154e741450d9f271801d53b00247369abdbcc2d444d0ff3781bf5372cda34"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G20.want.json",
+          "size": 2285,
+          "sha256": "0c9b3cc79392d0533cfbd7e999b2aa37479b0d708fe6a3073030c275b5c543d6"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G21.in.json",
+          "size": 387,
+          "sha256": "f271e9255ef0c587e81c0e2dd8db9363755eff76ab002c0d04760ef9c38a6fe8"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G21.want.json",
+          "size": 2400,
+          "sha256": "9ae0cab8d929257da89b0cc61b4cb464d8637a22538aa6d6f2dfaee2bfa445a0"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G22.in.json",
+          "size": 264,
+          "sha256": "8da078ef695e2229883f7eaf1bd64479cb144fea68b72add4689fd81ae300ad4"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G22.want.json",
+          "size": 2143,
+          "sha256": "45802bcd429752daf0b44acd0fd2fa3a5389952244d70fa88438bc7d6665b429"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G23.in.json",
+          "size": 772,
+          "sha256": "e2d036174cb47a99eb1acf627499bd68259163cae0d36911c5439081b4d951bd"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G23.want.json",
+          "size": 3535,
+          "sha256": "8481d152e6256682b46e528fe744c075e7ea47cb6b929223508fa7367280a357"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G24.in.json",
+          "size": 360,
+          "sha256": "f9f66d40f6e273ad990a13e88cd701c745643d75a2f1ebbc72c94fc463d63f9e"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G24.want.json",
+          "size": 2116,
+          "sha256": "6d34d526dd6254fbeb007f45c6790f3051ee6afa05d7744c6d04054246bb3d56"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G25.in.json",
+          "size": 722,
+          "sha256": "79986f3a009c23e77b9156103eb47e31ec60f8603a904c8a12fc9c52567ae9ad"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G25.want.json",
+          "size": 2822,
+          "sha256": "0c3e1d489bad4470ba50264484118cc25cb38d1ca3c4340e2c078727020c44a1"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G26.in.json",
+          "size": 255,
+          "sha256": "07461c73c75d8f1707493a8ebfde6e8afc53e8d66b410012332eccd5a2a34cf5"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G26.want.json",
+          "size": 2391,
+          "sha256": "b0278eaa7375de142bb32a73394a3121c18b225660d1c2ce95b9d24603705f12"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G27.in.json",
+          "size": 847,
+          "sha256": "8927de47ea1e9bfeb9483452f2c8140b4d6372e419ccbbc177965ea7ea0eb729"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G27.want.json",
+          "size": 1948,
+          "sha256": "50a3b56d3c4ed38413488b19b061e28d70bc4d1970797424c0c94ede2fd242c8"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G28.in.json",
+          "size": 326,
+          "sha256": "43e623397e63d027e69ba4845f002611fb5e01166ba7a097d9fe06106cc866b0"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G28.want.json",
+          "size": 11992,
+          "sha256": "2cb5455e704fdb8ef32dcfa213e7c4a94832893422507c37e147a2c2021699a2"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G29.in.json",
+          "size": 326,
+          "sha256": "a51c3691e045ee7f0928c8784a21f6118cd891af915e2f1f107d5af7d32edd79"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G29.want.json",
+          "size": 4837,
+          "sha256": "2b75d7ad09fe2a9d3586b524c355f3e70ba5e2f2c4219f1cfbc5e2cbb54758a1"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G30.in.json",
+          "size": 198,
+          "sha256": "c2a598c00a1a6508f88503703484811e41399457033a2217b3b9e7f748fef17a"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G30.want.json",
+          "size": 2385,
+          "sha256": "574d88987c01052aff16d361f2d89ed2f6e67d60e8a4dc2e679d7e9bbe02291d"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G30b.in.json",
+          "size": 205,
+          "sha256": "98d7c191a044c3f8f44b0d5fd1ce17e806986a85f194163f77a7e306a8cdcedd"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G30b.want.json",
+          "size": 2385,
+          "sha256": "ac43ea9208f68c0133f512ec055f6722563438b375078dfa56e9ede9cd0e0fe5"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G30c.in.json",
+          "size": 207,
+          "sha256": "117f4e98566575b1cdacf42d66c5f7f785205a636f60427f3526af3dbdcb7bb3"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G30c.want.json",
+          "size": 2066,
+          "sha256": "73da527f7d982411375604ae5bb92a602539bcd35228ae8ff65fea42088dc87a"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G31.in.json",
+          "size": 259,
+          "sha256": "7886065b9211c10975bb1b51e49fa00fd8c7e582e990a9d77465b9aca25d5d45"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G31.want.json",
+          "size": 1504,
+          "sha256": "b23e2797188a247bf1e4dfb781a8b12170bcf6f3f87f7ad74fe5faf50fa32697"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G32.in.json",
+          "size": 514,
+          "sha256": "61a7e16f888d57eb132a89b97a75c0de58e7bb0263258d60035b8bbd0a00bec4"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G32.want.json",
+          "size": 1864,
+          "sha256": "6fe23efcc8d95b2ca688a4bed04d27b2a4b43c72b1956e128c4b0c1906fe25da"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G34.in.json",
+          "size": 939,
+          "sha256": "cbe4df8c75f2cb87438df830cec1bee208ff8b7d8aad1cb81ad10e255506606f"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G34.want.json",
+          "size": 3007,
+          "sha256": "9fa6b7bc9e0845c69eb5a3bac94c31b745b15a0cf1c39a45c50955feaf1307ea"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G35a.in.json",
+          "size": 229,
+          "sha256": "0bd6e43f1c7500e8064aafbcf5e1401c569aa8df7a8116faafd6e7fa8014cc78"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G35a.want.json",
+          "size": 2358,
+          "sha256": "d86aa99145bb391ef8bb4cae87f84a1e890949ff5aa304a63fd16430f4f55a70"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G35b.in.json",
+          "size": 257,
+          "sha256": "ae1f56d09fc057c9e520a9cca32f3bc7811b02df20faca8f8eccd1e1ad421c9d"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G35b.want.json",
+          "size": 2387,
+          "sha256": "ff337e1da7ac499e84db10e3197288adbb1a4188181a2d67a383d69bd2912203"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G35c.in.json",
+          "size": 276,
+          "sha256": "113bb9b6086cf374d352ef94f0da32d307f9e87b30a88c6ca6f71d2f7853b92f"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G35c.want.json",
+          "size": 2408,
+          "sha256": "d69e2d0a92e0589c63b89c6793b79ca7903a7aa25d045d8d967e3f07f2f124f9"
+        }
+      ]
+    },
+    "fuzz-corpus": {
+      "description": "Корпуса go fuzz (формат «go test fuzz v1») из testdata/fuzz/ пакетов ядра",
+      "files": [
+        {
+          "path": "core/internal/links/testdata/fuzz/FuzzParseLink/18514b48dab4ba63",
+          "size": 6746,
+          "sha256": "18514b48dab4ba63bfcd07f56ab2642824fb377affeb19eb6f94d5572ed37640"
+        },
+        {
+          "path": "core/internal/links/testdata/fuzz/FuzzParseLink/c801b63bf388369c",
+          "size": 123,
+          "sha256": "c801b63bf388369ccc9231fe0e5404c3a79484a391cdf4a0614a22be0518eefe"
+        }
+      ]
+    },
+    "generated-backup": {
+      "description": "Образцы резервных копий LAVBK1 (генерирует этот пакет)",
+      "files": [
+        {
+          "path": "conformance/generated/backup/bad-magic.lavbk",
+          "size": 2280,
+          "sha256": "19e6d648fbcd2b9e3cdfa76b4d6f194368b363ee70f0976386091616e8a10242"
+        },
+        {
+          "path": "conformance/generated/backup/cases.json",
+          "size": 1468,
+          "sha256": "e4b8fed711d786d0339ca4448077563966cfb17e0cda0a2efc147bab688c5dea"
+        },
+        {
+          "path": "conformance/generated/backup/other-password.lavbk",
+          "size": 2280,
+          "sha256": "970306e30358a889020d4f9b0e31805d5975bd7931781176a1be3d6c175429a0"
+        },
+        {
+          "path": "conformance/generated/backup/payload.bin",
+          "size": 2168,
+          "sha256": "99430dc0350c365ca526894d2bba1c59dc30cc107080b66b8069f29e34159888"
+        },
+        {
+          "path": "conformance/generated/backup/tampered.lavbk",
+          "size": 2280,
+          "sha256": "57f0ca1d32eaa63e6bdc85d4eba03fc3dbed376cf47444bbd9aa0c2a9e03655d"
+        },
+        {
+          "path": "conformance/generated/backup/truncated-short.lavbk",
+          "size": 100,
+          "sha256": "355de802254861ec12151cc832a21250cd1cd5fea28a37d085908ffb6fb236e4"
+        },
+        {
+          "path": "conformance/generated/backup/truncated.lavbk",
+          "size": 2275,
+          "sha256": "cd45b5d0d07c655c0d03c3ea60fb2b2ac6f34b07f5268ed77357303be0237697"
+        },
+        {
+          "path": "conformance/generated/backup/valid.lavbk",
+          "size": 2280,
+          "sha256": "4fe2f8ac85c1120ae455fe96ba9a8357cdedbe342cf61ca953eed3c6b93aa0d6"
+        }
+      ]
+    },
+    "generated-updates": {
+      "description": "Метаданные и подписи TUF-lite (генерирует этот пакет)",
+      "files": [
+        {
+          "path": "conformance/generated/updates/cases.json",
+          "size": 6760,
+          "sha256": "150945e496af21d5958bd904f04f7304595c49e911886bd098e7cb710e9168b5"
+        },
+        {
+          "path": "conformance/generated/updates/lavray-setup.bin",
+          "size": 28,
+          "sha256": "a6a0662775e200186e545edc0d6e22eaa762e9cc4bdb18c6fdc4ff060b111826"
+        },
+        {
+          "path": "conformance/generated/updates/lavray-setup.bin.minisig",
+          "size": 299,
+          "sha256": "5d6928f5540e8428c08499183b4789b151bde7a1104bc59b9d6ab21c68f4db20"
+        },
+        {
+          "path": "conformance/generated/updates/lavray-setup.bin.minisig-wrong-claims",
+          "size": 299,
+          "sha256": "0f97515ef7be2e13139ed4906415ce00a31194326d664f0043e3265e0a1aa796"
+        },
+        {
+          "path": "conformance/generated/updates/lavray-setup.bin.tampered",
+          "size": 28,
+          "sha256": "c84ef0076a4d4e6499ad598e3e88f7985b911f73715c09d9b848123bef6dc3d4"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-bad-signature.json",
+          "size": 750,
+          "sha256": "da015f3536db83d7d567dac20f40b5d9823753d28caa2737d8139e18892ffab8"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-equal-serial.json",
+          "size": 748,
+          "sha256": "e16f5ddea2e08c919b671b969dbed96f7d3de204ef7cd2db6dc04dea50b4318e"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-expired.json",
+          "size": 750,
+          "sha256": "a52c36426852f9e805e3ee58d98009c38b1573e7442e4f063645897f540fd5f0"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-rollback.json",
+          "size": 748,
+          "sha256": "f10389ea66166e78fa162c2db5dcca2f20d71cf106b13dec9fc1410dbb5c7330"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-threshold2-one-signature.json",
+          "size": 750,
+          "sha256": "6c5ad73bea0ae1f73e860949fbf4c9b7a06573c9448ac666501557fb9cff757c"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-threshold2-two-signatures.json",
+          "size": 862,
+          "sha256": "8fbecb22fdbe62554a4cebbff42a55876407722430f0650de1c313f618010938"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-unknown-keyid.json",
+          "size": 750,
+          "sha256": "7e8147c6b7e46464b73c16317f12ce1fd761670569b76cc5a7021d2cfd675ad0"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-valid.json",
+          "size": 750,
+          "sha256": "6c5ad73bea0ae1f73e860949fbf4c9b7a06573c9448ac666501557fb9cff757c"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-wrong-channel.json",
+          "size": 748,
+          "sha256": "a7d5886f750f62d7c54e998b033f82b578d74cc788532d8cf7dffd99b0506343"
+        },
+        {
+          "path": "conformance/generated/updates/manifest-stable-wrong-product.json",
+          "size": 748,
+          "sha256": "f7bc2574d564866c0a8535fb022059b82a716db138a3e753bc65647e004738de"
+        },
+        {
+          "path": "conformance/generated/updates/root-expired.json",
+          "size": 898,
+          "sha256": "629b52306b3bc18bc55d7562112d7a3b4f150e84b1b31eac3425e0e2e2f982f7"
+        },
+        {
+          "path": "conformance/generated/updates/root-insufficient.json",
+          "size": 903,
+          "sha256": "60096a9abb6be23ea44939370a309456315b7a021df3689a4586cc9e59ebb875"
+        },
+        {
+          "path": "conformance/generated/updates/root-threshold2.json",
+          "size": 903,
+          "sha256": "4e3b08ef271fb0c7a38574bd59e2c2cfc9f45c5def07ab197c5df0f47f793305"
+        },
+        {
+          "path": "conformance/generated/updates/root.json",
+          "size": 898,
+          "sha256": "0114cd90046c589b376510aec8194cacbfd620983a3c2936fb437d35e0a68157"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-bad-signature.json",
+          "size": 339,
+          "sha256": "926eaff9e3bdd8ddd2a21106ce4794383ba19a6e83a75954109c28dad38ea060"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-equal-version.json",
+          "size": 339,
+          "sha256": "ce1a97829fee9b3d2e862cbefac98ab5499457d16cccfc6171085cc16680553f"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-expired.json",
+          "size": 339,
+          "sha256": "a1dbb9e4a1bc6ac206823291f54385689cbfe4d9a08155d9d4a925c43e1f7fa3"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-horizon.json",
+          "size": 339,
+          "sha256": "78a03f16d2611e5238d48729498946e3b9ac8383f19fa1ac5f83d7986da11d64"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-bad-signature.json",
+          "size": 339,
+          "sha256": "774349fefeadd80ce6ebaeaa5a3461f5f480e0b2cb328f4f552d27c61b0450b6"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-equal-serial.json",
+          "size": 338,
+          "sha256": "47397329bcca581c54c21f6e7bebcc09c3be8965c731b273e3577176022f1336"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-expired.json",
+          "size": 339,
+          "sha256": "267165f717369defea54d9c30a79f505ecd84c871f96672f04089e0789ab2c74"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-rollback.json",
+          "size": 338,
+          "sha256": "33d564187efd960e40a6126e12aa97d6295ff9bf5e521a9846ae262e179360ad"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-threshold2-one-signature.json",
+          "size": 339,
+          "sha256": "774349fefeadd80ce6ebaeaa5a3461f5f480e0b2cb328f4f552d27c61b0450b6"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-threshold2-two-signatures.json",
+          "size": 339,
+          "sha256": "774349fefeadd80ce6ebaeaa5a3461f5f480e0b2cb328f4f552d27c61b0450b6"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-unknown-keyid.json",
+          "size": 339,
+          "sha256": "774349fefeadd80ce6ebaeaa5a3461f5f480e0b2cb328f4f552d27c61b0450b6"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-valid.json",
+          "size": 339,
+          "sha256": "774349fefeadd80ce6ebaeaa5a3461f5f480e0b2cb328f4f552d27c61b0450b6"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-wrong-channel.json",
+          "size": 339,
+          "sha256": "afc5c402d53b54e212d091207ec9de11f0eb936fdd1acdfac04d6e7ebabf0e8f"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-wrong-length.json",
+          "size": 339,
+          "sha256": "fac49cfbbb280d56382e71c51bd41e6353bd3b155e1e4bbb3ec475f5044e66b7"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-wrong-product.json",
+          "size": 339,
+          "sha256": "595838f74d95365f6b29ab204084464b84878c81944043876324836e0c647b48"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-wrong-serial.json",
+          "size": 339,
+          "sha256": "9a4ed8530ae4cf43a5796e60c4bda11418d71da9bad084347ef4c2ca0acb739f"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-pin-wrong-sha.json",
+          "size": 339,
+          "sha256": "ae126c250a703f234aad888dfb6ec99b6a0f066ac27964ce5375410766f578bd"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-rollback.json",
+          "size": 339,
+          "sha256": "d731c2816398a0b4355d125349f59866658b33e3f4276d1182d8066af088b9bb"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-unknown-keyid.json",
+          "size": 339,
+          "sha256": "4dad17d8ea0f5330f365610ffcf8011eb00cfc807e661a7ba02c0fbac8dd4baf"
+        },
+        {
+          "path": "conformance/generated/updates/timestamp-valid.json",
+          "size": 339,
+          "sha256": "774349fefeadd80ce6ebaeaa5a3461f5f480e0b2cb328f4f552d27c61b0450b6"
+        }
+      ]
+    },
+    "store-migrations": {
+      "description": "Контрольные суммы миграций SQLite (цепочка migrate.go)",
+      "files": [
+        {
+          "path": "core/internal/store/testdata/migrations.sha256",
+          "size": 536,
+          "sha256": "263ecbc299aaa3b27fcc72433d12b82ab1b6ae62894efa6a02a36342428dada7"
+        }
+      ]
+    },
+    "testdata-store-nekoimport": {
+      "description": "Профили и группы NekoBox для импортёра store/nekoimport",
+      "files": [
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/groups/0.json",
+          "size": 294,
+          "sha256": "a35ed95f3276fcb0c76947e5f81f22cc77afc1316e1707658d991dc54bba66ee"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/groups/1.json",
+          "size": 423,
+          "sha256": "0aab36b1ed1c8d3d6c515ab6e5f124b67353baca55237d7b3cd7ac1e1dc2876c"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/groups/nekobox.json",
+          "size": 909,
+          "sha256": "59007afa14bc3a4053b4e73219d0324eff10c221abe5b42b88e3ff5374916da8"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/groups/pm.json",
+          "size": 17,
+          "sha256": "37d0aeb7026975a3dac0949c7da648c4e23c9bb5fc2142b1e755275a1ba8ce60"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/profiles/1.json",
+          "size": 644,
+          "sha256": "f7d830b21bac9fb2af55b9e8b6abeb13b2aae3c6262bc025085f9887c8475540"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/profiles/2.json",
+          "size": 543,
+          "sha256": "2bfc5d0830cba77fc57f169ecf7fc70ed428253aefef7a46ed3a3705b631177a"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/profiles/3.json",
+          "size": 457,
+          "sha256": "1ae6687211b9284c1ccdbda3dba13ce91a4be119951252fb0cf1f28b3d1345ab"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/profiles/4.json",
+          "size": 270,
+          "sha256": "e04348dfc3adf1e26120d0996b935ab4b2b50df706a820c08cefd770aee6acea"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/profiles/5.json",
+          "size": 411,
+          "sha256": "a428b46c67cfd43a0cffb7aae9493c8734fbe84016d80eb2a4bc5a0cf25b95e3"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/profiles/6.json",
+          "size": 193,
+          "sha256": "435733280890d75194cd112d62bdeb1c605f7b6c2a0aabb2f258431fdaf07b73"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/profiles/7.json",
+          "size": 362,
+          "sha256": "ef382abba87e6ac6e65035db5aef7216d19e3f51cab4be748ec27c1557927925"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/profiles/8.json",
+          "size": 54,
+          "sha256": "57e53fd4fba21610910d8defe84bf2e79fa22840a0d6663337bf8b8bfe435f20"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/profiles/9.json",
+          "size": 189,
+          "sha256": "beeb1e70a96068376ad89ac0eff3f9dcdddea1759be171b4568bb0d7fe68e9b3"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/routes_box/Default",
+          "size": 203,
+          "sha256": "81856d2d9edfcf296cced34d76b78b2be0a536577567b26d80922b06a6c1665b"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/config/routes_box/RU-bypass + Games",
+          "size": 610,
+          "sha256": "c3bb2149edca6838f50767be36ed9fd6aea61a3deecf1af9328c650e205ee72b"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/groups/0.json",
+          "size": 218,
+          "sha256": "70e86050b8761fe2e8be44fb2eb0dedb88c17c8f68c9df5ab71c967c2f229cb5"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/groups/1.json",
+          "size": 367,
+          "sha256": "ae00080206bd63f61eda116c14565381f08fa12bed4715b114ad6e24cf4d3deb"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/groups/pm.json",
+          "size": 17,
+          "sha256": "37d0aeb7026975a3dac0949c7da648c4e23c9bb5fc2142b1e755275a1ba8ce60"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/0.json",
+          "size": 707,
+          "sha256": "fc39999d24e408d0d2f2970835e320ab8f6ed9ad22d83764ff200833a1248be3"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/1.json",
+          "size": 334,
+          "sha256": "6bbf7669e2d2d2d167252446c834ec747314bad509041ece21d705cee6dda247"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/10.json",
+          "size": 456,
+          "sha256": "308b21b1ba460c4888d086defa0c22876df2d0eed543309ed9d38e44c66cb83f"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/11.json",
+          "size": 319,
+          "sha256": "1f2dba71c76777c0553d8a463e1fe7b97dff4d301c0bb3ff931b9bc6fc4d1828"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/12.json",
+          "size": 439,
+          "sha256": "5f7d1eb812831e84827d4dd2a0e60ff4eb4fd42d7a3fd633044b097930b4920b"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/2.json",
+          "size": 450,
+          "sha256": "8556ad4e4645733fd8da9a81b56ef89e10ed884ea2e62bbc4a9b1d82755d7890"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/3.json",
+          "size": 438,
+          "sha256": "9acb975fe918f62461ecbf5b8a569fa7238867d288da7ef8fc37b077bbe93424"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/4.json",
+          "size": 504,
+          "sha256": "2f0e6bb384e2a2e36035df0ec230da39b2b4c2057dc09a0be0ac90bdf30e7a26"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/5.json",
+          "size": 520,
+          "sha256": "b66081b2e8905780658afad99d9cc703c846f5efbe4cb3172ad36025886affa4"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/6.json",
+          "size": 602,
+          "sha256": "c313f4ca79f4ae25a2a4df0e01a834235cb5c16702959d49699dcab325189b9a"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/7.json",
+          "size": 54,
+          "sha256": "06b136344652bfc0b955f0309560f96761bdab4342411c49c17a505f8266a1ce"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/8.json",
+          "size": 202,
+          "sha256": "511acf463a5828c8cf1f3b9ed31bf96b4c6ca6c08a689171b756512429f6b641"
+        },
+        {
+          "path": "core/internal/store/nekoimport/testdata/nekobox/profiles/9.json",
+          "size": 185,
+          "sha256": "1cf97fc092f5a81a577a282eab585b7b9470524d6595c47005132b3ea0318efa"
+        }
+      ]
+    },
+    "testdata-subs": {
+      "description": "Образцы подписок парсера subs",
+      "files": [
+        {
+          "path": "core/internal/subs/parser/testdata/base64.txt",
+          "size": 525,
+          "sha256": "c7e5fbcdd18e570fcebebed945246b805ae8db5bc3656c3c779315165def4c49"
+        },
+        {
+          "path": "core/internal/subs/parser/testdata/broken.txt",
+          "size": 27,
+          "sha256": "43cf25b2775a25070cab579d5699751fd4e7dea2c4d53e14c97d8d57d5235a54"
+        },
+        {
+          "path": "core/internal/subs/parser/testdata/empty.txt",
+          "size": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "core/internal/subs/parser/testdata/happ.txt",
+          "size": 240,
+          "sha256": "dbc23efa23b3634a37c1b49f4eab13279c20c58b672945ded58139ea232b4b71"
+        },
+        {
+          "path": "core/internal/subs/parser/testdata/html.txt",
+          "size": 98,
+          "sha256": "67346b75e10881826b4af9bd3f7b68a3d57761e483de6184b20639295af64b6b"
+        },
+        {
+          "path": "core/internal/subs/parser/testdata/json-no-outbounds.json",
+          "size": 41,
+          "sha256": "3d14e70e36ee0a8a1e7ab8ce5738d7d6b03d31032b1500b5ef030fbf5dee6926"
+        },
+        {
+          "path": "core/internal/subs/parser/testdata/plain.txt",
+          "size": 353,
+          "sha256": "698e32e7db814b369a4baabf3810fc4a65860a9b2140047f971289b86b4082d8"
+        },
+        {
+          "path": "core/internal/subs/parser/testdata/singbox-broken.json",
+          "size": 100,
+          "sha256": "a50c1a4d33ff41dd1448d1ee014dc97f53293b0d1f05c34b5207aa386d707429"
+        },
+        {
+          "path": "core/internal/subs/parser/testdata/singbox.json",
+          "size": 3015,
+          "sha256": "cbaf00b3428713b8fb68e2f2359da24cbb168df4f26a4b56afdc432b33d076c3"
+        }
+      ]
+    }
+  }
+}

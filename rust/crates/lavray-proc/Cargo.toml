@@ -1,0 +1,11 @@
+[package]
+name = "lavray-proc"
+description = "Надзор за процессами ядра (заготовка Rust-ядра)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lints]
+workspace = true

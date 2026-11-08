@@ -810,3 +810,90 @@ fn other_systems_answer_unsupported() {
     assert!(!current_state().unwrap().supported);
     assert_eq!(change(true).unwrap_err(), ERR_UNSUPPORTED);
 }
+
+// ---- миграция Run → задача (autostart/migrate.rs) ----
+
+use super::migrate::migrate_run_to_task;
+
+#[test]
+fn an_elevated_installed_copy_moves_run_to_the_task() {
+    let os = FakeSystem::with_run_value();
+
+    assert_eq!(migrate_run_to_task(&os, &env(true)), Ok(true));
+
+    assert!(os.task.get(), "задача создана");
+    assert!(os.run.borrow().is_none(), "значение Run удалено");
+    let calls = os.mutating_calls();
+    assert_eq!(calls.len(), 2, "{calls:?}");
+    assert_eq!(calls[0].1[..4], ["/Create", "/TN", TASK, "/XML"]);
+    assert_eq!(calls[1], run_delete());
+    // повторный вызов уже ничего не делает
+    assert_eq!(migrate_run_to_task(&os, &env(true)), Ok(false));
+    assert_eq!(os.mutating_calls().len(), 2);
+}
+
+#[test]
+fn no_migration_without_elevation_or_for_portable_copies() {
+    for e in [env(false), portable(true), portable(false)] {
+        let os = FakeSystem::with_run_value();
+        assert_eq!(migrate_run_to_task(&os, &e), Ok(false));
+        assert!(
+            os.calls.borrow().is_empty(),
+            "ОС не трогаем: {:?}",
+            os.calls
+        );
+        assert!(os.run.borrow().is_some() && !os.task.get());
+    }
+}
+
+#[test]
+fn no_migration_when_the_task_already_exists() {
+    let os = FakeSystem::with_run_value();
+    os.task.set(true);
+    assert_eq!(migrate_run_to_task(&os, &env(true)), Ok(false));
+    assert!(os.mutating_calls().is_empty());
+    assert!(
+        os.run.borrow().is_some(),
+        "Run не трогаем: решает обычное включение"
+    );
+}
+
+#[test]
+fn no_migration_when_autostart_is_off() {
+    let os = FakeSystem::default();
+    assert_eq!(migrate_run_to_task(&os, &env(true)), Ok(false));
+    assert!(os.mutating_calls().is_empty());
+    assert!(!os.task.get());
+}
+
+#[test]
+fn no_migration_when_the_scheduler_state_is_unknown() {
+    let os = FakeSystem::with_run_value();
+    let broken = FakeSystem {
+        scheduler_down: true,
+        ..os
+    };
+    assert_eq!(migrate_run_to_task(&broken, &env(true)), Ok(false));
+    assert!(broken.mutating_calls().is_empty());
+    assert!(broken.run.borrow().is_some());
+}
+
+#[test]
+fn a_failed_task_creation_keeps_the_run_value() {
+    let os = FakeSystem {
+        fail_create: true,
+        ..FakeSystem::with_run_value()
+    };
+
+    let result = migrate_run_to_task(&os, &env(true));
+
+    assert!(result.is_err(), "{result:?}");
+    assert!(!os.task.get());
+    assert_eq!(os.run.borrow().as_deref(), Some(RUN_DATA), "Run остался");
+    let state = read_state(&os, &env(true)).unwrap();
+    assert_eq!(
+        state.method,
+        Some(Method::Registry),
+        "состояние не испорчено"
+    );
+}

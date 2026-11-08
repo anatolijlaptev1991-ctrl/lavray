@@ -15,6 +15,7 @@ import { ConnectMode, CoreState } from './gen/lavray_pb';
 import { useI18n, useStartupLanguage } from './hooks/useI18n';
 import { useAgentAccessSync } from './hooks/useAgentAccess';
 import { useSystemProxyApplied } from './hooks/useSystemProxy';
+import { usePendingConnect } from './hooks/usePendingConnect';
 import { useSystemProxyFollow } from './hooks/useSystemProxyFollow';
 import { useTrafficStats } from './hooks/useTraffic';
 import { useShellBridge } from './hooks/useShellBridge';
@@ -95,6 +96,7 @@ function AppInner(): JSX.Element {
   // MCP: окно ставит/снимает системный прокси, когда ядро подключил другой клиент,
   // и сообщает оболочке режим доступа агентов.
   useSystemProxyFollow(status);
+  usePendingConnect(status); // перезапуск от администратора: довести подключение до конца
   useAgentAccessSync();
 
   const section: Section | undefined = useMemo(

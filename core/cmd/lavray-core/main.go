@@ -4,7 +4,7 @@
 // `serve --listen-socket <path>`; спека — docs/stage3/shell-lifecycle §3):
 //
 //	lavray-core serve --listen-socket <unix:///…|pipe|127.0.0.1:0> \
-//	                  [--data <dir>] [--headless] [--web-bind … --platform openwrt]
+//	                  [--data <dir>] [--headless | --connect-last] [--web-bind … --platform openwrt]
 //
 // Протокол запуска: токен авторизации (32 байта CSPRNG → base64url) читается
 // ОДНОЙ строкой из stdin; необязательная вторая строка — агентский токен MCP
@@ -35,7 +35,6 @@ import (
 	"time"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/api"
-	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/headless"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/logs"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/presets"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
@@ -55,9 +54,14 @@ func main() {
 	listen := fs.String("listen-socket", "", "UDS-путь | \\\\.\\pipe\\name | 127.0.0.1:0")
 	dataDir := fs.String("data", defaultDataDir(), "каталог данных (права 0700)")
 	headless := fs.Bool("headless", false, "авторестарт последнего профиля (сервисный режим)")
+	connectLast := fs.Bool("connect-last", false, "однократно подключить запомненный профиль (десктоп)")
 	ext := addExtFlags(fs) // веб-панель и шлюз OpenWrt (ext_flags.go)
 	if err := fs.Parse(os.Args[2:]); err != nil || *listen == "" {
 		fmt.Fprintln(os.Stderr, "--listen-socket обязателен")
+		os.Exit(2)
+	}
+	if err := checkConnectFlags(*headless, *connectLast); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
 	ext.checkExtFlags()
@@ -143,6 +147,9 @@ func main() {
 	defer stop()
 	if *headless {
 		go runHeadless(ctx, server, mux)
+	}
+	if *connectLast {
+		go runConnectLast(ctx, server, mux)
 	}
 	ext.runGateway(ctx, server)
 
@@ -230,16 +237,6 @@ func authMiddlewareAgent(next http.Handler, token string, agent agentAuthorizer,
 		}
 		rejectUnauthenticated(w, r)
 	})
-}
-
-// runHeadless — сервисный режим (F19): автозапуск запомненного профиля и
-// авторестарт после падения через internal/headless.
-func runHeadless(ctx context.Context, server *api.Server, mux *logs.Mux) {
-	err := headless.Loop(ctx, server, headless.Options{})
-	if err != nil && !errors.Is(err, api.ErrNoRememberedProfile) {
-		mux.Logf("warn", "core", "headless-цикл завершён: %v", err)
-	}
-	<-ctx.Done()
 }
 
 func defaultDataDir() string {

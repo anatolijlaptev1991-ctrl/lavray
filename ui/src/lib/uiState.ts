@@ -25,6 +25,8 @@ export const UI_STATE_KEYS: readonly string[] = [
   'lavray.hotkeyConnect',
   // Хвосты B: копия настройки ядра connect.kill_switch_proxy для оболочки (lib/killSwitch.ts).
   'lavray.killSwitchProxy',
+  // Одноразовое намерение подключиться после перезапуска от администратора (lib/pendingConnect.ts).
+  'lavray.pendingConnect',
 ];
 
 function inShell(): boolean {

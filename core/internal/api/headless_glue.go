@@ -8,6 +8,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
@@ -25,7 +26,7 @@ func (s *Server) ConnectLast(ctx context.Context) error {
 	}
 	p, err := s.st.GetProfile(id)
 	if errors.Is(err, store.ErrNotFound) {
-		return errNoRememberedProfile // профиль удалён: автоподключения нет, ядро живо
+		return errRememberedGone // профиль удалён: автоподключения нет, ядро живо
 	}
 	if err != nil {
 		return err
@@ -52,6 +53,10 @@ func (s *Server) StatusAlive() bool {
 // ErrNoRememberedProfile — headless без запомненного профиля (штатная
 // ситуация: служба стартует, но соединяться не с чем).
 var errNoRememberedProfile = errors.New("headless: запомненный профиль не задан (remember.enable/remember.id)")
+
+// errRememberedGone — запомненный профиль удалён (это errNoRememberedProfile,
+// но для --connect-last причину стоит показать пользователю).
+var errRememberedGone = fmt.Errorf("%w: сервер, к которому подключались последним, удалён — выберите сервер и подключитесь вручную", errNoRememberedProfile)
 
 // ErrNoRememberedProfile — экспорт для вызывающей стороны (cmd).
 var ErrNoRememberedProfile = errNoRememberedProfile

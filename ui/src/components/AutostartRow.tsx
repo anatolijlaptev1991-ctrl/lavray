@@ -19,6 +19,15 @@ type Problem =
   | { readonly kind: 'installedOnly' }
   | { readonly kind: 'failed'; readonly detail: string };
 
+/**
+ * Повышенный экземпляр установленной копии, а автозапуск всё ещё обычный
+ * (`Run`): оболочка при старте переводит его в задачу, и если значение осталось —
+ * перевод не удался. TUN после входа в таком виде придётся включать вручную.
+ */
+function runNotUpgraded(info: AutostartInfo): boolean {
+  return info.enabled && info.elevated && info.installed && info.method === 'registry';
+}
+
 /** Подсказка под переключателем по состоянию ОС. */
 function detailKey(info: AutostartInfo): MessageKey {
   if (info.unknown && !info.enabled) return 'set.autostart.unknown';
@@ -102,9 +111,11 @@ export function AutostartRow(): JSX.Element | null {
           <div className="set-txt">
             <div className="set-l">{t('set.autostart')}</div>
             <div className="set-d">{t('set.autostartD')}</div>
-            <div className="set-d" role="status">
-              {t(detailKey(info))}
-            </div>
+            {!runNotUpgraded(info) && (
+              <div className="set-d" role="status">
+                {t(detailKey(info))}
+              </div>
+            )}
             {needsAdmin && (
               <button
                 className="btn btn-sec btn-sm"
@@ -129,6 +140,14 @@ export function AutostartRow(): JSX.Element | null {
               }}
             />
           </div>
+        </div>
+      )}
+      {info !== null && runNotUpgraded(info) && (
+        <div className="banner banner-warn" role="alert" id="autostartStuck">
+          <span className="ic">
+            <Icon name="alert" />
+          </span>
+          <div className="bn-t">{t('set.autostart.runStuck')}</div>
         </div>
       )}
       {problem !== null && (

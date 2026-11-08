@@ -31,7 +31,7 @@ func runSubcommand(args []string, in io.Reader, out, errOut io.Writer) (code int
 
 // printUsage — справка по запуску.
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "использование: lavray-core serve --listen-socket <path> [--data dir] [--headless]")
+	fmt.Fprintln(w, "использование: lavray-core serve --listen-socket <path> [--data dir] [--headless | --connect-last]")
 	fmt.Fprintln(w, "               lavray-core mcp [--data dir]   (MCP-сервер по stdio для ИИ-агентов)")
 	fmt.Fprintln(w, "               lavray-core import-nekobox --data dir --from <config NekoBox> [--dry-run] [--no-routes] [--no-settings]")
 	fmt.Fprintln(w, "               lavray-core verify-artifact --file F --sig F.minisig [--data dir] [--allow-older]")

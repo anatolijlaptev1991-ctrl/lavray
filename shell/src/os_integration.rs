@@ -37,6 +37,7 @@ pub fn on_setup<R: Runtime>(app: &AppHandle<R>, prefs: &ShellPrefs) {
     use tauri::Manager;
     let slot = app.state::<HotkeySlot>();
     hotkey::register_saved(app, &slot, prefs.hotkey_connect.as_deref());
+    crate::autostart::migrate::spawn_at_startup(); // Run → задача с правами, один раз
 }
 
 /// Смерть ядра в приложении: решение о прокси, флаг в [`ProxyFlags`] и события окну.

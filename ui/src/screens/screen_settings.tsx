@@ -460,7 +460,7 @@ export function SettingsScreen(): JSX.Element {
                   </select>
                 </div>
               </div>
-              <PlatformRows />
+              <PlatformRows rememberEnable={values['remember.enable'] === true} />
             </div>
           )}
 

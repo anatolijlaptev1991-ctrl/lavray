@@ -8,8 +8,8 @@
 //! рантайм-драйвер [`driver::RealCoreProcess`] (реализация [`CoreProcess`] на
 //! `std::process` + Job Object/`PDEATHSIG`); юнит-тесты каркаса используют мок
 //! [`MockCoreProcess`], поэтому FSM не зависит от Go-ядра.
-
 pub mod backoff;
+pub mod connect_last;
 pub mod driver;
 pub mod logs;
 pub mod runner;

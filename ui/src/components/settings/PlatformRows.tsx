@@ -7,12 +7,14 @@
 import type { JSX } from 'react';
 import { SessionsPanel } from '../../screens/web/SessionsPanel';
 import { AutostartRow } from '../AutostartRow';
+import { AutoConnectRow } from './AutoConnectRow';
 import { ShellPrefRows } from './ShellPrefRows';
 
-export function PlatformRows(): JSX.Element {
+export function PlatformRows({ rememberEnable = false }: { readonly rememberEnable?: boolean }): JSX.Element {
   return (
     <>
       <AutostartRow />
+      <AutoConnectRow value={rememberEnable} />
       <ShellPrefRows />
       <SessionsPanel />
     </>

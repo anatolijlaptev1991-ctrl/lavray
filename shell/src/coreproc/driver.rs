@@ -24,14 +24,17 @@
 //! unsafe — только тонкие FFI-вызовы Job Object (windows-sys) и libc
 //! (`prctl`/`getppid` в `pre_exec`, `kill` по pgid); у каждого — SAFETY.
 
-use std::io::{self, BufRead, BufReader, Read, Write};
+use std::io::{self, Write};
 use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::mpsc::{channel, Receiver, Sender, TryRecvError};
+use std::sync::mpsc::{channel, Receiver};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
-use super::logs::{FloodGate, LogLine, LogRing};
+use super::logs::{LogLine, LogRing};
+use super::pipe::spawn_pipe_reader;
+use super::ready::{wait_ready_loop, WaitOutcome};
+use super::reap::{abort_child, wait_exit_until};
 use super::{
     CoreEndpoint, CoreProcess, CoreProcessError, CoreSpawnConfig, SecretToken, AUTH_TOKEN_B64_LEN,
     AUTH_TOKEN_BYTES, T_EOF_GRACE, T_KILL_GRACE, T_SIGTERM_WAIT,
@@ -42,9 +45,6 @@ pub const READY_LINE_PREFIX: &str = "LAVRAY_CORE_READY ";
 /// Антифлуд пайпа §4: лимит строк/с по умолчанию (конфигурируемое значение,
 /// спеком не зафиксировано).
 pub const DEFAULT_MAX_LOG_LINES_PER_SEC: usize = 1000;
-/// Grace после обнаружения раннего exit: дать потоку-читателю допрочитать
-/// хвост stdout — ядро могло напечатать ready-строку и тут же умереть.
-const READY_FLUSH_GRACE: Duration = Duration::from_millis(200);
 
 /// Тайминги kill-лестницы §5 (инжектируются целиком — тесты прогоняют
 /// лестницу с короткими значениями, продакшн берёт нормы §2.2).
@@ -109,7 +109,7 @@ pub fn generate_auth_token() -> Result<SecretToken, CoreProcessError> {
 }
 
 /// Выделить transport-url из ready-строки §3.4 (строка уже без `\n`/`\r`).
-fn parse_ready_line(line: &str) -> Option<&str> {
+pub(super) fn parse_ready_line(line: &str) -> Option<&str> {
     let url = line.strip_prefix(READY_LINE_PREFIX)?.trim();
     if url.is_empty() {
         None
@@ -503,135 +503,6 @@ fn stdin_payload(config: &CoreSpawnConfig) -> Vec<u8> {
         payload.push(b'\n');
     }
     payload
-}
-
-/// Исход ожидания ready (внутренний, чтобы обойти заимствования `running`).
-enum WaitOutcome {
-    Ready(String),
-    Exited(ExitStatus),
-    Deadline,
-    Poll(io::Error),
-}
-
-/// Цикл §3.4: канал ready-строки + ранний exit + дедлайн.
-fn wait_ready_loop(
-    ready_rx: &Receiver<String>,
-    child: &mut Child,
-    budget: Duration,
-    poll: Duration,
-) -> WaitOutcome {
-    let deadline = Instant::now() + budget;
-    loop {
-        // Ready-строка первая: она могла прийти раньше, чем заметен exit.
-        match ready_rx.try_recv() {
-            Ok(url) => return WaitOutcome::Ready(url),
-            Err(TryRecvError::Empty) => {}
-            // stdout закрыт без ready-строки: ниже поймаем exit либо таймаут.
-            Err(TryRecvError::Disconnected) => {}
-        }
-        match child.try_wait() {
-            Ok(Some(status)) => {
-                // Гонка «ready напечатан и сразу exit»: даём читателю
-                // допрочитать хвост пайпа перед вердиктом.
-                let grace = deadline
-                    .saturating_duration_since(Instant::now())
-                    .min(READY_FLUSH_GRACE);
-                if let Ok(url) = ready_rx.recv_timeout(grace) {
-                    return WaitOutcome::Ready(url);
-                }
-                return WaitOutcome::Exited(status);
-            }
-            Ok(None) => {}
-            Err(err) => return WaitOutcome::Poll(err),
-        }
-        if Instant::now() >= deadline {
-            return WaitOutcome::Deadline;
-        }
-        thread::sleep(poll);
-    }
-}
-
-/// Ждать выхода до `deadline` (неблокирующе, шагами `poll`); `None` — жив.
-fn wait_exit_until(child: &mut Child, deadline: Instant, poll: Duration) -> Option<ExitStatus> {
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return Some(status),
-            Ok(None) => {}
-            // Статус не читается — шансов дождаться нет (ошибка waitpid).
-            Err(_) => return None,
-        }
-        if Instant::now() >= deadline {
-            return None;
-        }
-        thread::sleep(poll);
-    }
-}
-
-/// Ликвидация уже созданного процесса на пути ошибки spawn: kill + reap,
-/// чтобы неудавшийся spawn не оставлял сироту (§1 — сироты невозможны).
-/// `kill()` здесь — разовый сигнал лидеру (Unix SIGKILL / Windows
-/// TerminateProcess); при уже завершившемся процессе ошибка игнорируется.
-fn abort_child(mut child: Child) {
-    let _ = child.kill();
-    let _ = child.wait();
-}
-
-/// Поток пайпа §4: построчное чтение → антифлуд → ring (ANSI-стриппинг —
-/// внутри [`LogRing::push`]); ready-строка §3.4 (только stdout) — в канал.
-/// Не-UTF-8 байты заменяются (from_utf8_lossy) — бинарный мусор в пайпе не
-/// убивает чтение.
-fn spawn_pipe_reader<R: Read + Send + 'static>(
-    pipe: Option<R>,
-    ring: Arc<Mutex<LogRing>>,
-    max_per_second: usize,
-    mut ready_tx: Option<Sender<String>>,
-    thread_name: &'static str,
-) -> io::Result<thread::JoinHandle<()>> {
-    thread::Builder::new()
-        .name(thread_name.to_owned())
-        .spawn(move || {
-            let Some(pipe) = pipe else { return };
-            let mut reader = BufReader::new(pipe);
-            let mut gate = FloodGate::new(max_per_second);
-            let mut buf = Vec::with_capacity(512);
-            loop {
-                buf.clear();
-                match reader.read_until(b'\n', &mut buf) {
-                    Ok(0) | Err(_) => break, // EOF или разрыв пайпа
-                    Ok(_) => {
-                        let raw = String::from_utf8_lossy(&buf);
-                        let line = raw.trim_end_matches(['\n', '\r']);
-                        if line.is_empty() {
-                            continue;
-                        }
-                        // Ready-строка идёт в канал ВСЕГДА — антифлуд её не
-                        // касается (иначе шумный лог проглотил бы готовность).
-                        let is_ready = parse_ready_line(line).is_some();
-                        // D6 (ревью): сначала пуш в ring, потом send — иначе
-                        // log_tail может не увидеть ready-строку (гонка).
-                        let now_ms = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .map_or(0, |d| d.as_millis());
-                        if gate.allow(now_ms) || is_ready {
-                            match ring.lock() {
-                                Ok(mut ring) => {
-                                    ring.push(line);
-                                }
-                                Err(poisoned) => {
-                                    poisoned.into_inner().push(line);
-                                }
-                            }
-                        }
-                        if is_ready {
-                            if let (Some(url), Some(tx)) = (parse_ready_line(line), ready_tx.take())
-                            {
-                                let _ = tx.send(url.to_owned());
-                            }
-                        }
-                    }
-                }
-            }
-        })
 }
 
 // ---------------------------------------------------------------------------

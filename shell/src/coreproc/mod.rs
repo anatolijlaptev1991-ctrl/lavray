@@ -12,6 +12,9 @@
 pub mod backoff;
 pub mod driver;
 pub mod logs;
+mod pipe;
+mod ready;
+mod reap;
 pub mod runner;
 pub mod teardown;
 

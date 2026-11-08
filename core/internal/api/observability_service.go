@@ -10,6 +10,7 @@ package api
 import (
 	"context"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/cfgbuild"
@@ -62,82 +63,29 @@ func (s *Server) GetTail(ctx context.Context, req *connect.Request[lavrayv1.GetT
 
 func (s *Server) Subscribe(ctx context.Context, req *connect.Request[lavrayv1.SubscribeLogsRequest], stream *connect.ServerStream[lavrayv1.LogLine]) error {
 	msg := req.Msg
-	minLevel := lavrayv1.LogLevel_LOG_LEVEL_TRACE
-	if msg.MinLevel != nil {
-		minLevel = *msg.MinLevel
-	}
 	tailN := 0
 	if msg.TailLines != nil {
-		tailN = int(*msg.TailLines)
+		tailN = min(int(*msg.TailLines), 2000)
 	}
-	srcSet := map[string]bool{}
-	for _, src := range msg.Sources {
-		srcSet[src] = true
-	}
-	has := func(list []string, s string) bool {
-		for _, k := range list {
-			if strings.Contains(strings.ToLower(s), strings.ToLower(k)) {
-				return true
-			}
-		}
-		return false
-	}
-	keep := func(l logs.Line) bool {
-		if logLevelToProto(l.Level) < minLevel {
-			return false
-		}
-		if len(srcSet) > 0 && !srcSet[l.Source] {
-			return false
-		}
-		if len(msg.ExcludeKeywords) > 0 && has(msg.ExcludeKeywords, l.Message) {
-			return false
-		}
-		if len(msg.IncludeKeywords) > 0 && !has(msg.IncludeKeywords, l.Message) {
-			return false
-		}
-		return true
-	}
-	// T-70: tail_lines — «сколько истории отдать сразу (0 = нет)». Mux.Subscribe
-	// при tail <= 0 возвращает ВЕСЬ буфер, поэтому историю берём из него сами:
-	// те же фильтры, что у живого потока, последние tailN подходящих строк.
-	ch, cancel, ring := s.logs.Subscribe(256, 0, keep)
-	defer cancel()
-	for _, l := range lastMatching(ring, min(tailN, 2000), keep) {
+	// T-70: tail_lines — «сколько истории отдать сразу (0 = нет)», те же
+	// фильтры, что у живого потока. История и регистрация подписчика берутся
+	// атомарно (Mux.Open): строка на стыке не дублируется и не теряется.
+	sub := s.logs.Open(256, tailN, logFilter(msg))
+	defer sub.Close()
+	for _, l := range sub.History {
 		if err := stream.Send(logLineToProto(l)); err != nil {
 			return err
 		}
 	}
-	for {
-		select {
-		case <-ctx.Done():
-			return nil
-		case l, ok := <-ch:
-			if !ok {
-				return nil
-			}
-			if err := stream.Send(logLineToProto(l)); err != nil {
-				return err
-			}
-		}
+	maxPS := 0
+	if msg.MaxLinesPerSecond != nil {
+		maxPS = int(*msg.MaxLinesPerSecond)
 	}
-}
-
-// lastMatching — последние n строк из lines (от старых к новым), прошедших keep;
-// n <= 0 — пусто.
-func lastMatching(lines []logs.Line, n int, keep func(logs.Line) bool) []logs.Line {
-	if n <= 0 {
-		return nil
-	}
-	var out []logs.Line
-	for i := len(lines) - 1; i >= 0 && len(out) < n; i-- {
-		if keep(lines[i]) {
-			out = append(out, lines[i])
-		}
-	}
-	for i, j := 0, len(out)-1; i < j; i, j = i+1, j-1 {
-		out[i], out[j] = out[j], out[i]
-	}
-	return out
+	tick := time.NewTicker(time.Second)
+	defer tick.Stop()
+	return pumpLogs(ctx, sub, logs.NewFloodGate(maxPS), time.Now, tick.C, func(l logs.Line) error {
+		return stream.Send(logLineToProto(l))
+	})
 }
 
 // ---- StatsService -----------------------------------------------------------------

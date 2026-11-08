@@ -14,6 +14,7 @@ import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useModal } from '../hooks/useModal';
 import { Icon } from '../components/Icon';
+import { isImportFileTooLarge, MAX_IMPORT_FILE_MB } from '../lib/importFileGuard';
 import { importLogWarnings } from '../lib/importWarnings';
 import { onTablistKeyDown } from '../lib/tabs';
 import { ImportPreview } from './import/ImportPreview';
@@ -185,13 +186,18 @@ export function ImportDialog({ groupId, initialTab = 'link', onClose, onImported
   const readFile = useCallback(
     async (file: File): Promise<void> => {
       setErr('');
+      // Размер — до чтения: файл больше лимита сообщения ядра в память не берём.
+      if (isImportFileTooLarge(file)) {
+        setErr(tf('imp.fileTooLarge', { mb: MAX_IMPORT_FILE_MB }));
+        return;
+      }
       try {
         await acceptText(await file.text());
       } catch (e) {
         setErr(friendlyCoreError(e));
       }
     },
-    [acceptText],
+    [acceptText, tf],
   );
 
   // T-06: портал на <body> (см. DialogShell) — диалог не зависит от transform

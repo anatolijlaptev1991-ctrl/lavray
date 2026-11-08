@@ -13,6 +13,7 @@ import type { CoreClients } from '../lib/core';
 import { setLanguage } from '../lib/i18n';
 import { GetTailResponseSchema, LogLevel, LogLineSchema, type LogLine } from '../gen/lavray_pb';
 import { LogScreen } from './screen_log';
+import { LOG_FLUSH_MS } from './log/useLogBuffer';
 
 const line = (message: string, level: LogLevel, i: number): LogLine =>
   create(LogLineSchema, { tsMs: BigInt(1_700_000_000_000 + i * 1000), level, source: 'core', message });
@@ -68,10 +69,11 @@ describe('экран «Журнал» (T-70)', () => {
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = false;
   });
 
+  // Строки уходят в React снимком не чаще LOG_FLUSH_MS — ждём один такт сверх него.
   const settle = async (): Promise<void> => {
     await act(async () => {
       await new Promise<void>((resolve) => {
-        setTimeout(resolve, 0);
+        setTimeout(resolve, LOG_FLUSH_MS + 10);
       });
     });
   };

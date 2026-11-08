@@ -160,3 +160,37 @@ describe('WindowChrome: события окна', () => {
     expect(count('plugin:event|unlisten')).toBe(1);
   });
 });
+
+describe('WindowChrome: частые изменения размера', () => {
+  it('пачка resize — один запрос в полёте и одна финальная проверка с последним ответом', async () => {
+    installBridge(false);
+    const w = window as unknown as { __TAURI_INTERNALS__: { transformCallback: (cb: unknown) => number; invoke: (c: string) => Promise<unknown> } };
+    const handlers: ((e: unknown) => void)[] = [];
+    const answers: ((v: boolean) => void)[] = [];
+    const base = w.__TAURI_INTERNALS__;
+    base.transformCallback = (cb: unknown): number => {
+      handlers.push(cb as (e: unknown) => void);
+      return handlers.length;
+    };
+    const baseInvoke = base.invoke;
+    base.invoke = (cmd: string): Promise<unknown> => {
+      if (cmd !== 'window_is_maximized') return baseInvoke(cmd);
+      bridge.calls.push(cmd);
+      return new Promise<boolean>((resolve) => { answers.push(resolve); });
+    };
+    act(() => { root?.render(createElement(WindowChrome, { os: 'windows', placement: 'end' })); });
+    await settle();
+    expect(answers).toHaveLength(1); // начальный опрос
+    await act(async () => { answers[0]?.(false); await Promise.resolve(); });
+    const onResize = handlers.at(-1);
+    expect(onResize).toBeDefined();
+    await act(async () => { for (let i = 0; i < 10; i += 1) onResize?.({ event: 'tauri://resize', id: 1, payload: {} }); await Promise.resolve(); });
+    expect(answers).toHaveLength(2); // десять событий — один запрос в полёте
+    await act(async () => { answers[1]?.(false); await Promise.resolve(); await Promise.resolve(); });
+    expect(answers).toHaveLength(3); // обязательная финальная проверка
+    await act(async () => { answers[2]?.(true); await Promise.resolve(); await Promise.resolve(); });
+    expect(answers).toHaveLength(3);
+    // Последний ответ (true) применён: кнопка предлагает «восстановить».
+    expect(host?.querySelector('.cap-btn[aria-label="Restore"], .cap-btn[aria-label="Восстановить"]')).not.toBeNull();
+  });
+});

@@ -187,4 +187,29 @@ describe('useTraffic (T-79)', () => {
     expect(got).toEqual({ down: 64, up: 8 });
     expect(Object.keys(got ?? {}).sort()).toEqual(['down', 'up']);
   });
+  it('несколько потребителей делят один поток и видят одни кадры', async () => {
+    const seen: Speed[][] = [[], []];
+    let first: TrafficStats | undefined;
+    let second: TrafficStats | undefined;
+    function A(): null {
+      first = useTrafficStats(true, (s) => seen[0]?.push(s));
+      return null;
+    }
+    function B(): null {
+      second = useTrafficStats(true, (s) => seen[1]?.push(s));
+      return null;
+    }
+    host = await mountWithCore(coreOf(feed), createElement('div', null, createElement(A), createElement(B)));
+    expect(feed.opens).toHaveLength(1);
+    feed.push(snap([tag('proxy', 40, 4)], { down: 10n, up: 1n }));
+    await drain();
+    expect(first).toEqual(second);
+    expect(first?.speed).toEqual({ down: 40, up: 4 });
+    expect(seen[0]).toEqual([{ down: 40, up: 4 }]);
+    expect(seen[1]).toEqual([{ down: 40, up: 4 }]);
+    // Поток снимается, когда ушёл последний активный потребитель.
+    const signal = feed.opens[0]?.signal;
+    host.unmount();
+    expect(signal?.aborted).toBe(true);
+  });
 });

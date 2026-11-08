@@ -23,6 +23,7 @@ import { applyDocumentLanguage, formatSpeed } from './lib/i18n';
 import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
 import { focusWhenReady, hotkeyOf, isTypingTarget } from './lib/hotkeys';
 import { loadModes, toggleConnection } from './lib/connection';
+import { keepModes } from './lib/modesState';
 import type { TrayAction } from './lib/tray';
 import { onTablistKeyDown } from './lib/tabs';
 import { getPlatformAdapter } from './platform/adapter';
@@ -318,7 +319,7 @@ function AppInner(): JSX.Element {
   const [modes, setModes] = useState(() => loadModes(window.localStorage));
   useEffect(() => {
     // Экран подключения меняет режимы — статус-бар подхватывает изменения.
-    const sync = (): void => { setModes(loadModes(window.localStorage)); };
+    const sync = (): void => { setModes((prev) => keepModes(prev, loadModes(window.localStorage))); };
     window.addEventListener('storage', sync);
     const id = window.setInterval(sync, 1500);
     return (): void => {
@@ -499,7 +500,7 @@ function AppInner(): JSX.Element {
           onClose={() => {
             setOnboarding(false);
             window.localStorage.setItem('lavray.onboarded', '1');
-            setModes(loadModes(window.localStorage)); // чипы статус-бара без ожидания опроса
+            setModes((prev) => keepModes(prev, loadModes(window.localStorage))); // чипы статус-бара без ожидания опроса
           }}
           onOpenImport={(tab) => { setQuickImport(tab ?? 'link'); }}
         />

@@ -7,12 +7,12 @@
 // Поток ядра живёт между сессиями: без соединения молчит, при остановке сессии
 // шлёт финальный кадр (`final`) и ждёт следующую. Переподписываться ради этого
 // не нужно; переподключение (lib/streamWatch.ts) — только при обрыве потока.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useCore } from './useCore';
 import { useI18n } from './useI18n';
 import { friendlyCoreError } from '../lib/core';
-import { watchWithBackoff } from '../lib/streamWatch';
-import { applySnapshot, EMPTY_READING, ZERO_SPEED } from '../lib/traffic';
+import { EMPTY_READING } from '../lib/traffic';
+import { trafficStore } from '../lib/trafficStore';
 import type { Speed, TrafficReading, TrafficTotals } from '../lib/traffic';
 
 export type { Speed, TrafficTotals };
@@ -22,54 +22,30 @@ export interface TrafficStats extends TrafficReading {
   readonly error: string;
 }
 
-/** Интервал кадров, как у графика (64 точки по секунде). */
-const INTERVAL_MS = 1000;
-
 /**
  * Скорость и итоги сессии. `onSample` зовётся на каждый кадр (и с нулями при
- * финальном кадре и обрыве) — график копит по нему точки.
+ * обрыве) — график копит по нему точки. Поток общий для всех потребителей
+ * (lib/trafficStore.ts): статус-бар и график видят одни и те же кадры.
  */
 export function useTrafficStats(active: boolean, onSample?: (speed: Speed) => void): TrafficStats {
-  const core = useCore();
+  const store = trafficStore(useCore());
   const { t } = useI18n();
-  const [reading, setReading] = useState<TrafficReading>(EMPTY_READING);
-  const [failure, setFailure] = useState<unknown>(null);
   const sampleRef = useRef(onSample);
   useEffect(() => {
     sampleRef.current = onSample;
   });
-
   useEffect(() => {
-    let current = EMPTY_READING;
-    const publish = (next: TrafficReading): void => {
-      current = next;
-      setReading(next);
-      sampleRef.current?.(next.speed);
-    };
-    setReading(EMPTY_READING);
-    setFailure(null);
     if (!active) return undefined;
-    const ac = new AbortController();
-    void watchWithBackoff(
-      (signal) => core.stats.subscribe({ intervalMs: INTERVAL_MS }, { signal }),
-      {
-        onFrame: (snap) => {
-          setFailure(null);
-          publish(applySnapshot(current, snap));
-        },
-        // Связь потеряна: прежняя скорость уже не правда.
-        onError: (e) => {
-          setFailure(e);
-          publish({ ...current, speed: ZERO_SPEED });
-        },
-      },
-      ac.signal,
-    );
+    const stopSamples = store.onSample((s) => sampleRef.current?.(s));
+    const release = store.acquire();
     return (): void => {
-      ac.abort();
+      stopSamples();
+      release();
     };
-  }, [active, core]);
+  }, [active, store]);
 
+  const snap = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  const { reading, failure } = active ? snap : { reading: EMPTY_READING, failure: null };
   const error = failure === null ? '' : friendlyCoreError(failure, t);
   return { ...reading, error };
 }

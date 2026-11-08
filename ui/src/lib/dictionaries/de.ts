@@ -379,6 +379,7 @@ export const deDict: Record<string, string> = {
   "imp.drop": "Datei hierher ziehen",
   "imp.dropOr": "oder klicken zum Auswählen",
   "imp.fileHint": "Datei irgendwo ins Fenster ziehen oder auswählen: YAML, base64, Linkliste",
+  "imp.fileTooLarge": "Die Datei ist zu groß: Das Importlimit beträgt {mb} MB",
   "imp.happErrCtx": "Link konnte nicht entschlüsselt werden: gekürzt oder abgelaufen. Kopiere den vollständigen Link und versuche es erneut.",
   "imp.happErrT": "Link konnte nicht entschlüsselt werden",
   "imp.hint": "Füge einen beliebigen Link ein — verschlüsselte Links werden automatisch entschlüsselt",

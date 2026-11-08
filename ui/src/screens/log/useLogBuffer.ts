@@ -30,6 +30,33 @@ export function appendBounded<T>(list: readonly T[], item: T, max: number): T[] 
   return trimTo([...list, item], max);
 }
 
+/** Не чаще раза за это время снимок уходит в React (пачка строк — один коммит). */
+export const LOG_FLUSH_MS = 50;
+
+/**
+ * Изменяемое кольцо строк: push — O(1) амортизированно, лишнее срезается
+ * пачкой, когда буфер вдвое больше предела. Снимок — ровно последние `max`.
+ */
+export interface LogRing {
+  readonly push: (line: LogLine, max: number) => void;
+  readonly snapshot: (max: number) => LogLine[];
+  readonly clear: () => void;
+}
+
+export function createLogRing(): LogRing {
+  let items: LogLine[] = [];
+  return {
+    push: (line, max): void => {
+      items.push(line);
+      if (items.length > max * 2) items = items.slice(items.length - max);
+    },
+    snapshot: (max) => trimTo(items, max),
+    clear: (): void => {
+      items = [];
+    },
+  };
+}
+
 export interface LogBuffer {
   readonly lines: readonly LogLine[];
   /** Текст ошибки потока; пусто — потока не прерывало. */
@@ -45,6 +72,7 @@ export function useLogBuffer(core: CoreClients, tailLines: number): LogBuffer {
   const [lines, setLines] = useState<LogLine[]>([]);
   const [streamErr, setStreamErr] = useState('');
   const maxRef = useRef(DEFAULT_MAX_LOG_LINES);
+  const ringRef = useRef<LogRing>(createLogRing());
 
   useEffect(() => {
     const abort = new AbortController();
@@ -66,16 +94,31 @@ export function useLogBuffer(core: CoreClients, tailLines: number): LogBuffer {
 
   // T-70: один источник строк. Подписка сама отдаёт историю (tail_lines) и затем
   // новые строки одним упорядоченным потоком — отдельный GetTail давал дубли.
+  // Строки копятся в изменяемом кольце, а в React уходит снимок не чаще LOG_FLUSH_MS.
   useEffect(() => {
     const abort = new AbortController();
+    const ring = ringRef.current;
+    ring.clear();
     setLines([]);
     setStreamErr('');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastFlush = 0;
+    const flush = (): void => {
+      timer = undefined;
+      lastFlush = Date.now();
+      setLines(ring.snapshot(maxRef.current));
+    };
+    const onLine = (line: LogLine): void => {
+      ring.push(line, maxRef.current);
+      if (timer !== undefined) return;
+      timer = setTimeout(flush, Math.max(0, LOG_FLUSH_MS - (Date.now() - lastFlush)));
+    };
     void (async (): Promise<void> => {
       try {
         const stream = core.logs.subscribe({ tailLines }, { signal: abort.signal });
         for await (const line of stream) {
           if (abort.signal.aborted) return;
-          setLines((prev) => appendBounded(prev, line, maxRef.current));
+          onLine(line);
         }
       } catch (e) {
         if (!abort.signal.aborted) setStreamErr(friendlyCoreError(e));
@@ -83,6 +126,7 @@ export function useLogBuffer(core: CoreClients, tailLines: number): LogBuffer {
     })();
     return (): void => {
       abort.abort();
+      clearTimeout(timer);
     };
   }, [core, tailLines]);
 

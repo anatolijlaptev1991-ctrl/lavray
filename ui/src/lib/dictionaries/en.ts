@@ -379,6 +379,7 @@ export const enDict: Record<string, string> = {
   "imp.drop": "Drop the file here",
   "imp.dropOr": "or click to browse",
   "imp.fileHint": "Drop a file anywhere in the window or choose one: YAML, base64, list of links",
+  "imp.fileTooLarge": "The file is too large: the import limit is {mb} MB",
   "imp.happErrCtx": "Could not decrypt the link: it is truncated or expired. Copy the full link and try again.",
   "imp.happErrT": "Could not decrypt the link",
   "imp.hint": "Paste any link — encrypted links are decrypted automatically",

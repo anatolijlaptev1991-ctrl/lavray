@@ -379,6 +379,7 @@ export const zhDict: Record<string, string> = {
   "imp.drop": "将文件拖到这里",
   "imp.dropOr": "或点击选择文件",
   "imp.fileHint": "将文件拖到窗口任意位置或选择文件：YAML、base64、链接列表",
+  "imp.fileTooLarge": "文件过大：导入上限为 {mb} MB",
   "imp.happErrCtx": "无法解密链接：链接不完整或已过期。请复制完整链接后重试。",
   "imp.happErrT": "无法解密链接",
   "imp.hint": "粘贴任意链接——加密链接会自动解密",

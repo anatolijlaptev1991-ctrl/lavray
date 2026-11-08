@@ -4,7 +4,7 @@
 // закрытые (история копится в UI из closedIds) соединения с байтами, цепочкой
 // исходящих и статусом. Чипы «Все / Прокси / Напрямую / Блок», поиск, пауза,
 // меню строки (копировать адрес, закрыть). Пустой список — обычное состояние.
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { JSX } from 'react';
 import type { MenuAnchor } from '../../components/ContextMenu';
 import { Icon } from '../../components/Icon';
@@ -42,6 +42,10 @@ export function ConnsScreen({ active }: ConnsScreenProps): JSX.Element {
   const live = useMemo(() => filterConns(view.active, chip, query), [view.active, chip, query]);
   const closed = useMemo(() => filterConns(view.closed.items, chip, query), [view.closed.items, chip, query]);
   const rows = useMemo(() => [...live, ...closed], [live, closed]);
+  // Стабильный обработчик: иначе memo строк таблицы не сработает.
+  const openMenu = useCallback((conn: Connection, anchor: MenuAnchor): void => {
+    setMenu({ conn, anchor });
+  }, []);
   const hasAny = view.active.length + view.closed.items.length > 0;
 
   return (
@@ -62,7 +66,7 @@ export function ConnsScreen({ active }: ConnsScreenProps): JSX.Element {
       {rows.length === 0 ? (
         <EmptyState active={active} hasAny={hasAny} />
       ) : (
-        <ConnsTable rows={rows} nowMs={view.nowMs} onMenu={(conn, anchor) => { setMenu({ conn, anchor }); }} />
+        <ConnsTable rows={rows} nowMs={view.nowMs} onMenu={openMenu} />
       )}
       {menu !== null && (
         <ConnRowMenu

@@ -76,7 +76,7 @@ func baseDescriptors() []SettingDescriptor {
 		{Key: "test.udp_target", Type: SettingString, GroupID: "test", DefaultValue: `"1.1.1.1:53"`},
 
 		// ---- Маршрутизация ----
-		{Key: "routing.active_preset", Type: SettingString, GroupID: "routing", DefaultValue: `"global"`, RequiresProfileRestart: true, DeprecatedBy: "active_routing"},
+		{Key: "routing.active_preset", Type: SettingString, GroupID: "routing", DefaultValue: `"lav-ru"`, RequiresProfileRestart: true, DeprecatedBy: "active_routing"},
 		{Key: "routing.custom_global", Type: SettingString, GroupID: "routing", RequiresProfileRestart: true, DeprecatedBy: "custom_route"},
 
 		// ---- Подписки (LNB-33: use_proxy default true) ----

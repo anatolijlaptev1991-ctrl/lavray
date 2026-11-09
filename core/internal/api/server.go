@@ -297,7 +297,8 @@ const (
 	settingActivePreset = "routing.active_preset"
 )
 
-// activePresetID — id активного набора (дефолт дескриптора — "lav-global").
+// activePresetID — id активного набора. Значение по умолчанию задаёт дескриптор
+// routing.active_preset; global здесь — только запасной вариант для пустого значения.
 func (s *Server) activePresetID() string {
 	if v := s.settingStr(settingActivePreset); v != "" {
 		return v

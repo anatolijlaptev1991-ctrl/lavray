@@ -99,6 +99,10 @@ func Open(dir string) (*Store, error) {
 		_ = db.Close()
 		return nil, err
 	}
+	if err := s.settleDefaultPreset(); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	// T-79: процесс убили в середине сессии — закрываем её по последнему сбросу.
 	if err := s.closeDanglingOnOpen(); err != nil {
 		_ = db.Close()

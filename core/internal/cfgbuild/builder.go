@@ -198,7 +198,7 @@ func Build(req BuildRequest) (*BuildResult, error) {
 func NeutralPreset() *presets.Preset { return neutralPreset() }
 
 // neutralPreset — пресет по умолчанию при Preset==nil (W6 всегда передаёт
-// routing.active_preset; дефолты настройки — "lav-global", здесь —
+// routing.active_preset; значение настройки по умолчанию — "lav-ru", здесь —
 // эквивалент global: proxy final, sniffing для маршрутизации, раздельный
 // DNS google-DoH/local с dns_routing).
 func neutralPreset() *presets.Preset {

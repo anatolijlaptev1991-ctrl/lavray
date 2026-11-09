@@ -538,7 +538,7 @@ def sec3_presets(c, X):
     R = "RoutingService"
     st, r = c.rpc(R, "ListPresets")
     ids = [p["id"] for p in r.get("presets", [])] if st == 200 else []
-    check("3.list.five_builtin", st == 200 and ids[:5] == ["lav-ru", "lav-cn", "global", "all-proxy", "all-direct"] and r.get("activePresetId") == "global", (st, ids, r.get("activePresetId")))
+    check("3.list.five_builtin", st == 200 and ids[:5] == ["lav-ru", "lav-cn", "global", "all-proxy", "all-direct"] and r.get("activePresetId") == "lav-ru", (st, ids, r.get("activePresetId")))
     st, r = c.rpc(R, "GetPreset", {"id": "no-such"})
     check("3.get.unknown.not_found", st == 404, (st, r))
     # создание: источник XOR значения

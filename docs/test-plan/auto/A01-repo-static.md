@@ -39,7 +39,7 @@ $crlf = git -C $env:LAVRAY_SRC config core.autocrlf
 if (-not (Test-RepoLf)) { 'FAIL: в клоне src core.autocrlf не false (01-ENVIRONMENT.md, раздел 6); исправьте и повторите'; return }
 git -C $env:LAVRAY_SRC worktree add --detach C:\lavray-test\wt\A01 $env:LAVRAY_REF
 $head = git -C C:\lavray-test\wt\A01 rev-parse HEAD
-$tagCommit = Get-RefCommit        # git rev-parse "v0.9.2^{commit}": коммит тега, а не HEAD чего-либо
+$tagCommit = Get-RefCommit        # git rev-parse "v0.9.3^{commit}": коммит тега, а не HEAD чего-либо
 "HEAD рабочей копии: $head"
 "коммит $($env:LAVRAY_REF):  $tagCommit"
 "совпадают: " + ($head -eq $tagCommit)

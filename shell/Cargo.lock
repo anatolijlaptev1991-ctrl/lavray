@@ -1969,7 +1969,7 @@ dependencies = [
 
 [[package]]
 name = "lavray-shell"
-version = "0.9.2"
+version = "0.9.3"
 dependencies = [
  "getrandom 0.3.4",
  "libc",

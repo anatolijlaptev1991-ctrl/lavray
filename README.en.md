@@ -17,7 +17,7 @@ Architecture: **Go core** (a fork of the neko layer over sing-box 1.14) + **Rust
 **a single React UI**: the application window on desktops (working) and a web panel on the router
 (the core serves it and accepts password login; OpenWrt packages live outside this repository).
 
-> **Status: version 0.9.2, released for Windows only.** Everything in the table below is included
+> **Status: version 0.9.3, released for Windows only.** Everything in the table below is included
 > in the release. What is not yet done or works with caveats is in the "In development" section.
 
 ---
@@ -173,7 +173,7 @@ Policy and contacts: [`docs/SECURITY.md`](docs/SECURITY.md).
 - [`docs/FIX-REPORT.md`](docs/FIX-REPORT.md) — audit acceptance
 - [`docs/HISTORY-REWRITE.md`](docs/HISTORY-REWRITE.md) — history rewrite and release hashes
 - [`docs/RELEASE-CHECKLIST.md`](docs/RELEASE-CHECKLIST.md) — release checklist
-- [`docs/RELEASE-NOTES-windows-v0.9.2.md`](docs/RELEASE-NOTES-windows-v0.9.2.md) — what's new in 0.9.2
+- [`docs/RELEASE-NOTES-windows-v0.9.3.md`](docs/RELEASE-NOTES-windows-v0.9.3.md) — what's new in 0.9.3
 - [`docs/stage3/core-port-plan.md`](docs/stage3/core-port-plan.md) — plan W1–W8
 - [`docs/rust-migration/`](docs/rust-migration/) — plan for porting the core to Rust (draft)
 

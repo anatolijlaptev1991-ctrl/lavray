@@ -17,7 +17,7 @@ Architektur: **Go-Core** (Fork der Neko-Schicht über sing-box 1.14) + **Rust/Ta
 **einheitliche React-UI**: App-Fenster auf Desktops (funktioniert) und Webpanel auf dem Router
 (der Core liefert es aus und nimmt die Anmeldung per Passwort entgegen; OpenWrt-Pakete liegen außerhalb dieses Repositorys).
 
-> **Status: Version 0.9.2, nur für Windows veröffentlicht.** Alles aus der Tabelle unten ist im Release enthalten. Was noch nicht fertig ist oder nur mit Einschränkungen funktioniert, steht im Abschnitt „In Entwicklung“.
+> **Status: Version 0.9.3, nur für Windows veröffentlicht.** Alles aus der Tabelle unten ist im Release enthalten. Was noch nicht fertig ist oder nur mit Einschränkungen funktioniert, steht im Abschnitt „In Entwicklung“.
 
 ---
 
@@ -173,7 +173,7 @@ Richtlinie und Kontakte: [`docs/SECURITY.md`](docs/SECURITY.md).
 - [`docs/FIX-REPORT.md`](docs/FIX-REPORT.md) — Abnahme des Audits
 - [`docs/HISTORY-REWRITE.md`](docs/HISTORY-REWRITE.md) — Neuschreibung der Historie und Hashes der Releases
 - [`docs/RELEASE-CHECKLIST.md`](docs/RELEASE-CHECKLIST.md) — Release-Checkliste
-- [`docs/RELEASE-NOTES-windows-v0.9.2.md`](docs/RELEASE-NOTES-windows-v0.9.2.md) — Neuerungen in 0.9.2
+- [`docs/RELEASE-NOTES-windows-v0.9.3.md`](docs/RELEASE-NOTES-windows-v0.9.3.md) — Neuerungen in 0.9.3
 - [`docs/stage3/core-port-plan.md`](docs/stage3/core-port-plan.md) — Plan W1–W8
 - [`docs/rust-migration/`](docs/rust-migration/) — Plan für die Portierung des Cores nach Rust (Entwurf)
 

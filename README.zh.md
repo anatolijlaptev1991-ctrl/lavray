@@ -17,7 +17,7 @@
 **统一的 React UI**：桌面端为应用窗口（已可用），路由器上为网页面板
 （内核提供该面板并接受密码登录；OpenWrt 软件包不在本仓库中）。
 
-> **状态：版本 0.9.2，仅发布 Windows 版。** 下表中的所有功能均已包含在发布版中。尚未完成或存在限制的部分见“开发中”一节。
+> **状态：版本 0.9.3，仅发布 Windows 版。** 下表中的所有功能均已包含在发布版中。尚未完成或存在限制的部分见“开发中”一节。
 
 ---
 
@@ -165,7 +165,7 @@ python scripts/repo-stats.py    # 可验证的数字：契约、占位实现、�
 - [`docs/FIX-REPORT.md`](docs/FIX-REPORT.md) — 审计验收
 - [`docs/HISTORY-REWRITE.md`](docs/HISTORY-REWRITE.md) — 历史重写与发布版哈希
 - [`docs/RELEASE-CHECKLIST.md`](docs/RELEASE-CHECKLIST.md) — 发布检查清单
-- [`docs/RELEASE-NOTES-windows-v0.9.2.md`](docs/RELEASE-NOTES-windows-v0.9.2.md) — 0.9.2 的新增内容
+- [`docs/RELEASE-NOTES-windows-v0.9.3.md`](docs/RELEASE-NOTES-windows-v0.9.3.md) — 0.9.3 的新增内容
 - [`docs/stage3/core-port-plan.md`](docs/stage3/core-port-plan.md) — W1–W8 计划
 - [`docs/rust-migration/`](docs/rust-migration/) — 将内核迁移到 Rust 的计划（草案）
 

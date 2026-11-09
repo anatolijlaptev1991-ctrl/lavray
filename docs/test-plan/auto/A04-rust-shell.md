@@ -49,7 +49,7 @@ Set-Location $wt
 "коммит $($env:LAVRAY_REF):  " + (Get-RefCommit)
 ```
 
-   Ожидается: маркер найден (`Test-TestPc` = `True`), `HEAD рабочей копии` равен `коммиту v0.9.2`.
+   Ожидается: маркер найден (`Test-TestPc` = `True`), `HEAD рабочей копии` равен `коммиту v0.9.3`.
 
 2. Сборка интерфейса (нужна для `frontendDist`).
 

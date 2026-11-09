@@ -35,6 +35,18 @@ func TestCheckRouteMatchesRealConfig(t *testing.T) {
 		{"lav-ru", "google.ru", proxy, false},              // proxy-список раньше category-ru
 		{"lav-ru", "login.riotgames.com", proxy, false},    // custom-пин раньше geosite:riot
 		{"lav-ru", "https://example.org/path", proxy, false},
+		{"lav-ru", "bigmodel.cn", direct, false},
+		{"lav-ru", "www.bigmodel.cn", direct, false},
+		{"lav-ru", "zcode.bigmodel.cn", direct, false},
+		{"lav-ru", "https://open.bigmodel.cn/api/anthropic", direct, false},
+		{"lav-ru", "deepseek.com", direct, false},
+		{"lav-ru", "chat.deepseek.com", direct, false},
+		{"lav-ru", "https://api.deepseek.com/v1/models", direct, false},
+		{"lav-ru", "kimi.com", direct, false},
+		{"lav-ru", "https://api.kimi.ai/coding/v1", direct, false},
+		{"lav-ru", "api.moonshot.cn", direct, false},
+		{"lav-ru", "api.moonshot.ai", direct, false},
+		{"lav-ru", "zcode.z.ai", proxy, false},
 		{"global", "192.168.1.10", direct, false},
 		{"global", "doubleclick.net", block, true},
 		{"global", "example.org", proxy, false},
@@ -88,6 +100,15 @@ func TestCheckRouteExplainsTheMatch(t *testing.T) {
 	}
 	if r := check("exitgames.com"); r.GetMatchedList() != "direct_domain" || !strings.Contains(r.GetMatchedRule(), "domain_suffix") {
 		t.Errorf("exitgames.com: list=%q rule=%q", r.GetMatchedList(), r.GetMatchedRule())
+	}
+	if r := check("bigmodel.cn"); r.GetMatchedList() != "direct_domain" || !strings.Contains(r.GetMatchedRule(), "domain_suffix") {
+		t.Errorf("bigmodel.cn: list=%q rule=%q", r.GetMatchedList(), r.GetMatchedRule())
+	}
+	if r := check("deepseek.com"); r.GetMatchedList() != "direct_domain" || !strings.Contains(r.GetMatchedRule(), "domain_suffix") {
+		t.Errorf("deepseek.com: list=%q rule=%q", r.GetMatchedList(), r.GetMatchedRule())
+	}
+	if r := check("api.kimi.ai"); r.GetMatchedList() != "direct_domain" || !strings.Contains(r.GetMatchedRule(), "domain_suffix") {
+		t.Errorf("api.kimi.ai: list=%q rule=%q", r.GetMatchedList(), r.GetMatchedRule())
 	}
 	if r := check("lori.ru"); ruleSetsSupported && !strings.Contains(r.GetMatchedRule(), "geosite-category-ru") {
 		t.Errorf("lori.ru: list=%q rule=%q", r.GetMatchedList(), r.GetMatchedRule())

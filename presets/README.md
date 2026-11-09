@@ -6,7 +6,7 @@
 
 Встроенные (зашиты в сборки; `builtin: true`, схема — `SCHEMA.md`, версия формата `version`, ревизия данных `revision`):
 
-- `lav-ru.json` — «LAV Preset RU» (конвертация из исходника ниже; rev 1)
+- `lav-ru.json` — «LAV Preset RU» (конвертация из исходника ниже; rev 3)
 - `lav-cn.json` — «LAV Preset CN» (rev 2, с ads-блоком)
 - `global.json` — «Глобальный» (rev 1)
 - `all-proxy.json` — «Всё через прокси» (rev 1); `all-direct.json` — «Всё напрямую» (rev 1)
@@ -33,7 +33,7 @@
 
 Конвертер пишется один раз в ядре (`../core/`), покрывается тестами; `lav-ru.source.json`
 используется как эталонный тест-вектор (golden-тест конвертации в конфиг sing-box, тест
-приоритетов: `google.ru` → proxy, `lori.ru` → direct, LoL-процесс → direct; fuzzing входа).
+приоритетов: `google.ru` → proxy, `lori.ru` → direct, LoL-процесс → direct, `bigmodel.cn` → direct, `deepseek.com` → direct, `api.kimi.ai` → direct, `zcode.z.ai` → proxy; fuzzing входа).
 
 ## Регламент изменений
 

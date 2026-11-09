@@ -9,12 +9,15 @@
 |---|---|
 | Русские сайты (`.ru`, `.su`, `.рф`, gov, category-ru) | напрямую |
 | Игровые домены: Riot, Steam, Photon/Exitgames | напрямую |
+| BigModel (`bigmodel.cn`), DeepSeek (`deepseek.com`), Kimi (`kimi.com`, `kimi.ai`), Moonshot (`moonshot.cn`, `moonshot.ai`) — суффиксные правила, покрывают поддомены (в т.ч. `open.bigmodel.cn`, `api.deepseek.com`, `api.kimi.ai`) | напрямую (с rev 3) |
 | Игры по имени процесса: LoL (весь стек + Vanguard), Icarus, PEAK, Phasmophobia (+ Unity crash handler) | напрямую |
 | AI/IDE-инструменты по имени процесса: Cursor, Windsurf, Kimi, VS Code, Claude, Codex, Gemini, ollama, LM Studio, Jan, node/python и др. | через прокси |
 | AI/Dev-домены: Google/Gemini, OpenAI, Anthropic/Claude, xAI/Grok, Perplexity, HuggingFace, GitHub, npm, PyPI и др. (большой явный список) | через прокси |
 | Всё остальное (`def_outbound: proxy`) | через прокси |
 
-**DNS:** раздельный — RU и игровые домены через локальный DNS провайдера (низкий пинг), остальное через DoH `https://dns.google/dns-query` через туннель (`dns_final_out: proxy`, `dns_routing: true`, `sniffing_mode: 1`). `google.ru` явно закреплён за прокси (правило proxy приоритетнее category-ru).
+**DNS:** раздельный — RU и игровые домены через локальный DNS провайдера (низкий пинг), остальное через DoH `https://dns.google/dns-query` через туннель (`dns_final_out: proxy`, `dns_routing: true`, `sniffing_mode: 1`). `google.ru` явно закреплён за прокси (правило proxy приоритетнее category-ru). С rev 3 BigModel, DeepSeek и Kimi/Moonshot тоже резолвятся через локальный/прямой DNS (`dns-direct`), а не через DoH в туннеле. `zcode.z.ai` и `z.ai` (ZCode Start Plan) остаются через прокси.
+
+**Почему записи перенесены, а не продублированы (rev 3):** правила `proxy` приоритетнее `direct`, поэтому `domain:bigmodel.cn`, `domain:deepseek.com`, `domain:kimi.com`, `domain:moonshot.cn`, `domain:moonshot.ai` удалены из `proxy_domain` и добавлены в `direct_domain` (дубль в обоих списках оставил бы трафик на прокси). `domain:kimi.ai` добавлен заново: он отсутствовал в пресете, и `api.kimi.ai` (API Kimi Code) уходил в `def_outbound: proxy`. `def_outbound` остаётся `proxy`.
 
 ## 2. Структура исходного файла (ключи формата NekoRay)
 
@@ -33,7 +36,7 @@
    - `process_name` работает на Windows/macOS/Linux (сопоставление процессов sing-box); на **OpenWrt процессов клиентских приложений нет** — при установке пресета на роутере процессные правила silently опускаются, в UI показывается предупреждение (локализованное).
    - `geoip:private` на OpenWrt критичен (не заворачивать LAN).
 5. **Обновляемость:** пресет версионируется (поле `revision`); «Центр обновлений» умеет обновлять пресеты (fetch из репо `lavray`) независимо от версий приложения — домены AI-сервисов меняются часто. Обновление пресета никогда не перезаписывает пользовательские правки молча: если пресет кастомизирован — предлагается diff/merge.
-6. **Тестирование (по Доктрине):** golden-тест конвертации в конфиг sing-box; тест приоритетов (google.ru → proxy, lori.ru → direct, LoL-процесс → direct); тест на OpenWrt-профиле (процессные правила опущены, предупреждение показано); fuzzing на входе конвертера.
+6. **Тестирование (по Доктрине):** golden-тест конвертации в конфиг sing-box; тест приоритетов (google.ru → proxy, lori.ru → direct, LoL-процесс → direct, bigmodel.cn → direct, deepseek.com → direct, api.kimi.ai → direct, zcode.z.ai → proxy); тест на OpenWrt-профиле (процессные правила опущены, предупреждение показано); fuzzing на входе конвертера.
 7. **Регрессионная привязка:** BUGS.md — счётчик «пресет применён и активен после обновления приложения» (не должен сбрасываться).
 
 ## 3a. Региональные пресеты (добавлено аудитом 2026-10)

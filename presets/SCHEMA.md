@@ -3,7 +3,7 @@
 > ЧЕРНОВИК Этапа 3 (stage3-drafts), ревизия 2 по L2-ревью 2026-10-23.
 > Соответствует `docs/PRESET-LAV-RU.md` §3, §3a–§3d (актуальная редакция) и
 > `lavray/presets/README.md`. Файлы набора:
-> [`lav-ru.json`](lav-ru.json) · [`lav-cn.json`](lav-cn.json) (rev 2) ·
+> [`lav-ru.json`](lav-ru.json) (rev 3) · [`lav-cn.json`](lav-cn.json) (rev 2) ·
 > [`global.json`](global.json) · [`all-proxy.json`](all-proxy.json) ·
 > [`all-direct.json`](all-direct.json) — все 5 builtin (PRESET-LAV-RU §3a;
 > «Выборочный» — пустой пользовательский набор, не файл). Эталон конвертации
@@ -83,7 +83,7 @@ custom`. Proxy перед direct-geosite сохраняет семантику `
 4. `dns.mode=advanced` — валидация парсером конфига форка (LNB-08).
 5. Golden: каждый builtin конвертируется детерминированно (G28–G30 в
    core-port-plan §3.2) + `sing-box check`; приоритеты — тестами
-   «google.ru → proxy» (RU), «baidu.com → direct, google.com → proxy» (CN),
+   «google.ru → proxy, bigmodel.cn → direct, deepseek.com → direct, api.kimi.ai → direct, zcode.z.ai → proxy» (RU), «baidu.com → direct, google.com → proxy» (CN),
    «lan → direct, ads → block» (Global/AllProxy/AllDirect); G34 — старт с
    geosite-правилом без сети (кэш/поставка, FR-UI-266).
 

@@ -286,8 +286,8 @@
         },
         {
           "path": "core/internal/cfgbuild/testdata/golden/G28.want.json",
-          "size": 11992,
-          "sha256": "2cb5455e704fdb8ef32dcfa213e7c4a94832893422507c37e147a2c2021699a2"
+          "size": 12034,
+          "sha256": "5e4b585853c6b3e2fc74cb8c90622a4f1f4ba6ec07372791ea5c66adc4eb8c00"
         },
         {
           "path": "core/internal/cfgbuild/testdata/golden/G29.in.json",

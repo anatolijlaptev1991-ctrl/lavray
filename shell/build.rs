@@ -26,10 +26,11 @@ fn main() {
     if let Err(message) = check_core(release, size) {
         panic!("{message}");
     }
-    let core = Path::new("binaries/lavray-core.exe");
-    if !core.exists() {
+    // Заглушка — по пути ресурса текущей платформы (раньше писалась в
+    // binaries/lavray-core.exe и на Linux оставляла ресурс несуществующим).
+    if !shipped.exists() {
         let _ = std::fs::create_dir_all("binaries");
-        let _ = std::fs::write(core, b"#!/bin/sh\nexit 1\n");
+        let _ = std::fs::write(shipped, b"#!/bin/sh\nexit 1\n");
     }
     // T-44: SHA-256 поставляемого ядра вшивается в оболочку, перед запуском
     // она сверяет с ним файл (shell/src/integrity.rs). Нет файла — пустая
@@ -39,6 +40,24 @@ fn main() {
         "cargo:rustc-env=LAVRAY_CORE_SHA256={}",
         sha256_file(shipped).unwrap_or_default()
     );
+    // Имя приложения — по нему Tauri на Linux раскладывает ресурсы
+    // (/usr/lib/<имя> и $APPDIR/usr/lib/<имя>); оболочка ищет ядро там
+    // (shell/src/integrity.rs::core_search_paths). Платформенный конфиг
+    // перекрывает базовый, как при слиянии у Tauri.
+    let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let mut name = None;
+    for file in ["tauri.conf.json", &format!("tauri.{os}.conf.json")] {
+        if let Ok(text) = std::fs::read_to_string(Path::new(file)) {
+            if let Ok(value) = serde_json::from_str::<serde_json::Value>(&text) {
+                if let Some(product) = value.get("productName").and_then(|p| p.as_str()) {
+                    name = Some(product.to_string());
+                }
+            }
+        }
+        println!("cargo:rerun-if-changed={file}");
+    }
+    let name = name.unwrap_or_else(|| env!("CARGO_PKG_NAME").to_string());
+    println!("cargo:rustc-env=LAVRAY_PRODUCT_NAME={name}");
     tauri_build::build()
 }
 

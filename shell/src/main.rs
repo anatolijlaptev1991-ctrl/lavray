@@ -21,7 +21,7 @@ use lavray_shell::elevation::{
 use lavray_shell::endpoint::{
     EndpointEvent, EndpointHub, HostObserver, SupervisorHost, CORE_ENDPOINT_EVENT, ENDPOINT_WAIT,
 };
-use lavray_shell::integrity::{find_trusted_core, CORE_SHA256};
+use lavray_shell::integrity::{core_search_paths, find_trusted_core, CORE_SHA256};
 use lavray_shell::killswitch::{self, Exit, ProxyFlags};
 use lavray_shell::launch::{wait_for_exit, LaunchArgs, WAIT_PID_TIMEOUT};
 use lavray_shell::prefs::ShellPrefs;
@@ -415,33 +415,14 @@ fn data_dir() -> std::path::PathBuf {
     std::env::temp_dir().join("lavray")
 }
 
-/// Путь к доверенному `lavray-core` (T-44): только в установленных ресурсах и
-/// только с вшитой при сборке суммой SHA-256.
+/// Путь к доверенному `lavray-core` (T-44): только в установленных ресурсах
+/// (перечень — [`integrity::core_search_paths`]) и только с вшитой при сборке
+/// суммой SHA-256.
 fn locate_core() -> Result<std::path::PathBuf, String> {
-    let exe = std::env::current_exe().map_err(|e| format!("путь к LAVRay.exe: {e}"))?;
-    let dir = exe
-        .parent()
-        .ok_or("у LAVRay.exe нет каталога")?
-        .to_path_buf();
-    let core_name = if cfg!(windows) {
-        "lavray-core.exe"
-    } else {
-        "lavray-core"
-    };
-    // D6/D7 (аудит round 2): ядро ищется ТОЛЬКО в установленных ресурсах.
-    // Раньше первым шёл каталог рядом с exe — в portable-режиме это позволяло
-    // подменить lavray-core.exe без каких-либо проверок. .is_file() вместо
-    // .exists() (каталог с таким именем больше не считается бинарником).
-    // T-44: найденный файл сверяется с SHA-256, вшитым при сборке; подменённое
-    // или устаревшее ядро не запускается (A2-07).
-    find_trusted_core(
-        &[
-            dir.join("binaries").join(core_name),
-            dir.join("resources").join("binaries").join(core_name),
-            dir.join("resources").join(core_name),
-        ],
-        CORE_SHA256,
-    )
+    // D6/D7 (аудит round 2): ядро ищется ТОЛЬКО в установленных ресурсах;
+    // найденный файл сверяется с SHA-256, вшитым при сборке (A2-07).
+    let candidates = core_search_paths()?;
+    find_trusted_core(&candidates, CORE_SHA256)
 }
 
 /// Конфигурация запуска ядра (§3): бинарник рядом с приложением, каталог

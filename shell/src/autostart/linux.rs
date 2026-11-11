@@ -8,6 +8,34 @@ use super::desktop;
 use super::{AutostartState, Env, Method};
 use std::path::Path;
 
+/// Каталог автозапуска из значений переменных (по спецификации базовых
+/// каталогов): абсолютное `$XDG_CONFIG_HOME` → `<xdg>/autostart`; пустое и
+/// относительное значение игнорируется, тогда `~/.config/autostart`.
+pub fn autostart_dir_in(
+    xdg: Option<&std::ffi::OsStr>,
+    home: Option<&std::ffi::OsStr>,
+) -> Result<std::path::PathBuf, String> {
+    if let Some(xdg) = xdg {
+        let dir = std::path::PathBuf::from(xdg);
+        if dir.is_absolute() {
+            return Ok(dir.join("autostart"));
+        }
+    }
+    let home = home
+        .map(std::path::PathBuf::from)
+        .filter(|home| home.is_absolute())
+        .ok_or_else(|| "не удалось определить домашний каталог (HOME не задан)".to_string())?;
+    Ok(home.join(".config").join("autostart"))
+}
+
+/// Каталог автозапуска текущего пользователя — значения из окружения.
+pub fn autostart_dir() -> Result<std::path::PathBuf, String> {
+    autostart_dir_in(
+        std::env::var_os("XDG_CONFIG_HOME").as_deref(),
+        std::env::var_os("HOME").as_deref(),
+    )
+}
+
 /// Состояние XDG-автозапуска: включённость — из файла записи (FR-UI-013).
 /// Запись с путём от прежнего расположения программы обновляется на текущий
 /// exe (как пересоздание задачи старого вида на Windows), не мешая ответу.
@@ -23,7 +51,11 @@ pub(super) fn state(dir: &Path, env: &Env) -> Result<AutostartState, String> {
     let entry = contents.as_deref().map(desktop::entry_state);
     if let Some(desktop::Entry::Enabled { exec }) = &entry {
         if *exec != desktop::entry_exec(&env.exe) {
-            let _ = desktop::enable(dir, &env.exe);
+            // Переезд программы. Запись атомарная (temp+rename), не следует
+            // симлинку; сбой — в журнал, состояние остаётся как прочитано.
+            if let Err(reason) = desktop::enable(dir, &env.exe) {
+                eprintln!("LAVRay: запись автозапуска не обновлена: {reason}");
+            }
         }
     }
     Ok(AutostartState {

@@ -491,10 +491,9 @@ pub fn change(enabled: bool) -> Result<AutostartState, String> {
 #[cfg(test)]
 mod tests;
 
-#[cfg(target_os = "linux")]
-#[cfg(test)]
+#[cfg(all(target_os = "linux", test))]
+mod desktop_entry_files_tests;
+#[cfg(all(target_os = "linux", test))]
 mod desktop_parse_tests;
-
-#[cfg(target_os = "linux")]
-#[cfg(test)]
+#[cfg(all(target_os = "linux", test))]
 mod desktop_tests;

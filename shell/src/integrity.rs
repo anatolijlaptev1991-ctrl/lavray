@@ -18,8 +18,8 @@ use std::path::{Path, PathBuf};
 /// сборке ядра не было.
 pub const CORE_SHA256: &str = env!("LAVRAY_CORE_SHA256");
 
-/// Имя приложения из `tauri.conf.json` (`productName`), вшитое `build.rs`:
-/// по нему Tauri раскладывает ресурсы на Linux.
+/// Имя приложения из `tauri.conf.json` (вшито `build.rs`): по нему Tauri
+/// раскладывает ресурсы на Linux.
 pub const PRODUCT_NAME: &str = env!("LAVRAY_PRODUCT_NAME");
 
 /// Каталоги, в которых позволено лежать ядру (T-44): ресурсы установки, а не
@@ -47,6 +47,14 @@ pub fn core_search_paths() -> Result<Vec<PathBuf>, String> {
     ];
     #[cfg(target_os = "linux")]
     {
+        // Нестандартная установка (распакованный deb, извлечённый AppImage):
+        // Tauri находит ресурсы через exe_dir/../lib — оболочка ищет там же.
+        paths.push(
+            dir.join("../lib")
+                .join(PRODUCT_NAME)
+                .join("binaries")
+                .join(core),
+        );
         if let Some(appdir) = std::env::var_os("APPDIR") {
             paths.push(
                 PathBuf::from(appdir)
@@ -81,8 +89,8 @@ pub fn sha256_file(path: &Path) -> std::io::Result<String> {
     }
 }
 
-/// Первый существующий файл из `candidates`, если его SHA-256 равен
-/// `expected`. Иначе понятная ошибка для журнала и UI.
+/// Первый СУЩЕСТВУЮЩИЙ ФАЙЛ из `candidates` (каталог с именем ядра файлом не
+/// считается — D6/D7), если его SHA-256 равен `expected`; иначе понятная ошибка.
 pub fn find_trusted_core(candidates: &[PathBuf], expected: &str) -> Result<PathBuf, String> {
     let path = candidates
         .iter()

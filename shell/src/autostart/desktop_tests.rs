@@ -1,19 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Тесты XDG-автозапуска на реальных файлах: включение, выключение,
-//! перезапись при переезде программы, состояние при чужом или запрещённом
-//! файле. Переменные окружения не трогаются — функции принимают каталог явно.
+//! Тесты XDG-автозапуска на реальных файлах: включение, выключение, атомарная
+//! перезапись (симлинк не переходит на цель), валидация пути, состояние при
+//! чужом или запрещённом файле, каталог автозапуска по переменным.
+//! Переменные окружения не трогаются — функции принимают значения явно.
 
-use super::desktop::{autostart_dir, disable, enable, entry_exec, entry_state, Entry};
-use super::linux::{set_enabled, state};
+use super::desktop::{disable, enable, entry_exec, entry_state, Entry};
+use super::linux::{autostart_dir_in, set_enabled, state};
 use super::*;
+use std::ffi::OsStr;
 use std::path::Path;
 
 /// Временный каталог со случайным именем (как `TaskFile`): удаляется на выходе.
-struct TempDir(std::path::PathBuf);
+pub(super) struct TempDir(pub(super) std::path::PathBuf);
 
 impl TempDir {
-    fn new() -> Self {
+    pub(super) fn new() -> Self {
         let mut random = [0u8; 8];
         getrandom::fill(&mut random).expect("случайные байты");
         let name = random
@@ -80,20 +82,32 @@ fn enable_overwrites_and_updates_moved_path() {
 }
 
 #[test]
-fn autostart_dir_uses_home_without_xdg() {
-    // В CI HOME задан, XDG_CONFIG_HOME — нет; не трогая переменные, проверяем
-    // лишь что каталог не пуст и завершается с понятной ошибкой без HOME.
-    let home = std::env::var_os("HOME").map(std::path::PathBuf::from);
-    match home {
-        Some(home) if home.is_absolute() => {
-            let dir = autostart_dir().expect("каталог определён");
-            assert_eq!(dir, home.join(".config").join("autostart"));
-        }
-        _ => {
-            let err = autostart_dir().expect_err("без HOME — ошибка");
-            assert!(err.contains("HOME"), "в сообщении указание на HOME: {err}");
-        }
-    }
+fn autostart_dir_in_follows_base_directory_spec() {
+    use std::ffi::OsStr;
+    let home = OsStr::new("/home/u");
+    // Абсолютный XDG_CONFIG_HOME используется.
+    assert_eq!(
+        autostart_dir_in(Some(OsStr::new("/cfg")), Some(home)).unwrap(),
+        Path::new("/cfg/autostart")
+    );
+    // Пустое и относительное значение игнорируется по спецификации.
+    assert_eq!(
+        autostart_dir_in(Some(OsStr::new("")), Some(home)).unwrap(),
+        Path::new("/home/u/.config/autostart")
+    );
+    assert_eq!(
+        autostart_dir_in(Some(OsStr::new("rel/cfg")), Some(home)).unwrap(),
+        Path::new("/home/u/.config/autostart")
+    );
+    // Без XDG — ~/.config/autostart.
+    assert_eq!(
+        autostart_dir_in(None, Some(home)).unwrap(),
+        Path::new("/home/u/.config/autostart")
+    );
+    // HOME отсутствует или относительный — понятная ошибка.
+    let err = autostart_dir_in(None, None).unwrap_err();
+    assert!(err.contains("HOME"), "{err}");
+    assert!(autostart_dir_in(None, Some(OsStr::new("rel"))).is_err());
 }
 
 #[test]

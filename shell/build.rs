@@ -27,18 +27,25 @@ fn main() {
         panic!("{message}");
     }
     // Заглушка — по пути ресурса текущей платформы (раньше писалась в
-    // binaries/lavray-core.exe и на Linux оставляла ресурс несуществующим).
+    // binaries/lavray-core.exe и на Linux/macOS оставляла ресурс несуществующим).
+    let mut stub = false;
     if !shipped.exists() {
         let _ = std::fs::create_dir_all("binaries");
         let _ = std::fs::write(shipped, b"#!/bin/sh\nexit 1\n");
+        stub = true;
     }
     // T-44: SHA-256 поставляемого ядра вшивается в оболочку, перед запуском
-    // она сверяет с ним файл (shell/src/integrity.rs). Нет файла — пустая
-    // строка, оболочка такое ядро не запустит.
+    // она сверяет с ним файл (shell/src/integrity.rs).
     println!("cargo:rerun-if-changed={}", shipped.display());
+    // Для заглушки хэш не вшивается: оболочка честно ответит «не вшит хэш
+    // ядра», а не «доверенно» запустит 17-байтовую заглушку.
     println!(
         "cargo:rustc-env=LAVRAY_CORE_SHA256={}",
-        sha256_file(shipped).unwrap_or_default()
+        if stub {
+            String::new()
+        } else {
+            sha256_file(shipped).unwrap_or_default()
+        }
     );
     // Имя приложения — по нему Tauri на Linux раскладывает ресурсы
     // (/usr/lib/<имя> и $APPDIR/usr/lib/<имя>); оболочка ищет ядро там

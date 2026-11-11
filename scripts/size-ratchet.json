@@ -51,7 +51,7 @@
   "core/internal/web/web.go": 353,
   "design/tools/a11y_sweep.py": 276,
   "shell/src/agent.rs": 249,
-  "shell/src/autostart.rs": 461,
+  "shell/src/autostart.rs": 500,
   "shell/src/autostart/task.rs": 281,
   "shell/src/coreproc/driver.rs": 1020,
   "shell/src/coreproc/logs.rs": 308,

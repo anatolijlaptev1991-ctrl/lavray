@@ -26,6 +26,8 @@ pub mod migrate;
 
 #[cfg(target_os = "linux")]
 mod desktop;
+#[cfg(target_os = "linux")]
+mod linux;
 mod task;
 
 use crate::launch::ARG_TRAY;
@@ -463,7 +465,7 @@ pub fn current_state() -> Result<AutostartState, String> {
     #[cfg(target_os = "linux")]
     let state = {
         let dir = desktop::autostart_dir()?;
-        linux_state(&dir, &env)?
+        linux::state(&dir, &env)?
     };
     #[cfg(not(target_os = "linux"))]
     let state = read_state(&System, &env);
@@ -479,58 +481,19 @@ pub fn change(enabled: bool) -> Result<AutostartState, String> {
     #[cfg(target_os = "linux")]
     let state = {
         let dir = desktop::autostart_dir()?;
-        linux_set_enabled(&dir, &env, enabled)?
+        linux::set_enabled(&dir, &env, enabled)?
     };
     #[cfg(not(target_os = "linux"))]
     let state = set_enabled(&System, &env, enabled);
     state
 }
 
-/// Состояние XDG-автозапуска: включённость — из файла записи (FR-UI-013).
-/// Запись с путём от прежнего расположения программы обновляется на текущий
-/// exe (как пересоздание задачи старого вида на Windows), не мешая ответу.
-/// Способ указывается всегда: на Linux он один, и UI подбирает по нему
-/// формулировки подсказок.
-#[cfg(target_os = "linux")]
-fn linux_state(dir: &Path, env: &Env) -> Result<AutostartState, String> {
-    let path = dir.join(desktop::ENTRY_FILE);
-    let contents = match std::fs::read_to_string(&path) {
-        Ok(text) => Some(text),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
-        Err(e) => return Err(format!("{}: {e}", path.display())),
-    };
-    let entry = contents.as_deref().map(desktop::entry_state);
-    if let Some(desktop::Entry::Enabled { exec }) = &entry {
-        if *exec != desktop::entry_exec(&env.exe) {
-            let _ = desktop::enable(dir, &env.exe);
-        }
-    }
-    Ok(AutostartState {
-        supported: true,
-        enabled: matches!(entry, Some(desktop::Entry::Enabled { .. })),
-        method: Some(Method::DesktopEntry),
-        elevated: env.elevated,
-        installed: env.installed,
-        unknown: matches!(entry, Some(desktop::Entry::Unknown)),
-        notice: None,
-    })
-}
-
-/// Включить или выключить XDG-автозапуск и вернуть состояние, заново
-/// прочитанное из каталога. Имя файла `lavray.desktop` принадлежит приложению:
-/// чужой или повреждённый файл при включении затирается.
-#[cfg(target_os = "linux")]
-fn linux_set_enabled(dir: &Path, env: &Env, enabled: bool) -> Result<AutostartState, String> {
-    if enabled {
-        desktop::enable(dir, &env.exe)?;
-    } else {
-        desktop::disable(dir)?;
-    }
-    linux_state(dir, env)
-}
-
 #[cfg(test)]
 mod tests;
+
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod desktop_parse_tests;
 
 #[cfg(target_os = "linux")]
 #[cfg(test)]

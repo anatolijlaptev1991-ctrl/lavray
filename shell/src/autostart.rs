@@ -464,7 +464,7 @@ pub fn current_state() -> Result<AutostartState, String> {
     let env = Env::detect()?;
     #[cfg(target_os = "linux")]
     let state = {
-        let dir = desktop::autostart_dir()?;
+        let dir = linux::autostart_dir()?;
         linux::state(&dir, &env)
     };
     #[cfg(not(target_os = "linux"))]
@@ -480,7 +480,7 @@ pub fn change(enabled: bool) -> Result<AutostartState, String> {
     let env = Env::detect()?;
     #[cfg(target_os = "linux")]
     let state = {
-        let dir = desktop::autostart_dir()?;
+        let dir = linux::autostart_dir()?;
         linux::set_enabled(&dir, &env, enabled)
     };
     #[cfg(not(target_os = "linux"))]

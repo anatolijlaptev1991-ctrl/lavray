@@ -4,11 +4,12 @@
 // хранится в настройках: оболочка читает его из ОС при каждом вызове
 // (FR-UI-013). Windows: с правами администратора из установленной версии
 // (Program Files) автозапуск — задача планировщика (приложение стартует
-// повышенным, TUN работает сразу), иначе — значение `Run` в реестре. Другие ОС
-// и веб-панель: строку скрываем.
+// повышенным, TUN работает сразу), иначе — значение `Run` в реестре. Linux:
+// запись XDG в каталоге автозапуска сеанса. Другие ОС и веб-панель: строку
+// скрываем.
 
 /** Чем включён автозапуск. */
-export type AutostartMethod = 'task' | 'registry';
+export type AutostartMethod = 'task' | 'registry' | 'desktop_entry';
 
 /** Пояснение оболочки к результату изменения. */
 export type AutostartNotice = 'task_needs_admin' | 'task_installed_only';
@@ -37,7 +38,10 @@ function parse(answer: unknown): AutostartInfo | null {
   if (a.supported !== true) return null;
   return {
     enabled: a.enabled === true,
-    method: a.method === 'task' || a.method === 'registry' ? a.method : null,
+    method:
+      a.method === 'task' || a.method === 'registry' || a.method === 'desktop_entry'
+        ? a.method
+        : null,
     elevated: a.elevated === true,
     installed: a.installed === true,
     unknown: a.unknown === true,

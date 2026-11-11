@@ -350,6 +350,33 @@ describe('строка «Автозапуск» (T-82)', () => {
     expect(row(web)).toBeNull();
     expect(invokeMock).not.toHaveBeenCalled();
   });
+
+  describe('Linux (запись автозапуска сеанса)', () => {
+    it('включён: подсказка про запись сеанса, кнопки повышения нет', async () => {
+      invokeMock.mockResolvedValue(
+        os({ enabled: true, method: 'desktop_entry', installed: false }),
+      );
+      const v = await mountBare(createElement(AutostartRow));
+      expect(sw(v)?.getAttribute('aria-checked')).toBe('true');
+      expect(detail(v)).toContain('via a session autostart entry');
+      expect(v.container.querySelector('#autostartRelaunch')).toBeNull();
+    });
+
+    it('выключен: подсказка как включается на Linux, без слов про администратора', async () => {
+      invokeMock.mockResolvedValue(os({ method: 'desktop_entry', installed: false }));
+      const v = await mountBare(createElement(AutostartRow));
+      expect(sw(v)?.getAttribute('aria-checked')).toBe('false');
+      expect(detail(v)).toContain('session autostart entry (~/.config/autostart)');
+      expect(v.container.querySelector('#autostartRelaunch')).toBeNull();
+    });
+
+    it('запись не распознана: «неизвестно» словами записи, а не планировщика', async () => {
+      invokeMock.mockResolvedValue(os({ unknown: true, method: 'desktop_entry', installed: false }));
+      const v = await mountBare(createElement(AutostartRow));
+      expect(detail(v)).toContain('could not be recognized');
+      expect(detail(v)).not.toContain('scheduler');
+    });
+  });
 });
 
 describe('миграция Run -> задача не удалась (повышенный экземпляр, обычный автозапуск)', () => {

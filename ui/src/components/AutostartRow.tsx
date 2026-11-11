@@ -30,8 +30,15 @@ function runNotUpgraded(info: AutostartInfo): boolean {
 
 /** Подсказка под переключателем по состоянию ОС. */
 function detailKey(info: AutostartInfo): MessageKey {
-  if (info.unknown && !info.enabled) return 'set.autostart.unknown';
-  if (info.enabled) return info.method === 'task' ? 'set.autostart.viaTask' : 'set.autostart.viaRun';
+  if (info.unknown && !info.enabled) {
+    return info.method === 'desktop_entry' ? 'set.autostart.unknownX' : 'set.autostart.unknown';
+  }
+  if (info.enabled) {
+    if (info.method === 'task') return 'set.autostart.viaTask';
+    if (info.method === 'desktop_entry') return 'set.autostart.viaDesktopEntry';
+    return 'set.autostart.viaRun';
+  }
+  if (info.method === 'desktop_entry') return 'set.autostart.willDesktopEntry';
   if (info.elevated) return info.installed ? 'set.autostart.willTask' : 'set.autostart.installedOnly';
   return 'set.autostart.willRun';
 }

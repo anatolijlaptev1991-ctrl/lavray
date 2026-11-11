@@ -13,9 +13,19 @@
 //!
 //! Команды (`reg.exe`, `schtasks.exe`) идут через внедряемый [`Exec`], как в
 //! `sysproxy`: тесты проверяют точные аргументы и текст XML на подставке и
-//! не трогают ни реестр, ни планировщик. Старт — с флагом `--tray` (окно скрыто).
+//! не трогают ни реестр, ни планировщик. Приложение стартует с флагом `--tray`
+//! (окно скрыто, только значок).
+//!
+//! На Linux автозапуск — запись XDG Desktop Entry в каталоге автозапуска
+//! сеанса ([`desktop`]): внешних команд нет, состояние читается из файла.
+//! Способы на ОС не смешиваются, поэтому выбор потока — в [`current_state`]
+//! и [`change`], а логика каждого способа остаётся отдельной и проверяется
+//! на любой платформе (тесты Windows-потока идут через инъекцию [`Exec`]).
 
 pub mod migrate;
+
+#[cfg(target_os = "linux")]
+mod desktop;
 mod task;
 
 use crate::launch::ARG_TRAY;
@@ -77,6 +87,8 @@ pub enum Method {
     Task,
     /// Значение в `HKCU\...\Run` (обычный запуск).
     Registry,
+    /// Запись автозапуска сеанса (Linux, XDG Desktop Entry).
+    DesktopEntry,
 }
 
 /// Пояснение к результату операции (код, текст подбирает UI).
@@ -436,9 +448,10 @@ impl Exec for System {
     }
 }
 
-/// Автозапуск управляется из приложения только на Windows.
+/// Автозапуск управляется из приложения на Windows (задача планировщика или
+/// значение `Run`) и на Linux (запись XDG в каталоге автозапуска сеанса).
 pub fn supported() -> bool {
-    cfg!(windows)
+    cfg!(windows) || cfg!(target_os = "linux")
 }
 
 /// Состояние автозапуска в этой ОС (то, что отдаёт команда `autostart_state`).
@@ -446,7 +459,15 @@ pub fn current_state() -> Result<AutostartState, String> {
     if !supported() {
         return Ok(AutostartState::unsupported());
     }
-    read_state(&System, &Env::detect()?)
+    let env = Env::detect()?;
+    #[cfg(target_os = "linux")]
+    let state = {
+        let dir = desktop::autostart_dir()?;
+        linux_state(&dir, &env)?
+    };
+    #[cfg(not(target_os = "linux"))]
+    let state = read_state(&System, &env);
+    state
 }
 
 /// Изменить автозапуск в этой ОС (команда `set_autostart`).
@@ -454,8 +475,63 @@ pub fn change(enabled: bool) -> Result<AutostartState, String> {
     if !supported() {
         return Err(ERR_UNSUPPORTED.to_string());
     }
-    set_enabled(&System, &Env::detect()?, enabled)
+    let env = Env::detect()?;
+    #[cfg(target_os = "linux")]
+    let state = {
+        let dir = desktop::autostart_dir()?;
+        linux_set_enabled(&dir, &env, enabled)?
+    };
+    #[cfg(not(target_os = "linux"))]
+    let state = set_enabled(&System, &env, enabled);
+    state
+}
+
+/// Состояние XDG-автозапуска: включённость — из файла записи (FR-UI-013).
+/// Запись с путём от прежнего расположения программы обновляется на текущий
+/// exe (как пересоздание задачи старого вида на Windows), не мешая ответу.
+/// Способ указывается всегда: на Linux он один, и UI подбирает по нему
+/// формулировки подсказок.
+#[cfg(target_os = "linux")]
+fn linux_state(dir: &Path, env: &Env) -> Result<AutostartState, String> {
+    let path = dir.join(desktop::ENTRY_FILE);
+    let contents = match std::fs::read_to_string(&path) {
+        Ok(text) => Some(text),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => None,
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+    let entry = contents.as_deref().map(desktop::entry_state);
+    if let Some(desktop::Entry::Enabled { exec }) = &entry {
+        if *exec != desktop::entry_exec(&env.exe) {
+            let _ = desktop::enable(dir, &env.exe);
+        }
+    }
+    Ok(AutostartState {
+        supported: true,
+        enabled: matches!(entry, Some(desktop::Entry::Enabled { .. })),
+        method: Some(Method::DesktopEntry),
+        elevated: env.elevated,
+        installed: env.installed,
+        unknown: matches!(entry, Some(desktop::Entry::Unknown)),
+        notice: None,
+    })
+}
+
+/// Включить или выключить XDG-автозапуск и вернуть состояние, заново
+/// прочитанное из каталога. Имя файла `lavray.desktop` принадлежит приложению:
+/// чужой или повреждённый файл при включении затирается.
+#[cfg(target_os = "linux")]
+fn linux_set_enabled(dir: &Path, env: &Env, enabled: bool) -> Result<AutostartState, String> {
+    if enabled {
+        desktop::enable(dir, &env.exe)?;
+    } else {
+        desktop::disable(dir)?;
+    }
+    linux_state(dir, env)
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(target_os = "linux")]
+#[cfg(test)]
+mod desktop_tests;

@@ -803,7 +803,9 @@ fn state_serializes_with_snake_case_words() {
     );
 }
 
-#[cfg(not(windows))]
+// Не-Windows без своего потока: macOS отвечает «не поддерживается» (на Linux
+// свой XDG-поток — его тесты в desktop_tests).
+#[cfg(target_os = "macos")]
 #[test]
 fn other_systems_answer_unsupported() {
     assert!(!supported());

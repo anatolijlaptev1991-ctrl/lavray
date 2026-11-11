@@ -18,6 +18,55 @@ use std::path::{Path, PathBuf};
 /// сборке ядра не было.
 pub const CORE_SHA256: &str = env!("LAVRAY_CORE_SHA256");
 
+/// Имя приложения из `tauri.conf.json` (`productName`), вшитое `build.rs`:
+/// по нему Tauri раскладывает ресурсы на Linux.
+pub const PRODUCT_NAME: &str = env!("LAVRAY_PRODUCT_NAME");
+
+/// Каталоги, в которых позволено лежать ядру (T-44): ресурсы установки, а не
+/// пользовательские каталоги. Windows — рядом с exe (NSIS); Linux — ресурсы
+/// пакета `/usr/lib/<имя>` и, в AppImage, `$APPDIR/usr/lib/<имя>`
+/// (соответствует `resource_dir` в tauri-utils).
+pub fn core_search_paths() -> Result<Vec<PathBuf>, String> {
+    let core = if cfg!(windows) {
+        "lavray-core.exe"
+    } else {
+        "lavray-core"
+    };
+    let exe = std::env::current_exe().map_err(|e| format!("путь к LAVRay.exe: {e}"))?;
+    let dir = exe
+        .parent()
+        .ok_or("у LAVRay.exe нет каталога")?
+        .to_path_buf();
+    // На не-Linux ветки cfg ниже нет, и mut не нужен — как в tauri-utils
+    // (resource_dir_from).
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+    let mut paths = vec![
+        dir.join("binaries").join(core),
+        dir.join("resources").join("binaries").join(core),
+        dir.join("resources").join(core),
+    ];
+    #[cfg(target_os = "linux")]
+    {
+        if let Some(appdir) = std::env::var_os("APPDIR") {
+            paths.push(
+                PathBuf::from(appdir)
+                    .join("usr")
+                    .join("lib")
+                    .join(PRODUCT_NAME)
+                    .join("binaries")
+                    .join(core),
+            );
+        }
+        paths.push(
+            PathBuf::from("/usr/lib")
+                .join(PRODUCT_NAME)
+                .join("binaries")
+                .join(core),
+        );
+    }
+    Ok(paths)
+}
+
 /// SHA-256 файла в нижнем регистре.
 pub fn sha256_file(path: &Path) -> std::io::Result<String> {
     let mut file = std::fs::File::open(path)?;
@@ -62,6 +111,27 @@ mod tests {
 
     /// SHA-256("abc") — контрольный вектор FIPS 180-2.
     const ABC: &str = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
+
+    #[test]
+    fn search_paths_start_next_to_the_exe() {
+        let paths = core_search_paths().unwrap();
+        assert!(!paths.is_empty(), "перечень каталогов не пуст");
+        // Первый кандидат — ресурсы рядом с exe (портативный/NSIS): одинаково
+        // на всех платформах и не зависит от PRODUCT_NAME.
+        let exe = std::env::current_exe().unwrap();
+        assert!(
+            paths[0].starts_with(exe.parent().unwrap()),
+            "{:?}",
+            paths[0]
+        );
+        assert!(paths.iter().all(|p| p.file_name().is_some()), "{paths:?}");
+    }
+
+    #[test]
+    fn product_name_is_embedded() {
+        assert!(!PRODUCT_NAME.is_empty(), "{PRODUCT_NAME:?}");
+        assert_eq!(PRODUCT_NAME, "LAVRay", "имя из tauri.conf.json");
+    }
 
     fn core_file(tag: &str, content: &[u8]) -> PathBuf {
         let dir =

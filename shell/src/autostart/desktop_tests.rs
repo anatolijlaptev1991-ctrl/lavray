@@ -8,7 +8,6 @@
 use super::desktop::{disable, enable, entry_exec, entry_state, Entry};
 use super::linux::{autostart_dir_in, set_enabled, state};
 use super::*;
-use std::ffi::OsStr;
 use std::path::Path;
 
 /// Временный каталог со случайным именем (как `TaskFile`): удаляется на выходе.

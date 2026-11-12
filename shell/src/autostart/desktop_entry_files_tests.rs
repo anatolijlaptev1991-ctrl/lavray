@@ -3,7 +3,7 @@
 //! Тесты файловых операций записи автозапуска: замена симлинка без перехода
 //! на цель, валидация пути, отсутствие временных файлов.
 
-use super::desktop::{enable, entry_exec, entry_state, Entry};
+use super::desktop::enable;
 use super::desktop_tests::TempDir;
 use std::os::unix::ffi::OsStringExt;
 use std::path::Path;

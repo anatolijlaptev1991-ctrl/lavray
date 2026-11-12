@@ -205,15 +205,53 @@ mod imp {
 
 #[cfg(unix)]
 mod imp {
+    use super::RunasError;
+    use std::path::Path;
+    use std::process::Command;
+
     pub fn is_elevated() -> bool {
         // SAFETY: `geteuid` — сисколл без аргументов и побочных эффектов.
         unsafe { libc::geteuid() == 0 }
     }
 
-    pub fn run_elevated(_exe: &std::path::Path, _args: &[String]) -> Result<(), super::RunasError> {
-        // pkexec/sudo с графическим запросом — отдельная работа (Linux/macOS
-        // вне 0.1.x): права здесь даёт пользователь, запустив приложение сам.
-        Err(super::RunasError::Unsupported)
+    /// pkexec доступен в PATH (PolicyKit). Без него графический запрос
+    /// пароля невозможен — пользователь запускает приложение сам.
+    pub fn pkexec_available() -> bool {
+        Command::new("pkexec")
+            .arg("--version")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success())
+    }
+
+    /// Интерпретация кода возврата pkexec. Вынесена для тестируемости:
+    /// настоящий pkexec в тестах не запускается (диалог пароля).
+    pub fn interpret_exit(code: Option<i32>) -> Result<(), RunasError> {
+        match code {
+            Some(0) => Ok(()),
+            // 126 = пользователь отказал в диалоге PolicyKit.
+            Some(126) => Err(RunasError::Cancelled),
+            // 127 = команда не найдена / не авторизован.
+            Some(127) => Err(RunasError::Failed("pkexec: не авторизован".into())),
+            Some(code) => Err(RunasError::Failed(format!("pkexec: код {code}"))),
+            None => Err(RunasError::Failed("pkexec: завершён сигналом".into())),
+        }
+    }
+
+    /// Перезапуск с повышением через pkexec (PolicyKit). Диалог пароля
+    /// показывает сама система; отказ (exit 126) — не ошибка, а Cancelled.
+    pub fn run_elevated(exe: &Path, args: &[String]) -> Result<(), RunasError> {
+        if !pkexec_available() {
+            return Err(RunasError::Unsupported);
+        }
+        let status = Command::new("pkexec")
+            .arg(exe)
+            .args(args)
+            .stdin(std::process::Stdio::null())
+            .status()
+            .map_err(|e| RunasError::Failed(format!("pkexec: {e}")))?;
+        interpret_exit(status.code())
     }
 }
 
@@ -388,5 +426,61 @@ mod tests {
         let expected = false;
         assert_eq!(is_elevated(), expected);
         assert_eq!(is_elevated(), is_elevated());
+    }
+
+    // ---- pkexec: интерпретация кодов возврата (B08, Linux) ----
+
+    #[cfg(unix)]
+    mod pkexec_tests {
+        use super::super::imp::interpret_exit;
+        use super::super::RunasError;
+
+        #[test]
+        fn exit_zero_is_success() {
+            assert_eq!(interpret_exit(Some(0)), Ok(()));
+        }
+
+        #[test]
+        fn exit_126_is_cancelled_not_error() {
+            // Пользователь закрыл диалог PolicyKit — это не ошибка.
+            assert_eq!(interpret_exit(Some(126)), Err(RunasError::Cancelled));
+        }
+
+        #[test]
+        fn exit_127_is_not_authorized() {
+            let err = interpret_exit(Some(127)).unwrap_err();
+            assert!(matches!(err, RunasError::Failed(_)));
+            if let RunasError::Failed(msg) = err {
+                assert!(msg.contains("не авторизован"), "{msg}");
+            }
+        }
+
+        #[test]
+        fn exit_other_codes_are_failed_with_code() {
+            for code in [1, 2, 125, 128, 255] {
+                let err = interpret_exit(Some(code)).unwrap_err();
+                assert!(matches!(err, RunasError::Failed(_)), "code {code}");
+                if let RunasError::Failed(msg) = err {
+                    assert!(msg.contains(&code.to_string()), "code {code} in {msg}");
+                }
+            }
+        }
+
+        #[test]
+        fn signal_death_is_failed() {
+            // None = процесс убит сигналом (SIGKILL, SIGSEGV…).
+            let err = interpret_exit(None).unwrap_err();
+            assert!(matches!(err, RunasError::Failed(_)));
+            if let RunasError::Failed(msg) = err {
+                assert!(msg.contains("сигналом"), "{msg}");
+            }
+        }
+
+        #[test]
+        fn negative_codes_are_failed() {
+            // Некорректный отрицательный код — не паника, а Failed.
+            let err = interpret_exit(Some(-1)).unwrap_err();
+            assert!(matches!(err, RunasError::Failed(_)));
+        }
     }
 }

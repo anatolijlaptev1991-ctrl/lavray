@@ -14,6 +14,8 @@
 #![allow(clippy::must_use_candidate)] // not all pure fns need must_use
 #![allow(clippy::struct_excessive_bools)] // state flags are natural
 #![allow(clippy::doc_markdown)] // backticks not needed for all identifiers
+#![allow(unknown_lints)] // forward-compat: новые линты clippy (assert_is_empty в 1.100)
+#![allow(clippy::assert_is_empty)] // assert!(x.is_empty()) в тестах идиоматичен
 
 //! Библиотечная часть оболочки `LAVRay` (этап 3, скаффолд).
 //!

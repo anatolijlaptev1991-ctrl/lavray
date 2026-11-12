@@ -28,7 +28,7 @@ const KILL_BUDGET: Duration = Duration::from_secs(2);
 /// URL фейк-транспорта (§3.4 — адрес выделяет «ядро», оболочка его только читает).
 const FAKE_URL: &str = "http://127.0.0.1:1";
 
-/// Интерпретатор фейк-ядра: POSIX sh / Windows cmd (ComSpec).
+/// Интерпретатор фейк-ядра: POSIX sh / Windows cmd (`ComSpec`).
 #[cfg(unix)]
 fn interpreter() -> PathBuf {
     PathBuf::from("/bin/sh")

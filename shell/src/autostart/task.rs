@@ -51,15 +51,12 @@ pub fn task_xml(exe: &Path, sid: &str) -> String {
     let user = xml_escape(sid);
     let sddl = xml_escape(&task_sddl(sid));
     let command = xml_escape(&format!("\"{}\"", exe.display()));
-    let workdir = exe
-        .parent()
-        .map(|dir| {
-            format!(
-                "\n      <WorkingDirectory>{}</WorkingDirectory>",
-                xml_escape(&dir.display().to_string())
-            )
-        })
-        .unwrap_or_default();
+    let workdir = exe.parent().map_or(String::new(), |dir| {
+        format!(
+            "\n      <WorkingDirectory>{}</WorkingDirectory>",
+            xml_escape(&dir.display().to_string())
+        )
+    });
     format!(
         r#"<?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.2" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">

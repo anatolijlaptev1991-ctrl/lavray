@@ -11,8 +11,7 @@ fn gsettings() -> bool {
     std::process::Command::new("gsettings")
         .arg("--version")
         .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+        .is_ok_and(|o| o.status.success())
 }
 
 fn get_gnome(key: &str) -> Option<String> {

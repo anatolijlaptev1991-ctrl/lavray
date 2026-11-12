@@ -11,7 +11,7 @@ impl TempDir {
     fn new() -> Self {
         let mut r = [0u8; 8];
         getrandom::fill(&mut r).unwrap();
-        let name: String = r.iter().map(|b| format!("{b:02x}")).collect();
+        let name = format!("{:016x}", u64::from_ne_bytes(r));
         let d = std::env::temp_dir().join(format!("lavray-kde-test-{name}"));
         std::fs::create_dir_all(&d).unwrap();
         Self(d)

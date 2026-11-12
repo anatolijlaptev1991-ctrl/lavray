@@ -210,7 +210,7 @@ pub fn strip_ansi_into(input: &str, out: &mut String) {
 pub struct FloodGate {
     max_per_second: usize,
     /// Метки времени пропущенных строк (только allowed) — скользящее окно.
-    window: VecDeque<u128>,
+    window: VecDeque<u64>,
 }
 
 impl FloodGate {
@@ -227,7 +227,7 @@ impl FloodGate {
 
     /// Пропустить строку с меткой времени `now_ms`? `false` = дроп (флуд).
     /// Из окна вытесняются метки старше секунды (`now − t ≥ 1000`).
-    pub fn allow(&mut self, now_ms: u128) -> bool {
+    pub fn allow(&mut self, now_ms: u64) -> bool {
         while self
             .window
             .front()

@@ -228,7 +228,7 @@ async fn core_endpoint(
     let ready = tauri::async_runtime::spawn_blocking(move || hub.wait_ready(ENDPOINT_WAIT))
         .await
         .map_err(|e| e.to_string())?;
-    Ok(ready.map(|ep| (ep.url, ep.token)).unwrap_or_default())
+    Ok(ready.map_or(Default::default(), |ep| (ep.url, ep.token)))
 }
 
 /// Состояние ядра §2.2 (Spawning, Ready, Crashed, `RateLimited`, …).

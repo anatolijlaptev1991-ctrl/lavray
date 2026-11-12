@@ -17,10 +17,11 @@ impl TempDir {
     pub(super) fn new() -> Self {
         let mut random = [0u8; 8];
         getrandom::fill(&mut random).expect("случайные байты");
-        let name = random
-            .iter()
-            .map(|b| format!("{b:02x}"))
-            .collect::<String>();
+        let name = random.iter().fold(String::with_capacity(16), |mut s, b| {
+            use std::fmt::Write;
+            let _ = write!(s, "{b:02x}");
+            s
+        });
         let dir = std::env::temp_dir().join(format!("lavray-autostart-test-{name}"));
         std::fs::create_dir_all(&dir).expect("создать временный каталог");
         Self(dir)

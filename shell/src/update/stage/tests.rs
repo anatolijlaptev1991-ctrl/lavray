@@ -17,17 +17,15 @@ fn source(tmp: &TempDir, name: &str, bytes: &[u8]) -> PathBuf {
 }
 
 fn part_files(layout: &Layout) -> Vec<String> {
-    std::fs::read_dir(layout.staging())
-        .map(|rd| {
-            rd.map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-                .filter(|n| {
-                    std::path::Path::new(n)
-                        .extension()
-                        .is_some_and(|e| e.eq_ignore_ascii_case("part"))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+    std::fs::read_dir(layout.staging()).map_or(Vec::new(), |rd| {
+        rd.map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| {
+                std::path::Path::new(n)
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("part"))
+            })
+            .collect()
+    })
 }
 
 #[test]

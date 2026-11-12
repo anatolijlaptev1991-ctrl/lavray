@@ -149,10 +149,11 @@ pub fn enable(dir: &Path, exe: &Path) -> Result<(), String> {
     std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let mut random = [0u8; 8];
     getrandom::fill(&mut random).map_err(|e| format!("случайное имя файла: {e}"))?;
-    let name = random
-        .iter()
-        .map(|b| format!("{b:02x}"))
-        .collect::<String>();
+    let name = random.iter().fold(String::with_capacity(16), |mut s, b| {
+        use std::fmt::Write;
+        let _ = write!(s, "{b:02x}");
+        s
+    });
     let tmp = dir.join(format!(".lavray-{name}.tmp"));
     let path = dir.join(ENTRY_FILE);
     let result = (|| -> Result<(), String> {

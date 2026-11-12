@@ -53,7 +53,7 @@ fn enable_leaves_no_temporary_files() {
     enable(&dir.0, Path::new(EXE)).expect("включить");
     let leftovers: Vec<_> = std::fs::read_dir(&dir.0)
         .unwrap()
-        .filter_map(|entry| entry.ok())
+        .filter_map(std::result::Result::ok)
         .filter(|entry| entry.file_name().to_string_lossy().starts_with(".lavray-"))
         .collect();
     assert!(leftovers.is_empty(), "temp-файлы удалены: {leftovers:?}");

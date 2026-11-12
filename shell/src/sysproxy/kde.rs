@@ -47,9 +47,9 @@ pub fn parse(text: &str) -> KdeProxy {
         };
         match key.trim() {
             "ProxyType" => out.proxy_type = val.trim().parse().unwrap_or(0),
-            "httpProxy" => out.http = val.trim().to_owned(),
-            "httpsProxy" => out.https = val.trim().to_owned(),
-            "NoProxyFor" => out.no_proxy = val.trim().to_owned(),
+            "httpProxy" => val.trim().clone_into(&mut out.http),
+            "httpsProxy" => val.trim().clone_into(&mut out.https),
+            "NoProxyFor" => val.trim().clone_into(&mut out.no_proxy),
             _ => {}
         }
     }
@@ -133,7 +133,7 @@ pub fn apply_at(path: &Path, host: &str, port: u16) -> Result<(), String> {
     let mut p = parse(&original);
     p.proxy_type = 1;
     p.http = format!("http://{host}:{port}");
-    p.https = format!("http://{host}:{port}");
+    p.https = p.http.clone();
     write_rendered(path, &original, &p)
 }
 
@@ -145,7 +145,10 @@ pub fn restore_at(path: &Path, snap: &ProxySnapshot) -> Result<(), String> {
     }
     let original = std::fs::read_to_string(path).unwrap_or_default();
     let p = KdeProxy {
-        proxy_type: d.get("proxy_type").and_then(|v| v.as_u64()).unwrap_or(0) as u8,
+        proxy_type: d
+            .get("proxy_type")
+            .and_then(serde_json::Value::as_u64)
+            .unwrap_or(0) as u8,
         http: json_str(d, "http"),
         https: json_str(d, "https"),
         no_proxy: json_str(d, "no_proxy"),

@@ -90,7 +90,7 @@ impl PipeState {
         // Антифлуд обходит только ПЕРВАЯ ready-строка (пока канал не отдан):
         // повторные — обычные логи, иначе они забили бы ring мимо лимита.
         let first_ready = ready_url.is_some() && self.ready_tx.is_some();
-        let allowed = self.gate.allow(self.started.elapsed().as_millis());
+        let allowed = self.gate.allow(self.started.elapsed().as_millis() as u64);
         if allowed || first_ready {
             self.push(ring, line, truncated);
         }

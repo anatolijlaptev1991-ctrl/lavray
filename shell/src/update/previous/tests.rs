@@ -38,12 +38,10 @@ fn sorted(mut names: Vec<String>) -> Vec<String> {
 }
 
 fn names(dir: &Path) -> Vec<String> {
-    let mut found: Vec<String> = std::fs::read_dir(dir)
-        .map(|rd| {
-            rd.map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-                .collect()
-        })
-        .unwrap_or_default();
+    let mut found: Vec<String> = std::fs::read_dir(dir).map_or(Vec::new(), |rd| {
+        rd.map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect()
+    });
     found.sort();
     found
 }

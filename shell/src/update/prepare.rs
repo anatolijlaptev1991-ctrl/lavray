@@ -121,8 +121,7 @@ fn apply(deps: &ApplyDeps<'_>, req: &ApplyRequest<'_>) -> Result<ApplyOutcome, A
 
 fn file_name(path: &Path) -> String {
     path.file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default()
+        .map_or(String::new(), |n| n.to_string_lossy().into_owned())
 }
 
 /// Копия exe для watchdog и (при обновлении) копия установщика для отката.

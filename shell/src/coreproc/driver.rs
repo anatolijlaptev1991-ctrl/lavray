@@ -547,6 +547,7 @@ fn stdin_payload(config: &CoreSpawnConfig) -> Vec<u8> {
 /// kill по pgid — LNB-09) + `PR_SET_PDEATHSIG(SIGKILL)` (§1 — сироты
 /// невозможны).
 #[cfg(unix)]
+#[allow(clippy::unnecessary_wraps)] // единый Result-интерфейс с windows-вариантом
 fn platform_configure(cmd: &mut Command) -> Result<(), CoreProcessError> {
     use std::os::unix::process::CommandExt;
 

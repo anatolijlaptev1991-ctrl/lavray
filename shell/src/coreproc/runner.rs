@@ -301,7 +301,7 @@ where
         self.publish(CoreState::Crashed);
         self.fail(format!(
             "ядро неожиданно завершилось{}",
-            exit.map(|e| format!(" ({e})")).unwrap_or_default()
+            exit.map_or(String::new(), |e| format!(" ({e})"))
         ));
         if state == CoreState::RateLimited {
             self.publish(state);

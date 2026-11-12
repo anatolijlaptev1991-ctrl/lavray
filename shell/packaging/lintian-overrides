@@ -1,0 +1,3 @@
+# lavray-core собирается с CGO_ENABLED=0 — статическая линковка намеренна
+# (переносимость между дистрибутивами, без зависимости от glibc версии).
+lav-ray: statically-linked-binary [usr/lib/LAVRay/binaries/lavray-core]

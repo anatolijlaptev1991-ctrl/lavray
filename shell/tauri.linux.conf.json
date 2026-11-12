@@ -2,6 +2,7 @@
   "$schema": "https://schema.tauri.app/config/2",
   "bundle": {
     "category": "Utility",
+    "publisher": "LAVRay <lavray@users.noreply.github.com>",
     "targets": [
       "deb",
       "appimage"
@@ -12,10 +13,16 @@
     "linux": {
       "deb": {
         "depends": [
+          "libc6",
           "libwebkit2gtk-4.1-0",
           "libgtk-3-0",
           "libayatana-appindicator3-1"
-        ]
+        ],
+        "files": {
+          "/usr/share/doc/lav-ray/changelog.gz": "packaging/changelog.gz",
+          "/usr/share/doc/lav-ray/copyright": "packaging/copyright",
+          "/usr/share/lintian/overrides/lav-ray": "packaging/lintian-overrides"
+        }
       }
     }
   },

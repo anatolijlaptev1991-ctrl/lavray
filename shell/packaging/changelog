@@ -1,0 +1,9 @@
+lav-ray (0.9.3) unstable; urgency=medium
+
+  * KDE sysproxy via kioslaverc + D-Bus notification
+  * pkexec elevation (PolicyKit) for TUN
+  * XDG autostart (freedesktop Autostart 0.6)
+  * Zero-alloc hex encoding, strip + panic=abort
+  * clippy pedantic + perf: 0 warnings
+
+ -- LAVRay <lavray@users.noreply.github.com>  Wed, 12 Nov 2026 00:00:00 +0000

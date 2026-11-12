@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Linux: gsettings (GNOME) / kwriteconfig (KDE).
+//! Linux: gsettings (GNOME). KDE — вручную (kwriteconfig+D-Bus — цель,
+//! см. PLATFORM-MATRIX); в остальных средах системный прокси не применяется.
 
 use super::ProxySnapshot;
 

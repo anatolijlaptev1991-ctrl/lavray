@@ -42,28 +42,24 @@ fn validate_exe(exe: &Path) -> Result<(), String> {
 /// 3. значение строки: `\` → `\\` (разбор строки идёт раньше кавычек, поэтому
 ///    литеральный `\` в кавычках даёт четыре подряд).
 pub fn entry_exec(exe: &Path) -> String {
-    let mut out = String::with_capacity(exe.as_os_str().len() + 16);
+    // Single-pass: три слоя экранирования применяются inline, без
+    // промежуточных аллокаций (раньше — 2 String на каждый символ пути).
+    // Порядок слоёв обратен разбору лаунчера: field codes → кавычки → строка.
+    let mut out = String::with_capacity(exe.as_os_str().len() * 2 + 16);
     out.push('"');
     for c in exe.to_string_lossy().chars() {
-        // Слой 1: field codes — литеральный % удваивается.
-        let field: String = if c == '%' { "%%".into() } else { c.to_string() };
-        // Слой 2: внутри двойных кавычек экранируются `"` `\` `` ` `` `$`.
-        let mut quoted = String::with_capacity(field.len() + 1);
-        for pc in field.chars() {
-            if matches!(pc, '"' | '\\' | '`' | '$') {
-                quoted.push('\\');
-            }
-            quoted.push(pc);
-        }
-        // Слой 3: значение строки — каждый `\` удваивается (строковый разбор
-        // у лаунчера идёт раньше кавычек, поэтому литеральный `\` в кавычках
-        // — четыре подряд, `$` в спеке — пример `\\$`).
-        for pc in quoted.chars() {
-            if pc == '\\' {
+        match c {
+            // Слой 1: % → %% (field code). Слои 2/3 не затрагивают %.
+            '%' => out.push_str("%%"),
+            // Слои 2+3: спецсимвол кавычек → \X → \\X (строка удваивает \).
+            '"' | '`' | '$' => {
                 out.push_str("\\\\");
-            } else {
-                out.push(pc);
+                out.push(c);
             }
+            // Слои 2+3: \ → \\ (кавычки добавляют escape) → \\\\ (строка
+            // удваивает КАЖДЫЙ из двух backslash — итого четыре).
+            '\\' => out.push_str("\\\\\\\\"),
+            _ => out.push(c),
         }
     }
     out.push('"');

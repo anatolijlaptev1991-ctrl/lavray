@@ -6,4 +6,4 @@ lav-ray (0.9.3) unstable; urgency=medium
   * Zero-alloc hex encoding, strip + panic=abort
   * clippy pedantic + perf: 0 warnings
 
- -- LAVRay <lavray@users.noreply.github.com>  Wed, 12 Nov 2026 00:00:00 +0000
+ -- LAVRay <lavray@users.noreply.github.com>  Thu, 12 Nov 2026 00:00:00 +0000

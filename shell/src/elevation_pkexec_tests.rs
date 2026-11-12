@@ -2,8 +2,8 @@
 
 //! Тесты pkexec: интерпретация кодов возврата PolicyKit (B08).
 
-use super::super::imp::interpret_exit;
-use super::super::RunasError;
+use super::imp::interpret_exit;
+use super::RunasError;
 
 #[test]
 fn exit_zero_is_success() {

@@ -6,7 +6,7 @@
 
 | Функция | Windows 10/11 | macOS 13+ | Ubuntu 22.04/24.04 GNOME (X11/Wayland) | KDE (Linux) | OpenWrt (веб-режим) |
 |---|---|---|---|---|---|
-| Системный прокси | да (WinINET; формат строки настраивается) | да (networksetup по каждому network service) | условие: gsettings (GNOME); KDE — вручную (цель: kwriteconfig+D-Bus); остальные среды — не применяется, используйте TUN | условие: kwriteconfig + D-Bus | нет (вместо него режим шлюза TProxy/TUN) |
+| Системный прокси | да (WinINET; формат строки настраивается) | да (networksetup по каждому network service) | да: gsettings (GNOME) + kioslaverc (KDE Plasma 5/6, D-Bus); остальные среды — не применяется, используйте TUN | условие: kwriteconfig + D-Bus | нет (вместо него режим шлюза TProxy/TUN) |
 | TUN | да — приложение (и ядро) запущено от администратора, как в NekoBox: «Перезапустить от администратора» из диалога (UAC), службы нет | условие: привилегированный помощник SMAppService (Network Extension — v1.x) | условие: systemd-служба с `AmbientCapabilities=CAP_NET_ADMIN`; в AppImage — только с помощником (setcap на read-only squashfs невозможен) | как GNOME | да — режим шлюза; на роутере прав не требует |
 | Трей | да (цветной значок, состояния знака) | да (template-значок, только альфа) | условие: без расширения AppIndicator в «чистом» GNOME трея нет — закрытие окна = выход с предупреждением | да (KStatusNotifier) | нет |
 | Автозапуск | да (без прав — HKCU Run; с правами администратора из установленной копии (Program Files) — задача планировщика `LAVRay-<SID>`, TUN работает сразу после входа; флаг `--tray`) | условие: SMAppService LoginItems (LSSharedFileList — устарел, DROP FR-UI-224/macOS) | да (~/.config/autostart) | да | да (procd/init.d) |

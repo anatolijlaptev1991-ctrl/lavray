@@ -20,6 +20,8 @@ mod conn;
 #[cfg(test)]
 mod fakes;
 #[cfg(all(unix, not(target_os = "macos")))]
+mod kde;
+#[cfg(all(unix, not(target_os = "macos")))]
 mod linux;
 #[cfg(target_os = "macos")]
 mod macos;

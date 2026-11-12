@@ -21,6 +21,7 @@ pub struct BackoffSchedule {
 
 impl BackoffSchedule {
     /// Новое расписание без неудач.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -36,12 +37,14 @@ impl BackoffSchedule {
     }
 
     /// Число зарегистрированных неудач.
+    #[must_use]
     pub fn failures(&self) -> usize {
         self.failures
     }
 
     /// Базовая задержка (без джиттера): `ZERO` при нуле неудач; после N
     /// неудач — `BACKOFF_STEPS_MS[min(N-1, len-1)]`, т.е. 1,2,4,8,15,15,… с.
+    #[must_use]
     pub fn delay(&self) -> Duration {
         if self.failures == 0 {
             return Duration::ZERO;
@@ -59,9 +62,12 @@ impl BackoffSchedule {
 
 /// Применить к базовой задержке множитель `1 ± JITTER_FRACTION`;
 /// `unit ∈ [0, 1)` равномерно отображается на диапазон множителя.
+#[must_use]
+#[allow(clippy::cast_precision_loss)] // u128→f64: джиттер тайминга, не крипто
 pub fn apply_jitter(base: Duration, unit: f64) -> Duration {
     let unit = unit.clamp(0.0, 1.0);
     let factor = 1.0 + JITTER_FRACTION * (2.0 * unit - 1.0);
+    // u128→f64: потеря точности допустима — джиттер тайминга, не крипто.
     let ms = (base.as_millis() as f64 * factor).round() as u64;
     Duration::from_millis(ms)
 }
@@ -127,14 +133,14 @@ mod tests {
     fn jitter_bounds_are_twenty_percent() {
         let base = Duration::from_secs(4);
         assert_eq!(apply_jitter(base, 0.0), Duration::from_millis(3200));
-        assert_eq!(apply_jitter(base, 0.5), Duration::from_millis(4000));
+        assert_eq!(apply_jitter(base, 0.5), Duration::from_secs(4));
         assert_eq!(apply_jitter(base, 0.999_999), Duration::from_millis(4800));
         // Выходы за [0,1) клампятся.
         assert_eq!(apply_jitter(base, -3.0), Duration::from_millis(3200));
         assert_eq!(apply_jitter(base, 7.0), Duration::from_millis(4800));
     }
 
-    /// delay_with использует инжектированный источник джиттера.
+    /// `delay_with` использует инжектированный источник джиттера.
     #[test]
     fn delay_with_uses_jitter_source() {
         let mut schedule = BackoffSchedule::new();
@@ -142,6 +148,6 @@ mod tests {
         let mut low = FixedJitter { value: 0.0 };
         let mut mid = FixedJitter { value: 0.5 };
         assert_eq!(schedule.delay_with(&mut low), Duration::from_millis(800));
-        assert_eq!(schedule.delay_with(&mut mid), Duration::from_millis(1000));
+        assert_eq!(schedule.delay_with(&mut mid), Duration::from_secs(1));
     }
 }

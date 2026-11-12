@@ -65,13 +65,13 @@ fn main() {
     }
     let name = name.unwrap_or_else(|| env!("CARGO_PKG_NAME").to_string());
     println!("cargo:rustc-env=LAVRAY_PRODUCT_NAME={name}");
-    tauri_build::build()
+    tauri_build::build();
 }
 
 fn sha256_file(path: &Path) -> std::io::Result<String> {
     let mut file = std::fs::File::open(path)?;
     let mut hasher = Sha256::new();
-    let mut buf = [0u8; 64 * 1024];
+    let mut buf = vec![0u8; 64 * 1024]; // heap: 64 КБ не на стеке (clippy large_stack_arrays)
     loop {
         let n = file.read(&mut buf)?;
         if n == 0 {

@@ -24,6 +24,7 @@ pub enum SlotError {
 }
 
 impl SlotError {
+    #[must_use]
     pub fn code(&self) -> &'static str {
         match self {
             Self::Conflict(_) => "conflict",
@@ -41,7 +42,10 @@ impl HotkeySlot {
     /// Заменить сочетание (`None` — снять). Под замком: две замены подряд из
     /// разных потоков не перепутают порядок снятия и регистрации.
     pub fn set<B: HotkeyBackend>(&self, backend: &B, next: Option<Accel>) -> Result<(), SlotError> {
-        let mut current = self.current.lock().unwrap_or_else(|e| e.into_inner());
+        let mut current = self
+            .current
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if *current == next {
             return Ok(());
         }
@@ -66,7 +70,10 @@ impl HotkeySlot {
 
     /// Текущее сочетание.
     pub fn current(&self) -> Option<Accel> {
-        *self.current.lock().unwrap_or_else(|e| e.into_inner())
+        *self
+            .current
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 }
 

@@ -4,7 +4,7 @@
 //! приложения (`%APPDATA%\LAVRay`), один для обычного и повышенного экземпляров
 //! одного пользователя.
 //!
-//! У повышенного экземпляра отдельный профиль WebView (см. `profile`), поэтому
+//! У повышенного экземпляра отдельный профиль `WebView` (см. `profile`), поэтому
 //! `localStorage` у двух экземпляров разный. Язык, тема, режимы, выбор сервера и
 //! признак пройденного онбординга должны быть одинаковыми, поэтому источник
 //! истины — этот файл, а `localStorage` — кэш: UI до первого рендера применяет
@@ -49,6 +49,7 @@ pub struct Loaded {
 }
 
 /// Записи по явному списку и лимиту размера; лишнее отбрасывается молча.
+#[must_use]
 pub fn sanitize(entries: Entries) -> Entries {
     entries
         .into_iter()
@@ -62,6 +63,7 @@ fn key_allowed(key: &str) -> bool {
 
 /// Прочитать файл. Нет файла, не JSON-объект, слишком большой: `exists = false`.
 /// В объекте остаются только допустимые строковые записи.
+#[must_use]
 pub fn load(dir: &Path) -> Loaded {
     let path = dir.join(FILE_NAME);
     match std::fs::metadata(&path) {
@@ -107,7 +109,9 @@ pub fn set(
     if value.as_ref().is_some_and(|v| v.len() > MAX_VALUE_BYTES) {
         return Err(format!("значение {key} больше {MAX_VALUE_BYTES} байт"));
     }
-    let _guard = WRITE_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let _guard = WRITE_LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
     // испорченный файл заменяется: чтение вернуло пустой список
     let mut entries = load(dir).entries;
     match value {
@@ -122,7 +126,11 @@ pub fn set(
 fn temp_path(dir: &Path, name: &str) -> Result<PathBuf, String> {
     let mut random = [0u8; 6];
     getrandom::fill(&mut random).map_err(|e| format!("случайное имя файла: {e}"))?;
-    let suffix: String = random.iter().map(|b| format!("{b:02x}")).collect();
+    let suffix: String = random.iter().fold(String::with_capacity(12), |mut s, b| {
+        use std::fmt::Write;
+        let _ = write!(s, "{b:02x}");
+        s
+    });
     Ok(dir.join(format!("{name}.{suffix}.tmp")))
 }
 

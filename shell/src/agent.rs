@@ -49,6 +49,7 @@ pub enum AgentMode {
 
 impl AgentMode {
     /// Разбор значения настройки; незнакомое значение — `None`.
+    #[must_use]
     pub fn parse(value: &str) -> Option<Self> {
         match value {
             "off" => Some(Self::Off),
@@ -58,6 +59,7 @@ impl AgentMode {
         }
     }
 
+    #[must_use]
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Off => "off",
@@ -69,11 +71,13 @@ impl AgentMode {
 
 /// Дескриптор безопасности файла: только пользователь и SYSTEM, наследование от
 /// каталога отключено (`P`).
+#[must_use]
 pub fn sddl(sid: &str) -> String {
     format!("D:P(A;;FA;;;{sid})(A;;FA;;;SY)")
 }
 
 /// Содержимое файла.
+#[must_use]
 pub fn endpoint_json(url: &str, token: &str, mode: AgentMode) -> String {
     serde_json::json!({ "url": url, "token": token, "mode": mode.as_str() }).to_string()
 }
@@ -101,6 +105,7 @@ pub struct AgentAccess {
 
 impl AgentAccess {
     /// `dir` — каталог данных приложения, `sid` — SID пользователя процесса.
+    #[must_use]
     pub fn new(dir: PathBuf, sid: Option<String>) -> Self {
         Self {
             dir,
@@ -158,7 +163,9 @@ impl AgentAccess {
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(|e| e.into_inner())
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Привести файл в соответствие состоянию.
@@ -229,7 +236,7 @@ fn retry(mut op: impl FnMut() -> Result<(), String>) -> Result<(), String> {
 }
 
 /// Удалить файл; его отсутствие — не ошибка. Родитель-не-каталог (Unix:
-/// ENOTDIR, Windows отвечает NotFound) тоже значит, что файла нет.
+/// ENOTDIR, Windows отвечает `NotFound`) тоже значит, что файла нет.
 fn remove_file(path: &Path) -> Result<(), String> {
     retry(|| match std::fs::remove_file(path) {
         Ok(()) => Ok(()),

@@ -23,6 +23,7 @@ pub enum ElevationKind {
 /// Может ли процесс повысить себя без чужой учётной записи. `kind` — тип токена
 /// (`None` — прочитать не удалось: не блокируем, решит система), `elevated` —
 /// процесс уже повышен.
+#[must_use]
 pub fn can_self_elevate(kind: Option<ElevationKind>, elevated: bool) -> bool {
     if elevated {
         return true;
@@ -32,11 +33,13 @@ pub fn can_self_elevate(kind: Option<ElevationKind>, elevated: bool) -> bool {
 
 /// Строка SID пользователя процесса (`S-1-5-21-…`); `None` — не Windows или
 /// токен не прочитан.
+#[must_use]
 pub fn user_sid() -> Option<String> {
     imp::user_sid()
 }
 
 /// Тип повышения токена процесса; `None` — не Windows или токен не прочитан.
+#[must_use]
 pub fn elevation_kind() -> Option<ElevationKind> {
     imp::elevation_kind()
 }
@@ -60,7 +63,7 @@ mod imp {
             let mut handle: HANDLE = std::ptr::null_mut();
             // SAFETY: псевдо-хэндл процесса закрывать не нужно; `handle` —
             // валидный указатель на локальную переменную.
-            let ok = unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut handle) };
+            let ok = unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw mut handle) };
             (ok != 0).then_some(Self(handle))
         }
     }
@@ -76,7 +79,9 @@ mod imp {
         let token = Token::open()?;
         let mut needed = 0u32;
         // SAFETY: нулевой буфер нулевой длины — штатный запрос размера.
-        unsafe { GetTokenInformation(token.0, TokenUser, std::ptr::null_mut(), 0, &mut needed) };
+        unsafe {
+            GetTokenInformation(token.0, TokenUser, std::ptr::null_mut(), 0, &raw mut needed)
+        };
         if needed == 0 {
             return None;
         }
@@ -89,7 +94,7 @@ mod imp {
                 TokenUser,
                 buffer.as_mut_ptr().cast(),
                 needed,
-                &mut needed,
+                &raw mut needed,
             )
         };
         if ok == 0 {
@@ -100,7 +105,7 @@ mod imp {
         let mut text: *mut u16 = std::ptr::null_mut();
         // SAFETY: `sid` указывает внутрь `buffer`, который жив; `text`
         // получает буфер, выделенный системой.
-        if unsafe { ConvertSidToStringSidW(sid, &mut text) } == 0 || text.is_null() {
+        if unsafe { ConvertSidToStringSidW(sid, &raw mut text) } == 0 || text.is_null() {
             return None;
         }
         // SAFETY: строка нуль-терминирована, длина считается до нуля.
@@ -128,7 +133,7 @@ mod imp {
                 TokenElevationType,
                 std::ptr::from_mut(&mut kind).cast(),
                 std::mem::size_of::<i32>() as u32,
-                &mut returned,
+                &raw mut returned,
             )
         };
         if ok == 0 {

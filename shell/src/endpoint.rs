@@ -35,6 +35,7 @@ pub struct EndpointEvent {
 
 impl EndpointEvent {
     /// «Ядро остановлено, ждите следующее событие».
+    #[must_use]
     pub fn down() -> Self {
         Self {
             url: String::new(),
@@ -58,7 +59,9 @@ pub struct EndpointHub {
 
 impl EndpointHub {
     fn lock(&self) -> MutexGuard<'_, Slot> {
-        self.slot.lock().unwrap_or_else(|e| e.into_inner())
+        self.slot
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Ядро запущено: запомнить адрес и разбудить ожидающих.
@@ -104,7 +107,7 @@ impl EndpointHub {
             slot = self
                 .changed
                 .wait_timeout(slot, left)
-                .unwrap_or_else(|e| e.into_inner())
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
                 .0;
         }
     }
@@ -351,10 +354,10 @@ mod tests {
         Outcome { hub, seen, waits }
     }
 
-    fn endpoint(url: &str) -> Result<CoreEndpoint, CoreProcessError> {
-        Ok(CoreEndpoint {
+    fn endpoint(url: &str) -> CoreEndpoint {
+        CoreEndpoint {
             transport_url: url.to_owned(),
-        })
+        }
     }
 
     fn token(n: usize) -> String {
@@ -370,8 +373,8 @@ mod tests {
         // ядро №1 умирает на 3-й проверке живости, ядро №2 живёт до выхода
         let process = MockCoreProcess {
             ready_results: vec![
-                endpoint("tcp://127.0.0.1:50001"),
-                endpoint("tcp://127.0.0.1:50002"),
+                Ok(endpoint("tcp://127.0.0.1:50001")),
+                Ok(endpoint("tcp://127.0.0.1:50002")),
             ],
             alive_results: vec![true, true, false],
             ..MockCoreProcess::default()
@@ -412,8 +415,8 @@ mod tests {
     fn agent_token_follows_the_core_and_main_token_never_reaches_the_agent_file() {
         let process = MockCoreProcess {
             ready_results: vec![
-                endpoint("tcp://127.0.0.1:50001"),
-                endpoint("tcp://127.0.0.1:50002"),
+                Ok(endpoint("tcp://127.0.0.1:50001")),
+                Ok(endpoint("tcp://127.0.0.1:50002")),
             ],
             alive_results: vec![true, true, false],
             ..MockCoreProcess::default()

@@ -12,13 +12,15 @@ pub const TITLE: &str = "LAVRay";
 pub const ALREADY_RUNNING_ELEVATED: &str = "LAVRay уже запущен от имени администратора — откройте его из области уведомлений (трея).\n\nLAVRay is already running as administrator — open it from the notification area (system tray).";
 
 /// Прежний экземпляр не вышел за отведённое время при перезапуске.
+#[must_use]
 pub fn previous_instance_alive(pid: u32, seconds: u64) -> String {
     format!(
         "Предыдущая копия LAVRay (процесс {pid}) не завершилась за {seconds} с. Закройте её (значок в трее → «Выход») и запустите LAVRay снова.\n\nThe previous LAVRay (process {pid}) did not exit within {seconds} s. Close it (tray icon → Exit) and start LAVRay again."
     )
 }
 
-/// Окно не создалось (например, WebView2 не запустился).
+/// Окно не создалось (например, `WebView2` не запустился).
+#[must_use]
 pub fn window_failed(reason: &str) -> String {
     format!(
         "Не удалось создать окно LAVRay: {reason}\n\nCould not create the LAVRay window: {reason}"

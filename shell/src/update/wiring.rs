@@ -26,6 +26,7 @@ use std::sync::Arc;
 use tauri::{AppHandle, State};
 
 /// Замок «установка уже идёт» для общего состояния приложения.
+#[must_use]
 pub fn new_gate() -> Arc<ApplyGate> {
     Arc::new(ApplyGate::default())
 }
@@ -104,7 +105,7 @@ async fn run_job(
     Ok(outcome)
 }
 
-/// update_apply — установить проверенный ядром установщик из `updates/staging`:
+/// `update_apply` — установить проверенный ядром установщик из `updates/staging`:
 /// повторная проверка SHA-256 под блокировкой, остановка ядра, снятие прокси,
 /// запуск NSIS `/S` с одним запросом UAC. `{"status":"installing"}` — приложение
 /// сейчас выйдет; `{"status":"uac_cancelled"}` — отказ в UAC, ничего не изменено.
@@ -126,7 +127,7 @@ pub async fn update_apply(
     run_job(app, Arc::clone(&gate), dir.0.clone(), job).await
 }
 
-/// update_rollback — вернуть прошлую версию её установщиком из `updates/previous`.
+/// `update_rollback` — вернуть прошлую версию её установщиком из `updates/previous`.
 /// Нет прошлого установщика — `rollback_unavailable`.
 #[tauri::command]
 pub async fn update_rollback(
@@ -147,7 +148,7 @@ pub async fn update_rollback(
     run_job(app, Arc::clone(&gate), dir.0.clone(), job).await
 }
 
-/// update_health_ok — UI сообщает: ядро готово и первый кадр нарисован. Пишет
+/// `update_health_ok` — UI сообщает: ядро готово и первый кадр нарисован. Пишет
 /// `updates/health.json` с версией самого приложения; повтор безвреден.
 #[tauri::command]
 pub async fn update_health_ok(dir: State<'_, DataDir>) -> Result<(), String> {
@@ -160,7 +161,7 @@ pub async fn update_health_ok(dir: State<'_, DataDir>) -> Result<(), String> {
     .map_err(|_| "health_write_failed".to_string())
 }
 
-/// update_previous_info — описание прошлого установщика (`null`, если отката нет).
+/// `update_previous_info` — описание прошлого установщика (`null`, если отката нет).
 #[tauri::command]
 pub async fn update_previous_info(dir: State<'_, DataDir>) -> Result<Option<PreviousInfo>, String> {
     let store = PreviousStore::new(Layout::new(&dir.0));

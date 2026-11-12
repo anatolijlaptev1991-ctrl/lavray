@@ -25,7 +25,7 @@ fn main_window_lets_the_page_handle_file_drops() {
     assert_eq!(window["dragDropEnabled"], Value::Bool(false));
 }
 
-/// F-088 (A2-19, B1-22): `window.open` и `target="_blank"` в WebView2 молча
+/// F-088 (A2-19, B1-22): `window.open` и `target="_blank"` в `WebView2` молча
 /// гасятся; ссылки открывает плагин opener, и только по `https`/`http`.
 #[test]
 fn opener_plugin_is_registered_and_limited_to_http_and_https() {
@@ -62,7 +62,7 @@ fn opener_plugin_is_registered_and_limited_to_http_and_https() {
 /// с `--tray` и «Запускать свёрнутым»): иначе автозапуск мигал бы окном перед
 /// тем, как его спрятать.
 /// T-81 (ревью): само окно создаёт код (`create: false` в конфигурации), чтобы
-/// у повышенного экземпляра был свой каталог данных WebView.
+/// у повышенного экземпляра был свой каталог данных `WebView`.
 #[test]
 fn main_window_is_created_by_code_hidden_and_shown_unless_tray() {
     let window = &read_json("tauri.conf.json")["app"]["windows"][0];
@@ -156,7 +156,7 @@ fn nsis_uninstall_hook_removes_autostart_but_not_on_update() {
     // задачи по схеме имён `LAVRay-<SID>` (и прежнее простое имя), PowerShell по полному пути
     assert!(text.contains("Get-ScheduledTask -TaskName 'LAVRay','LAVRay-*'"));
     assert!(text.contains("Unregister-ScheduledTask -Confirm:$$false"));
-    assert!(text.contains(r#"$WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"#));
+    assert!(text.contains(r"$WINDIR\System32\WindowsPowerShell\v1.0\powershell.exe"));
     assert!(
         text.contains("${DisableX64FSRedirection}") && text.contains("${EnableX64FSRedirection}")
     );

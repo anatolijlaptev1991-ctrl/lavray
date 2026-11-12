@@ -44,7 +44,7 @@ pub fn pick_and_stage(
     }
 }
 
-/// update_pick_installer — «Из файла»: диалог выбора установщика и копия в
+/// `update_pick_installer` — «Из файла»: диалог выбора установщика и копия в
 /// staging. `null` — диалог закрыт без выбора. Дальше ядро проверяет подпись
 /// (`VerifyLocalUpdate`), а `update_apply` ставит.
 #[tauri::command]

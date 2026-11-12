@@ -51,11 +51,13 @@ impl Default for ShellPrefs {
 
 impl ShellPrefs {
     /// Настройки из `ui-state.json` в каталоге данных; файла нет или он испорчен — умолчания.
+    #[must_use]
     pub fn load(data_dir: &std::path::Path) -> Self {
         Self::from_entries(&crate::ui_state::load(data_dir).entries)
     }
 
     /// Настройки из записей `ui-state.json`; чего нет или что испорчено — умолчание.
+    #[must_use]
     pub fn from_entries(entries: &Entries) -> Self {
         let d = Self::default();
         Self {
@@ -71,8 +73,8 @@ impl ShellPrefs {
 /// Логическое значение: UI пишет `"1"`/`"0"`, старые записи могли быть `true`/`false`.
 fn flag(entries: &Entries, key: &str, default: bool) -> bool {
     match entries.get(key).map(|v| v.trim()) {
-        Some("1") | Some("true") => true,
-        Some("0") | Some("false") => false,
+        Some("1" | "true") => true,
+        Some("0" | "false") => false,
         _ => default,
     }
 }

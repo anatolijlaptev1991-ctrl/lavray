@@ -1,6 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Библиотечная часть оболочки LAVRay (этап 3, скаффолд).
+// Обоснованные исключения pedantic (аудит Linux-180, секция A/K):
+// - Tauri IPC требует owned-типы (String/AppHandle) для десериализации команд;
+// - Win32 FFI требует точных ширин整数 (usize→u32 для DWORD);
+// - Result-типы самодокументируемы, варианты ошибок описаны на уровне модуля;
+// - state-структуры естественно содержат >3 bool-флагов.
+#![allow(clippy::needless_pass_by_value)] // Tauri IPC: owned types required
+#![allow(clippy::cast_possible_truncation)] // Win32 FFI: DWORD = u32
+#![allow(clippy::cast_sign_loss)] // Win32 FFI: LONG → DWORD
+#![allow(clippy::cast_possible_wrap)] // Win32 FFI: RECT coordinates
+#![allow(clippy::missing_errors_doc)] // Result variants documented at module level
+#![allow(clippy::missing_panics_doc)] // panics documented inline with SAFETY
+#![allow(clippy::must_use_candidate)] // not all pure fns need must_use
+#![allow(clippy::struct_excessive_bools)] // state flags are natural
+#![allow(clippy::doc_markdown)] // backticks not needed for all identifiers
+
+//! Библиотечная часть оболочки `LAVRay` (этап 3, скаффолд).
 //!
 //! Спек: `docs/stage3/shell-lifecycle.md` (§10 — каркас крейта). GUI-часть
 //! (окно/трей/рантайм) живёт в `main.rs` на Tauri 2; вся логика жизненного
@@ -27,9 +42,9 @@
 //! - [`token`] — SID пользователя и тип повышения токена процесса (T-81, T-82);
 //! - [`single_instance`] — проверка мьютекса single-instance между разными
 //!   уровнями прав (T-81);
-//! - [`profile`] — отдельный каталог данных WebView повышенного экземпляра (T-81);
+//! - [`profile`] — отдельный каталог данных `WebView` повышенного экземпляра (T-81);
 //! - [`ui_state`] — общий файл настроек UI `ui-state.json` для обоих профилей
-//!   WebView (T-81);
+//!   `WebView` (T-81);
 //! - [`agent`] — доступ ИИ-агентов (MCP): агентский токен ядра и файл
 //!   `agent-endpoint.json` с защищённым дескриптором (MCP);
 //! - [`msgbox`] — сообщения до появления окна (T-81);

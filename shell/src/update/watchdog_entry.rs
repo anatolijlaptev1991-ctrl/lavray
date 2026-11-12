@@ -72,11 +72,13 @@ fn watch(args: &WatchdogArgs) -> Outcome {
 }
 
 /// Код выхода: 0 — всё хорошо (здорово или откатились), иначе 1.
+#[must_use]
 pub fn exit_code(outcome: &Outcome) -> i32 {
     i32::from(!matches!(outcome, Outcome::Healthy | Outcome::RolledBack))
 }
 
 /// `last-update.json`: чем кончилось обновление, чтобы показать в интерфейсе.
+#[must_use]
 pub fn result_json(version: &str, outcome: &Outcome, now_ms: u64) -> String {
     let detail = match outcome {
         Outcome::RollbackFailed(text) | Outcome::LaunchFailed(text) => Some(text.clone()),

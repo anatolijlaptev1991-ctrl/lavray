@@ -2,7 +2,7 @@
 
 //! Тестовый дочерний процесс — сам тестовый бинарник: тест `child_main`
 //! без переменной окружения ничего не делает, с ней — ведёт себя как
-//! запрошено. Ядро LAVRay не запускается. К stdout примешивается заголовок
+//! запрошено. Ядро `LAVRay` не запускается. К stdout примешивается заголовок
 //! тестового harness, поэтому ответ ищется как подстрока.
 
 use super::*;
@@ -13,10 +13,10 @@ const MARK: &[u8] = b"{\"version\":\"1.2.3\"}";
 /// Роль дочернего процесса; в обычном прогоне не делает ничего.
 #[test]
 fn child_main() {
+    use std::io::Write;
     let Ok(mode) = std::env::var(MODE) else {
         return;
     };
-    use std::io::Write;
     let mut out = std::io::stdout();
     match mode.as_str() {
         "short" => out.write_all(MARK).unwrap(),
@@ -30,7 +30,7 @@ fn child_main() {
                 return;
             }
         },
-        "hang" => std::thread::sleep(Duration::from_secs(60)),
+        "hang" => std::thread::sleep(Duration::from_mins(1)),
         other => panic!("неизвестный режим {other}"),
     }
     out.flush().unwrap();

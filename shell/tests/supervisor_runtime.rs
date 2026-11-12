@@ -83,7 +83,7 @@ fn a_core_dying_right_after_ready_is_restarted_only_twice() {
     handle.stop();
     while !handle.is_stopped() {
         assert!(
-            started.elapsed() < Duration::from_secs(60),
+            started.elapsed() < Duration::from_mins(1),
             "надзиратель не остановился"
         );
         std::thread::sleep(Duration::from_millis(20));

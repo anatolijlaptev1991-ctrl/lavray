@@ -91,11 +91,12 @@ impl ProxyFlags {
     }
 }
 
-/// proxy_kept — оставлен ли системный прокси после падения ядра. Окно спрашивает
+/// `proxy_kept` — оставлен ли системный прокси после падения ядра. Окно спрашивает
 /// при запуске (после перезагрузки страницы событие уже прошло) и перед любым
 /// автоматическим снятием прокси. Права JS (capability) не нужны: команда
 /// приложения, не плагин.
 #[tauri::command]
+#[must_use]
 pub fn proxy_kept(flags: tauri::State<'_, ProxyFlags>) -> bool {
     flags.is_kept()
 }
@@ -113,6 +114,7 @@ impl<B: Backend> ProxyControl for SysProxy<B> {
 }
 
 /// Держать ли прокси: только при падении ядра и включённом kill switch.
+#[must_use]
 pub fn keeps_proxy(exit: Exit, kill_switch: bool) -> bool {
     exit == Exit::CoreCrashed && kill_switch
 }
@@ -135,6 +137,7 @@ pub fn handle_exit<P: ProxyControl>(
 }
 
 /// То же на настоящем системном прокси; настройка берётся из `ui-state.json`.
+#[must_use]
 pub fn apply_exit(data_dir: &Path, exit: Exit, active: bool) -> Outcome {
     let kill_switch = ShellPrefs::load(data_dir).kill_switch_proxy;
     handle_exit(&SysProxy::new(data_dir), exit, kill_switch, active)

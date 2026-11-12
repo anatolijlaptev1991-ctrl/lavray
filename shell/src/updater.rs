@@ -16,13 +16,13 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 
 /// Grace-период health-флага новой версии до отката (v2.0 §3).
-pub const HEARTBEAT_GRACE: Duration = Duration::from_secs(60);
+pub const HEARTBEAT_GRACE: Duration = Duration::from_mins(1);
 /// Каталог предыдущей установки (v2.0 §3, `updates/previous/`).
 pub const ROLLBACK_DIR: &str = "updates/previous";
 /// Freeze-статус «warning»: timestamp.json просрочен > 7 дней (§8.3).
-pub const FREEZE_WARNING: Duration = Duration::from_secs(7 * 24 * 60 * 60);
+pub const FREEZE_WARNING: Duration = Duration::from_hours(168);
 /// Freeze-статус «красный»: > 30 дней (§8.3).
-pub const FREEZE_ERROR: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+pub const FREEZE_ERROR: Duration = Duration::from_hours(720);
 
 /// Состояния процесса обновления.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -124,11 +124,13 @@ pub struct UpdateTransitionError {
 
 /// Downgrade-политика (§8.3): serial монотонный; артефакт с serial ≤
 /// установленного отвергается.
+#[must_use]
 pub fn is_downgrade(installed_serial: u64, candidate_serial: u64) -> bool {
     candidate_serial <= installed_serial
 }
 
 /// Автомат состояний обновления: чистая функция переходов.
+#[allow(clippy::too_many_lines)] // FSM: единая таблица переходов
 pub fn transition(
     from: &UpdateState,
     event: UpdateEvent,
@@ -137,6 +139,7 @@ pub fn transition(
     use UpdateState as S;
 
     // Клон в scrutinee: ветка ошибки возвращает исходное `event`.
+    #[allow(clippy::match_same_arms)] // FSM: явная таблица переходов для аудируемости
     let next = match (from, event.clone()) {
         (S::Idle, E::ManifestVerified { serial, version }) => S::Available { serial, version },
         (S::Idle, E::ManifestRejected { reason }) => S::Error { reason },
@@ -198,6 +201,7 @@ pub struct UpdateMachine {
 
 impl UpdateMachine {
     /// Новая машина для установки с `installed_serial`.
+    #[must_use]
     pub fn new(installed_serial: u64) -> Self {
         Self {
             state: UpdateState::Idle,
@@ -206,11 +210,13 @@ impl UpdateMachine {
     }
 
     /// Текущее состояние.
+    #[must_use]
     pub fn state(&self) -> &UpdateState {
         &self.state
     }
 
     /// Serial установленной версии.
+    #[must_use]
     pub fn installed_serial(&self) -> u64 {
         self.installed_serial
     }
@@ -323,7 +329,7 @@ mod tests {
         );
     }
 
-    /// Heartbeat не встал за 60 с → RollingBack → RolledBack (rollback-
+    /// Heartbeat не встал за 60 с → `RollingBack` → `RolledBack` (rollback-
     /// помощник старой версии, v2.0 §3).
     #[test]
     fn heartbeat_timeout_triggers_rollback() {
@@ -386,6 +392,7 @@ mod tests {
     /// каждая ветка `transition` покрыта, длина пинится (новое ребро без
     /// теста не пройдёт).
     #[test]
+    #[allow(clippy::too_many_lines)] // исчерпывающая таблица переходов FSM
     fn transition_table_legal_edges() {
         let v = || "1.2.3".to_owned();
         let edges: Vec<(UpdateState, UpdateEvent, UpdateState)> = vec![

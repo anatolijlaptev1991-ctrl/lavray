@@ -42,6 +42,7 @@ pub enum StageError {
 
 impl StageError {
     /// Код для UI.
+    #[must_use]
     pub fn code(self) -> &'static str {
         match self {
             Self::InvalidSource => "invalid_source",
@@ -52,6 +53,7 @@ impl StageError {
 }
 
 /// Имя файла без разделителей и опасных символов; `None` — ничего не осталось.
+#[must_use]
 pub fn sanitize_name(raw: &str) -> Option<String> {
     let cleaned: String = raw
         .chars()

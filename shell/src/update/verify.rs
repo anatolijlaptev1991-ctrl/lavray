@@ -32,11 +32,13 @@ pub struct LockedInstaller {
 
 impl LockedInstaller {
     /// Путь для запуска.
+    #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
     /// Проверенная сумма, строчный hex.
+    #[must_use]
     pub fn sha256(&self) -> &str {
         &self.sha256
     }
@@ -76,6 +78,7 @@ pub fn open_verified(
 }
 
 /// Файл подписи рядом с установщиком: `<установщик>.minisig`.
+#[must_use]
 pub fn signature_path(installer: &Path) -> PathBuf {
     let mut name = installer.as_os_str().to_os_string();
     name.push(".minisig");

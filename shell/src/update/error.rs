@@ -44,6 +44,7 @@ pub enum ApplyError {
 
 impl ApplyError {
     /// Код для UI.
+    #[must_use]
     pub fn code(self) -> &'static str {
         match self {
             Self::Busy => "busy",

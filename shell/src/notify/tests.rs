@@ -92,7 +92,7 @@ fn suppressed_call_does_not_extend_the_window() {
             NotifyKind::Error,
             "t",
             "b",
-            t0 + Duration::from_millis(2000)
+            t0 + Duration::from_secs(2)
         )
         .unwrap());
 }

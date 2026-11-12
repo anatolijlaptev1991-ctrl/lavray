@@ -2,7 +2,7 @@
 
 //! Снимок экрана для поиска QR-кода (T-77).
 //!
-//! Окно LAVRay прячется, чтобы не закрывать код, через секунду снимается
+//! Окно `LAVRay` прячется, чтобы не закрывать код, через секунду снимается
 //! главный монитор, и окно возвращается в любом случае — даже если снимок не
 //! удался. Кадр уменьшается до 2000 пикселей по длинной стороне (больше
 //! распознавателю не нужно, а передавать меньше) и уходит в UI одним бинарным
@@ -79,6 +79,7 @@ fn push_scaled(frame: &Frame, (k, w, h): (u32, u32, u32), out: &mut Vec<u8>) {
 
 /// Уменьшить кадр усреднением квадратов k×k так, чтобы длинная сторона была не
 /// больше `max_side`. Кадр меньше — возвращается тот же, без копии.
+#[must_use]
 pub fn downscale(frame: Frame, max_side: u32) -> Frame {
     let Some(p) = plan(&frame, max_side) else {
         return frame;
@@ -94,6 +95,7 @@ pub fn downscale(frame: Frame, max_side: u32) -> Frame {
 
 /// Уменьшить кадр и сразу собрать бинарный ответ: итоговый буфер точной
 /// ёмкости, без промежуточного уменьшенного кадра.
+#[must_use]
 pub fn downscale_payload(frame: Frame, max_side: u32) -> Vec<u8> {
     let Some(p) = plan(&frame, max_side) else {
         return encode_payload(&frame);
@@ -121,6 +123,7 @@ fn average(frame: &Frame, x0: u32, y0: u32, k: u32) -> [u8; 4] {
 }
 
 /// Бинарный ответ для UI: заголовок из ширины и высоты (LE), затем пиксели.
+#[must_use]
 pub fn encode_payload(frame: &Frame) -> Vec<u8> {
     let mut out = Vec::with_capacity(8 + frame.rgba.len());
     out.extend_from_slice(&frame.width.to_le_bytes());
@@ -158,7 +161,7 @@ impl WindowControl for TauriWindow {
     }
 }
 
-/// qr_capture_screen — снимок экрана для QR (сырой ответ, формат выше).
+/// `qr_capture_screen` — снимок экрана для QR (сырой ответ, формат выше).
 #[tauri::command]
 pub async fn qr_capture_screen(
     window: tauri::WebviewWindow,

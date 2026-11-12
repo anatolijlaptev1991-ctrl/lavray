@@ -33,11 +33,13 @@ const REPARSE_POINT: u32 = 0x400;
 const MAX_NAME: usize = 255;
 
 /// Атрибуты файла Windows говорят, что это точка повторной обработки.
+#[must_use]
 pub fn is_reparse_attr(attributes: u32) -> bool {
     attributes & REPARSE_POINT != 0
 }
 
 /// Разобрать `<64 hex>-<имя>`: вернуть (сумма, имя) или `None`.
+#[must_use]
 pub fn parse_staged_name(name: &str) -> Option<(&str, &str)> {
     if name.len() > MAX_NAME || !name.is_char_boundary(64) {
         return None;

@@ -6,7 +6,7 @@
 use sha2::{Digest, Sha256};
 use std::io::{self, Read};
 
-/// Размер блока чтения: 64 КиБ — компромисс между вызовами и памятью.
+/// Размер блока чтения: 64 `КиБ` — компромисс между вызовами и памятью.
 const CHUNK: usize = 64 * 1024;
 
 /// SHA-256 потока до конца; читается тот же дескриптор, второго открытия нет.
@@ -26,11 +26,19 @@ pub fn sha256_reader(reader: &mut impl Read) -> io::Result<[u8; 32]> {
 }
 
 /// Строчный hex.
+#[must_use]
 pub fn to_hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|b| format!("{b:02x}")).collect()
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut s = String::with_capacity(bytes.len() * 2);
+    for &b in bytes {
+        s.push(HEX[(b >> 4) as usize] as char);
+        s.push(HEX[(b & 0xf) as usize] as char);
+    }
+    s
 }
 
 /// 64 hex-символа (любой регистр) → 32 байта; иначе `None`.
+#[must_use]
 pub fn parse_sha256_hex(text: &str) -> Option<[u8; 32]> {
     let raw = text.as_bytes();
     if raw.len() != 64 {
@@ -46,6 +54,7 @@ pub fn parse_sha256_hex(text: &str) -> Option<[u8; 32]> {
 }
 
 /// Равенство двух сумм без раннего выхода: время не зависит от места расхождения.
+#[must_use]
 pub fn ct_eq(a: &[u8; 32], b: &[u8; 32]) -> bool {
     a.iter().zip(b).fold(0u8, |acc, (x, y)| acc | (x ^ y)) == 0
 }
@@ -74,6 +83,56 @@ mod tests {
         let bytes = parse_sha256_hex(ABC).unwrap();
         assert_eq!(to_hex(&bytes), ABC);
         assert_eq!(parse_sha256_hex(&ABC.to_uppercase()), Some(bytes));
+    }
+
+    #[test]
+    fn hex_empty_input() {
+        assert_eq!(to_hex(&[]), "");
+    }
+
+    #[test]
+    fn hex_single_bytes_boundary_values() {
+        assert_eq!(to_hex(&[0x00]), "00");
+        assert_eq!(to_hex(&[0xff]), "ff");
+        assert_eq!(to_hex(&[0x0a]), "0a");
+        assert_eq!(to_hex(&[0x10]), "10");
+        assert_eq!(to_hex(&[0x7f]), "7f");
+        assert_eq!(to_hex(&[0x80]), "80");
+    }
+
+    #[test]
+    fn hex_all_256_byte_values() {
+        let all: Vec<u8> = (0..=255).collect();
+        let hex = to_hex(&all);
+        assert_eq!(hex.len(), 512);
+        // Каждый байт даёт ровно 2 hex-символа, нижний регистр.
+        for (i, &b) in all.iter().enumerate() {
+            let expected = format!("{b:02x}");
+            assert_eq!(&hex[i * 2..i * 2 + 2], expected, "byte {b:#04x}");
+        }
+        // Round-trip: все 256 байт восстанавливаются.
+        let parsed: Vec<u8> = (0..256)
+            .map(|i| u8::from_str_radix(&hex[i * 2..i * 2 + 2], 16).unwrap())
+            .collect();
+        assert_eq!(parsed, all);
+    }
+
+    #[test]
+    fn hex_capacity_is_exact_no_realloc() {
+        // Предвыделение точно len*2 — ёмкость не превышает (нет реаллокаций).
+        let bytes = [0xab_u8; 1000];
+        let hex = to_hex(&bytes);
+        assert_eq!(hex.len(), 2000);
+        assert_eq!(hex.capacity(), 2000, "ёмкость точно len*2, без реаллокаций");
+    }
+
+    #[test]
+    fn hex_lowercase_only() {
+        let hex = to_hex(&[0xAB, 0xCD, 0xEF]);
+        assert_eq!(hex, "abcdef");
+        assert!(hex
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
     }
 
     #[test]

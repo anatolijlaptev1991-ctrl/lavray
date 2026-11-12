@@ -105,10 +105,10 @@ impl<R: Runtime> Notifier for PluginNotifier<'_, R> {
     }
 }
 
-/// notify_show — показать уведомление; `false` — подавлено (настройка
+/// `notify_show` — показать уведомление; `false` — подавлено (настройка
 /// выключена или такое же было меньше 2 с назад). Тексты — из словарей UI.
 #[tauri::command]
-pub async fn notify_show(
+pub fn notify_show(
     app: AppHandle,
     gate: tauri::State<'_, NotifyGate>,
     dir: tauri::State<'_, DataDir>,

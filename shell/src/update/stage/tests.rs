@@ -20,7 +20,11 @@ fn part_files(layout: &Layout) -> Vec<String> {
     std::fs::read_dir(layout.staging())
         .map(|rd| {
             rd.map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-                .filter(|n| n.ends_with(".part"))
+                .filter(|n| {
+                    std::path::Path::new(n)
+                        .extension()
+                        .is_some_and(|e| e.eq_ignore_ascii_case("part"))
+                })
                 .collect()
         })
         .unwrap_or_default()
@@ -87,7 +91,10 @@ fn names_are_sanitized_and_capped() {
     let long = format!("{}.exe", "x".repeat(300));
     let capped = sanitize_name(&long).unwrap();
     assert_eq!(capped.len(), MAX_NAME);
-    assert!(capped.ends_with(".exe"), "расширение сохраняется");
+    assert!(
+        capped.to_ascii_lowercase().ends_with(".exe"),
+        "расширение сохраняется"
+    );
 }
 
 #[test]

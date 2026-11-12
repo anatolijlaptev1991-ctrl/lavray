@@ -49,6 +49,7 @@ pub enum AccelError {
 }
 
 impl AccelError {
+    #[must_use]
     pub fn code(self) -> &'static str {
         match self {
             Self::Invalid => "invalid_accel",

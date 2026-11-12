@@ -23,7 +23,7 @@ pub const ARG_WAIT_PID: &str = "--wait-pid";
 pub const WAIT_PID_TIMEOUT: Duration = Duration::from_secs(20);
 /// Период опроса «процесс ещё жив».
 pub const WAIT_PID_POLL: Duration = Duration::from_millis(100);
-/// Пауза после выхода прежнего процесса: его процессы WebView2 закрываются чуть
+/// Пауза после выхода прежнего процесса: его процессы `WebView2` закрываются чуть
 /// позже, а новый экземпляр (с другим уровнем прав) уже открывает тот же профиль.
 pub const WAIT_PID_SETTLE: Duration = Duration::from_millis(500);
 
@@ -66,6 +66,7 @@ impl LaunchArgs {
 
     /// Аргументы процесса из `std::env::args_os()` (без имени программы):
     /// не-Unicode аргумент не должен ронять запуск.
+    #[must_use]
     pub fn from_env() -> Self {
         Self::parse(
             std::env::args_os()
@@ -76,6 +77,7 @@ impl LaunchArgs {
 }
 
 /// Аргументы для второго экземпляра: кого дождаться и скрыто ли окно.
+#[must_use]
 pub fn relaunch_args(parent_pid: u32, tray: bool) -> Vec<String> {
     let mut args = vec![
         ARG_ELEVATED_RELAUNCH.to_string(),
@@ -128,6 +130,7 @@ pub fn wait_for_exit(pid: u32) -> bool {
 /// Жив ли процесс `pid`. Нет доступа к процессу — считаем живым: ждать
 /// дольше безопаснее, чем стартовать поверх чужого окна.
 #[cfg(windows)]
+#[must_use]
 pub fn process_alive(pid: u32) -> bool {
     use windows_sys::Win32::Foundation::{
         CloseHandle, GetLastError, ERROR_INVALID_PARAMETER, WAIT_TIMEOUT,

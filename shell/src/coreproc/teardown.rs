@@ -32,7 +32,7 @@ pub enum StaleResource {
     /// Маршруты через адаптер: Windows `route print` (фильтр через адаптер);
     /// Linux `ip route show dev lavray-tun`; macOS `netstat -rn`.
     Routes,
-    /// Системный прокси: Windows WinINET == наш inbound? (иначе — снимок не
+    /// Системный прокси: Windows `WinINET` == наш inbound? (иначе — снимок не
     /// восстановлен); Linux gsettings mode; macOS networksetup (§9, FR-UI-259).
     SystemProxy,
     /// DNS-состояние (Р2-25): Windows `Get-DnsClientServerAddress` на эталон;
@@ -56,6 +56,7 @@ impl StaleResource {
     ];
 
     /// Каноническое имя детектора (журнал чистки, «Troubleshooting» §6).
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::TunAdapter => "tun_adapter",
@@ -89,6 +90,7 @@ pub struct TeardownReport {
 
 impl TeardownReport {
     /// Записи отчёта (детектор + исход пробы), в порядке §6.
+    #[must_use]
     pub fn findings(&self) -> &[(StaleResource, ProbeOutcome)] {
         &self.findings
     }
@@ -104,12 +106,14 @@ impl TeardownReport {
     }
 
     /// Отчёт из готовых исходов проб (мок-вывод тестов, будущие пробы).
+    #[must_use]
     pub fn from_findings(findings: Vec<(StaleResource, ProbeOutcome)>) -> Self {
         Self { findings }
     }
 
     /// Что мешает объявить сеть чистой (для предупреждения): детектор и
     /// причина — `stale: …`, `unchecked`, `нет пробы`.
+    #[must_use]
     pub fn unconfirmed_summary(&self) -> String {
         let parts: Vec<String> = StaleResource::ALL
             .iter()
@@ -130,6 +134,7 @@ impl TeardownReport {
     /// Сеть подтверждена чистой: КАЖДЫЙ из пяти обязательных детекторов §6
     /// дал `Clean`. `Unchecked`, `Stale` и частичный/пустой отчёт чистотой
     /// не считаются — только по такому отчёту FSM вправе сказать `Stopped`.
+    #[must_use]
     pub fn is_clean(&self) -> bool {
         StaleResource::ALL.iter().all(|resource| {
             self.findings
@@ -144,6 +149,7 @@ impl TeardownReport {
 /// ЗАГЛУШКА: всегда `Unchecked` — реализация платформенных проб (команды из
 /// doc-комментариев [`StaleResource`], парсинг вывода, мок-вывод в тестах) —
 /// в следующей итерации.
+#[must_use]
 pub fn probe(_resource: StaleResource) -> ProbeOutcome {
     ProbeOutcome::Unchecked
 }
@@ -153,6 +159,7 @@ pub fn probe(_resource: StaleResource) -> ProbeOutcome {
 /// ЗАГЛУШКА: собирает [`probe`] по всем детекторам; бюджет
 /// [`T_TEARDOWN_VERIFY`](super::T_TEARDOWN_VERIFY) 3 с будет держать
 /// рантайм-драйвер. Реализация проб — в следующей итерации.
+#[must_use]
 pub fn verify_all() -> TeardownReport {
     TeardownReport {
         findings: StaleResource::ALL

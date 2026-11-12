@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Прокси на подключениях RAS/VPN (T-82). Реестр, WinINET и список RAS —
+//! Прокси на подключениях RAS/VPN (T-82). Реестр, `WinINET` и список RAS —
 //! подставные (`fakes.rs`), настоящую ОС тесты не трогают.
 
 use super::conn::{ConnChange, ConnSettings, Connections, AUTO_DETECT, DIRECT, PROXY};
@@ -141,7 +141,7 @@ fn connection_record_roundtrips_through_the_snapshot_format() {
     assert!(ConnSettings::from_record(&json!("строка")).is_err());
 }
 
-/// WinINET, каким его увидел прогон 0.9.0 (D-1): запись подключения RAS
+/// `WinINET`, каким его увидел прогон 0.9.0 (D-1): запись подключения RAS
 /// переписывает и общие значения LAN в реестре.
 struct LanEcho<'a>(&'a Env);
 

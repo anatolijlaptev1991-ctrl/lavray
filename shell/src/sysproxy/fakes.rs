@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Подставные реестр, подключения WinINET и список RAS для тестов: настоящие
-//! `reg.exe`, WinINET и RAS тесты не трогают.
+//! Подставные реестр, подключения `WinINET` и список RAS для тестов: настоящие
+//! `reg.exe`, `WinINET` и RAS тесты не трогают.
 
 use super::conn::{ConnChange, ConnSettings, Connections, AUTO_DETECT, DIRECT, PROXY};
 use super::memconns::{FakeRas, MemConns};
@@ -106,7 +106,7 @@ impl<T: RasEntries + ?Sized> RasEntries for &T {
 
 pub(super) type MemWindows<'a> = Windows<&'a MemRegistry, &'a MemConns, &'a FakeRas>;
 
-/// Весь Windows в памяти: реестр, подключения WinINET и список RAS.
+/// Весь Windows в памяти: реестр, подключения `WinINET` и список RAS.
 pub(super) struct Env {
     pub reg: MemRegistry,
     pub conns: MemConns,

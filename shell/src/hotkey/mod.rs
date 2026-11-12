@@ -19,6 +19,7 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut,
 pub const EVENT: &str = "hotkey-toggle-connect";
 
 /// Плагин: любое зарегистрированное сочетание (оно одно) — событие окну.
+#[must_use]
 pub fn plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
     tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, _shortcut, event| {
@@ -30,6 +31,7 @@ pub fn plugin<R: Runtime>() -> tauri::plugin::TauriPlugin<R> {
 }
 
 /// Сочетание для плагина.
+#[must_use]
 pub fn shortcut(a: &Accel) -> Shortcut {
     let mut mods = Modifiers::empty();
     mods.set(Modifiers::CONTROL, a.mods.ctrl);
@@ -39,7 +41,12 @@ pub fn shortcut(a: &Accel) -> Shortcut {
 }
 
 fn code(key: Key) -> Code {
-    use Code::*;
+    use Code::{
+        Digit0, Digit1, Digit2, Digit3, Digit4, Digit5, Digit6, Digit7, Digit8, Digit9, KeyA, KeyB,
+        KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN, KeyO, KeyP, KeyQ,
+        KeyR, KeyS, KeyT, KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ, F1, F10, F11, F12, F13, F14, F15,
+        F16, F17, F18, F19, F2, F20, F21, F22, F23, F24, F3, F4, F5, F6, F7, F8, F9,
+    };
     const LETTERS: [Code; 26] = [
         KeyA, KeyB, KeyC, KeyD, KeyE, KeyF, KeyG, KeyH, KeyI, KeyJ, KeyK, KeyL, KeyM, KeyN, KeyO,
         KeyP, KeyQ, KeyR, KeyS, KeyT, KeyU, KeyV, KeyW, KeyX, KeyY, KeyZ,
@@ -81,11 +88,11 @@ impl<R: Runtime> HotkeyBackend for PluginBackend<'_, R> {
 pub fn requested(raw: Option<&str>) -> Result<Option<Accel>, &'static str> {
     match raw.map(str::trim) {
         None | Some("") => Ok(None),
-        Some(text) => parse_accel(text).map(Some).map_err(|e| e.code()),
+        Some(text) => parse_accel(text).map(Some).map_err(accel::AccelError::code),
     }
 }
 
-/// hotkey_set — задать (`accel`) или снять (`null`) сочетание. Ответ —
+/// `hotkey_set` — задать (`accel`) или снять (`null`) сочетание. Ответ —
 /// нормальная запись сочетания (UI её сохраняет) или код ошибки:
 /// `invalid_accel`, `no_modifier`, `reserved`, `conflict`.
 #[tauri::command]

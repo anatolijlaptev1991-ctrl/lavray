@@ -20,7 +20,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 /// Предел ожидания ответа ядра: хэш установщика считается секунды.
-pub const VERIFY_TIMEOUT: Duration = Duration::from_secs(120);
+pub const VERIFY_TIMEOUT: Duration = Duration::from_mins(2);
 
 /// Итог запущенного процесса.
 pub struct RunOutput {
@@ -35,6 +35,7 @@ pub trait CoreRunner {
 
 /// Каталоги установки, где может лежать встроенное ядро, относительно exe
 /// приложения. Только рядом с ним: ни staging, ни каталог данных сюда не входят.
+#[must_use]
 pub fn bundled_core_candidates(app_exe: &Path) -> Vec<PathBuf> {
     let name = if cfg!(windows) {
         "lavray-core.exe"
@@ -73,6 +74,7 @@ pub struct CoreVerifier {
 }
 
 impl CoreVerifier {
+    #[must_use]
     pub fn new(core: PathBuf, data_dir: PathBuf, runner: Box<dyn CoreRunner>) -> Self {
         Self {
             core,
@@ -102,6 +104,7 @@ impl SignatureVerifier for MissingCore {
 }
 
 /// Аргументы `verify-artifact`; `--allow-older` только для отката.
+#[must_use]
 pub fn verify_args(
     installer: &Path,
     signature: &Path,

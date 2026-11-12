@@ -8,7 +8,7 @@
 //! игнорирование SIGTERM (эскалация SIGKILL — Unix).
 //!
 //! Тайминги лестницы §5 укорочены инъекцией `DriverTimeouts`; бюджет
-//! `wait_ready` передаётся напрямую (T_SPAWN в supervisor'е — 10 с, здесь
+//! `wait_ready` передаётся напрямую (`T_SPAWN` в supervisor'е — 10 с, здесь
 //! достаточно 5 с). На Windows graceful-сигнала нет — лестница шага 3 это
 //! TerminateJobObject/TerminateProcess (см. driver.rs).
 
@@ -21,7 +21,7 @@ use lavray_shell::coreproc::{
     SystemClock,
 };
 
-/// Бюджет wait_ready в тестах (фейк печатает ready за миллисекунды).
+/// Бюджет `wait_ready` в тестах (фейк печатает ready за миллисекунды).
 const WAIT_READY: Duration = Duration::from_secs(5);
 /// Бюджет kill-лестницы в тестах.
 const KILL_BUDGET: Duration = Duration::from_secs(2);
@@ -36,9 +36,7 @@ fn interpreter() -> PathBuf {
 
 #[cfg(windows)]
 fn interpreter() -> PathBuf {
-    std::env::var_os("ComSpec")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from("cmd.exe"))
+    std::env::var_os("ComSpec").map_or_else(|| PathBuf::from("cmd.exe"), PathBuf::from)
 }
 
 /// Уникальный каталог данных теста (cwd фейка, §3.3).
@@ -166,7 +164,7 @@ fn supervisor_drives_real_process_full_cycle() {
     cleanup(&config);
 }
 
-/// §3.4 + §5 напрямую через драйвер: spawn → wait_ready (endpoint) → kill
+/// §3.4 + §5 напрямую через драйвер: spawn → `wait_ready` (endpoint) → kill
 /// → процесс мёртв, exit-статус зафиксирован, kill идемпотентен.
 #[test]
 fn driver_ready_then_kill_leaves_no_process() {
@@ -267,8 +265,8 @@ fn crashed_core_fails_wait_ready_with_exit_reason() {
     cleanup(&config);
 }
 
-/// §2.2 таймаут t_spawn: ядро живо, но ready-строки нет → ReadyTimeout, и
-/// драйвер НЕ оставляет живой процесс (инвариант SpawnErr).
+/// §2.2 таймаут `t_spawn`: ядро живо, но ready-строки нет → `ReadyTimeout`, и
+/// драйвер НЕ оставляет живой процесс (инвариант `SpawnErr`).
 #[test]
 fn silent_core_times_out_and_gets_cleaned_up() {
     let mut driver = test_driver();

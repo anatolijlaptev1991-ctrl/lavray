@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Сбои RAS не срывают включение (T-82): частичное применение с
-//! предупреждениями. Реестр, WinINET и RAS — подставные.
+//! предупреждениями. Реестр, `WinINET` и RAS — подставные.
 
 use super::fakes::{fresh_dir, state, vpn_env, HOME, OFFICE};
 use super::values::RegValue;

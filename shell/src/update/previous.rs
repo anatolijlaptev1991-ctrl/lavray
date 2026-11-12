@@ -97,11 +97,13 @@ fn remove_dir(dir: &Path) {
 }
 
 impl PreviousStore {
+    #[must_use]
     pub fn new(layout: Layout) -> Self {
         Self { layout }
     }
 
     /// Прошлый установщик, если он есть и описание целое.
+    #[must_use]
     pub fn available(&self) -> Option<PreviousInfo> {
         read_info(&self.layout.previous_dir(), INFO_FILE)
     }
@@ -166,6 +168,7 @@ impl RollbackArchive for PreviousStore {
 }
 
 /// Путь прошлого установщика по его описанию.
+#[must_use]
 pub fn installer_path(layout: &Layout, info: &PreviousInfo) -> PathBuf {
     layout.previous_dir().join(&info.file)
 }

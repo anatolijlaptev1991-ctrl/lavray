@@ -15,6 +15,7 @@ pub enum CloseAction {
 }
 
 /// Решение по крестику.
+#[must_use]
 pub fn on_close(prefs: &ShellPrefs) -> CloseAction {
     if prefs.close_to_tray {
         CloseAction::Hide
@@ -28,6 +29,7 @@ pub fn on_close(prefs: &ShellPrefs) -> CloseAction {
 /// После перезапуска от администратора (`elevated_relaunch`) «Запускать
 /// свёрнутым» не действует: пользователь только что нажал кнопку и ждёт окно.
 /// `--tray` при этом передаётся, только если окно было скрыто, — его слушаем.
+#[must_use]
 pub fn start_hidden(tray_flag: bool, elevated_relaunch: bool, prefs: &ShellPrefs) -> bool {
     if elevated_relaunch {
         return tray_flag;

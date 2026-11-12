@@ -58,7 +58,7 @@ pub struct DriverTimeouts {
     pub sigterm_wait: Duration,
     /// Шаг 3 §5: grace после SIGKILL/TerminateProcess(force).
     pub kill_grace: Duration,
-    /// Интервал опроса состояния процесса (try_wait).
+    /// Интервал опроса состояния процесса (`try_wait`).
     pub poll_interval: Duration,
 }
 
@@ -141,7 +141,7 @@ struct RunningProcess {
 /// Продакшн-драйвер [`CoreProcess`]: реальный spawn/ready/kill.
 ///
 /// # Ограничение PDEATHSIG (D3, ревью)
-/// PR_SET_PDEATHSIG срабатывает на завершение ПОТОКА, вызвавшего spawn
+/// `PR_SET_PDEATHSIG` срабатывает на завершение ПОТОКА, вызвавшего spawn
 /// (man prctl(2)), а не всего процесса оболочки. Вызывать `spawn` можно
 /// только из долгоживущего потока (главный/main-рантайм); transient-поток
 /// (tokio-воркер, threadpool) приведёт к спорадическому SIGKILL ядра у
@@ -174,11 +174,13 @@ impl Default for RealCoreProcess {
 
 impl RealCoreProcess {
     /// Драйвер с таймингами §2.2/§5 и антифлудом по умолчанию.
+    #[must_use]
     pub fn new() -> Self {
         Self::with_timeouts(DriverTimeouts::default())
     }
 
     /// Драйвер с переопределёнными таймингами лестницы §5 (тесты).
+    #[must_use]
     pub fn with_timeouts(timeouts: DriverTimeouts) -> Self {
         Self {
             timeouts,
@@ -191,18 +193,20 @@ impl RealCoreProcess {
     }
 
     /// Подключить общий флаг отмены (Stop из `SupervisorHandle`).
+    #[must_use]
     pub fn with_cancel(mut self, cancel: Arc<AtomicBool>) -> Self {
         self.cancel = cancel;
         self
     }
 
     /// Текущие тайминги лестницы §5.
+    #[must_use]
     pub fn timeouts(&self) -> DriverTimeouts {
         self.timeouts
     }
 
     /// Жив ли процесс (неблокирующий опрос; фиксирует exit при обнаружении).
-    /// Статус «неизвестно» (ошибка try_wait) трактуется как «жив».
+    /// Статус «неизвестно» (ошибка `try_wait`) трактуется как «жив».
     pub fn is_running(&mut self) -> bool {
         let exited = self
             .running
@@ -219,11 +223,13 @@ impl RealCoreProcess {
     }
 
     /// Последний exit-статус ядра (после kill/краха), если наблюдался.
+    #[must_use]
     pub fn exit_status(&self) -> Option<ExitStatus> {
         self.last_exit
     }
 
     /// Последние `n` диагностических строк пайпа §4 (пост-мортем Crashed).
+    #[must_use]
     pub fn log_tail(&self, n: usize) -> Vec<LogLine> {
         match self.ring.lock() {
             Ok(ring) => ring.tail(n).cloned().collect(),
@@ -421,7 +427,7 @@ impl CoreProcess for RealCoreProcess {
     /// §3.4: дождаться `LAVRAY_CORE_READY <transport-url>` в пределах
     /// `budget` (supervisor передаёт [`super::T_SPAWN`]).
     ///
-    /// Инвариант: при `Err` живого процесса не остаётся (инвариант SpawnErr
+    /// Инвариант: при `Err` живого процесса не остаётся (инвариант `SpawnErr`
     /// §2.2 «процесс мёртв») — молчащее ядро застреливается лестницей §5.
     fn wait_ready(&mut self, budget: Duration) -> Result<CoreEndpoint, CoreProcessError> {
         let poll = self.timeouts.poll_interval;
@@ -594,6 +600,7 @@ fn platform_configure(cmd: &mut Command) -> Result<(), CoreProcessError> {
 /// групповая изоляция — Job Object, назначается после spawn (см.
 /// [`JobGuard::create_and_assign`]).
 #[cfg(windows)]
+#[allow(clippy::unnecessary_wraps)] // единый Result-интерфейс с unix-вариантом
 fn platform_configure(cmd: &mut Command) -> Result<(), CoreProcessError> {
     use std::os::windows::process::CommandExt;
     use windows_sys::Win32::System::Threading::CREATE_NO_WINDOW;
@@ -640,13 +647,13 @@ fn signal_process_group(child: &Child, sig: libc::c_int) -> Result<(), CoreProce
 
 #[cfg(windows)]
 impl RunningProcess {
-    /// Шаг 3 §5: TerminateJobObject — завершает ВСЁ дерево ядра (лидер +
+    /// Шаг 3 §5: `TerminateJobObject` — завершает ВСЁ дерево ядра (лидер +
     /// ext-дети, все в job), по хэндлу job — не по имени (LNB-09).
     fn terminate_tree(&mut self) -> Result<(), CoreProcessError> {
         self.job.terminate()
     }
 
-    /// Шаг 3 §5 (force): TerminateProcess по хэндлу лидера — фолбэк, если
+    /// Шаг 3 §5 (force): `TerminateProcess` по хэндлу лидера — фолбэк, если
     /// завершение job не сработало (ядро могло вырваться из job).
     fn kill_tree(&mut self) -> Result<(), CoreProcessError> {
         use std::os::windows::io::AsRawHandle;
@@ -686,7 +693,7 @@ struct JobGuard {
 
 #[cfg(windows)]
 impl JobGuard {
-    /// Создать job с KILL_ON_JOB_CLOSE и назначить в него `child`.
+    /// Создать job с `KILL_ON_JOB_CLOSE` и назначить в него `child`.
     fn create_and_assign(child: &Child) -> Result<Self, CoreProcessError> {
         use std::os::windows::io::AsRawHandle;
         use windows_sys::Win32::Foundation::HANDLE;
@@ -717,7 +724,7 @@ impl JobGuard {
             SetInformationJobObject(
                 job,
                 JobObjectExtendedLimitInformation,
-                &info as *const _ as *const core::ffi::c_void,
+                (&raw const info).cast::<core::ffi::c_void>(),
                 std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
             )
         };
@@ -784,7 +791,7 @@ mod tests {
     use super::*;
 
     /// base64url без padding: эталонные векторы RFC 4648 (§5, url-алфавит),
-    /// сверены с эталонной реализацией (python base64.urlsafe_b64encode).
+    /// сверены с эталонной реализацией (python `base64.urlsafe_b64encode`).
     #[test]
     fn base64url_known_vectors() {
         assert_eq!(base64url_nopad(b""), "");
@@ -904,7 +911,7 @@ mod tests {
         );
     }
 
-    /// Драйвер без процесса: kill идемпотентен, wait_ready — NotRunning.
+    /// Драйвер без процесса: kill идемпотентен, `wait_ready` — `NotRunning`.
     #[test]
     fn idle_driver_kill_idempotent_wait_ready_not_running() {
         let mut driver = RealCoreProcess::new();

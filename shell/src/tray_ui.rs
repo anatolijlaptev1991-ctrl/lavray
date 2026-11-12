@@ -42,7 +42,12 @@ pub fn show_main_window(app: &AppHandle) {
 
 fn core_alive(app: &AppHandle) -> bool {
     app.try_state::<Arc<Mutex<RuntimeState>>>()
-        .is_some_and(|state| state.lock().unwrap_or_else(|e| e.into_inner()).core_alive)
+        .is_some_and(|state| {
+            state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .core_alive
+        })
 }
 
 /// Светлый значок — для тёмной темы окна (и когда тема неизвестна).
@@ -130,7 +135,9 @@ pub fn hide(app: &AppHandle) {
             let _ = window.hide();
         }
         if let Some(ui) = target.try_state::<TrayUi>() {
-            let handles = ui.0.lock().unwrap_or_else(|e| e.into_inner());
+            let handles =
+                ui.0.lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
             let _ = handles.tray.set_visible(false);
         }
     });
@@ -141,7 +148,9 @@ fn render(app: &AppHandle, update: Option<TrayUpdate>, alive: bool) {
     let Some(ui) = app.try_state::<TrayUi>() else {
         return;
     };
-    let mut handles = ui.0.lock().unwrap_or_else(|e| e.into_inner());
+    let mut handles =
+        ui.0.lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
     if let Some(update) = update {
         handles.last = update;
     }

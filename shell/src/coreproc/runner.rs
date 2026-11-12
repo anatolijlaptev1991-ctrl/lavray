@@ -5,7 +5,7 @@
 //! Раньше `main.rs` держал свой цикл «спим 500 мс, ядро умерло, перезапуск»:
 //! пауза сбрасывалась в 1 с после каждого успешного запуска, и ядро, умирающее
 //! сразу после READY, перезапускалось каждые ~1,5 с вечно; политика
-//! [`CoreSupervisor`] (backoff 1/2/4/8/15 с ±20 %, RateLimited после 3 падений
+//! [`CoreSupervisor`] (backoff 1/2/4/8/15 с ±20 %, `RateLimited` после 3 падений
 //! за 60 с, сброс эскалации после стабильной работы) бинарнику была не нужна.
 //! Теперь цикл ведёт именно [`CoreSupervisor`], а `main.rs` лишь подставляет
 //! среду ([`Observer`], конфигурацию запуска). Цикл обобщён по процессу, часам,
@@ -30,14 +30,14 @@ use super::{
 pub const POLL_INTERVAL: Duration = Duration::from_millis(200);
 /// Сколько строк кольца логов ядра прикладывается к сообщению о сбое.
 pub const FAILURE_LOG_LINES: usize = 40;
-const AWAIT_MANUAL_WAIT: Duration = Duration::from_secs(3600);
+const AWAIT_MANUAL_WAIT: Duration = Duration::from_hours(1);
 
 /// Команда надзирателю из другого потока.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Command {
     /// Остановить ядро (лестница §5) и завершить надзор.
     Stop,
-    /// Ручной «Перезапустить» (из RateLimited и после ошибки запуска).
+    /// Ручной «Перезапустить» (из `RateLimited` и после ошибки запуска).
     ManualRestart,
 }
 
@@ -256,7 +256,7 @@ where
         }
     }
 
-    /// Ретрай запуска: пауза backoff, затем новый spawn либо RateLimited.
+    /// Ретрай запуска: пауза backoff, затем новый spawn либо `RateLimited`.
     fn retry_spawn(&mut self) -> Phase {
         if self.sup.state() != CoreState::SpawnErr {
             return Phase::AwaitManual;
@@ -327,7 +327,7 @@ where
         self.started(config, result)
     }
 
-    /// RateLimited или ядро не собрать: ждём ручного «Перезапустить».
+    /// `RateLimited` или ядро не собрать: ждём ручного «Перезапустить».
     fn await_manual(&mut self) -> Phase {
         loop {
             match self.waiter.wait(AWAIT_MANUAL_WAIT) {
@@ -399,12 +399,13 @@ impl SupervisorHandle {
         let _ = self.tx.send(Command::Stop);
     }
 
-    /// Ручной «Перезапустить» (после RateLimited или ошибки запуска).
+    /// Ручной «Перезапустить» (после `RateLimited` или ошибки запуска).
     pub fn manual_restart(&self) {
         let _ = self.tx.send(Command::ManualRestart);
     }
 
     /// Надзор закончен: ядро остановлено (или его не было).
+    #[must_use]
     pub fn is_stopped(&self) -> bool {
         self.stopped.load(Ordering::SeqCst)
     }

@@ -83,7 +83,10 @@ tauri-build = { version = "2", features = [] }
 sha2 = "0.10"
 serde_json = "1"
 
-# Релизная сборка: тонкий LTO и один codegen-unit. Без strip и panic=abort.
+# Релизная сборка: тонкий LTO, один codegen-unit, strip символов, panic=abort
+# (catch_unwind не используется — проверено). Меньше бинарь, быстрее старт.
 [profile.release]
 lto = "thin"
 codegen-units = 1
+strip = true
+panic = "abort"

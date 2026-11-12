@@ -21,7 +21,7 @@ pub const TOOLTIP_MAX_CHARS: usize = 120;
 /// Статический пункт меню трея.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum TrayMenuItem {
-    /// Состояние («LAVRay — Подключено»): только показывает.
+    /// Состояние («`LAVRay` — Подключено»): только показывает.
     Status,
     /// Текущий сервер: только показывает.
     Server,
@@ -37,6 +37,7 @@ pub enum TrayMenuItem {
 
 impl TrayMenuItem {
     /// Идентификатор пункта в Tauri-меню (приходит в `on_menu_event`).
+    #[must_use]
     pub const fn id(self) -> &'static str {
         match self {
             Self::Status => "status",
@@ -49,6 +50,7 @@ impl TrayMenuItem {
     }
 
     /// Обратное преобразование для `on_menu_event`.
+    #[must_use]
     pub fn from_id(id: &str) -> Option<Self> {
         [
             Self::Status,
@@ -100,16 +102,19 @@ pub struct TrayMenuSpec {
 
 impl TrayMenuSpec {
     /// Собрать меню через [`TrayMenuBuilder`].
+    #[must_use]
     pub fn builder() -> TrayMenuBuilder {
         TrayMenuBuilder::new()
     }
 
     /// Элементы меню по порядку.
+    #[must_use]
     pub fn entries(&self) -> &[TrayEntry] {
         &self.items
     }
 
     /// Содержит ли пункт.
+    #[must_use]
     pub fn contains(&self, item: TrayMenuItem) -> bool {
         self.items.contains(&TrayEntry::Item(item))
     }
@@ -123,6 +128,7 @@ pub struct TrayMenuBuilder {
 
 impl TrayMenuBuilder {
     /// Пустой билдер.
+    #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
@@ -141,6 +147,7 @@ impl TrayMenuBuilder {
 
     /// Стандартное меню: Состояние | Сервер | — | Подключить | Отключить | —
     /// | Открыть | — | Выход.
+    #[must_use]
     pub fn standard() -> TrayMenuSpec {
         let mut builder = Self::new();
         builder.item(TrayMenuItem::Status);
@@ -205,6 +212,7 @@ pub struct TrayAvailability {
 ///
 /// Connect разрешён в Idle/Ready/RateLimited/Stopped (в Ready ядро живо, но
 /// инстанс не активен); Disconnect — только в Connected.
+#[must_use]
 pub fn availability_for(state: CoreState) -> TrayAvailability {
     let (connect, disconnect) = match state {
         CoreState::Idle | CoreState::Ready | CoreState::RateLimited | CoreState::Stopped => {
@@ -239,6 +247,7 @@ pub enum TrayIconKind {
 }
 
 /// Знак иконки по состоянию ядра.
+#[must_use]
 pub fn icon_kind_for(state: CoreState) -> TrayIconKind {
     match state {
         CoreState::Idle | CoreState::Stopped => TrayIconKind::Idle,
@@ -268,7 +277,7 @@ pub enum TrayConn {
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TrayLabels {
-    /// «LAVRay — Подключено» (пункт состояния и начало подсказки).
+    /// «`LAVRay` — Подключено» (пункт состояния и начало подсказки).
     pub status: String,
     /// «Сервер: Frankfurt 01».
     pub server: String,
@@ -319,12 +328,14 @@ pub struct TrayView {
 
 impl TrayView {
     /// Пункт по идентификатору.
+    #[must_use]
     pub fn item(&self, which: TrayMenuItem) -> Option<&TrayItemView> {
         self.items.iter().find(|v| v.item == which)
     }
 }
 
 /// Обрезать до `max` символов с многоточием (подсказка Windows — 127 символов).
+#[must_use]
 pub fn truncate_chars(text: &str, max: usize) -> String {
     if text.chars().count() <= max {
         return text.to_owned();
@@ -337,6 +348,7 @@ pub fn truncate_chars(text: &str, max: usize) -> String {
 /// Вид трея по сообщению UI и живости процесса ядра. Мёртвый процесс важнее
 /// слов UI: значок «ошибка», подключать нельзя. После неудачи (`Error`)
 /// «Подключить» остаётся доступным — это повтор.
+#[must_use]
 pub fn view(update: &TrayUpdate, core_alive: bool) -> TrayView {
     let conn = update.state;
     let (state, avail_state) = match (core_alive, conn) {
@@ -386,6 +398,7 @@ pub fn view(update: &TrayUpdate, core_alive: bool) -> TrayView {
 /// PNG 32×32 RGBA из `design/concepts/logo/tray/*.svg`; `dark` — светлый
 /// значок для тёмной панели задач. «Ядро не работает» и «не подключено»
 /// рисуются одинаково (`off`).
+#[must_use]
 pub fn icon_png(kind: TrayIconKind, dark: bool) -> &'static [u8] {
     use TrayIconKind::{Busy, Connected, Error, Idle, Running};
     match (dark, kind) {

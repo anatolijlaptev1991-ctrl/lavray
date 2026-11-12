@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Тесты kill switch системного прокси: подставной управляющий и подставной
-//! бэкенд ОС. Настоящий системный прокси, реестр и WinINET не затрагиваются.
+//! бэкенд ОС. Настоящий системный прокси, реестр и `WinINET` не затрагиваются.
 
 use super::*;
 use crate::sysproxy::{set_with, Backend, ProxySnapshot, SysProxy};
@@ -246,7 +246,11 @@ impl Backend for &MemBackend {
 fn temp_dir() -> std::path::PathBuf {
     let mut random = [0u8; 6];
     getrandom::fill(&mut random).unwrap();
-    let name: String = random.iter().map(|b| format!("{b:02x}")).collect();
+    let name: String = random.iter().fold(String::new(), |mut s, b| {
+        use std::fmt::Write;
+        let _ = write!(s, "{b:02x}");
+        s
+    });
     let dir = std::env::temp_dir().join(format!("lavray-killswitch-{name}"));
     std::fs::create_dir_all(&dir).unwrap();
     dir

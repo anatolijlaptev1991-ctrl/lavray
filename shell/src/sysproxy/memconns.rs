@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Подставные подключения WinINET и перечисление RAS для тестов.
+//! Подставные подключения `WinINET` и перечисление RAS для тестов.
 
 use super::conn::{ConnChange, ConnSettings, Connections};
 use super::ras::RasEntries;
@@ -51,10 +51,10 @@ impl MemConns {
 }
 
 /// Новое значение строки: `Some("")` очищает, `None` оставляет прежнее.
-fn merged_text(new: &Option<String>, old: &Option<String>) -> Option<String> {
+fn merged_text(new: Option<&str>, old: Option<&str>) -> Option<String> {
     match new {
-        Some(new) => Some(new.clone()).filter(|t| !t.is_empty()),
-        None => old.clone(),
+        Some(new) => Some(new.to_owned()).filter(|t| !t.is_empty()),
+        None => old.map(str::to_owned),
     }
 }
 
@@ -82,9 +82,9 @@ impl Connections for MemConns {
         };
         *target = ConnSettings {
             flags: change.flags.unwrap_or(target.flags),
-            server: merged_text(&change.server, &target.server),
-            bypass: merged_text(&change.bypass, &target.bypass),
-            pac_url: merged_text(&change.pac_url, &target.pac_url),
+            server: merged_text(change.server.as_deref(), target.server.as_deref()),
+            bypass: merged_text(change.bypass.as_deref(), target.bypass.as_deref()),
+            pac_url: merged_text(change.pac_url.as_deref(), target.pac_url.as_deref()),
         };
         Ok(())
     }

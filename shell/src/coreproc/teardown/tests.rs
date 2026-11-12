@@ -16,7 +16,10 @@ fn detector_list_covers_spec_section6_table() {
     );
 
     // Уникальность и канонические имена.
-    let names: HashSet<&str> = StaleResource::ALL.iter().map(|r| r.as_str()).collect();
+    let names: HashSet<&str> = StaleResource::ALL
+        .iter()
+        .map(super::StaleResource::as_str)
+        .collect();
     assert_eq!(names.len(), 5, "канонические имена уникальны");
 
     let expected = [

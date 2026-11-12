@@ -12,7 +12,11 @@ const TOKEN: &str = "AgentTokenAgentTokenAgentTokenAgentToken01";
 fn temp_dir(tag: &str) -> PathBuf {
     let mut random = [0u8; 6];
     getrandom::fill(&mut random).unwrap();
-    let name: String = random.iter().map(|b| format!("{b:02x}")).collect();
+    let name: String = random.iter().fold(String::new(), |mut s, b| {
+        use std::fmt::Write;
+        let _ = write!(s, "{b:02x}");
+        s
+    });
     let dir = std::env::temp_dir().join(format!("lavray-agent-{tag}-{name}"));
     std::fs::create_dir_all(&dir).unwrap();
     dir

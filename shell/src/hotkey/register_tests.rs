@@ -16,7 +16,7 @@ struct FakeOs {
 impl FakeOs {
     fn taken(names: &[&str]) -> Self {
         Self {
-            taken_by_others: names.iter().map(|n| n.to_string()).collect(),
+            taken_by_others: names.iter().map(std::string::ToString::to_string).collect(),
             ..Self::default()
         }
     }

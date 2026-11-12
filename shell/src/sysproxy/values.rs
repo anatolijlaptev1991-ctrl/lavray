@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Значения Internet Settings (WinINET через реестр): снимок, применение и
+//! Значения Internet Settings (`WinINET` через реестр): снимок, применение и
 //! запись из снимка. Логика без обращения к ОС: сам реестр подставляется
 //! (`Registry`), поэтому проверяется на любой платформе.
 
@@ -48,7 +48,7 @@ impl RegValue {
     }
 
     /// Из снимка: `null` (значения нет), объект `{type, data}` или строка
-    /// старого формата (число для ProxyEnable, иначе REG_SZ).
+    /// старого формата (число для `ProxyEnable`, иначе `REG_SZ`).
     fn from_json(name: &str, value: &Value) -> Result<Option<Self>, String> {
         match value {
             Value::Null => Ok(None),
@@ -114,8 +114,8 @@ pub(super) trait Registry {
     fn remove(&self, name: &str) -> Result<(), String>;
 }
 
-/// Снимок текущих настроек. ProxyEnable и ProxyServer лежат в одной записи
-/// `proxy`: если ProxyServer сменила другая программа, её ProxyEnable мы
+/// Снимок текущих настроек. `ProxyEnable` и `ProxyServer` лежат в одной записи
+/// `proxy`: если `ProxyServer` сменила другая программа, её `ProxyEnable` мы
 /// тоже не трогаем.
 pub(super) fn capture_with(reg: &impl Registry) -> Result<ProxySnapshot, String> {
     let found = reg.read()?;
@@ -174,7 +174,7 @@ pub(super) fn pac_present(data: &Value) -> bool {
 }
 
 /// Записать настройки из снимка (новый формат или плоский старый).
-/// ProxyEnable идёт первым: если запись оборвётся посередине, прокси
+/// `ProxyEnable` идёт первым: если запись оборвётся посередине, прокси
 /// останется выключенным, а не включённым с чужим адресом.
 pub(super) fn restore_with(reg: &impl Registry, snap: &ProxySnapshot) -> Result<(), String> {
     for name in NAMES {

@@ -24,6 +24,7 @@ static FIRST_SPAWN: AtomicBool = AtomicBool::new(true);
 /// Дописать `--connect-last` к конфигурации запуска, если это первый запуск
 /// ядра процесса и оболочка не запущена с `--elevated-relaunch`. Вызывается из
 /// фабрики конфигурации надзирателя на каждый (пере)запуск.
+#[must_use]
 pub fn apply(config: CoreSpawnConfig) -> CoreSpawnConfig {
     apply_with(
         config,

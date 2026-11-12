@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Windows: прокси отдельного подключения через WinINET (T-82) —
+//! Windows: прокси отдельного подключения через `WinINET` (T-82) —
 //! `InternetQueryOptionW`/`InternetSetOptionW` с
 //! `INTERNET_OPTION_PER_CONNECTION_OPTION`. `pszConnection` = NULL — подключение
 //! по локальной сети (LAN), иначе имя записи RAS. Параметры: флаги, прокси,
@@ -19,7 +19,7 @@ use windows_sys::Win32::Networking::WinInet::{
     INTERNET_PER_CONN_PROXY_SERVER,
 };
 
-/// Настоящий WinINET.
+/// Настоящий `WinINET`.
 pub(super) struct WinInet;
 
 /// Строка UTF-16 с завершающим нулём.
@@ -63,11 +63,11 @@ fn last_error(api: &str) -> String {
     format!("{api}: код {}", unsafe { GetLastError() })
 }
 
-/// Строка, выданная WinINET (`GlobalAlloc`): копия в `String`, исходная
+/// Строка, выданная `WinINET` (`GlobalAlloc`): копия в `String`, исходная
 /// память освобождается. Пустая и NULL — `None`.
 ///
 /// # Safety
-/// `ptr` — NULL либо указатель на строку UTF-16 с нулём, выданную WinINET и
+/// `ptr` — NULL либо указатель на строку UTF-16 с нулём, выданную `WinINET` и
 /// ещё не освобождённую.
 unsafe fn take_text(ptr: *mut u16) -> Option<String> {
     if ptr.is_null() {
@@ -101,7 +101,7 @@ fn query_with(conn: Option<&str>, flags_option: u32) -> Result<ConnSettings, Str
     .map(|kind| option_dword(kind, 0));
     let mut list = list_for(name.as_deref(), &mut options);
     let mut size = list.dwSize;
-    let list_ptr: *mut INTERNET_PER_CONN_OPTION_LISTW = &mut list;
+    let list_ptr: *mut INTERNET_PER_CONN_OPTION_LISTW = &raw mut list;
     // SAFETY: `list` и `options` живут до конца вызова, `size` — размер
     // `list`; hInternet = NULL — настройки по умолчанию, как требует опция.
     let ok = unsafe {
@@ -109,7 +109,7 @@ fn query_with(conn: Option<&str>, flags_option: u32) -> Result<ConnSettings, Str
             null(),
             INTERNET_OPTION_PER_CONNECTION_OPTION,
             list_ptr.cast(),
-            &mut size,
+            &raw mut size,
         )
     };
     if ok == 0 {
@@ -152,7 +152,7 @@ fn store(conn: Option<&str>, change: &ConnChange) -> Result<(), String> {
         return Ok(());
     }
     let list = list_for(name.as_deref(), &mut options);
-    let list_ptr: *const INTERNET_PER_CONN_OPTION_LISTW = &list;
+    let list_ptr: *const INTERNET_PER_CONN_OPTION_LISTW = &raw const list;
     // SAFETY: `list`, `options` и строки (`server`/`bypass`/`pac`, `name`)
     // живут до конца вызова; длина буфера — размер `list`.
     let ok = unsafe {
@@ -178,7 +178,7 @@ impl Connections for WinInet {
         store(conn, change)
     }
 
-    /// Уведомить WinINET об изменении (без этого Chrome видит старый прокси).
+    /// Уведомить `WinINET` об изменении (без этого Chrome видит старый прокси).
     fn refresh(&self) {
         // SAFETY: вызовы без параметров (hInternet = NULL), документированы
         // WinINET: система узнаёт о смене настроек прокси.

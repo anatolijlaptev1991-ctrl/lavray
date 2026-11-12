@@ -10,7 +10,11 @@ use std::sync::Arc;
 fn temp_dir(tag: &str) -> PathBuf {
     let mut random = [0u8; 6];
     getrandom::fill(&mut random).unwrap();
-    let name: String = random.iter().map(|b| format!("{b:02x}")).collect();
+    let name: String = random.iter().fold(String::new(), |mut s, b| {
+        use std::fmt::Write;
+        let _ = write!(s, "{b:02x}");
+        s
+    });
     let dir = std::env::temp_dir().join(format!("lavray-uistate-{tag}-{name}"));
     std::fs::create_dir_all(&dir).unwrap();
     dir
@@ -25,6 +29,7 @@ fn files(dir: &Path) -> Vec<String> {
     names
 }
 
+#[allow(clippy::unnecessary_wraps)] // test helper: Option-интерфейс для uniformity
 fn text(v: &str) -> Option<String> {
     Some(v.to_string())
 }
@@ -236,7 +241,7 @@ fn the_key_list_matches_the_ui_sources() {
     }
     // кэш, который намеренно остаётся только в профиле окна
     let excluded = ["lavray.subErrors"];
-
+    #[allow(clippy::items_after_statements)] // вложенный fn после let — намеренно
     fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();

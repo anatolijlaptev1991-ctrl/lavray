@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Выбор папки через системный диалог (T-78): перенос из NekoBox просит
+//! Выбор папки через системный диалог (T-78): перенос из `NekoBox` просит
 //! пользователя указать каталог `config`. Страница получает только строку с
 //! выбранным путём (или `null` при отмене); читает каталог ядро, а не страница.
 
@@ -31,7 +31,7 @@ pub fn pick_with<D: FolderDialog>(dialog: &D) -> Option<String> {
     dialog.pick().map(|p| p.to_string_lossy().into_owned())
 }
 
-/// file_pick_folder — «Выбрать папку…». Ответ: путь или `null` при отмене.
+/// `file_pick_folder` — «Выбрать папку…». Ответ: путь или `null` при отмене.
 /// Диалог блокирующий, поэтому живёт в пуле блокирующих задач, а не в потоке IPC.
 #[tauri::command]
 pub async fn file_pick_folder(app: AppHandle) -> Result<Option<String>, String> {

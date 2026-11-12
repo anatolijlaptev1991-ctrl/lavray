@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Снимок главного монитора через GDI (T-77): BitBlt экранного контекста в
-//! совместимый битмап, GetDIBits в 32-битный top-down буфер, BGRA → RGBA.
+//! Снимок главного монитора через GDI (T-77): `BitBlt` экранного контекста в
+//! совместимый битмап, `GetDIBits` в 32-битный top-down буфер, BGRA → RGBA.
 //! Все созданные объекты GDI освобождаются на любом пути выхода.
 
 use super::Frame;
@@ -82,7 +82,7 @@ pub fn capture_primary() -> Result<Frame, String> {
             0,
             h as u32,
             rgba.as_mut_ptr().cast(),
-            &mut info,
+            &raw mut info,
             DIB_RGB_COLORS,
         );
         if lines != h {

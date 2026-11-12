@@ -52,7 +52,7 @@ pub fn wait_exit_until<C: ChildHandle>(
 /// Ликвидация уже созданного процесса на пути ошибки spawn: kill + reap,
 /// чтобы неудавшийся spawn не оставлял сироту (§1 — сироты невозможны).
 /// `kill()` здесь — разовый сигнал лидеру (Unix SIGKILL / Windows
-/// TerminateProcess); при уже завершившемся процессе ошибка игнорируется.
+/// `TerminateProcess`); при уже завершившемся процессе ошибка игнорируется.
 pub fn abort_child(mut child: Child) {
     let _ = child.kill();
     let _ = child.wait_exit();

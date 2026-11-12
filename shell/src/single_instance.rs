@@ -16,6 +16,7 @@
 pub const MUTEX_SUFFIX: &str = "-sim";
 
 /// Имя мьютекса плагина для идентификатора приложения.
+#[must_use]
 pub fn mutex_name(identifier: &str) -> String {
     format!("{identifier}{MUTEX_SUFFIX}")
 }

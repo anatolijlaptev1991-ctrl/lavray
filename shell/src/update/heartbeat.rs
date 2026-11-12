@@ -49,6 +49,7 @@ fn bare(version: &str) -> &str {
 }
 
 /// [`HEARTBEAT_GRACE`] в миллисекундах: единый источник — `updater.rs`.
+#[must_use]
 pub fn grace_ms() -> u64 {
     u64::try_from(HEARTBEAT_GRACE.as_millis()).unwrap_or(u64::MAX)
 }
@@ -56,6 +57,7 @@ pub fn grace_ms() -> u64 {
 /// Оценить отметку. Годная — версия совпадает с ожидаемой и сделана не раньше
 /// запуска (`started_at`): отметка прошлого запуска той же версии не в счёт.
 /// Отметка другой версии считается отсутствующей.
+#[must_use]
 pub fn evaluate(
     health: Option<&Health>,
     expected_version: &str,
@@ -82,6 +84,7 @@ pub struct HealthStore {
 }
 
 impl HealthStore {
+    #[must_use]
     pub fn new(layout: &Layout) -> Self {
         Self {
             path: layout.health_file(),

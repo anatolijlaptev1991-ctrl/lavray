@@ -15,7 +15,7 @@ use std::time::Duration;
 /// Как часто watchdog читает `health.json`.
 pub const POLL_INTERVAL: Duration = Duration::from_secs(1);
 /// Сколько ждать завершения установщика (NSIS ставит десятки секунд).
-pub const INSTALLER_WAIT: Duration = Duration::from_secs(600);
+pub const INSTALLER_WAIT: Duration = Duration::from_mins(10);
 
 /// Решение на момент `now`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,6 +30,7 @@ pub enum Decision {
 
 /// Решить по отметке: `started_ms` — когда запущена новая версия, `now_ms` —
 /// сейчас (оба в миллисекундах Unix). Ровно 60 с — уже откат, 59,9 с — ждём.
+#[must_use]
 pub fn decide(now_ms: u64, started_ms: u64, health: Option<&Health>, expected: &str) -> Decision {
     match evaluate(health, expected, started_ms, now_ms) {
         HealthVerdict::Ok => Decision::Healthy,
@@ -99,6 +100,7 @@ pub enum Outcome {
 
 impl Outcome {
     /// Короткое имя для `last-update.json`.
+    #[must_use]
     pub fn name(&self) -> &'static str {
         match self {
             Self::Healthy => "healthy",
@@ -115,6 +117,7 @@ impl Outcome {
 
 /// Довести обновление до конца: дождаться установщика, запустить приложение,
 /// следить за heartbeat, при необходимости откатить.
+#[must_use]
 pub fn run(args: &WatchdogArgs, deps: &WatchdogDeps<'_>) -> Outcome {
     match deps.waiter.wait_exit(args.installer_pid, INSTALLER_WAIT) {
         WaitResult::TimedOut => return Outcome::InstallerTimeout,

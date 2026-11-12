@@ -85,6 +85,7 @@ impl Default for MockCoreProcess {
 impl MockCoreProcess {
     /// Мок, у которого всё успешно; КАЖДЫЙ `wait_ready` возвращает endpoint
     /// с данным `transport_url`.
+    #[must_use]
     pub fn always_ok(transport_url: &str) -> Self {
         Self {
             default_ready_endpoint: CoreEndpoint {

@@ -28,6 +28,7 @@ pub enum NotifyKind {
 
 impl NotifyKind {
     /// Вид из строки UI; неизвестный — `None`.
+    #[must_use]
     pub fn parse(raw: &str) -> Option<Self> {
         match raw {
             "connected" => Some(Self::Connected),
@@ -68,7 +69,10 @@ impl NotifyGate {
     }
 
     fn admit(&self, kind: NotifyKind, now: Instant) -> bool {
-        let mut last = self.last.lock().unwrap_or_else(|e| e.into_inner());
+        let mut last = self
+            .last
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let recent = last
             .get(&kind)
             .is_some_and(|at| now.saturating_duration_since(*at) < MIN_INTERVAL);
@@ -80,6 +84,7 @@ impl NotifyGate {
 }
 
 /// Обрезать до `max` символов (не байт: кириллица и иероглифы — несколько байт).
+#[must_use]
 pub fn clamp(text: &str, max: usize) -> String {
     let text = text.trim();
     if text.chars().count() <= max {

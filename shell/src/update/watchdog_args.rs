@@ -39,6 +39,7 @@ where
 }
 
 /// Версия годится для передачи watchdog: непустая, короткая, без пробелов.
+#[must_use]
 pub fn version_ok(version: &str) -> bool {
     !version.is_empty()
         && version.len() <= MAX_VERSION
@@ -47,6 +48,7 @@ pub fn version_ok(version: &str) -> bool {
 
 impl WatchdogArgs {
     /// Аргументы командной строки (без имени программы).
+    #[must_use]
     pub fn to_cli(&self) -> Vec<String> {
         vec![
             ARG_UPDATE_WATCHDOG.to_string(),

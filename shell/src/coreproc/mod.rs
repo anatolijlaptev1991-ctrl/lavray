@@ -33,7 +33,7 @@ use serde::{Deserialize, Serialize};
 pub const T_READY_BUDGET: Duration = Duration::from_secs(2);
 /// Порог предупреждения готовности (TEST-PLAN §2: старт до готовности ≤ 1500 мс).
 pub const T_READY_WARNING: Duration = Duration::from_secs(5);
-/// Таймаут фазы Spawning: нет ready за 10 с → SpawnErr (§2.2).
+/// Таймаут фазы Spawning: нет ready за 10 с → `SpawnErr` (§2.2).
 pub const T_SPAWN: Duration = Duration::from_secs(10);
 /// Таймаут `CoreService.Disconnect` (LNB-06).
 pub const T_DISCONNECT_RPC: Duration = Duration::from_secs(10);
@@ -49,22 +49,22 @@ pub const T_KILL_GRACE: Duration = Duration::from_secs(3);
 pub const T_TEARDOWN_VERIFY: Duration = Duration::from_secs(3);
 /// Общий таймаут graceful-стопа (§2.2, Stopping).
 pub const GRACEFUL_SHUTDOWN_TOTAL: Duration = Duration::from_secs(15);
-/// Ретраев спавна ПОСЛЕ первой неудачной попытки до RateLimited
+/// Ретраев спавна ПОСЛЕ первой неудачной попытки до `RateLimited`
 /// (§2.1–2.2: «spawn failed (3 ретрая, потом) rate-limited»,
 /// «ретрай ×3» — суммарно [`SPAWN_ATTEMPTS_TOTAL`] попыток запуска).
 pub const SPAWN_RETRIES: u32 = 3;
-/// Суммарное число попыток запуска до RateLimited: первая + 3 ретрая (§2.2).
+/// Суммарное число попыток запуска до `RateLimited`: первая + 3 ретрая (§2.2).
 pub const SPAWN_ATTEMPTS_TOTAL: u32 = SPAWN_RETRIES + 1;
 /// Rate-limit: ≥ 3 падения за окно 60 с (§2.2, Crashed).
 pub const CRASH_RATE_LIMIT_COUNT: usize = 3;
 /// Окно rate-limit рестартов (§2.2, Crashed).
-pub const CRASH_RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
+pub const CRASH_RATE_LIMIT_WINDOW: Duration = Duration::from_mins(1);
 /// Стабильный аптайм, после которого эскалация backoff сбрасывается:
 /// ядро, проживший это время без падений, считается здоровым, и следующий
 /// крах начинается снова с шага 1 с (значение спеком не зафиксировано —
 /// выбрано 300 с: на порядок больше окна rate-limit 60 с и всех шагов
 /// backoff).
-pub const BACKOFF_RESET_AFTER: Duration = Duration::from_secs(300);
+pub const BACKOFF_RESET_AFTER: Duration = Duration::from_mins(5);
 
 /// Состояния FSM ядра (§2.2, все 9 состояний спека).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
@@ -77,7 +77,7 @@ pub enum CoreState {
     Spawning,
     /// Процесс мёртв → прогон teardown-проверки §6.
     SpawnErr,
-    /// ConnectRPC жив, инстанс не активен.
+    /// `ConnectRPC` жив, инстанс не активен.
     Ready,
     /// Инстанс активен (SystemProxy/TUN).
     Connected,
@@ -93,6 +93,7 @@ pub enum CoreState {
 
 impl CoreState {
     /// Каноническое имя состояния (совпадает с serde-представлением).
+    #[must_use]
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Idle => "idle",
@@ -117,11 +118,11 @@ impl fmt::Display for CoreState {
 /// События, управляющие FSM (входы автомата; источники — рантайм-слои).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum CoreEvent {
-    /// spawn() из Idle (§3).
+    /// `spawn()` из Idle (§3).
     SpawnRequested,
     /// Ready-строка `LAVRAY_CORE_READY <url>` + `/healthz` 200 (§3.4).
     ReadyConfirmed,
-    /// Таймаут t_spawn=10 с или ранний exit процесса.
+    /// Таймаут `t_spawn=10` с или ранний exit процесса.
     SpawnFailed,
     /// Backoff-рестарт тем же профилем (FR-UI-232).
     RetryScheduled,
@@ -129,15 +130,15 @@ pub enum CoreEvent {
     RetryExhausted,
     /// Teardown-проверка §6 прошла (сеть чиста).
     TeardownVerified,
-    /// Connect() ok — событие ядра (FR-UI-261).
+    /// `Connect()` ok — событие ядра (FR-UI-261).
     CoreConnected,
-    /// Disconnect() ok.
+    /// `Disconnect()` ok.
     CoreDisconnected,
     /// Exit не по команде (крах).
     CoreExited,
-    /// stop() graceful (§5).
+    /// `stop()` graceful (§5).
     StopRequested,
-    /// Ручной «Перезапустить» из RateLimited.
+    /// Ручной «Перезапустить» из `RateLimited`.
     ManualRestart,
     /// Stopped → Idle (сброс к исходному).
     Reset,
@@ -164,6 +165,7 @@ pub fn transition(from: CoreState, event: CoreEvent) -> Result<CoreState, Transi
     use CoreEvent as E;
     use CoreState as S;
 
+    #[allow(clippy::match_same_arms)] // FSM: явная таблица переходов для аудируемости
     let next = match (from, event) {
         (S::Idle, E::SpawnRequested) => S::Spawning,
         (S::Spawning, E::ReadyConfirmed) => S::Ready,
@@ -240,6 +242,7 @@ impl SecretToken {
 
     /// Значение токена — ТОЛЬКО для записи в stdin ядра (§3.2); не для
     /// логирования/событий/argv.
+    #[must_use]
     pub fn expose(&self) -> &str {
         &self.0
     }
@@ -367,6 +370,7 @@ pub struct MockClock {
 
 impl MockClock {
     /// Часы, застывшие в `start`.
+    #[must_use]
     pub fn at(start: Instant) -> Self {
         Self {
             now: Rc::new(RefCell::new(start)),
@@ -485,7 +489,7 @@ impl<P: CoreProcess, C: Clock> CoreSupervisor<P, C> {
         Ok(next)
     }
 
-    /// §3: запуск из Idle → Spawning. Ошибка spawn → SpawnErr (+ учёт ретрая).
+    /// §3: запуск из Idle → Spawning. Ошибка spawn → `SpawnErr` (+ учёт ретрая).
     pub fn start(&mut self, config: &CoreSpawnConfig) -> Result<CoreState, SupervisorError> {
         if self.state == CoreState::Idle {
             self.spawn_failures = 0;
@@ -522,9 +526,9 @@ impl<P: CoreProcess, C: Clock> CoreSupervisor<P, C> {
         }
     }
 
-    /// Ретрай из SpawnErr: пока не исчерпаны [`SPAWN_RETRIES`] ретраев ПОСЛЕ
+    /// Ретрай из `SpawnErr`: пока не исчерпаны [`SPAWN_RETRIES`] ретраев ПОСЛЕ
     /// первой попытки (суммарно ≤ [`SPAWN_ATTEMPTS_TOTAL`] запусков) — снова
-    /// Spawning, иначе → RateLimited (§2.2 «ретрай ×3, потом RateLimited»).
+    /// Spawning, иначе → `RateLimited` (§2.2 «ретрай ×3, потом `RateLimited`»).
     pub fn retry_spawn(&mut self, config: &CoreSpawnConfig) -> Result<CoreState, SupervisorError> {
         if self.spawn_failures >= SPAWN_ATTEMPTS_TOTAL {
             self.spawn_failures = 0;
@@ -538,12 +542,12 @@ impl<P: CoreProcess, C: Clock> CoreSupervisor<P, C> {
         Ok(self.state)
     }
 
-    /// Событие ядра Connect() ok → Connected (FR-UI-261).
+    /// Событие ядра `Connect()` ok → Connected (FR-UI-261).
     pub fn mark_connected(&mut self) -> Result<CoreState, SupervisorError> {
         self.apply(CoreEvent::CoreConnected)
     }
 
-    /// Disconnect() ok → Stopping (§2.2 Connected).
+    /// `Disconnect()` ok → Stopping (§2.2 Connected).
     pub fn mark_disconnected(&mut self) -> Result<CoreState, SupervisorError> {
         self.apply(CoreEvent::CoreDisconnected)
     }
@@ -597,7 +601,7 @@ impl<P: CoreProcess, C: Clock> CoreSupervisor<P, C> {
 
     /// Exit не по команде → Crashed + решение о рестарте:
     /// ≥ [`CRASH_RATE_LIMIT_COUNT`] падений за окно
-    /// [`CRASH_RATE_LIMIT_WINDOW`] → RateLimited, иначе backoff-рестарт.
+    /// [`CRASH_RATE_LIMIT_WINDOW`] → `RateLimited`, иначе backoff-рестарт.
     pub fn notify_unexpected_exit(
         &mut self,
     ) -> Result<(CoreState, CrashDecision), SupervisorError> {
@@ -644,7 +648,7 @@ impl<P: CoreProcess, C: Clock> CoreSupervisor<P, C> {
         Ok(self.state)
     }
 
-    /// Ручной «Перезапустить» из RateLimited: сброс лимитов и новый spawn.
+    /// Ручной «Перезапустить» из `RateLimited`: сброс лимитов и новый spawn.
     pub fn manual_restart(
         &mut self,
         config: &CoreSpawnConfig,
@@ -927,7 +931,7 @@ mod tests {
         );
     }
 
-    /// Краш-цикл: 3 падения за окно 60 с → RateLimited; ручной перезапуск
+    /// Краш-цикл: 3 падения за окно 60 с → `RateLimited`; ручной перезапуск
     /// возвращает к Spawning (§2.2 Crashed/RateLimited).
     #[test]
     fn supervisor_crash_cycle_hits_rate_limit() {
@@ -998,8 +1002,8 @@ mod tests {
         assert_eq!(sup.state(), CoreState::Ready);
     }
 
-    /// SpawnErr §2.2: первая попытка + 3 ретрая (суммарно 4 запуска),
-    /// следующий вызов → RateLimited без обращения к процессу.
+    /// `SpawnErr` §2.2: первая попытка + 3 ретрая (суммарно 4 запуска),
+    /// следующий вызов → `RateLimited` без обращения к процессу.
     #[test]
     fn supervisor_spawn_retries_exhausted() {
         let spawn_err = Err(CoreProcessError::Spawn("no such file".to_owned()));
@@ -1031,7 +1035,7 @@ mod tests {
         );
     }
 
-    /// Teardown-успех из SpawnErr возвращает Idle (§2.2 «успех → Idle»).
+    /// Teardown-успех из `SpawnErr` возвращает Idle (§2.2 «успех → Idle»).
     #[test]
     fn supervisor_spawn_err_teardown_to_idle() {
         let spawn_err = Err(CoreProcessError::Spawn("boom".to_owned()));
@@ -1101,7 +1105,7 @@ mod tests {
         );
     }
 
-    /// always_ok: кастомный endpoint возвращается ВСЕМ вызовам wait_ready,
+    /// `always_ok`: кастомный endpoint возвращается ВСЕМ вызовам `wait_ready`,
     /// а не только первому.
     #[test]
     fn mock_always_ok_endpoint_serves_every_wait_ready() {
@@ -1115,7 +1119,7 @@ mod tests {
         assert_eq!(process.ready_calls.len(), 3);
     }
 
-    /// wait_ready вне фазы Spawning отклоняется ДО обращения к драйверу
+    /// `wait_ready` вне фазы Spawning отклоняется ДО обращения к драйверу
     /// процесса (валидация перехода впереди побочных эффектов).
     #[test]
     fn wait_ready_out_of_phase_rejects_before_driver_call() {
@@ -1128,7 +1132,7 @@ mod tests {
         );
     }
 
-    /// Политика сброса эскалации: аптайм ≥ BACKOFF_RESET_AFTER сбрасывает
+    /// Политика сброса эскалации: аптайм ≥ `BACKOFF_RESET_AFTER` сбрасывает
     /// backoff и окно крахов — следующий крах снова с шага 1 с (§2.2).
     /// (Падения разнесены > окна 60 с, чтобы не мешал rate-limit.)
     #[test]
@@ -1151,7 +1155,11 @@ mod tests {
         sup.wait_ready().unwrap();
 
         // Аптайм ниже порога — эскалация сохраняется (следующий крах → 4 с).
-        assert!(!sup.note_stable_uptime(BACKOFF_RESET_AFTER - Duration::from_secs(1)));
+        assert!(!sup.note_stable_uptime(
+            BACKOFF_RESET_AFTER
+                .checked_sub(Duration::from_secs(1))
+                .unwrap()
+        ));
         clock.advance(CRASH_RATE_LIMIT_WINDOW + Duration::from_secs(1));
         let (_, decision) = sup.notify_unexpected_exit().unwrap();
         assert_eq!(
@@ -1171,8 +1179,8 @@ mod tests {
         );
     }
 
-    /// CrashDecision::restart_delay_with — джиттер §2.2 поверх базовой
-    /// задержки; RateLimited задержки не имеет (контракт рантайм-планировщика).
+    /// `CrashDecision::restart_delay_with` — джиттер §2.2 поверх базовой
+    /// задержки; `RateLimited` задержки не имеет (контракт рантайм-планировщика).
     #[test]
     fn crash_decision_applies_jitter_to_base_delay() {
         let base = Duration::from_secs(4);

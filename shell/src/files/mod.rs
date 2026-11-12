@@ -5,9 +5,9 @@
 //! Страница присылает данные (сырое тело запроса), предложенное имя и
 //! расширение; путь выбирает пользователь в диалоге ОС, и только туда оболочка
 //! пишет. Так страница не может записать файл по произвольному пути. Открытие
-//! файлов не нужно оболочке: `<input type="file">` в WebView2 уже открывает
+//! файлов не нужно оболочке: `<input type="file">` в `WebView2` уже открывает
 //! системный диалог и читает выбранный файл. Выбор папки (`pick`) нужен
-//! переносу из NekoBox: `<input webkitdirectory>` не отдаёт путь.
+//! переносу из `NekoBox`: `<input webkitdirectory>` не отдаёт путь.
 
 pub mod bounded;
 pub mod io;
@@ -78,6 +78,7 @@ fn header(request: &Request<'_>, name: &str) -> Result<String, String> {
 }
 
 /// Раскодировать `encodeURIComponent`; испорченная последовательность — `None`.
+#[must_use]
 pub fn percent_decode(raw: &str) -> Option<String> {
     let bytes = raw.as_bytes();
     let mut out = Vec::with_capacity(bytes.len());
@@ -95,7 +96,7 @@ pub fn percent_decode(raw: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
-/// file_save — «Сохранить как»: тело — байты файла, заголовки — имя и
+/// `file_save` — «Сохранить как»: тело — байты файла, заголовки — имя и
 /// расширение. Ответ: `true` — записано, `false` — отменено. Ошибки:
 /// `bad_request`, `bad_name`, `bad_extension`, `too_large`, `io:<вид>`.
 #[tauri::command]

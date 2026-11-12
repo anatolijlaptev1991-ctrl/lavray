@@ -125,7 +125,7 @@ fn secs(list: &[u64]) -> Vec<Duration> {
 /// A2-11: ядро, умирающее сразу после READY, перезапускается с растущей
 /// паузой 1 с → 2 с и после 3 падений за минуту больше не перезапускается
 /// (раньше пауза сбрасывалась в 1 с, и перезапуски шли вечно); ручной
-/// «Перезапустить» выводит из RateLimited; токен у каждого запуска новый;
+/// «Перезапустить» выводит из `RateLimited`; токен у каждого запуска новый;
 /// к сбою прикладывается хвост кольца логов ядра.
 #[test]
 fn crash_loop_stops_after_three_crashes_and_manual_restart_resumes() {
@@ -162,7 +162,7 @@ fn crash_loop_stops_after_three_crashes_and_manual_restart_resumes() {
     );
 }
 
-/// Ядро не стартует: 4 попытки с паузами 1/2/4/8 с, затем RateLimited.
+/// Ядро не стартует: 4 попытки с паузами 1/2/4/8 с, затем `RateLimited`.
 #[test]
 fn spawn_failures_back_off_and_end_in_rate_limited() {
     let fail = || Err(CoreProcessError::Spawn("нет такого файла".to_owned()));
@@ -240,7 +240,7 @@ fn stable_uptime_resets_the_backoff_escalation() {
     );
 }
 
-/// Stop во время ожидания ready: не сбой запуска — ни SpawnErr, ни ретрая,
+/// Stop во время ожидания ready: не сбой запуска — ни `SpawnErr`, ни ретрая,
 /// ни нового spawn; ровно один shutdown и обычный Stopped.
 #[test]
 fn stop_during_the_ready_wait_is_a_cancel_not_a_retry() {
@@ -352,7 +352,7 @@ fn clean_teardown_marks_the_network_verified() {
     assert!(out.events.unconfirmed.is_empty());
 }
 
-/// ManualRestart из RateLimited не зависит от отметки: spawn происходит.
+/// `ManualRestart` из `RateLimited` не зависит от отметки: spawn происходит.
 #[test]
 fn manual_restart_does_not_need_the_verified_mark() {
     let mut sup = CoreSupervisor::new(MockCoreProcess::default(), MockClock::at(Instant::now()));

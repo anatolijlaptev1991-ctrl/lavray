@@ -6,7 +6,7 @@
 //! - **с правами администратора из установленной версии** — задача планировщика
 //!   `LAVRay-<SID>` (триггер входа пользователя, `RunLevel=HighestAvailable`):
 //!   приложение, а с ним и ядро, стартует повышенным, и TUN работает сразу после
-//!   входа, как у NekoBox. Задача создаётся, только если exe лежит под Program
+//!   входа, как у `NekoBox`. Задача создаётся, только если exe лежит под Program
 //!   Files: повышенная задача на exe в каталоге, доступном пользователю на
 //!   запись (portable, Загрузки), позволила бы обойти UAC подменой файла;
 //! - **иначе** — значение `LAVRay` в `HKCU\...\Run`.
@@ -126,6 +126,7 @@ pub struct AutostartState {
 
 impl AutostartState {
     /// Ответ ОС без автозапуска из приложения: строку в UI нужно скрыть.
+    #[must_use]
     pub fn unsupported() -> Self {
         Self {
             supported: false,
@@ -274,6 +275,7 @@ pub fn read_state(exec: &impl Exec, env: &Env) -> Result<AutostartState, String>
 }
 
 /// Строка запуска: `"<exe>" --tray`.
+#[must_use]
 pub fn run_command(exe: &Path) -> String {
     format!("\"{}\" {ARG_TRAY}", exe.display())
 }
@@ -452,6 +454,7 @@ impl Exec for System {
 
 /// Автозапуск управляется из приложения на Windows (задача планировщика или
 /// значение `Run`) и на Linux (запись XDG в каталоге автозапуска сеанса).
+#[must_use]
 pub fn supported() -> bool {
     cfg!(windows) || cfg!(target_os = "linux")
 }

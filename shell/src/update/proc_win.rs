@@ -39,7 +39,7 @@ impl InstallerWaiter for ProcessWaiter {
             let mut code = 0u32;
             // SAFETY: `handle` открыт с правом QUERY_LIMITED; `code` — валидный
             // указатель на локальную переменную.
-            let known = unsafe { GetExitCodeProcess(handle, &mut code) } != 0;
+            let known = unsafe { GetExitCodeProcess(handle, &raw mut code) } != 0;
             WaitResult::Exited(known.then_some(code))
         } else {
             WaitResult::TimedOut
@@ -74,11 +74,11 @@ fn process_listed(pid: u32) -> bool {
     entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
     let mut found = false;
     // SAFETY: `snapshot` валиден, `entry` — валидный указатель с заполненным размером.
-    let mut more = unsafe { Process32FirstW(snapshot, &mut entry) } != 0;
+    let mut more = unsafe { Process32FirstW(snapshot, &raw mut entry) } != 0;
     while more && !found {
         found = entry.th32ProcessID == pid;
         // SAFETY: те же условия, что для `Process32FirstW`.
-        more = unsafe { Process32NextW(snapshot, &mut entry) } != 0;
+        more = unsafe { Process32NextW(snapshot, &raw mut entry) } != 0;
     }
     // SAFETY: `snapshot` создан выше и закрывается ровно один раз.
     unsafe { CloseHandle(snapshot) };

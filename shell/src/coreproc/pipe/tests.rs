@@ -147,7 +147,7 @@ fn eof_without_newline_returns_the_partial_line_then_eof() {
     assert_eq!(read_all(b"\n\n", 100), [(vec![], false), (vec![], false)]);
 }
 
-/// 64 КиБ — боевой лимит: границы тоже точные.
+/// 64 `КиБ` — боевой лимит: границы тоже точные.
 #[test]
 fn the_production_limit_is_64_kib() {
     assert_eq!(MAX_LINE_BYTES, 64 * 1024);

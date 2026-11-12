@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! Повышенные права процесса (T-46, T-81). TUN без прав администратора
-//! (Windows) или root (Unix) не поднимется. Модель прав — «как в NekoBox»,
+//! (Windows) или root (Unix) не поднимется. Модель прав — «как в `NekoBox`»,
 //! без системной службы: TUN работает, когда приложение (а с ним и ядро, его
 //! дочерний процесс) запущено от администратора. Оболочка отвечает, запущена
 //! ли она с повышением ([`is_elevated`]), и по явной просьбе пользователя
@@ -14,6 +14,7 @@ use std::path::Path;
 
 /// `true`, если процесс запущен с повышенными правами: Windows — токен с
 /// `TokenIsElevated`, Unix — euid 0.
+#[must_use]
 pub fn is_elevated() -> bool {
     imp::is_elevated()
 }
@@ -120,7 +121,7 @@ mod imp {
         let mut token: HANDLE = std::ptr::null_mut();
         // SAFETY: псевдо-хэндл процесса закрывать не нужно; `token` — валидный
         // указатель на локальную переменную.
-        if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut token) } == 0 {
+        if unsafe { OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &raw mut token) } == 0 {
             return false;
         }
         let mut elevation = TOKEN_ELEVATION { TokenIsElevated: 0 };
@@ -133,7 +134,7 @@ mod imp {
                 TokenElevation,
                 std::ptr::from_mut(&mut elevation).cast(),
                 std::mem::size_of::<TOKEN_ELEVATION>() as u32,
-                &mut returned,
+                &raw mut returned,
             )
         };
         // SAFETY: `token` открыт выше и закрывается ровно один раз.
@@ -167,7 +168,7 @@ mod imp {
         info.lpVerb = verb.as_ptr();
         info.lpFile = file.as_ptr();
         info.lpParameters = params.as_ptr();
-        info.lpDirectory = dir.as_ref().map_or(std::ptr::null(), |dir| dir.as_ptr());
+        info.lpDirectory = dir.as_ref().map_or(std::ptr::null(), std::vec::Vec::as_ptr);
         info.nShow = SW_SHOWNORMAL;
 
         // SAFETY: COM нужен оболочке Windows для ShellExecute вне потока окна;
@@ -181,7 +182,7 @@ mod imp {
         };
         // SAFETY: `info` и все строки (`verb`, `file`, `params`, `dir`) живут до
         // конца вызова; `cbSize` указан.
-        let launched = unsafe { ShellExecuteExW(&mut info) } != 0;
+        let launched = unsafe { ShellExecuteExW(&raw mut info) } != 0;
         // SAFETY: читает код последней ошибки потока сразу после вызова.
         let code = if launched {
             0

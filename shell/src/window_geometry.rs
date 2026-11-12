@@ -35,6 +35,7 @@ fn bottom(r: &Rect) -> i32 {
 ///
 /// Список мониторов пуст (ОС не ответила) — считаем, что можно: двигать окно
 /// вслепую хуже, чем оставить как есть.
+#[must_use]
 pub fn title_bar_reachable(window: &Rect, monitors: &[Rect]) -> bool {
     if monitors.is_empty() {
         return true;
@@ -50,6 +51,7 @@ pub fn title_bar_reachable(window: &Rect, monitors: &[Rect]) -> bool {
 }
 
 /// Плагин window-state: размер, позиция и развёрнутость, без видимости и рамки.
+#[must_use]
 pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     use tauri_plugin_window_state::{Builder, StateFlags};
     Builder::new()

@@ -24,7 +24,7 @@ pub const PRODUCT_NAME: &str = env!("LAVRAY_PRODUCT_NAME");
 
 /// Каталоги, в которых позволено лежать ядру (T-44): ресурсы установки, а не
 /// пользовательские каталоги. Windows — рядом с exe (NSIS); Linux — ресурсы
-/// пакета `/usr/lib/<имя>` и, в AppImage, `$APPDIR/usr/lib/<имя>`
+/// пакета `/usr/lib/<имя>` и, в `AppImage`, `$APPDIR/usr/lib/<имя>`
 /// (соответствует `resource_dir` в tauri-utils).
 pub fn core_search_paths() -> Result<Vec<PathBuf>, String> {
     let core = if cfg!(windows) {
@@ -79,7 +79,7 @@ pub fn core_search_paths() -> Result<Vec<PathBuf>, String> {
 pub fn sha256_file(path: &Path) -> std::io::Result<String> {
     let mut file = std::fs::File::open(path)?;
     let mut hasher = Sha256::new();
-    let mut buf = [0u8; 64 * 1024];
+    let mut buf = vec![0u8; 64 * 1024]; // heap: 64 КБ не на стеке (clippy large_stack_arrays)
     loop {
         let n = file.read(&mut buf)?;
         if n == 0 {

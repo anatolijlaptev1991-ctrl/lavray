@@ -5,7 +5,7 @@
 //! stdout/stderr ядра читаются построчно → ring на 200 строк (пост-мортем
 //! диагностика Crashed, LNB-21/U-04); VT100/ANSI вырезается; антифлуд —
 //! окно в `max_per_second` строк/с (значение — конфигурируемое, спеком не
-//! зафиксировано). Рабочий журнал идёт через LogService ядра (§4), строки
+//! зафиксировано). Рабочий журнал идёт через `LogService` ядра (§4), строки
 //! оболочки в ядро НЕ форвардятся (Р2-43).
 
 use std::collections::VecDeque;
@@ -38,6 +38,7 @@ impl LogRing {
     ///
     /// # Panics
     /// Паникует при `capacity == 0`.
+    #[must_use]
     pub fn new(capacity: usize) -> Self {
         assert!(capacity > 0, "LogRing capacity must be positive");
         Self {
@@ -48,6 +49,7 @@ impl LogRing {
     }
 
     /// Ring на [`RING_CAPACITY`] строк (стандартная ёмкость §4).
+    #[must_use]
     pub fn with_default_capacity() -> Self {
         Self::new(RING_CAPACITY)
     }
@@ -99,21 +101,25 @@ impl LogRing {
     }
 
     /// Самая свежая строка.
+    #[must_use]
     pub fn last(&self) -> Option<&LogLine> {
         self.lines.back()
     }
 
     /// Текущее число строк.
+    #[must_use]
     pub fn len(&self) -> usize {
         self.lines.len()
     }
 
     /// Пуст ли буфер.
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.lines.is_empty()
     }
 
     /// Ёмкость буфера.
+    #[must_use]
     pub fn capacity(&self) -> usize {
         self.capacity
     }
@@ -131,6 +137,7 @@ enum St {
 }
 
 /// Переход автомата по символу `ch`.
+#[allow(clippy::match_same_arms)] // ANSI-парсер: явные переходы для аудируемости
 fn advance(state: St, ch: char) -> St {
     match state {
         St::Ground if ch == '\x1b' => St::Esc,
@@ -163,6 +170,7 @@ fn advance(state: St, ch: char) -> St {
 /// OSC `ESC ] … (BEL | ESC \)`, escape-последовательности ECMA-48 с
 /// промежуточными байтами 0x20–0x2F (`ESC ( B`, `ESC # 8`, `ESC % G` … —
 /// финальный байт съедается) и прочие двухсимвольные ESC-коды.
+#[must_use]
 pub fn strip_ansi(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
     strip_ansi_into(input, &mut out);
@@ -190,7 +198,7 @@ pub fn strip_ansi_into(input: &str, out: &mut String) {
 
 /// Антифлуд-фильтр: не более `max_per_second` строк в СКОЛЬЗЯЩУЮ секунду
 /// (окно `(now−1000, now]`, а не тумблинг-окно: всплеск на стыке секунд не
-/// проходит удвоенный лимит; §4 «антифлуд max_log_line строк/с», значение
+/// проходит удвоенный лимит; §4 «антифлуд `max_log_line` строк/с», значение
 /// задаётся конфигом).
 ///
 /// Контракт лимита — НА ПАЙП: у stdout и у stderr свой `FloodGate`, поэтому
@@ -207,6 +215,7 @@ pub struct FloodGate {
 
 impl FloodGate {
     /// Новый фильтр с лимитом `max_per_second` строк в скользящую секунду.
+    #[must_use]
     pub fn new(max_per_second: usize) -> Self {
         Self {
             max_per_second,
@@ -235,6 +244,7 @@ impl FloodGate {
     }
 
     /// Лимит строк в скользящую секунду.
+    #[must_use]
     pub fn max_per_second(&self) -> usize {
         self.max_per_second
     }

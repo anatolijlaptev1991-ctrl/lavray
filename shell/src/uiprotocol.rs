@@ -3,7 +3,7 @@
 //! Протокол UI ↔ shell: команды (UI → shell) и события (shell → UI).
 //!
 //! Это верхний канал Tauri IPC (`invoke` + события). Нижний канал
-//! shell ↔ ядро — ConnectRPC по UDS/named pipe: он будет жить в будущем
+//! shell ↔ ядро — `ConnectRPC` по UDS/named pipe: он будет жить в будущем
 //! модуле `src/ipc.rs` (Connect-клиент, §10-дерево; план — комментарий в
 //! `lib.rs`), поэтому этот модуль переименован из `ipc.rs` в
 //! `uiprotocol.rs` и имя `ipc` освобождено под клиент ядра.
@@ -30,14 +30,14 @@ pub enum ShellCommand {
     StartCore,
     /// Graceful-стоп ядра (§5).
     StopCore,
-    /// Перезапуск (в т.ч. из RateLimited — ручной «Перезапустить»).
+    /// Перезапуск (в т.ч. из `RateLimited` — ручной «Перезапустить»).
     RestartCore,
-    /// Connect(profile_id) — активировать профиль (FR-UI-261).
+    /// `Connect(profile_id)` — активировать профиль (FR-UI-261).
     ConnectProfile {
         /// Идентификатор профиля в БД ядра.
         profile_id: String,
     },
-    /// Disconnect() — деактивировать инстанс.
+    /// `Disconnect()` — деактивировать инстанс.
     Disconnect,
     /// Системный прокси вкл/выкл (§9; перед включением — снимок FR-UI-259).
     SetSystemProxy {
@@ -61,7 +61,7 @@ pub enum ShellEvent {
         /// Новое состояние.
         state: CoreState,
     },
-    /// Строка из пайпа ядра (§4; UI склеивает с LogService локально, Р2-43).
+    /// Строка из пайпа ядра (§4; UI склеивает с `LogService` локально, Р2-43).
     CoreLogLine {
         /// Порядковый номер строки.
         seq: u64,

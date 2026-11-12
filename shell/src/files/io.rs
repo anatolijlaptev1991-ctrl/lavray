@@ -31,7 +31,11 @@ fn temp_path(path: &Path) -> std::io::Result<PathBuf> {
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "нет имени файла"))?;
     let mut bytes = [0u8; 8];
     getrandom::fill(&mut bytes).map_err(|e| std::io::Error::other(e.to_string()))?;
-    let suffix: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+    let suffix: String = bytes.iter().fold(String::with_capacity(16), |mut s, b| {
+        use std::fmt::Write;
+        let _ = write!(s, "{b:02x}");
+        s
+    });
     let temp = format!(".{}.lavray-{suffix}.tmp", name.to_string_lossy());
     Ok(dir.map_or_else(|| PathBuf::from(&temp), |d| d.join(&temp)))
 }
@@ -43,6 +47,7 @@ fn write_temp(temp: &Path, data: &[u8]) -> std::io::Result<()> {
 }
 
 /// Код ошибки ввода-вывода для UI: `io:<вид>`.
+#[must_use]
 pub fn io_code(e: &std::io::Error) -> String {
     format!("io:{:?}", e.kind()).to_ascii_lowercase()
 }
@@ -62,7 +67,11 @@ mod tests {
         std::fs::read_dir(d)
             .unwrap()
             .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
-            .filter(|n| n.ends_with(".tmp"))
+            .filter(|n| {
+                std::path::Path::new(n)
+                    .extension()
+                    .is_some_and(|e| e.eq_ignore_ascii_case("tmp"))
+            })
             .collect()
     }
 

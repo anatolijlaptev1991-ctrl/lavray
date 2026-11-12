@@ -77,6 +77,7 @@ impl Registry for RegExe {
         .map(|_| ())
     }
 
+    #[allow(clippy::match_same_arms)] // reg delete: Ok и Err(нет значения) → Ok
     fn remove(&self, name: &str) -> Result<(), String> {
         match run(&["delete", REG_KEY, "/v", name, "/f"]) {
             Ok(_) => Ok(()),

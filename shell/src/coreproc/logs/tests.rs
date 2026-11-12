@@ -202,7 +202,7 @@ fn strip_ansi_into_matches_the_old_implementation() {
 fn push_reusing_matches_the_old_ring_model() {
     let cap = 7;
     let mut ring = LogRing::new(cap);
-    let mut model: std::collections::VecDeque<(u64, String)> = Default::default();
+    let mut model = std::collections::VecDeque::<(u64, String)>::default();
     let mut work = String::new();
     let mut seq = 0u64;
     for round in 0..40 {
@@ -249,7 +249,7 @@ fn push_reusing_keeps_buffers_in_steady_state() {
     assert!(work.capacity() >= 300, "рабочий буфер тоже не потерян");
 }
 
-/// Контракт лимита — на пайп: два независимых FloodGate пропускают до
+/// Контракт лимита — на пайп: два независимых `FloodGate` пропускают до
 /// `2 × max` за секунду, один пайп — ровно `max`.
 #[test]
 fn flood_gate_limit_is_per_pipe() {

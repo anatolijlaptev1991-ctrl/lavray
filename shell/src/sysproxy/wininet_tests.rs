@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Настоящий WinINET на выдуманном имени записи RAS (только Windows).
+//! Настоящий `WinINET` на выдуманном имени записи RAS (только Windows).
 //!
 //! Тесты пишут в HKCU пользователя, под которым запущены, поэтому идут только
 //! по явному разрешению окружения: `LAVRAY_CI_REAL_WININET=1` (одноразовый
 //! раннер CI). Без переменной они возвращаются, не вызвав ни одной функции
-//! WinINET; локально её не выставляют.
+//! `WinINET`; локально её не выставляют.
 //!
 //! Даже на раннере после каждого теста возвращаются четыре значения LAN
 //! (`ProxyEnable`, `ProxyServer`, `ProxyOverride`, `AutoConfigURL`) и
 //! удаляется значение выдуманной записи в `Connections`: прогон 0.9.0 (D-1)
-//! показал, что запись подключения RAS через WinINET обнуляет `ProxyServer`.
+//! показал, что запись подключения RAS через `WinINET` обнуляет `ProxyServer`.
 
 use super::backend::Backend;
 use super::conn::{ConnSettings, Connections, DIRECT, PROXY};

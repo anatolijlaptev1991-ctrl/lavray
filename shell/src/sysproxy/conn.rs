@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Прокси отдельного подключения WinINET: LAN или запись RAS/VPN (T-82).
+//! Прокси отдельного подключения `WinINET`: LAN или запись RAS/VPN (T-82).
 //!
 //! Windows хранит для каждого подключения свои настройки, и ручной прокси в
 //! `Internet Settings` относится только к LAN. Здесь — модель этих настроек и
@@ -36,7 +36,7 @@ pub(super) struct ConnChange {
     pub pac_url: Option<String>,
 }
 
-/// Настройки подключений: WinINET или подставные (тесты).
+/// Настройки подключений: `WinINET` или подставные (тесты).
 pub(super) trait Connections {
     /// `None` — LAN, `Some(имя)` — запись RAS.
     fn get(&self, conn: Option<&str>) -> Result<ConnSettings, String>;

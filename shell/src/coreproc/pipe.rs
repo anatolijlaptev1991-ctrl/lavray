@@ -117,7 +117,7 @@ impl PipeState {
 
 /// Поток пайпа §4: построчное чтение (строка ≤ [`MAX_LINE_BYTES`]) →
 /// антифлуд → ring; ready-строка §3.4 (только stdout) — в канал. Не-UTF-8
-/// байты заменяются (from_utf8_lossy) — бинарный мусор в пайпе не убивает
+/// байты заменяются (`from_utf8_lossy`) — бинарный мусор в пайпе не убивает
 /// чтение. Лимит антифлуда действует НА ПАЙП (см. [`FloodGate`]).
 pub fn spawn_pipe_reader<R: Read + Send + 'static>(
     pipe: Option<R>,

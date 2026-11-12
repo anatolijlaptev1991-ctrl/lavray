@@ -20,11 +20,13 @@ pub struct RealOpener {
 
 impl RealOpener {
     /// Без привязки к каталогу (копия exe для watchdog и т. п.).
+    #[must_use]
     pub fn any() -> Self {
         Self { root: None }
     }
 
     /// Файл обязан лежать прямо в `dir` (staging или previous).
+    #[must_use]
     pub fn within(dir: &Path) -> Self {
         Self {
             root: Some(dir.to_path_buf()),
@@ -54,6 +56,7 @@ fn strip_verbatim(path: &Path) -> PathBuf {
 }
 
 /// `real` — прямой потомок `root` (без учёта регистра на Windows, где пути такие).
+#[must_use]
 pub fn directly_in(real: &Path, root: &Path) -> bool {
     let (real, root) = (strip_verbatim(real), strip_verbatim(root));
     real.parent().is_some_and(|parent| {

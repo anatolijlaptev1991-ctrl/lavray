@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
 //! WPAD («Автоматическое определение настроек») и снимки прежних версий
-//! (T-82). Реестр, WinINET и RAS — подставные.
+//! (T-82). Реестр, `WinINET` и RAS — подставные.
 
 use super::conn::{ConnChange, Connections, AUTO_DETECT, AUTO_PROXY_URL, DIRECT, PROXY};
 use super::fakes::{conn, fresh_dir, Env};

@@ -81,7 +81,7 @@ fn delay_respected() {
     );
     let slept = RefCell::new(Duration::ZERO);
     scan_screen(&screen, &win, Duration::from_millis(1234), |d| {
-        *slept.borrow_mut() += d
+        *slept.borrow_mut() += d;
     })
     .unwrap();
     assert_eq!(*slept.borrow(), Duration::from_millis(1234));

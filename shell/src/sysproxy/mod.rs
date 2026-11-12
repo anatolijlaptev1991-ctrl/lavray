@@ -8,7 +8,7 @@
 //!
 //! Откат трёхсторонний (T-42): значение возвращается к исходному, только если
 //! сейчас оно наше (снимок хранит и то, что стояло сразу после включения).
-//! Windows: реестр Internet Settings (LAN) + WinINET по подключениям (WPAD и
+//! Windows: реестр Internet Settings (LAN) + `WinINET` по подключениям (WPAD и
 //! каждая запись RAS/VPN, T-82). Linux: gsettings (GNOME). macOS: `networksetup`.
 
 mod backend;
@@ -75,6 +75,7 @@ pub struct SysProxy<B: Backend = System> {
 
 impl SysProxy {
     /// Менеджер с файлом снимка в каталоге данных.
+    #[must_use]
     pub fn new(data_dir: &Path) -> Self {
         Self::with_backend(data_dir, System)
     }

@@ -32,7 +32,8 @@ impl RasEntries for RasApi {
         let (mut bytes, mut count) = (0u32, 0u32);
         // SAFETY: буфер не передаётся (NULL, размер 0): функция только
         // сообщает, сколько места нужно; остальные указатели — локальные.
-        let code = unsafe { RasEnumEntriesW(null(), null(), null_mut(), &mut bytes, &mut count) };
+        let code =
+            unsafe { RasEnumEntriesW(null(), null(), null_mut(), &raw mut bytes, &raw mut count) };
         match code {
             0 => return Ok(Vec::new()),
             ERROR_BUFFER_TOO_SMALL => {}
@@ -50,7 +51,13 @@ impl RasEntries for RasApi {
             // SAFETY: `buf` — `slots` инициализированных структур с заполненным
             // `dwSize`, `bytes` — их размер в байтах; указатели локальные.
             let code = unsafe {
-                RasEnumEntriesW(null(), null(), buf.as_mut_ptr(), &mut bytes, &mut count)
+                RasEnumEntriesW(
+                    null(),
+                    null(),
+                    buf.as_mut_ptr(),
+                    &raw mut bytes,
+                    &raw mut count,
+                )
             };
             match code {
                 0 => return Ok(entry_names(&buf[..(count as usize).min(slots)])),

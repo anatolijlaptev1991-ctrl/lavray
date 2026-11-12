@@ -92,7 +92,7 @@ fn system_proxy_command_validates_the_port_it_is_given() {
     assert!(!command.contains("port: u16"));
 }
 
-/// T-82: `reg.exe`, WinINET и RAS не работают в потоке команд: команда
+/// T-82: `reg.exe`, `WinINET` и RAS не работают в потоке команд: команда
 /// асинхронная и отдаёт тело `sysproxy::set_blocking`, а то идёт в пул
 /// блокирующих потоков.
 #[test]

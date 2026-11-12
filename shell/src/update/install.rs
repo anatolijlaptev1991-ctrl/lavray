@@ -18,7 +18,7 @@ pub enum ElevateError {
     UacCancelled,
     /// Система не запустила установщик, потому что файл удерживается оболочкой с
     /// запретом записи (`ERROR_SHARING_VIOLATION`, 32). Не проверено на ВМ, принимают
-    /// ли UAC и CreateProcess такой файл: если нет, это ровно тот отказ, и он
+    /// ли UAC и `CreateProcess` такой файл: если нет, это ровно тот отказ, и он
     /// сообщается отдельным кодом, а не повторяется по кругу.
     SharingViolation,
     /// Прочий сбой, текст — от ОС.
@@ -87,6 +87,7 @@ fn quote(arg: &str) -> String {
 }
 
 /// Строка параметров для `ShellExecuteExW`.
+#[must_use]
 pub fn join_args(args: &[&str]) -> String {
     args.iter().map(|a| quote(a)).collect::<Vec<_>>().join(" ")
 }

@@ -33,7 +33,7 @@ mod imp {
             ConvertStringSecurityDescriptorToSecurityDescriptorW(
                 descriptor.as_ptr(),
                 SDDL_REVISION_1,
-                &mut security,
+                &raw mut security,
                 std::ptr::null_mut(),
             )
         };
@@ -57,7 +57,7 @@ mod imp {
                 wide.as_ptr(),
                 GENERIC_WRITE,
                 0,
-                &attributes,
+                &raw const attributes,
                 CREATE_NEW,
                 FILE_ATTRIBUTE_NORMAL,
                 std::ptr::null_mut(),

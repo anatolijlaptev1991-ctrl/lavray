@@ -1,6 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-//! Точка входа LAVRay shell (Tauri 2).
+// Обоснованные исключения pedantic — см. lib.rs (Tauri IPC, Win32 FFI).
+#![allow(clippy::needless_pass_by_value)]
+#![allow(clippy::cast_possible_truncation)]
+#![allow(clippy::cast_sign_loss)]
+#![allow(clippy::cast_possible_wrap)]
+#![allow(clippy::missing_errors_doc)]
+#![allow(clippy::missing_panics_doc)]
+#![allow(clippy::must_use_candidate)]
+#![allow(clippy::struct_excessive_bools)]
+#![allow(clippy::doc_markdown)]
+
+//! Точка входа `LAVRay` shell (Tauri 2).
 //!
 //! Спек §10: single instance, deep-link, трей, окна, онбординг — итерации
 //! после скаффолда. Сейчас: окно с placeholder-фронтендом
@@ -58,20 +69,20 @@ struct RuntimeState {
     last_error: String,
     /// Ядро живо (Ready/Connected): обновляет наблюдатель надзирателя.
     core_alive: bool,
-    /// Состояние FSM ядра §2.2: Spawning, Ready, Crashed, RateLimited, …
+    /// Состояние FSM ядра §2.2: Spawning, Ready, Crashed, `RateLimited`, …
     core_state: CoreState,
     /// Хвост кольца логов ядра на момент последнего сбоя (диагностика).
     core_log: Vec<String>,
 }
 
-/// is_elevated — запущено ли приложение с правами администратора/root (T-46):
+/// `is_elevated` — запущено ли приложение с правами администратора/root (T-46):
 /// UI проверяет это до подключения в режиме TUN.
 #[tauri::command]
 fn is_elevated() -> bool {
     process_is_elevated()
 }
 
-/// relaunch_elevated — «Перезапустить от администратора» из диалога TUN
+/// `relaunch_elevated` — «Перезапустить от администратора» из диалога TUN
 /// (T-81): запускает второй экземпляр через UAC и, если запуск состоялся,
 /// завершает этот обычным путём выхода (останов ядра, возврат системного
 /// прокси — как `begin_quit`). Отказ в UAC — не ошибка: ответ `cancelled`, и
@@ -121,7 +132,7 @@ struct LaunchState {
     answered: AtomicBool,
 }
 
-/// launch_info — признак «приложение только что перезапущено от администратора»
+/// `launch_info` — признак «приложение только что перезапущено от администратора»
 /// (по флагу `--elevated-relaunch`, а не по файлам и `localStorage`).
 #[tauri::command]
 fn launch_info(state: tauri::State<'_, LaunchState>) -> LaunchInfo {
@@ -131,8 +142,8 @@ fn launch_info(state: tauri::State<'_, LaunchState>) -> LaunchInfo {
     }
 }
 
-/// ui_state_load — общие настройки UI из `ui-state.json` в каталоге данных
-/// (источник истины для обоих профилей WebView; `localStorage` — кэш).
+/// `ui_state_load` — общие настройки UI из `ui-state.json` в каталоге данных
+/// (источник истины для обоих профилей `WebView`; `localStorage` — кэш).
 #[tauri::command]
 async fn ui_state_load() -> Result<ui_state::Loaded, String> {
     tauri::async_runtime::spawn_blocking(|| ui_state::load(&data_dir()))
@@ -140,7 +151,7 @@ async fn ui_state_load() -> Result<ui_state::Loaded, String> {
         .map_err(|e| e.to_string())
 }
 
-/// ui_state_set — записать (`value`) или удалить (`null`) одну настройку из
+/// `ui_state_set` — записать (`value`) или удалить (`null`) одну настройку из
 /// явного списка ключей. Повышенный процесс создаёт файл с явным доступом для
 /// текущего пользователя, чтобы обычный экземпляр мог его перезаписать.
 #[tauri::command]
@@ -157,14 +168,14 @@ async fn ui_state_set(key: String, value: Option<String>) -> Result<(), String> 
     .map_err(|e| e.to_string())?
 }
 
-/// window_show — показать и развернуть главное окно (трей и Ctrl+D просят
+/// `window_show` — показать и развернуть главное окно (трей и Ctrl+D просят
 /// диалог TUN, пока окно скрыто).
 #[tauri::command]
 fn window_show(app: tauri::AppHandle) {
     tray_ui::show_main_window(&app);
 }
 
-/// autostart_state — автозапуск с системой, как его видит ОС (T-82): задача
+/// `autostart_state` — автозапуск с системой, как его видит ОС (T-82): задача
 /// планировщика или значение `Run`. Читается при каждом показе строки
 /// настроек (FR-UI-013); `supported: false` — строку нужно скрыть.
 #[tauri::command]
@@ -174,7 +185,7 @@ async fn autostart_state() -> Result<AutostartState, String> {
         .map_err(|e| e.to_string())?
 }
 
-/// set_autostart — включить/выключить автозапуск (T-82). С правами
+/// `set_autostart` — включить/выключить автозапуск (T-82). С правами
 /// администратора — задача планировщика, без прав — `Run` в реестре; ответ —
 /// состояние, заново прочитанное из ОС. Вызовы `reg.exe`/`schtasks.exe`
 /// идут в фоновом потоке: окно не замирает.
@@ -185,7 +196,7 @@ async fn set_autostart(enabled: bool) -> Result<AutostartState, String> {
         .map_err(|e| e.to_string())?
 }
 
-/// agent_access_set — режим доступа ИИ-агентов (настройка ядра `agent.mode`):
+/// `agent_access_set` — режим доступа ИИ-агентов (настройка ядра `agent.mode`):
 /// окно сообщает его при каждой загрузке и при каждом изменении. Оболочка
 /// создаёт, перезаписывает или удаляет `agent-endpoint.json`; ядро режим
 /// применяет само и сразу, перезапуск не нужен.
@@ -196,7 +207,7 @@ fn agent_access_set(agent: tauri::State<'_, Arc<AgentAccess>>, mode: String) -> 
     agent.set_mode(mode)
 }
 
-/// agent_core_path — полный путь к `lavray-core.exe` рядом с установленным
+/// `agent_core_path` — полный путь к `lavray-core.exe` рядом с установленным
 /// приложением, для настройки MCP-клиентов (Claude Desktop, Claude Code, Cursor).
 #[tauri::command]
 fn agent_core_path() -> Result<String, String> {
@@ -220,31 +231,34 @@ async fn core_endpoint(
     Ok(ready.map(|ep| (ep.url, ep.token)).unwrap_or_default())
 }
 
-/// Состояние ядра §2.2 (Spawning, Ready, Crashed, RateLimited, …).
+/// Состояние ядра §2.2 (Spawning, Ready, Crashed, `RateLimited`, …).
 #[tauri::command]
 fn core_state(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> CoreState {
-    shared.lock().unwrap_or_else(|e| e.into_inner()).core_state
+    shared
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .core_state
 }
 
-/// core_log_tail — последние строки stdout/stderr ядра на момент сбоя (кольцо
+/// `core_log_tail` — последние строки stdout/stderr ядра на момент сбоя (кольцо
 /// §4): по ним видно, почему ядро не стартует или упало.
 #[tauri::command]
 fn core_log_tail(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> Vec<String> {
     shared
         .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .core_log
         .clone()
 }
 
-/// restart_core — ручной «Перезапустить» из RateLimited (рестарты прекращены)
+/// `restart_core` — ручной «Перезапустить» из `RateLimited` (рестарты прекращены)
 /// или после ошибки запуска.
 #[tauri::command]
 fn restart_core(supervisor: tauri::State<'_, Arc<SupervisorHandle>>) {
     supervisor.manual_restart();
 }
 
-/// set_system_proxy — включить/выключить системный прокси (F5, FR-UI-221/222).
+/// `set_system_proxy` — включить/выключить системный прокси (F5, FR-UI-221/222).
 /// Включение сохраняет снимок прежних настроек; выключение — восстанавливает.
 /// Прокси указывает на mixed-инбаунд ядра (127.0.0.1:<port>).
 ///
@@ -269,11 +283,13 @@ async fn set_system_proxy(
         data_dir()
     };
     let done = set_blocking(data, enabled, port).await;
-    done.iter().for_each(|_| flags.on_proxy_set(enabled)); // только при успехе
+    if done.is_ok() {
+        flags.on_proxy_set(enabled);
+    } // только при успехе
     done
 }
 
-/// request_quit — попросить надзирателя остановить ядро перед выходом (D2).
+/// `request_quit` — попросить надзирателя остановить ядро перед выходом (D2).
 #[tauri::command]
 fn request_quit(supervisor: tauri::State<'_, Arc<SupervisorHandle>>) {
     supervisor.stop();
@@ -317,14 +333,14 @@ fn begin_quit(app: &tauri::AppHandle) {
     });
 }
 
-/// quit_app — полный выход из приложения по пункту меню «Выход».
+/// `quit_app` — полный выход из приложения по пункту меню «Выход».
 #[tauri::command]
 async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
     begin_quit(&app);
     Ok(())
 }
 
-/// tray_update — UI сообщает состояние соединения и готовые строки меню на
+/// `tray_update` — UI сообщает состояние соединения и готовые строки меню на
 /// языке интерфейса; оболочка перерисовывает меню, значок и подсказку трея.
 #[tauri::command]
 fn tray_update(app: tauri::AppHandle, update: TrayUpdate) -> Result<(), String> {
@@ -379,19 +395,19 @@ fn window_start_drag(window: tauri::WebviewWindow) -> Result<(), String> {
     window.start_dragging().map_err(|e| e.to_string())
 }
 
-/// shell_error — причина отказа запуска ядра для UI (D15).
+/// `shell_error` — причина отказа запуска ядра для UI (D15).
 #[tauri::command]
 fn shell_error(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> String {
     shared
         .lock()
-        .unwrap_or_else(|e| e.into_inner())
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
         .last_error
         .clone()
 }
 
-/// data_dir — пользовательский каталог данных на всех ОС (D5): Windows —
+/// `data_dir` — пользовательский каталог данных на всех ОС (D5): Windows —
 /// %APPDATA%\LAVRay, macOS — ~/Library/Application Support/LAVRay,
-/// Linux — $XDG_DATA_HOME/lavray (по умолчанию ~/.local/share/lavray).
+/// Linux — $`XDG_DATA_HOME/lavray` (по умолчанию ~/.local/share/lavray).
 fn data_dir() -> std::path::PathBuf {
     if cfg!(windows) {
         if let Some(appdata) = std::env::var_os("APPDATA") {
@@ -466,7 +482,10 @@ impl ShellHost {
 
 impl SupervisorHost for ShellHost {
     fn state_changed(&self, state: CoreState) {
-        let mut s = self.shared.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = self
+            .shared
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         s.core_state = state;
         s.core_alive = matches!(state, CoreState::Ready | CoreState::Connected);
     }
@@ -518,14 +537,17 @@ impl SupervisorHost for ShellHost {
     fn failure(&self, failure: &Failure) {
         // T-56: причина и хвост кольца логов ядра — для `shell_error` и
         // `core_log_tail` (релизная сборка stderr не выводит).
-        let mut s = self.shared.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = self
+            .shared
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         s.last_error.clone_from(&failure.message);
         s.core_log.clone_from(&failure.log_tail);
     }
 }
 
 /// Главное окно создаётся здесь, а не из `tauri.conf.json` (там `create: false`):
-/// повышенному экземпляру нужен собственный каталог данных WebView, иначе общий
+/// повышенному экземпляру нужен собственный каталог данных `WebView`, иначе общий
 /// профиль с процессами другой целостности может не открыться.
 fn create_main_window(app: &tauri::App, elevated: bool) -> Result<(), String> {
     let config = app
@@ -678,9 +700,9 @@ fn main() {
 }
 
 /// Реакция на события цикла tauri. `Exit` приходит при любом выходе, в том
-/// числе при завершении сеанса Windows (WM_ENDSESSION: tao вызывает
+/// числе при завершении сеанса Windows (`WM_ENDSESSION`: tao вызывает
 /// `loop_destroyed()` и сразу `std::process::exit(0)`), — это последняя
-/// возможность вернуть системный прокси, иначе после загрузки в WinINET
+/// возможность вернуть системный прокси, иначе после загрузки в `WinINET`
 /// остаётся адрес без слушателя (A2-06, T-43). Повторный откат безвреден:
 /// без снимка `release_on_quit` ничего не делает.
 fn on_run_event(event: &tauri::RunEvent, release_proxy: impl FnOnce()) {

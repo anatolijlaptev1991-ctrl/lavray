@@ -65,12 +65,16 @@ impl FakeSystem {
              \"\\LAVRay-Other-S-1-5-21-9\",\"N/A\",\"Ready\"\r\n",
         );
         if self.task.get() {
-            text.push_str(&format!("\"\\{TASK}\",\"N/A\",\"Ready\"\r\n"));
+            {
+                use std::fmt::Write;
+                let _ = write!(text, "\"\\{TASK}\",\"N/A\",\"Ready\"\r\n");
+            }
         }
         text
     }
 }
 
+#[allow(clippy::unnecessary_wraps)] // test helper: единый Result-интерфейс
 fn ok() -> Result<Output, String> {
     Ok(Output {
         success: true,
@@ -79,6 +83,7 @@ fn ok() -> Result<Output, String> {
     })
 }
 
+#[allow(clippy::unnecessary_wraps)] // test helper: единый Result-интерфейс
 fn failed(text: &str) -> Result<Output, String> {
     Ok(Output {
         success: false,

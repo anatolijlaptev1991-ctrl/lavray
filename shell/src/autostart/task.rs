@@ -10,7 +10,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf, Prefix};
 
-/// Общее начало имени задач LAVRay; установщик удаляет все `LAVRay-*`.
+/// Общее начало имени задач `LAVRay`; установщик удаляет все `LAVRay-*`.
 pub const TASK_PREFIX: &str = "LAVRay";
 
 /// Ревизия XML задачи. Метка лежит в описании задачи (его планировщик хранит и
@@ -25,6 +25,7 @@ pub const TASK_REVISION: &str = "acl-v2";
 /// документации сам добавляет разрешающую запись субъекту задачи (флаг
 /// `TASK_DONT_ADD_PRINCIPAL_ACE` через `schtasks /XML` не передать); записи на
 /// изменение это не даёт.
+#[must_use]
 pub fn task_sddl(sid: &str) -> String {
     format!("D:(A;;FA;;;BA)(A;;FA;;;SY)(A;;FR;;;{sid})")
 }
@@ -131,13 +132,12 @@ impl TaskFile {
     pub fn create(bytes: &[u8]) -> Result<Self, String> {
         let mut random = [0u8; 8];
         getrandom::fill(&mut random).map_err(|e| format!("случайное имя файла: {e}"))?;
-        let name = format!(
-            "lavray-task-{}.xml",
-            random
-                .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<String>()
-        );
+        let hex: String = random.iter().fold(String::with_capacity(16), |mut s, b| {
+            use std::fmt::Write;
+            let _ = write!(s, "{b:02x}");
+            s
+        });
+        let name = format!("lavray-task-{hex}.xml");
         let path = std::env::temp_dir().join(name);
         let mut writer = std::fs::OpenOptions::new();
         writer.write(true).create_new(true);
@@ -252,7 +252,7 @@ pub fn program_files_dirs() -> Vec<PathBuf> {
         let mut text: *mut u16 = std::ptr::null_mut();
         // SAFETY: `id` — валидная GUID, `text` получает строку, выделенную
         // системой; нулевой токен — текущий пользователь.
-        let hr = unsafe { SHGetKnownFolderPath(id, 0, std::ptr::null_mut(), &mut text) };
+        let hr = unsafe { SHGetKnownFolderPath(id, 0, std::ptr::null_mut(), &raw mut text) };
         if hr >= 0 && !text.is_null() {
             // SAFETY: строка нуль-терминирована, длина считается до нуля.
             let units = unsafe {

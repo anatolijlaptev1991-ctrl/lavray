@@ -3,8 +3,8 @@
 //! Windows: прокси из трёх частей (T-82).
 //!
 //! * LAN — значения Internet Settings через реестр, как и раньше;
-//! * WPAD у LAN — флаг в `DefaultConnectionSettings`, через WinINET;
-//! * записи RAS/VPN — у каждой своя настройка, тоже через WinINET.
+//! * WPAD у LAN — флаг в `DefaultConnectionSettings`, через `WinINET`;
+//! * записи RAS/VPN — у каждой своя настройка, тоже через `WinINET`.
 //!
 //! LAN обязателен: его сбой — ошибка. WPAD и RAS необязательны: что не
 //! удалось, возвращается предупреждениями, остальное применено.
@@ -20,7 +20,7 @@ use super::{ras::RasApi, registry::RegExe, wininet::WinInet};
 use super::{wpad, ProxySnapshot};
 use serde_json::{json, Map, Value};
 
-/// Бэкенд Windows: реестр, подключения WinINET и список записей RAS
+/// Бэкенд Windows: реестр, подключения `WinINET` и список записей RAS
 /// подставляются (в тестах — в памяти).
 pub(super) struct Windows<R, C, E> {
     pub reg: R,
@@ -46,9 +46,9 @@ fn captured_warnings(data: &Value) -> Vec<String> {
     strings.map(str::to_string).collect()
 }
 
-/// Есть ли в снимке записи RAS, которые пишутся через WinINET.
+/// Есть ли в снимке записи RAS, которые пишутся через `WinINET`.
 ///
-/// Запись подключения RAS через WinINET переписывает и общие значения LAN в
+/// Запись подключения RAS через `WinINET` переписывает и общие значения LAN в
 /// реестре: прогон 0.9.0 (D-1) увидел, как после неё обнулился `ProxyServer`.
 /// Поэтому после записей RAS значения LAN пишутся ещё раз, последними.
 fn has_ras(data: &Value) -> bool {
@@ -116,7 +116,7 @@ impl<R: Registry, C: Connections, E: RasEntries> Backend for Windows<R, C, E> {
     }
 }
 
-/// Настоящая ОС: `reg.exe`, WinINET и RAS.
+/// Настоящая ОС: `reg.exe`, `WinINET` и RAS.
 #[cfg(windows)]
 pub(super) fn system() -> Windows<RegExe, WinInet, RasApi> {
     Windows {

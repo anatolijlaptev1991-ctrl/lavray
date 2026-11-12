@@ -9,5 +9,7 @@ use std::sync::{Mutex, MutexGuard};
 static OPERATIONS: Mutex<()> = Mutex::new(());
 
 pub(super) fn exclusive() -> MutexGuard<'static, ()> {
-    OPERATIONS.lock().unwrap_or_else(|e| e.into_inner())
+    OPERATIONS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }

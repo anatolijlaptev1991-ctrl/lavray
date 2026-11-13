@@ -46,5 +46,8 @@ pub fn handler() -> impl Fn(tauri::ipc::Invoke) -> bool + Send + Sync + 'static 
         lavray_shell::update::wiring::update_health_ok,
         lavray_shell::update::wiring::update_previous_info,
         lavray_shell::update::pick::update_pick_installer,
+        lavray_shell::shellcaps::shell_capabilities,
+        lavray_shell::tunaccess::commands::tun_access_state,
+        lavray_shell::tunaccess::commands::tun_access_grant,
     ]
 }

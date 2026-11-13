@@ -27,7 +27,7 @@ fn registered(entry: &str) -> bool {
 #[test]
 fn tray_is_built_from_the_spec_without_hardcoded_labels() {
     let main_rs = source("main.rs");
-    assert!(main_rs.contains("tray_ui::install(app)"));
+    assert!(main_rs.contains("tray_start::install_logged(app"));
     assert!(main_rs.contains("fn tray_update"));
     for banned in ["\"Открыть LAVRay\"", "\"Выход\""] {
         assert!(!main_rs.contains(banned), "зашита подпись трея: {banned}");
@@ -405,7 +405,8 @@ fn close_button_follows_the_close_to_tray_setting() {
             .next()
         })
         .expect("close_window");
-    assert!(close.contains("window_policy::on_close(&ShellPrefs::load(&data_dir()))"));
+    assert!(close.contains("window_policy::on_close(&ShellPrefs::load(&data_dir()), tray)"));
+    assert!(close.contains("CloseAction::Minimize => window.minimize()"));
     assert!(close.contains(
         "CloseAction::Quit => {
             begin_quit("

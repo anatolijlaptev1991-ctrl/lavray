@@ -37,7 +37,8 @@ const AWAIT_MANUAL_WAIT: Duration = Duration::from_hours(1);
 pub enum Command {
     /// Остановить ядро (лестница §5) и завершить надзор.
     Stop,
-    /// Ручной «Перезапустить» (из `RateLimited` и после ошибки запуска).
+    /// «Перезапустить»: из `RateLimited` и после ошибки запуска — ручной
+    /// запуск; на здоровом ядре — штатный перезапуск (остановка и новый запуск).
     ManualRestart,
 }
 
@@ -66,6 +67,9 @@ pub trait Observer {
     /// `Stopped` не объявляется. Выход приложения продолжается — это
     /// предупреждение, не сбой запуска (`on_failure` не вызывается).
     fn on_teardown_unconfirmed(&mut self, _detail: &str) {}
+    /// Намеренный перезапуск здорового ядра начинается: адрес пропадает, но это
+    /// не крах (kill switch не трогается).
+    fn on_restarting(&mut self) {}
 }
 
 /// Ожидание, прерываемое командой: остановка срабатывает сразу, а не на
@@ -73,6 +77,11 @@ pub trait Observer {
 pub trait Waiter {
     /// Подождать `delay`; `Some(команда)`, если она пришла раньше.
     fn wait(&mut self, delay: Duration) -> Option<Command>;
+    /// Выбросить накопившиеся «Перезапустить» (пришли, пока цикл был занят
+    /// запуском или остановкой); `true`, если среди них был `Stop`.
+    fn drain_restarts(&mut self) -> bool {
+        false
+    }
 }
 
 /// Продакшн-ожидание на канале команд.
@@ -86,6 +95,14 @@ impl Waiter for ChannelWaiter {
             Err(RecvTimeoutError::Timeout) => None,
             Err(RecvTimeoutError::Disconnected) => Some(Command::Stop), // приложение закрыто
         }
+    }
+
+    fn drain_restarts(&mut self) -> bool {
+        let mut stop = false;
+        while let Ok(command) = self.0.try_recv() {
+            stop |= command == Command::Stop;
+        }
+        stop
     }
 }
 
@@ -109,6 +126,7 @@ enum Phase {
     RetrySpawn,
     Monitor,
     Restart(CrashDecision),
+    Relaunch,
     AwaitManual,
     Stop,
 }
@@ -163,6 +181,7 @@ pub fn run<P, C, O, W, J, F>(
             Phase::RetrySpawn => runner.retry_spawn(),
             Phase::Monitor => runner.monitor(),
             Phase::Restart(decision) => runner.restart(decision),
+            Phase::Relaunch => runner.relaunch(),
             Phase::AwaitManual => runner.await_manual(),
             Phase::Stop => return runner.stop(),
         };
@@ -250,6 +269,11 @@ where
                 self.ready_at = Some(self.sup.now());
                 self.stable_noted = false;
                 self.publish(self.sup.state());
+                // «Перезапустить», пришедшее пока ядро поднималось, уже исполнено
+                // самим запуском: повтор перезапустил бы свежее ядро снова
+                if self.waiter.drain_restarts() {
+                    return Phase::Stop;
+                }
                 Phase::Monitor
             }
             Err(err) => self.spawn_failed(&err),
@@ -282,11 +306,16 @@ where
     /// Наблюдение за живым ядром до команды или смерти процесса.
     fn monitor(&mut self) -> Phase {
         loop {
-            if let Some(Command::Stop) = self.waiter.wait(POLL_INTERVAL) {
-                return Phase::Stop;
-            }
+            let restart = match self.waiter.wait(POLL_INTERVAL) {
+                Some(Command::Stop) => return Phase::Stop,
+                Some(Command::ManualRestart) => true,
+                None => false,
+            };
             if !self.sup.process_mut().is_alive() {
-                break;
+                break; // и крах ровно в момент запроса — обычный крах
+            }
+            if restart {
+                return Phase::Relaunch;
             }
             // Стабильная работа ≥ BACKOFF_RESET_AFTER сбрасывает эскалацию backoff.
             if let (false, Some(since)) = (self.stable_noted, self.ready_at) {
@@ -324,6 +353,41 @@ where
             return Phase::AwaitManual;
         };
         let result = self.sup.restart_after_crash(&config);
+        self.started(config, result)
+    }
+
+    /// Перезапуск здорового ядра: та же остановка, что у `Stop` (kill и проверка
+    /// чистоты сети §6), затем новый запуск с новыми токенами. Не крах: счётчики
+    /// крахов не растут, `core_down` (kill switch) не вызывается, состояние
+    /// `Stopped` не объявляется, `--connect-last` не передаётся.
+    fn relaunch(&mut self) -> Phase {
+        self.observer.on_restarting();
+        let killed = self.sup.request_restart();
+        self.publish(self.sup.state());
+        if let Err(err) = killed {
+            self.observer
+                .on_teardown_unconfirmed(&format!("ядро не остановлено: {err}"));
+            self.sup.abort_restart();
+            self.fail(format!("не удалось остановить ядро для перезапуска: {err}"));
+            self.publish(self.sup.state());
+            return Phase::RetrySpawn;
+        }
+        let report = self.sup.process_mut().verify_teardown();
+        if !report.is_clean() {
+            self.observer
+                .on_teardown_unconfirmed(&report.unconfirmed_summary());
+        }
+        // Stop во время остановки: нового ядра не будет
+        if self.sup.process().is_cancelled() {
+            self.sup.finish_restart_as_stopped(report.is_clean());
+            self.publish(self.sup.state());
+            return Phase::Stop;
+        }
+        let Some(config) = self.fresh_config() else {
+            self.sup.abort_restart();
+            return Phase::RetrySpawn;
+        };
+        let result = self.sup.spawn_after_restart(&config);
         self.started(config, result)
     }
 
@@ -399,7 +463,8 @@ impl SupervisorHandle {
         let _ = self.tx.send(Command::Stop);
     }
 
-    /// Ручной «Перезапустить» (после `RateLimited` или ошибки запуска).
+    /// «Перезапустить»: после `RateLimited` и ошибки запуска — ручной запуск;
+    /// на здоровом ядре — перезапуск с новым событием `core-endpoint`.
     pub fn manual_restart(&self) {
         let _ = self.tx.send(Command::ManualRestart);
     }

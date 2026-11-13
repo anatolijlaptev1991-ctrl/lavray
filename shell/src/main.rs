@@ -25,6 +25,7 @@ use lavray_shell::autostart::{self, AutostartState};
 use lavray_shell::coreproc::driver::generate_auth_token;
 use lavray_shell::coreproc::runner::{spawn_supervisor, Failure, SupervisorHandle};
 use lavray_shell::coreproc::{connect_last, CoreSpawnConfig, CoreState};
+use lavray_shell::datadir::data_dir;
 use lavray_shell::elevation::{
     is_elevated as process_is_elevated, relaunch_elevated as relaunch, RelaunchOutcome,
     RelaunchRequest, Runas,
@@ -51,6 +52,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{Emitter, Manager};
 
 mod commands;
+mod tray_start;
 mod tray_ui;
 
 /// Версия протокола UI ↔ shell (`uiprotocol.rs`).
@@ -251,8 +253,8 @@ fn core_log_tail(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> Vec<Stri
         .clone()
 }
 
-/// `restart_core` — ручной «Перезапустить» из `RateLimited` (рестарты прекращены)
-/// или после ошибки запуска.
+/// `restart_core` — «Перезапустить»: из `RateLimited`/после ошибки запуска и на
+/// здоровом ядре (после выдачи прав TUN: новое ядро их получает при запуске).
 #[tauri::command]
 fn restart_core(supervisor: tauri::State<'_, Arc<SupervisorHandle>>) {
     supervisor.manual_restart();
@@ -380,8 +382,10 @@ fn window_hide(window: tauri::WebviewWindow) -> Result<(), String> {
 
 /// Крестик: спрятать в трей (спека §8.1) или выйти полностью — по настройке.
 fn close_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
-    match window_policy::on_close(&ShellPrefs::load(&data_dir())) {
+    let tray = lavray_shell::shellcaps::tray_available();
+    match window_policy::on_close(&ShellPrefs::load(&data_dir()), tray) {
         CloseAction::Hide => window.hide(),
+        CloseAction::Minimize => window.minimize(),
         CloseAction::Quit => {
             begin_quit(window.app_handle());
             Ok(())
@@ -405,32 +409,6 @@ fn shell_error(shared: tauri::State<'_, Arc<Mutex<RuntimeState>>>) -> String {
         .clone()
 }
 
-/// `data_dir` — пользовательский каталог данных на всех ОС (D5): Windows —
-/// %APPDATA%\LAVRay, macOS — ~/Library/Application Support/LAVRay,
-/// Linux — $`XDG_DATA_HOME/lavray` (по умолчанию ~/.local/share/lavray).
-fn data_dir() -> std::path::PathBuf {
-    if cfg!(windows) {
-        if let Some(appdata) = std::env::var_os("APPDATA") {
-            return std::path::PathBuf::from(appdata).join("LAVRay");
-        }
-    } else if cfg!(target_os = "macos") {
-        if let Some(home) = std::env::var_os("HOME") {
-            return std::path::PathBuf::from(home)
-                .join("Library")
-                .join("Application Support")
-                .join("LAVRay");
-        }
-    } else if let Some(xdg) = std::env::var_os("XDG_DATA_HOME") {
-        return std::path::PathBuf::from(xdg).join("lavray");
-    } else if let Some(home) = std::env::var_os("HOME") {
-        return std::path::PathBuf::from(home)
-            .join(".local")
-            .join("share")
-            .join("lavray");
-    }
-    std::env::temp_dir().join("lavray")
-}
-
 /// Путь к доверенному `lavray-core` (T-44): только в установленных ресурсах
 /// (перечень — [`integrity::core_search_paths`]) и только с вшитой при сборке
 /// суммой SHA-256.
@@ -451,8 +429,8 @@ fn core_spawn_config() -> Result<CoreSpawnConfig, String> {
     // D5: данные — в пользовательском каталоге на всех ОС. APPDATA есть
     // только на Windows; на macOS/Linux каталог рядом с .app//opt был бы
     // read-only, а create_dir_all тихо возвращал None.
-    let data_dir = data_dir();
-    std::fs::create_dir_all(&data_dir)
+    let data_dir = lavray_shell::datadir::data_dir_checked()?;
+    lavray_shell::datadir::ensure_private(&data_dir)
         .map_err(|e| format!("каталог данных {}: {e}", data_dir.display()))?;
     Ok(connect_last::apply(CoreSpawnConfig {
         binary: core_bin,
@@ -510,6 +488,14 @@ impl SupervisorHost for ShellHost {
         // switch, оставить; флаг раньше событий, «адреса нет» последним (killswitch.rs).
         os_integration::on_core_crash(&self.app, &data_dir());
         tray_ui::refresh(&self.app); // T-45: значок «ошибка»
+    }
+
+    fn core_restarting(&self) {
+        if let Ok(mut s) = self.shared.lock() {
+            s.core_alive = false;
+        }
+        self.emit_endpoint(&EndpointEvent::down());
+        tray_ui::refresh(&self.app);
     }
 
     fn spawn_failed(&self, reason: &str) {
@@ -601,7 +587,9 @@ fn main() {
     }
     // T-82: `--tray` (автозапуск) или «Запускать свёрнутым» — только значок.
     let prefs = ShellPrefs::load(&data_dir());
-    let start_hidden = window_policy::start_hidden(launch.tray, launch.elevated_relaunch, &prefs);
+    lavray_shell::shellcaps::start_tray_watch(); // трей GNOME может появиться позже
+    let tray = lavray_shell::shellcaps::tray_available();
+    let start = window_policy::start_mode(launch.tray, launch.elevated_relaunch, &prefs, tray);
     let elevated = process_is_elevated();
     let runtime = Arc::new(Mutex::new(RuntimeState::default()));
     let rt_for_setup = Arc::clone(&runtime);
@@ -658,13 +646,11 @@ fn main() {
             app.manage(Arc::new(spawn_supervisor(core_spawn_config, observer)?));
             // Трей (DS §9, §10): меню по TrayMenuSpec, состояние и тексты
             // присылает UI (`tray_update`); закрытие окна — в трей.
-            tray_ui::install(app)?;
+            let start = tray_start::install_logged(app, start); // сбой трея не рушит запуск
             os_integration::on_setup(app.handle(), &prefs); // T-82: глобальное сочетание
                                                             // Окно в tauri.conf.json создаётся скрытым (`visible: false`): так
                                                             // `--tray` не мигает окном на старте.
-            if !start_hidden {
-                tray_ui::show_main_window(app.handle());
-            }
+            tray_start::apply_start(app.handle(), start);
             Ok(())
         })
         .on_window_event(|window, event| match event {

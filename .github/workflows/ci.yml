@@ -279,6 +279,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends             libwebkit2gtk-4.1-dev build-essential curl wget file             libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+          # gsettings_live: настоящий gsettings поверх dconf под dbus-run-session
+          sudo apt-get install -y --no-install-recommends dbus dbus-daemon dconf-gsettings-backend dconf-service gsettings-desktop-schemas libglib2.0-bin
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -308,6 +310,12 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: cargo test
         run: cargo test
+      # Системный прокси GNOME настоящим gsettings: временный XDG_CONFIG_HOME
+      # (dconf пишет туда) и одноразовая сеансовая шина.
+      - name: "gsettings: живой тест системного прокси"
+        run: |
+          export XDG_CONFIG_HOME="$(mktemp -d)"
+          dbus-run-session -- cargo test --test gsettings_live -- --ignored
       - name: cargo build
         run: cargo build
 

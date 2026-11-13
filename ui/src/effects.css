@@ -42,18 +42,19 @@ html[data-theme="light"] #bgField[data-conn="err"] .bf-tint.err{opacity:.09}
 span.fx-swap{display:inline-block}
 @keyframes fxSwap{from{opacity:0;transform:translateY(5px)}}
 
-/* ---- 6. Каскад первых 9 строк списков (серверы, подписки, правила) ----
+/* ---- 6. Каскад первых 9 карточек (подписки, правила). Строки серверов (.prow) без каскада:
+   список часто сортируется и фильтруется, анимация перезапускалась бы при каждом изменении. ----
    fill-mode backwards: transform не остаётся на строке (см. T-06 в prototype.css).
    CSS-анимация стартует при монтировании элемента, а не при каждом обновлении данных. */
-:is(.prow,.sub-card,.preset):nth-child(-n+9){animation:fxRow var(--t-emph) var(--e-in) backwards;animation-delay:calc(60ms + var(--fx-i,0) * 28ms)}
-:is(.prow,.sub-card,.preset):nth-child(2){--fx-i:1}
-:is(.prow,.sub-card,.preset):nth-child(3){--fx-i:2}
-:is(.prow,.sub-card,.preset):nth-child(4){--fx-i:3}
-:is(.prow,.sub-card,.preset):nth-child(5){--fx-i:4}
-:is(.prow,.sub-card,.preset):nth-child(6){--fx-i:5}
-:is(.prow,.sub-card,.preset):nth-child(7){--fx-i:6}
-:is(.prow,.sub-card,.preset):nth-child(8){--fx-i:7}
-:is(.prow,.sub-card,.preset):nth-child(9){--fx-i:8}
+:is(.sub-card,.preset):nth-child(-n+9){animation:fxRow var(--t-emph) var(--e-in) backwards;animation-delay:calc(60ms + var(--fx-i,0) * 28ms)}
+:is(.sub-card,.preset):nth-child(2){--fx-i:1}
+:is(.sub-card,.preset):nth-child(3){--fx-i:2}
+:is(.sub-card,.preset):nth-child(4){--fx-i:3}
+:is(.sub-card,.preset):nth-child(5){--fx-i:4}
+:is(.sub-card,.preset):nth-child(6){--fx-i:5}
+:is(.sub-card,.preset):nth-child(7){--fx-i:6}
+:is(.sub-card,.preset):nth-child(8){--fx-i:7}
+:is(.sub-card,.preset):nth-child(9){--fx-i:8}
 @keyframes fxRow{from{opacity:0;transform:translateY(8px)}}
 
 /* ---- 7. Отклик на нажатие: переключатели, вкладки, пункты меню ---- */

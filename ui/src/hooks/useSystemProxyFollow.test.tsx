@@ -154,6 +154,28 @@ describe('useSystemProxyFollow', () => {
     expect(getProxyError()).toBeNull();
   });
 
+  it('ядро ушло в IDLE/ERROR: прежняя ошибка прокси снимается, баннер не появляется при штатном снятии', async () => {
+    clearProxyError();
+    shell.invoke.mockRejectedValueOnce('first failure');
+    await render(status(CoreState.IDLE));
+    await render(status(CoreState.CONNECTED));
+    expect(getProxyError()).toBe('first failure');
+    await render(status(CoreState.ERROR));
+    expect(getProxyError()).toBeNull();
+  });
+
+  it('пустой core-endpoint (ядро перезапускают): штатное снятие прокси баннер не вызывает', async () => {
+    clearProxyError();
+    shell.invoke.mockResolvedValue('');
+    await render(status(CoreState.IDLE));
+    await render(status(CoreState.CONNECTED));
+    expect(getProxyError()).toBeNull();
+    // новые клиенты ядра начинают с заглушки «idle»: окно снимает прокси
+    await render(status(CoreState.IDLE));
+    expect(proxyCalls().at(-1)).toEqual({ enabled: false, port: 1 });
+    expect(getProxyError()).toBeNull();
+  });
+
   it('отказ оболочки не повторяется каждую секунду', async () => {
     shell.invoke.mockRejectedValue(new Error('прокси недоступен'));
     await render(status(CoreState.IDLE));

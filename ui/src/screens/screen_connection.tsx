@@ -4,7 +4,7 @@
 // 1082-1127 + CSS .cx-card/.cx-top/.cx-main/.cx-meta/.cx-qa): карточка
 // состояния со знаком «Отражение», пикер сервера, кнопка подключения,
 // режим, метаданные сессии, быстрые действия. Данные — от живого ядра.
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { JSX } from 'react';
 import { Icon } from '../components/Icon';
 import {
@@ -19,6 +19,7 @@ import { useActivePreset } from '../hooks/useActivePreset';
 import { useElevated } from '../hooks/useElevated';
 import { usePlatformText } from '../hooks/useShellCaps';
 import { useTunAccess } from '../hooks/useTunAccess';
+import { useTunDialogRequest } from '../hooks/useTunDialogRequest';
 import { useTunFlow, type TunActions } from '../hooks/useTunFlow';
 import { useI18n } from '../hooks/useI18n';
 import { CORE_UNAVAILABLE, showCoreError } from '../lib/core';
@@ -41,7 +42,7 @@ import { tunNeedsElevation } from '../lib/elevation';
 import { gateFromAccess } from '../lib/tunAccess';
 import { takeRelaunched } from '../lib/launch';
 import { relaunchForTun } from '../lib/tunRelaunch';
-import { onTunDialogRequest, takeTunDialogRequest } from '../lib/tunRequest';
+import { isCoreRestarting, subscribeCoreRestart } from '../lib/coreRestart';
 import type { RelaunchOutcome } from '../lib/elevation';
 import { ConnRight } from '../components/ConnRight';
 import { TrafficWarning } from '../components/TrafficWarning';
@@ -96,8 +97,10 @@ export function ConnectionScreen(): JSX.Element {
   // ответило ни разу (coreVersion пуст — холодный старт), это не ошибка:
   // первые секунды приложение просто ждёт ядро.
   const coreError = status.lastError ?? '';
+  // Ожидаемый перезапуск ядра (выдача прав для TUN): «ядра нет» — не ошибка.
+  const restartingCore = useSyncExternalStore(subscribeCoreRestart, isCoreRestarting, isCoreRestarting);
   const coreFailed =
-    status.state === CoreState.ERROR || (coreError !== '' && status.coreVersion !== '');
+    !restartingCore && (status.state === CoreState.ERROR || (coreError !== '' && status.coreVersion !== ''));
   // T-46/T-81: бейдж «админ» на пункте TUN, пока оболочка точно сообщает, что
   // прав нет; выбранный TUN без прав — предупреждение с кнопкой перезапуска.
   // Linux: прав администратора нет, ядру выдаётся разрешение (useTunAccess).
@@ -241,7 +244,7 @@ export function ConnectionScreen(): JSX.Element {
       relaunchForTun({ core, prev: { sysProxy, tunMode }, profileId: active?.id }),
     [core, sysProxy, tunMode, active],
   );
-  const tunActions = useRef<TunActions>({ connect: () => undefined, enable: () => undefined });
+  const tunActions = useRef<TunActions>({ connect: () => undefined, enable: () => undefined, connected: false });
   const accessGranted = useCallback((): void => {
     refreshAccess();
     setActionMsg(pt('toast.tunReady'));
@@ -325,7 +328,7 @@ export function ConnectionScreen(): JSX.Element {
 
   // TUN ядро на лету не включает: перезапуск соединения с новым режимом.
   const changeTun = useCallback(
-    async (next: boolean): Promise<void> => {
+    async (next: boolean, restore = false): Promise<void> => {
       // T-81: включать TUN без прав администратора бессмысленно — диалог с
       // перезапуском; пока не перезапустились, режим не меняется.
       if (next && !(await tunFlow.guard('enable'))) return;
@@ -334,7 +337,11 @@ export function ConnectionScreen(): JSX.Element {
       saveModes(window.localStorage, { sysProxy, tunMode: next });
       void rememberModes(core, { sysProxy, tunMode: next });
       const running = status.mode === ConnectMode.TUN;
-      if (!ready || runningId === 0n || running === next) return;
+      if (!ready || runningId === 0n || running === next) {
+        // Ядро перезапускали ради TUN, и соединение пропало: восстановить в новом режиме.
+        if (restore) setTimeout(() => { tunActions.current.connect(); }, 0);
+        return;
+      }
       setBusy(true);
       setConnError('');
       setActionMsg('');
@@ -362,18 +369,11 @@ export function ConnectionScreen(): JSX.Element {
   useLayoutEffect(() => {
     tunActions.current = {
       connect: (): void => void toggle(),
-      enable: (): void => void changeTun(true),
+      enable: (restore?: boolean): void => void changeTun(true, restore),
+      connected: ready,
     };
   });
-  useEffect(() => {
-    const open = (): void => {
-      if (!takeTunDialogRequest()) return;
-      if (access === null) tunFlow.open({ kind: 'elevate' }, 'connect');
-      else void tunFlow.guard('connect');
-    };
-    open();
-    return onTunDialogRequest(open);
-  }, [tunFlow, access]);
+  useTunDialogRequest(tunFlow, tunActions);
 
   // Состояние карточки (прототип renderConn): ошибка важнее остальных.
   const phase = coreFailed ? 'err' : ready ? 'on' : connecting ? 'connecting' : 'off';
@@ -436,7 +436,7 @@ export function ConnectionScreen(): JSX.Element {
 
   return (
     <div className="conn2">
-      <ProxyErrorBanner />
+      <ProxyErrorBanner tunMode={tunMode} />
       {(coreFailed || connError !== '') && (
         <div
           className="banner banner-err"
@@ -505,7 +505,7 @@ export function ConnectionScreen(): JSX.Element {
           </div>
           <div className="cx-state">
             <div className="conn-state" id="connState" role="status" aria-live="polite">
-              <span className="fx-swap" key={phase}>{stateLabel}</span>
+              {stateLabel}
             </div>
             <div className="conn-state-sub fx-swap" key={phase}>{stateSub}</div>
           </div>

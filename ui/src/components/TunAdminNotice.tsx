@@ -7,7 +7,7 @@
 // ImportDialog (banner banner-warn).
 import type { JSX } from 'react';
 import { useI18n } from '../hooks/useI18n';
-import { usePlatformText } from '../hooks/useShellCaps';
+import { usePlatformText, useShellCaps } from '../hooks/useShellCaps';
 import type { TunAccessInfo } from '../lib/tunAccess';
 import { Icon } from './Icon';
 
@@ -20,6 +20,9 @@ interface Props {
 export function TunAdminNotice({ onRestart, access = null }: Props): JSX.Element {
   const { t } = useI18n();
   const pt = usePlatformText();
+  const grant = useShellCaps().tunAccess === 'grant';
+  // Linux: состояние доступа ещё неизвестно — кнопки «от администратора» там нет вовсе.
+  if (access === null && grant) return <></>;
   if (access === null) {
     return (
       <div className="banner banner-warn" role="alert">
@@ -39,8 +42,8 @@ export function TunAdminNotice({ onRestart, access = null }: Props): JSX.Element
   const text = unavailable
     ? access.reason === 'appimage'
       ? t('tun.grant.appimage')
-      : access.reason === 'nosuid'
-        ? t('tun.grant.nosuid')
+      : access.reason === 'nosuid' || access.reason === 'read_only'
+        ? t('tun.grant.noPerms')
         : t('tun.grant.unavail')
     : pt('mode.tun.needAdmin');
   return (

@@ -5,9 +5,10 @@
 // один раз спрашивает пароль, приложение не перезапускается. Виды по ответу
 // `tun_access_state`: `grant` (кнопка «Выдать разрешение»), `manual` (готовая
 // команда и «Скопировать»), `unavailable` (причина, например AppImage).
-import { useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { JSX } from 'react';
 import { useI18n } from '../hooks/useI18n';
+import { isCoreRestarting, subscribeCoreRestart } from '../lib/coreRestart';
 import type { GrantOutcome, TunGate } from '../lib/tunAccess';
 import type { MessageKey } from '../lib/i18n';
 import { DialogShell } from './DialogShell';
@@ -23,11 +24,12 @@ interface Props {
   readonly onRecheck: () => void;
 }
 
-type Notice = { readonly kind: 'cancelled' } | { readonly kind: 'error'; readonly code: string };
+type Notice = { readonly kind: 'cancelled' } | { readonly kind: 'busy' } | { readonly kind: 'error'; readonly code: string };
 
 const UNAVAILABLE_KEY: Readonly<Record<string, MessageKey>> = {
   appimage: 'tun.grant.appimage',
-  nosuid: 'tun.grant.nosuid',
+  nosuid: 'tun.grant.noPerms',
+  read_only: 'tun.grant.noPerms',
   restart: 'tun.grant.restartFailed',
 };
 
@@ -46,6 +48,7 @@ function copyToClipboard(text: string, done: () => void): void {
 function Body({ gate, busy, notice }: { gate: GrantDialogGate; busy: boolean; notice: Notice | null }): JSX.Element {
   const { t } = useI18n();
   const failure = notice?.kind === 'error' ? failureKey(notice.code) : null;
+  const restarting = useSyncExternalStore(subscribeCoreRestart, isCoreRestarting, isCoreRestarting);
   return (
     <>
       {gate.kind === 'grant' && <p>{t('tun.grant.d')}</p>}
@@ -60,12 +63,17 @@ function Body({ gate, busy, notice }: { gate: GrantDialogGate; busy: boolean; no
       {gate.kind === 'unavailable' && <p role="alert">{t(UNAVAILABLE_KEY[gate.reason] ?? 'tun.grant.unavail')}</p>}
       {busy && (
         <p className="hint" role="status">
-          {t('tun.grant.busy')}
+          {t(restarting ? 'tun.grant.restarting' : 'tun.grant.busy')}
         </p>
       )}
       {notice?.kind === 'cancelled' && (
         <p className="hint" role="status">
           {t('tun.grant.cancelled')}
+        </p>
+      )}
+      {notice?.kind === 'busy' && (
+        <p className="hint" role="status">
+          {t('tun.grant.inProgress')}
         </p>
       )}
       {notice?.kind === 'error' && (
@@ -119,14 +127,27 @@ export function TunGrantDialog(props: Props): JSX.Element {
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
+  // Диалог могли закрыть, пока шла выдача: после размонтирования состояние не трогаем.
+  const alive = useRef(true);
+  useEffect(
+    () => (): void => {
+      alive.current = false;
+    },
+    [],
+  );
+
   const grant = async (): Promise<void> => {
     setBusy(true);
     setNotice(null);
+    let next: Notice | null = null;
     try {
-      if ((await props.onGrant()) === 'cancelled') setNotice({ kind: 'cancelled' });
+      if ((await props.onGrant()) === 'cancelled') next = { kind: 'cancelled' };
     } catch (e) {
-      setNotice({ kind: 'error', code: e instanceof Error ? e.message : String(e) });
+      const code = e instanceof Error ? e.message : String(e);
+      next = code === 'busy' ? { kind: 'busy' } : { kind: 'error', code };
     }
+    if (!alive.current) return;
+    setNotice(next);
     setBusy(false);
   };
 

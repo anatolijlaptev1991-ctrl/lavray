@@ -18,6 +18,9 @@ import { GlobalHotkeyRow } from './settings/GlobalHotkeyRow';
 import { ShellPrefRows } from './settings/ShellPrefRows';
 import { QrTab } from './import/QrTab';
 import { NekoBoxForm } from './nekobox/NekoBoxForm';
+import { ProxyErrorBanner } from './ProxyErrorBanner';
+import { markSystemProxy } from '../lib/connection';
+import { clearProxyError, reportProxyError } from '../lib/proxyError';
 
 const invokeMock = vi.hoisted(() => vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>());
 vi.mock('@tauri-apps/api/core', () => ({ invoke: invokeMock }));
@@ -228,5 +231,45 @@ describe('тексты без .exe на Linux', () => {
     };
     const v = await mountBare(createElement(NekoBoxForm, props as never));
     expect(v.container.querySelector('#nbPathHint')?.textContent).toContain('nekobox.exe');
+  });
+});
+
+describe('баннер ошибки системного прокси', () => {
+  afterEach(() => {
+    clearProxyError();
+  });
+
+  it('Linux, режим не TUN: причина и совет про TUN', async () => {
+    await useShell(LINUX);
+    reportProxyError('gsettings failed');
+    const v = await mountBare(createElement(ProxyErrorBanner, { tunMode: false }));
+    expect(v.container.textContent).toContain('Could not turn on the system proxy: gsettings failed');
+    expect(v.container.textContent).toContain('turn on TUN mode');
+  });
+
+  it('режим уже TUN или Windows: только причина, без совета', async () => {
+    await useShell(LINUX);
+    reportProxyError('x');
+    const tun = await mountBare(createElement(ProxyErrorBanner, { tunMode: true }));
+    expect(tun.container.textContent).toContain('Could not turn on');
+    expect(tun.container.textContent).not.toContain('TUN');
+    tun.unmount();
+    resetShellCaps();
+    await useShell(WINDOWS);
+    const win = await mountBare(createElement(ProxyErrorBanner, { tunMode: false }));
+    expect(win.container.textContent).not.toMatch(/TUN|administrator/);
+  });
+
+  it('снимается при штатном применении прокси (ручное включение, следующее применение)', async () => {
+    await useShell(LINUX);
+    reportProxyError('boom');
+    const v = await mountBare(createElement(ProxyErrorBanner, { tunMode: false }));
+    expect(v.container.querySelector('#proxyBanner')).not.toBeNull();
+    const { act } = await import('react');
+    act(() => {
+      markSystemProxy(true);
+    });
+    expect(v.container.querySelector('#proxyBanner')).toBeNull();
+    markSystemProxy(false);
   });
 });

@@ -4,7 +4,7 @@
 // (веб — всё выключено, Tauri на Windows — как раньше, Tauri на Linux — по UA),
 // разбор ответа `shell_capabilities` и устойчивость к его отсутствию.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getShellCaps, loadShellCaps, parseShellCaps, resetShellCaps, subscribeShellCaps } from './shellCaps';
+import { getShellCaps, loadShellCaps, loadShellCapsWithin, parseShellCaps, resetShellCaps, subscribeShellCaps } from './shellCaps';
 
 const shell = vi.hoisted(() => ({ invoke: vi.fn<(cmd: string) => Promise<unknown>>() }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: shell.invoke }));
@@ -106,5 +106,33 @@ describe('parseShellCaps', () => {
   it('не объект — null', () => {
     expect(parseShellCaps(null, base)).toBeNull();
     expect(parseShellCaps('linux', base)).toBeNull();
+  });
+});
+
+describe('loadShellCapsWithin', () => {
+  it('зависшая команда не держит рендер дольше предела; поздний ответ доходит через подписку', async () => {
+    enableTauri();
+    setUa('Mozilla/5.0 (Windows NT 10.0)');
+    let answer: (v: unknown) => void = () => undefined;
+    shell.invoke.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    const listener = vi.fn();
+    const off = subscribeShellCaps(listener);
+    const started = Date.now();
+    await loadShellCapsWithin(40);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(getShellCaps().os).toBe('windows');
+    expect(listener).not.toHaveBeenCalled();
+    answer({ os: 'linux', tunAccess: 'grant', selfUpdate: false });
+    await new Promise((r) => setTimeout(r, 10));
+    off();
+    expect(getShellCaps()).toMatchObject({ os: 'linux', tunAccess: 'grant' });
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('быстрый ответ применяется до возврата', async () => {
+    enableTauri();
+    shell.invoke.mockResolvedValue({ os: 'linux', tunAccess: 'grant' });
+    await loadShellCapsWithin(1000);
+    expect(getShellCaps().os).toBe('linux');
   });
 });

@@ -7,6 +7,11 @@
 // ожидание его адреса), `grantable`/`manual`/`unavailable` — диалог выдачи
 // разрешения, после которого отложенное действие (подключение или включение
 // TUN) продолжается само.
+//
+// Отмена: закрытие диалога (кнопка, Esc) меняет «эпоху» — любое действие,
+// начатое раньше, перед продолжением сверяется с ней и тихо прекращается: VPN не
+// должен подключиться после отказа. Перезапуск ядра идёт одним промисом: второй
+// вызов ждёт его, а не считает перезапуск сделанным.
 import { useCallback, useRef, useState } from 'react';
 import type { JSX, MutableRefObject } from 'react';
 import { TunDialog } from '../components/TunDialog';
@@ -21,7 +26,10 @@ export type TunThen = 'connect' | 'enable' | 'none';
 
 export interface TunActions {
   readonly connect: () => void;
-  readonly enable: () => void;
+  /** Включить TUN; `reconnect` — потом заново подключиться (ядро перезапускали, соединение пропало). */
+  readonly enable: (reconnect?: boolean) => void;
+  /** Ядро сейчас подключено: после перезапуска соединение надо восстановить. */
+  readonly connected: boolean;
 }
 
 export interface TunFlow {
@@ -32,11 +40,6 @@ export interface TunFlow {
   readonly element: JSX.Element | null;
 }
 
-const tick = (): Promise<void> =>
-  new Promise((resolve) => {
-    setTimeout(resolve, 0);
-  });
-
 interface Args {
   readonly relaunch: () => Promise<RelaunchOutcome>;
   /** Свежие обработчики экрана: после перезапуска ядра клиенты другие. */
@@ -45,28 +48,45 @@ interface Args {
   readonly onAccessChanged: () => void;
 }
 
-/** Выдать разрешение и, если ядру нужен перезапуск, перезапустить его. `restarted` — перезапуск был. */
-async function grantAndRestart(): Promise<{ outcome: GrantOutcome; restarted: boolean }> {
-  const outcome = await grantTunAccess();
-  if (outcome === 'cancelled') return { outcome, restarted: false };
-  const gate = gateFromAccess(await readTunAccess());
-  if (gate.kind !== 'ready') throw new Error('not_grantable');
-  if (gate.restartCore) await restartCoreAndWait();
-  return { outcome, restarted: gate.restartCore };
+interface GrantState {
+  readonly gate: GrantDialogGate;
+  readonly then: TunThen;
 }
+
+const tick = (): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, 0);
+  });
 
 export function useTunFlow({ relaunch, actions, onAccessChanged }: Args): TunFlow {
   const admin = useShellCaps().tunAccess === 'admin';
   const [adminOpen, setAdminOpen] = useState(false);
-  const [grant, setGrant] = useState<{ gate: GrantDialogGate; then: TunThen } | null>(null);
-  // Ядро уже перезапускали ради этого действия: второй раз не просим (защита от цикла).
-  const restarted = useRef(false);
+  const [grant, setGrant] = useState<GrantState | null>(null);
+  const epoch = useRef(0);
+  // Идущий перезапуск ядра и признак «только что перезапускали» (защита от цикла).
+  const restarting = useRef<Promise<void> | null>(null);
+  const justRestarted = useRef(false);
+
+  const restart = useCallback((): Promise<void> => {
+    restarting.current ??= restartCoreAndWait().finally(() => {
+      restarting.current = null;
+    });
+    return restarting.current;
+  }, []);
+
+  /** Отменить всё начатое и сбросить признаки (закрытие диалога, новое решение). */
+  const cancel = useCallback((): void => {
+    epoch.current += 1;
+    justRestarted.current = false;
+  }, []);
 
   const resume = useCallback(
-    (then: TunThen): void => {
+    (then: TunThen, reconnect = false): void => {
+      const mine = epoch.current;
       void tick().then(() => {
-        if (then === 'connect') actions.current.connect();
-        else if (then === 'enable') actions.current.enable();
+        if (mine !== epoch.current) return;
+        if (then === 'enable') actions.current.enable(reconnect);
+        else if (then === 'connect' || reconnect) actions.current.connect();
       });
     },
     [actions],
@@ -83,47 +103,68 @@ export function useTunFlow({ relaunch, actions, onAccessChanged }: Args): TunFlo
 
   const guard = useCallback(
     async (then: TunThen): Promise<boolean> => {
+      const mine = epoch.current;
       const gate = await tunGate();
+      if (mine !== epoch.current) return false;
       if (gate.kind !== 'ready') {
+        justRestarted.current = false;
         open(gate, then);
         return false;
       }
-      if (!gate.restartCore || restarted.current) {
-        restarted.current = false;
+      if (!gate.restartCore || justRestarted.current) {
+        justRestarted.current = false;
         return true;
       }
-      restarted.current = true;
+      const running = restarting.current !== null;
+      // Перезапуск рвёт соединение: если оно было, его надо восстановить, что бы ни было намерением.
+      const wasOn = actions.current.connected;
       try {
-        await restartCoreAndWait();
+        await restart();
       } catch {
-        restarted.current = false;
-        setGrant({ gate: { kind: 'unavailable', reason: 'restart' }, then });
+        if (mine === epoch.current && !running) setGrant({ gate: { kind: 'unavailable', reason: 'restart' }, then });
         return false;
       }
-      resume(then);
+      // Второй вызов во время перезапуска только ждал его: продолжит первый.
+      if (mine !== epoch.current || running) return false;
+      justRestarted.current = then !== 'none' || wasOn;
+      resume(then, wasOn);
       return false;
     },
-    [open, resume],
+    [open, resume, restart, actions],
   );
 
   const doGrant = useCallback(
     async (then: TunThen): Promise<GrantOutcome> => {
-      const { outcome, restarted: didRestart } = await grantAndRestart();
+      const mine = epoch.current;
+      const outcome = await grantTunAccess();
       if (outcome === 'cancelled') return outcome;
-      restarted.current = didRestart;
+      const gate = gateFromAccess(await readTunAccess());
+      if (gate.kind !== 'ready') throw new Error('not_grantable');
+      const wasOn = actions.current.connected;
+      if (gate.restartCore) await restart();
+      // Диалог закрыли, пока шла выдача или перезапуск: намерение отменено.
+      if (mine !== epoch.current) return outcome;
+      const reconnect = gate.restartCore && wasOn;
+      justRestarted.current = gate.restartCore && (then !== 'none' || reconnect);
       onAccessChanged();
       setGrant(null);
-      resume(then);
+      resume(then, reconnect);
       return outcome;
     },
-    [onAccessChanged, resume],
+    [onAccessChanged, resume, restart, actions],
   );
+
+  const close = useCallback((): void => {
+    cancel();
+    setGrant(null);
+  }, [cancel]);
 
   const element = (
     <>
       {adminOpen && (
         <TunDialog
           onClose={() => {
+            cancel();
             setAdminOpen(false);
           }}
           onRelaunch={relaunch}
@@ -132,12 +173,10 @@ export function useTunFlow({ relaunch, actions, onAccessChanged }: Args): TunFlo
       {grant !== null && (
         <TunGrantDialog
           gate={grant.gate}
-          onClose={() => {
-            setGrant(null);
-          }}
+          onClose={close}
           onGrant={() => doGrant(grant.then)}
           onRecheck={() => {
-            setGrant(null);
+            close();
             resume(grant.then);
           }}
         />

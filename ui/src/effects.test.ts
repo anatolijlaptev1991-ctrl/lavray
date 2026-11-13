@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
 import prototypeCss from './prototype.css?raw';
 import baseCss from './base.css?raw';
 import effectsCss from './effects.css?raw';
+import connectionScreen from './screens/screen_connection.tsx?raw';
 
 const ALL = [prototypeCss, baseCss, effectsCss];
 // Свойства, пересчитывающие раскладку или требующие перерисовки с размытием.
@@ -78,5 +79,20 @@ describe('пауза и reduce-motion', () => {
   it('бесконечные анимации из effects.css используют токены длительности', () => {
     const infinite = effectsCss.split('\n').filter((l) => l.includes('infinite'));
     for (const l of infinite) expect(l).toMatch(/var\(--t-/);
+  });
+
+  it('каскад появления не вешается на строки серверов .prow (сортировка и фильтр перезапускали бы анимацию)', () => {
+    const cascade = effectsCss.split('\n').filter((l) => l.includes('nth-child') && l.includes('fxRow'));
+    expect(cascade.length).toBeGreaterThan(0);
+    for (const l of cascade) {
+      expect(l).not.toContain('.prow');
+      expect(l).toContain('.sub-card');
+    }
+  });
+
+  it('живая область #connState меняет только текст: без перемонтирования дочернего узла по key', () => {
+    const src = connectionScreen.slice(connectionScreen.indexOf('id="connState"'));
+    const region = src.slice(0, src.indexOf('</div>'));
+    expect(region).not.toMatch(/key=/);
   });
 });

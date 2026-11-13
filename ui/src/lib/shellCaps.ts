@@ -117,6 +117,23 @@ export async function loadShellCaps(): Promise<void> {
   }
 }
 
+/** Сколько первый рендер ждёт ответ `shell_capabilities`. */
+export const SHELL_CAPS_WAIT_MS = 300;
+
+/**
+ * Загрузка с пределом ожидания: зависшая команда не задерживает первый кадр.
+ * По истечении предела рендер идёт с запасными значениями, а поздний ответ
+ * доходит до экранов через подписку (`subscribeShellCaps`).
+ */
+export async function loadShellCapsWithin(ms: number = SHELL_CAPS_WAIT_MS): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const limit = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, ms);
+  });
+  await Promise.race([loadShellCaps(), limit]);
+  clearTimeout(timer);
+}
+
 /** Для тестов: забыть загруженное. */
 export function resetShellCaps(): void {
   loaded = null;

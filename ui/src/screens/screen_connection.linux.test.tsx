@@ -9,6 +9,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { CoreContext } from '../hooks/useCore';
 import { createCoreClients } from '../lib/core';
 import { setCoreEndpoint } from '../lib/coreEndpoint';
+import { requestTunDialog } from '../lib/tunRequest';
 import { setLanguage } from '../lib/i18n';
 import { loadShellCaps, resetShellCaps } from '../lib/shellCaps';
 import { ConnectionScreen } from './screen_connection';
@@ -17,8 +18,15 @@ const shell = vi.hoisted(() => ({
   invoke: vi.fn<(cmd: string, args?: unknown) => Promise<unknown>>(),
 }));
 vi.mock('@tauri-apps/api/core', () => ({ invoke: shell.invoke }));
+// Таймаут ожидания перезапуска ядра сокращён: настоящий — 30 с.
+vi.mock('../lib/coreRestart', async (original) => {
+  const real = await original<{ restartCoreAndWait: (ms: number) => Promise<void> }>();
+  return { ...real, restartCoreAndWait: (): Promise<void> => real.restartCoreAndWait(60) };
+});
 
 const requests: string[] = [];
+const IDLE = { state: 'CORE_STATE_IDLE', activeProfileId: '0', inbound: { port: 2080 } };
+let coreStatus: Record<string, unknown> = IDLE;
 
 function installCore(): void {
   globalThis.fetch = vi.fn((input: RequestInfo | URL): Promise<Response> => {
@@ -26,7 +34,7 @@ function installCore(): void {
     const path = new URL(href).pathname;
     requests.push(path);
     const body = path.endsWith('.CoreService/GetStatus')
-      ? { state: 'CORE_STATE_IDLE', activeProfileId: '0', inbound: { port: 2080 } }
+      ? coreStatus
       : path.endsWith('.ProfileService/ListProfiles')
         ? { profiles: [{ id: '1', name: 'Frankfurt 01', address: 'example.org', port: 443 }] }
         : {};
@@ -113,6 +121,7 @@ describe('TUN on Linux: permission instead of administrator', () => {
     window.localStorage.clear();
     setLanguage('en');
     requests.length = 0;
+    coreStatus = IDLE;
     installCore();
     root = createRoot(document.body.appendChild(document.createElement('div')));
   });
@@ -245,5 +254,148 @@ describe('TUN on Linux: permission instead of administrator', () => {
     );
     await press('button.btn-lg');
     expect(connectCalls()).toBe(1);
+  });
+
+  it('просьба подключиться из трея / Ctrl+D: права есть — подключает; права выдаются — диалог', async () => {
+    await open(READY);
+    await act(async () => {
+      requestTunDialog();
+      await sleep(60);
+    });
+    expect(connectCalls()).toBe(1);
+    expect(dialog()).toBeNull();
+    requests.length = 0;
+    access = GRANTABLE;
+    await act(async () => {
+      requestTunDialog();
+      await sleep(60);
+    });
+    expect(connectCalls()).toBe(0);
+    expect(dialog()).not.toBeNull();
+  });
+
+  it('просьба из трея, состояние доступа неизвестно (старая оболочка): подключает', async () => {
+    await open(GRANTABLE);
+    shell.invoke.mockImplementation((cmd: string) =>
+      cmd === 'tun_access_state' ? Promise.reject(new Error('command not found')) : Promise.resolve(null),
+    );
+    await act(async () => {
+      requestTunDialog();
+      await sleep(60);
+    });
+    expect(connectCalls()).toBe(1);
+  });
+
+  it('закрыл диалог, пока шла выдача: VPN не подключается после отказа', async () => {
+    await open(GRANTABLE);
+    await press('button.btn-lg');
+    let finish: () => void = () => undefined;
+    grant = (): Promise<unknown> =>
+      new Promise((resolve) => {
+        finish = (): void => {
+          access = READY;
+          resolve(null);
+        };
+      });
+    await press('#tunGrant');
+    await press('.dlg .btn-ghost'); // «Отмена» во время выдачи
+    expect(dialog()).toBeNull();
+    await act(async () => {
+      finish();
+      await sleep(60);
+    });
+    expect(connectCalls()).toBe(0);
+  });
+
+  it('закрыл диалог во время перезапуска ядра после выдачи: подключения нет', async () => {
+    await open(GRANTABLE);
+    await press('button.btn-lg');
+    grant = (): Promise<unknown> => {
+      access = { ...READY, needsCoreRestart: true };
+      return Promise.resolve(null);
+    };
+    let restartDone: () => void = () => undefined;
+    shell.invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'tun_access_state') return Promise.resolve(access);
+      if (cmd === 'tun_access_grant') return grant();
+      if (cmd === 'restart_core') {
+        restartDone = (): void => {
+          access = READY;
+          setCoreEndpoint('tcp://127.0.0.1:9', 'later');
+        };
+      }
+      return Promise.resolve(null);
+    });
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('#tunGrant')?.click();
+      await sleep(20);
+    });
+    await press('.dlg .btn-ghost');
+    await act(async () => {
+      restartDone();
+      await sleep(60);
+    });
+    expect(connectCalls()).toBe(0);
+  });
+
+  it('перезапуск ядра не дождался адреса: понятная ошибка, намерение сброшено, «ядро недоступно» не показано', async () => {
+    await open({ ...READY, needsCoreRestart: true });
+    shell.invoke.mockImplementation((cmd: string) =>
+      cmd === 'tun_access_state' ? Promise.resolve(access) : Promise.resolve(null),
+    );
+    await press('button.btn-lg');
+    await act(async () => {
+      await sleep(120);
+    });
+    expect(document.querySelector('.dlg')?.textContent).toContain('did not restart in time');
+    expect(connectCalls()).toBe(0);
+    // поздний адрес намерение не оживляет
+    await act(async () => {
+      setCoreEndpoint('tcp://127.0.0.1:9', 'late');
+      await sleep(60);
+    });
+    expect(connectCalls()).toBe(0);
+  });
+
+  it('ядро было подключено, TUN включают с перезапуском: соединение восстанавливается в режиме TUN', async () => {
+    coreStatus = {
+      state: 'CORE_STATE_CONNECTED',
+      activeProfileId: '1',
+      mode: 'CONNECT_MODE_SYSTEM_PROXY',
+      coreVersion: '1',
+      inbound: { port: 2080 },
+    };
+    await open({ ...READY, needsCoreRestart: true }, false);
+    shell.invoke.mockImplementation((cmd: string) => {
+      if (cmd === 'tun_access_state') return Promise.resolve(access);
+      if (cmd === 'restart_core') {
+        access = READY;
+        coreStatus = IDLE;
+        setCoreEndpoint('tcp://127.0.0.1:9', 'new-token');
+      }
+      return Promise.resolve(null);
+    });
+    await act(async () => {
+      document.querySelectorAll<HTMLButtonElement>('.cx-mode-row .sw')[1]?.click();
+      await sleep(150);
+    });
+    expect(invoked('restart_core')).toBe(1);
+    expect(connectCalls()).toBe(1);
+    expect(JSON.parse(window.localStorage.getItem('lavray.modes') ?? '{}')).toMatchObject({ tunMode: true });
+  });
+
+  it('busy от оболочки — спокойный текст; read_only не поминает AppImage', async () => {
+    await open(GRANTABLE);
+    await press('button.btn-lg');
+    grant = (): Promise<unknown> => Promise.reject(new Error('busy'));
+    await press('#tunGrant');
+    expect(document.querySelector('.dlg')?.textContent).toContain('already in progress');
+    expect(document.querySelector('.dlg .banner-err')).toBeNull();
+  });
+
+  it('unavailable read_only / nosuid: текст про раздел, без слова AppImage', async () => {
+    await open({ state: 'unavailable', reason: 'read_only', command: '', needsCoreRestart: false });
+    expect(notice()?.textContent).toContain('read-only');
+    expect(notice()?.textContent).not.toMatch(/AppImage/);
   });
 });

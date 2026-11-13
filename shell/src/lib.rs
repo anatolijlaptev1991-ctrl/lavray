@@ -97,3 +97,4 @@ pub mod update;
 pub mod updater;
 pub mod window_geometry;
 pub mod window_policy;
+pub mod window_visibility;

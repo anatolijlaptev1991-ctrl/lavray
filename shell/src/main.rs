@@ -383,14 +383,17 @@ fn window_hide(window: tauri::WebviewWindow) -> Result<(), String> {
 /// Крестик: спрятать в трей (спека §8.1) или выйти полностью — по настройке.
 fn close_window(window: &tauri::WebviewWindow) -> tauri::Result<()> {
     let tray = lavray_shell::shellcaps::tray_available();
-    match window_policy::on_close(&ShellPrefs::load(&data_dir()), tray) {
+    let result = match window_policy::on_close(&ShellPrefs::load(&data_dir()), tray) {
         CloseAction::Hide => window.hide(),
         CloseAction::Minimize => window.minimize(),
         CloseAction::Quit => {
             begin_quit(window.app_handle());
             Ok(())
         }
-    }
+    };
+    // окно спрятано или свёрнуто — интерфейсу «не видно» (минимизация применяется позже)
+    lavray_shell::window_visibility::report_as(window.app_handle(), false);
+    result
 }
 
 /// Начать перетаскивание окна за шапку (безрамочные окна требуют вызова).
@@ -598,6 +601,8 @@ fn main() {
     let hub = Arc::new(EndpointHub::default());
     let hub_for_setup = Arc::clone(&hub);
     os_integration::attach(tauri::Builder::default(), data_dir())
+        // Страница загрузилась и подписывается на события: отправить видимость.
+        .on_page_load(lavray_shell::window_visibility::on_page_load)
         // Сингл-инстанс (shell-lifecycle §8.1): второй запуск фокусирует окно.
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             tray_ui::show_main_window(app); // свёрнутое окно тоже разворачиваем
@@ -653,6 +658,7 @@ fn main() {
                                                             // Окно в tauri.conf.json создаётся скрытым (`visible: false`): так
                                                             // `--tray` не мигает окном на старте.
             tray_start::apply_start(app.handle(), start);
+            lavray_shell::window_visibility::report(app.handle()); // стартовое значение
             let handle = app.handle().clone();
             lavray_shell::sigquit::on_quit(move || begin_quit(&handle)); // сигнал = «Выход»
             Ok(())
@@ -669,6 +675,10 @@ fn main() {
             }
             // Тема окна сменилась — значок трея под другую панель задач.
             tauri::WindowEvent::ThemeChanged(_) => tray_ui::refresh(window.app_handle()),
+            // свёрнуто/развёрнуто пользователем: размер и фокус меняются
+            tauri::WindowEvent::Resized(_) | tauri::WindowEvent::Focused(_) => {
+                lavray_shell::window_visibility::report(window.app_handle());
+            }
             _ => {}
         })
         .invoke_handler(commands::handler())

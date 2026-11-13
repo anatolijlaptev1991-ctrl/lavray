@@ -47,6 +47,7 @@ fn minimize_unless_tray_appears(app: AppHandle) {
         let _ = app.run_on_main_thread(move || {
             if let Some(window) = target.get_webview_window("main") {
                 let _ = window.minimize();
+                lavray_shell::window_visibility::report_as(&target, false);
             }
         });
     });

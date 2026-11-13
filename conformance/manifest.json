@@ -286,8 +286,18 @@
         },
         {
           "path": "core/internal/cfgbuild/testdata/golden/G28.want.json",
-          "size": 12034,
-          "sha256": "5e4b585853c6b3e2fc74cb8c90622a4f1f4ba6ec07372791ea5c66adc4eb8c00"
+          "size": 12544,
+          "sha256": "4fcea2cd975b07d068159dd1110fea3460f6fc52c13c86f766153254d999da14"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G28b.in.json",
+          "size": 331,
+          "sha256": "d5c37ee3cb773b2d985c2fe7ff25a22ecd36ef48cc72ca1825a60c6fd7e872f4"
+        },
+        {
+          "path": "core/internal/cfgbuild/testdata/golden/G28b.want.json",
+          "size": 11267,
+          "sha256": "642a239f0949c67dcda2314ba769849634bdcadef3309bbe247658b32d8b2d01"
         },
         {
           "path": "core/internal/cfgbuild/testdata/golden/G29.in.json",

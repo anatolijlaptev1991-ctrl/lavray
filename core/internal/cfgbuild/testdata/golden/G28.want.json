@@ -111,7 +111,16 @@
           "kimi.com",
           "kimi.ai",
           "moonshot.cn",
-          "moonshot.ai"
+          "moonshot.ai",
+          "ubuntu.com",
+          "launchpad.net",
+          "launchpadcontent.net",
+          "snapcraft.io",
+          "snapcraftcontent.com",
+          "debian.org",
+          "dl.flathub.org",
+          "fedoraproject.org",
+          "archlinux.org"
         ],
         "rule_set": [
           "geosite-category-ru",
@@ -425,7 +434,16 @@
           "kimi.com",
           "kimi.ai",
           "moonshot.cn",
-          "moonshot.ai"
+          "moonshot.ai",
+          "ubuntu.com",
+          "launchpad.net",
+          "launchpadcontent.net",
+          "snapcraft.io",
+          "snapcraftcontent.com",
+          "debian.org",
+          "dl.flathub.org",
+          "fedoraproject.org",
+          "archlinux.org"
         ],
         "outbound": "bypass",
         "rule_set": [

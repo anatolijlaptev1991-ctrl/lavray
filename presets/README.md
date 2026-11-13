@@ -6,7 +6,7 @@
 
 Встроенные (зашиты в сборки; `builtin: true`, схема — `SCHEMA.md`, версия формата `version`, ревизия данных `revision`):
 
-- `lav-ru.json` — «LAV Preset RU» (конвертация из исходника ниже; rev 3)
+- `lav-ru.json` — «LAV Preset RU» (конвертация из исходника ниже; rev 4; домены обновлений Linux напрямую, процессных правил Linux нет — `../docs/PRESET-LAV-RU.md` §3e)
 - `lav-cn.json` — «LAV Preset CN» (rev 2, с ads-блоком)
 - `global.json` — «Глобальный» (rev 1)
 - `all-proxy.json` — «Всё через прокси» (rev 1); `all-direct.json` — «Всё напрямую» (rev 1)

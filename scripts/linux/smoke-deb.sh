@@ -74,6 +74,10 @@ getcap "$CORE" | grep -q cap_net_admin || fail "после переустано�
 apt-get remove -y lav-ray 2>&1
 test ! -e /usr/bin/LAVRay || fail "после удаления остался /usr/bin/LAVRay"
 test ! -e "$DESKTOP" || fail "после удаления остался desktop-файл"
-apt-get purge -y lav-ray 2>&1
+# У пакета нет конфигурационных файлов: после remove он уже полностью удалён, и
+# apt-get purge отвечает «Unable to locate package». dpkg --purge в этом случае
+# только предупреждает, а остатки, если они появятся, уберёт.
+dpkg --purge lav-ray 2>&1
+if dpkg-query -W -f='${Status}' lav-ray 2>/dev/null | grep -q .; then fail "после purge пакет остался в базе dpkg"; fi
 
 echo "Smoke OK: deb установлен, права TUN выданы, desktop валиден, удаление чистое"

@@ -9,7 +9,7 @@
 set -e
 
 CORE=/usr/lib/LAVRay/binaries/lavray-core
-CAPS=cap_net_admin,cap_net_bind_service+ep
+CAPS=cap_net_admin+ep
 
 case "$1" in
     configure)

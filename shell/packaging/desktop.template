@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name={{name}}
+Comment=Proxy client with split routing (VPN, TUN, system proxy)
+Comment[ru]=Клиент прокси с раздельной маршрутизацией (VPN, TUN, системный прокси)
+Categories=Network;
+Keywords=VPN;Proxy;Tunnel;TUN;sing-box;
+Keywords[ru]=VPN;Прокси;Туннель;TUN;sing-box;ВПН;
+Exec={{exec}}
+Icon={{icon}}
+StartupWMClass={{exec}}
+Terminal=false
+{{#if mime_type}}
+MimeType={{mime_type}}
+{{/if}}

@@ -148,11 +148,13 @@ kbd,
   white-space: nowrap;
 }
 
-/* DS §11 / §12: reduced motion kills non-essential animation */
+/* DS §11 / §12: reduced motion kills non-essential animation. Только пока пользователь
+   не выбрал «Анимации» в настройках (html[data-motion] ставит hooks/useMotion): явный выбор
+   важнее системного, а при отсутствии выбора useMotion сам ставит data-motion="off". */
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
+  html:not([data-motion]) *,
+  html:not([data-motion]) *::before,
+  html:not([data-motion]) *::after {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition: none !important;

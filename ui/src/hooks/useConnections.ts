@@ -11,6 +11,9 @@
 //   пусты; при отключении история сбрасывается. История живёт, пока открыт экран:
 //   closedIds приходят только по подписке, а без неё полной картины всё равно нет.
 // - Размонтирование обрывает запрос (abort).
+// - Окно скрыто в трей: поток закрывается (список некому показывать), история
+//   не сбрасывается; при показе подписка открывается заново, и модель сама
+//   переносит исчезнувшие за это время соединения в историю (closedSince).
 import { useCallback, useEffect, useReducer, useState } from 'react';
 import { useCore } from './useCore';
 import { useI18n } from './useI18n';
@@ -18,6 +21,7 @@ import { friendlyCoreError } from '../lib/core';
 import { ACTIVE_PAGE_LIMIT, connsReducer, createState, viewOf } from '../lib/conns/model';
 import type { ConnsModel } from '../lib/conns/model';
 import { watchWithBackoff } from '../lib/streamWatch';
+import { useWindowHidden } from './useWindowHidden';
 
 const INTERVAL_MS = 1000;
 
@@ -35,11 +39,16 @@ export function useConnections(active: boolean): UseConnections {
   const { t } = useI18n();
   const [state, dispatch] = useReducer(connsReducer, undefined, createState);
   const [failure, setFailure] = useState<unknown>(null);
+  const hidden = useWindowHidden();
 
+  // Сброс — только при смене «подключено» или ядра, но не при скрытии окна.
   useEffect(() => {
     dispatch({ type: 'reset' });
     setFailure(null);
-    if (!active) return undefined;
+  }, [active, core]);
+
+  useEffect(() => {
+    if (!active || hidden) return undefined;
     const ac = new AbortController();
     void watchWithBackoff(
       (signal) =>
@@ -59,7 +68,7 @@ export function useConnections(active: boolean): UseConnections {
     return (): void => {
       ac.abort();
     };
-  }, [active, core]);
+  }, [active, hidden, core]);
 
   const setPaused = useCallback((paused: boolean): void => {
     dispatch({ type: 'pause', paused });

@@ -19,6 +19,8 @@ import { useSystemProxyApplied } from './hooks/useSystemProxy';
 import { usePendingConnect } from './hooks/usePendingConnect';
 import { useSystemProxyFollow } from './hooks/useSystemProxyFollow';
 import { useTrafficStats } from './hooks/useTraffic';
+import { useMotion } from './hooks/useMotion';
+import { useStatusBarModes } from './hooks/useStatusBarModes';
 import { useWindowActivity } from './hooks/useWindowActivity';
 import { useConnectFlash } from './hooks/useConnectFlash';
 import { useShellBridge } from './hooks/useShellBridge';
@@ -26,8 +28,7 @@ import { applyDocumentLanguage, formatSpeed } from './lib/i18n';
 import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
 import { focusWhenReady, hotkeyOf, isTypingTarget } from './lib/hotkeys';
 import { bgConnOf } from './lib/bgState';
-import { loadModes, toggleConnection } from './lib/connection';
-import { keepModes } from './lib/modesState';
+import { toggleConnection } from './lib/connection';
 import type { TrayAction } from './lib/tray';
 import { onTablistKeyDown } from './lib/tabs';
 import { getPlatformAdapter } from './platform/adapter';
@@ -101,6 +102,7 @@ function AppInner(): JSX.Element {
   const connOn = status.state === CoreState.CONNECTED;
   const bgConn = bgConnOf(status.state);
   const flash = useConnectFlash(bgConn);
+  useMotion(); // настройка «Анимации»: html[data-motion], дрейф фона только при вводе
   useWindowActivity(); // окно скрыто/без фокуса → html[data-active="0"] → фон на паузе
   // MCP: окно ставит/снимает системный прокси, когда ядро подключил другой клиент,
   // и сообщает оболочке режим доступа агентов.
@@ -324,17 +326,7 @@ function AppInner(): JSX.Element {
   // статистики, что и график; профиль берём из статуса ядра (его имя
   // приходит в CoreStatus), не загружая весь список.
   const { speed, error: trafficError } = useTrafficStats(connOn);
-  const [modes, setModes] = useState(() => loadModes(window.localStorage));
-  useEffect(() => {
-    // Экран подключения меняет режимы — статус-бар подхватывает изменения.
-    const sync = (): void => { setModes((prev) => keepModes(prev, loadModes(window.localStorage))); };
-    window.addEventListener('storage', sync);
-    const id = window.setInterval(sync, 1500);
-    return (): void => {
-      window.removeEventListener('storage', sync);
-      window.clearInterval(id);
-    };
-  }, []);
+  const [modes, syncModes] = useStatusBarModes(); // скрыто в трей — опрос снят
   const activeProfileName =
     status.activeProfileName === undefined || status.activeProfileName === ''
       ? '—'
@@ -511,7 +503,7 @@ function AppInner(): JSX.Element {
           onClose={() => {
             setOnboarding(false);
             window.localStorage.setItem('lavray.onboarded', '1');
-            setModes((prev) => keepModes(prev, loadModes(window.localStorage))); // чипы статус-бара без ожидания опроса
+            syncModes(); // чипы статус-бара без ожидания опроса
           }}
           onOpenImport={(tab) => { setQuickImport(tab ?? 'link'); }}
         />

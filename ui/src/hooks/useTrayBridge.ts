@@ -10,6 +10,7 @@ import {
   type TrayAction,
   type TrayStatusInput,
 } from '../lib/tray';
+import { boostStatusPolling } from '../lib/coreStatusStore';
 import { isProxyKept, subscribeProxyKept } from '../lib/killSwitch';
 import { useI18n } from './useI18n';
 
@@ -35,6 +36,7 @@ export function useTrayBridge(status: TrayStatusInput, onAction: (action: TrayAc
     let cancelled = false;
     let unlisten: (() => void) | null = null;
     listenTrayActions((action) => {
+      boostStatusPolling(); // окно скрыто: результат действия нужен без паузы скрытого опроса
       actionRef.current(action);
     })
       .then((stop) => {

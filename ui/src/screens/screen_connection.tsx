@@ -19,6 +19,7 @@ import { useActivePreset } from '../hooks/useActivePreset';
 import { useElevated } from '../hooks/useElevated';
 import { usePlatformText } from '../hooks/useShellCaps';
 import { useTunAccess } from '../hooks/useTunAccess';
+import { useWindowHidden } from '../hooks/useWindowHidden';
 import { useTunDialogRequest } from '../hooks/useTunDialogRequest';
 import { useTunFlow, type TunActions } from '../hooks/useTunFlow';
 import { useI18n } from '../hooks/useI18n';
@@ -79,6 +80,7 @@ export function ConnectionScreen(): JSX.Element {
   const [menuAnchor, setMenuAnchor] = useState<ProfileMenuAnchor | null>(null);
   const pickRef = useRef<HTMLButtonElement | null>(null);
   const [sessionSec, setSessionSec] = useState(0);
+  const hidden = useWindowHidden();
   const rayId = `ray${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
   // Быстрые действия прототипа (.cx-qa): тест задержек, импорт, обновление
   // подписок. Раньше все три просто перезапрашивали список профилей —
@@ -225,6 +227,7 @@ export function ConnectionScreen(): JSX.Element {
       setSessionSec(0);
       return undefined;
     }
+    if (hidden) return undefined; // окно в трее: тик не нужен, при показе пересчитаем сразу
     const started = Number(status.startedAtMs ?? 0n);
     const tick = (): void => {
       setSessionSec(started > 0 ? Math.max(0, Math.floor((Date.now() - started) / 1000)) : 0);
@@ -234,7 +237,7 @@ export function ConnectionScreen(): JSX.Element {
     return (): void => {
       clearInterval(id);
     };
-  }, [ready, status.startedAtMs]);
+  }, [ready, hidden, status.startedAtMs]);
 
   // T-81: «Перезапустить от администратора». Выбор TUN записывается заранее
   // (localStorage и ядро), чтобы новый экземпляр открылся уже в режиме TUN; отказ

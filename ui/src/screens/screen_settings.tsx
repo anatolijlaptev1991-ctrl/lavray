@@ -18,6 +18,7 @@ import { HOTKEYS, HotkeysCard } from '../components/settings/HotkeysCard';
 import { PlatformRows } from '../components/settings/PlatformRows';
 import { ConfirmDialog } from '../components/dialogs';
 import { BackupRows } from '../components/settings/BackupRows';
+import { MotionRow } from '../components/settings/MotionRow'; import { MOTION_ROWS } from '../lib/motion';
 import { NekoBoxRow } from '../components/settings/NekoBoxRow';
 import { Icon, type IconName } from '../components/Icon';
 import { AGENT_MODE_KEY, parseAgentMode, type AgentMode } from '../lib/agents';
@@ -128,7 +129,7 @@ const SECTION_SEARCH: Readonly<Record<string, readonly SearchRow[]>> = {
     { labelKey: 'set.theme' },
     ...THEMES.map((th) => ({ labelKey: `theme.${th}` as MessageKey })),
     { labelKey: 'set.accent' },
-    ...ACCENTS.map((ac) => ({ labelKey: `accent.${ac}` as MessageKey })),
+    ...ACCENTS.map((ac) => ({ labelKey: `accent.${ac}` as MessageKey })), ...MOTION_ROWS,
   ],
   backup: [{ labelKey: 'bk.export', descKey: 'bk.hint' }, { labelKey: 'bk.restore', descKey: 'bk.restoreD' }, { labelKey: 'nb.row.l', descKey: 'nb.row.d' }],
   core: [{ labelKey: 'mux.title' }, { labelKey: 'set.appVersion' }, { labelKey: 'set.coreVersion' }, ...CORE_ROWS],
@@ -679,6 +680,7 @@ export function SettingsScreen(): JSX.Element {
                   ))}
                 </div>
               </div>
+              <MotionRow />
             </div>
           )}
 

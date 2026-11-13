@@ -133,6 +133,13 @@ echo "desktop-файл: ${DESKTOP_FILE#"$DEB_ROOT"}"
 DESKTOP_TXT="$(cat "$DESKTOP_FILE")"
 echo "$DESKTOP_TXT" | grep -q '^Categories=Network;'   || { echo "::error::desktop-файл без Categories=Network (шаблон не применился)"; exit 1; }
 echo "$DESKTOP_TXT" | grep -q '^StartupWMClass=LAVRay'   || { echo "::error::в desktop-файле нет StartupWMClass=LAVRay"; exit 1; }
+# Правило polkit для DNS туннеля: без него в режиме TUN система спрашивает пароль
+# на каждую настройку systemd-resolved (3 раза при подключении, 1 при отключении).
+POLKIT_RULE="$DEB_ROOT/usr/share/polkit-1/rules.d/50-lavray-tun-dns.rules"
+if [ ! -f "$POLKIT_RULE" ]; then
+  echo "::error::в deb нет правила polkit usr/share/polkit-1/rules.d/50-lavray-tun-dns.rules"
+  exit 1
+fi
 
 echo "=== Контроль AppImage (распаковка) ==="
 chmod +x "$DIST/LAVRay-$VERSION-x86_64.AppImage"

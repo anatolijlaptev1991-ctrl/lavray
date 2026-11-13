@@ -56,6 +56,16 @@ for dep in libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1; do
   echo "$deps" | grep -q "$dep" || fail "нет $dep в Depends"
 done
 
+# Правило polkit для DNS туннеля: на месте, принадлежит root, чужим на запись закрыто,
+# перечисляет ровно четыре действия systemd-resolved.
+POLKIT_RULE=/usr/share/polkit-1/rules.d/50-lavray-tun-dns.rules
+test -f "$POLKIT_RULE" || fail "нет правила polkit $POLKIT_RULE"
+[ "$(stat -c '%U %a' "$POLKIT_RULE")" = "root 644" ] || fail "права на правило polkit: $(stat -c '%U %a' "$POLKIT_RULE")"
+for act in set-dns-servers set-domains set-default-route revert; do
+  grep -q "org.freedesktop.resolve1.$act\"" "$POLKIT_RULE" || fail "в правиле polkit нет действия $act"
+done
+[ "$(grep -c 'org.freedesktop.resolve1\.' "$POLKIT_RULE")" -eq 4 ] || fail "в правиле polkit лишние действия resolve1"
+
 # Ядро запускается: без аргументов печатает справку и выходит с кодом 2
 # (подкоманд, меняющих состояние системы, не вызываем).
 set +e
@@ -74,6 +84,7 @@ getcap "$CORE" | grep -q cap_net_admin || fail "после переустано�
 apt-get remove -y lav-ray 2>&1
 test ! -e /usr/bin/LAVRay || fail "после удаления остался /usr/bin/LAVRay"
 test ! -e "$DESKTOP" || fail "после удаления остался desktop-файл"
+test ! -e "$POLKIT_RULE" || fail "после удаления осталось правило polkit"
 # У пакета нет конфигурационных файлов: после remove он уже полностью удалён, и
 # apt-get purge отвечает «Unable to locate package». dpkg --purge в этом случае
 # только предупреждает, а остатки, если они появятся, уберёт.

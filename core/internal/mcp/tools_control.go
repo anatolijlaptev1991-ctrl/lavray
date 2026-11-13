@@ -43,7 +43,7 @@ func controlTools() []tool {
 			Title: "Connect",
 			Description: "Connects LAVRay to a server. Without server_id it uses the server currently selected in the " +
 				"app (or the first one). The connection mode (system proxy or TUN) is the one chosen in the app; " +
-				"in system proxy mode the app window also sets the Windows proxy. This changes the user's network " +
+				"in system proxy mode the app window also sets the system proxy (Windows, GNOME or KDE). This changes the user's network " +
 				"traffic: use only when the user asked for it. Does nothing if already connected to that server.",
 			InputSchema: obj(map[string]any{
 				"server_id": serverIDProp("Server id from list_servers (optional)."),
@@ -54,7 +54,7 @@ func controlTools() []tool {
 		{spec: ToolSpec{
 			Name:        "disconnect",
 			Title:       "Disconnect",
-			Description: "Disconnects LAVRay (the app also removes the Windows system proxy it set). Use only when the user asked for it.",
+			Description: "Disconnects LAVRay (the app also removes the system proxy it set). Use only when the user asked for it.",
 			InputSchema: obj(map[string]any{}),
 			Idempotent:  true,
 			Control:     true,
@@ -195,7 +195,7 @@ func connectedResult(ctx context.Context, s *Session, lead string) (ToolResult, 
 	}
 	view, text := statusView(st, s.Mode, time.Now())
 	if st.GetState() == lavrayv1.CoreState_CORE_STATE_CONNECTED && st.GetMode() == lavrayv1.ConnectMode_CONNECT_MODE_SYSTEM_PROXY {
-		text += " Системный прокси Windows применит окно LAVRay."
+		text += " Системный прокси применит окно LAVRay."
 	}
 	return ToolResult{Text: strings.TrimSpace(lead + " " + text), Structured: view}, nil
 }

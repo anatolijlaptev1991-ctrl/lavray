@@ -29,7 +29,12 @@ echo "$caps" | grep -q cap_net_admin || fail "у ядра нет cap_net_admin"
 if echo "$caps" | grep -q cap_net_bind_service; then fail "у ядра лишняя cap_net_bind_service"; fi
 
 # Desktop-файл: валиден по спецификации, нужные поля на месте.
-test -f "$DESKTOP" || fail "нет $DESKTOP"
+# Имя файла задаёт сборщик: если оно иное, берём то, что реально поставил пакет.
+if [ ! -f "$DESKTOP" ]; then
+  DESKTOP="$(dpkg -L lav-ray | grep -E '^/usr/share/applications/[^/]+\.desktop$' | head -n 1)"
+fi
+[ -n "$DESKTOP" ] && [ -f "$DESKTOP" ] || fail "пакет не поставил desktop-файл"
+echo "desktop-файл: $DESKTOP"
 desktop-file-validate "$DESKTOP"
 grep -q '^Exec=LAVRay' "$DESKTOP" || fail "Exec"
 grep -q '^Categories=Network;' "$DESKTOP" || fail "Categories"

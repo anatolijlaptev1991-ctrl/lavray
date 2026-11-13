@@ -117,7 +117,20 @@ grep -q 'cap_net_admin+ep' "$CTRL_DIR/postinst" || { echo "::error::postinst н�
 # Лишних прав быть не должно: ядру для TUN нужен только cap_net_admin.
 if grep -q 'cap_net_bind_service' "$CTRL_DIR/postinst"; then echo "::error::postinst выдаёт лишнюю cap_net_bind_service"; exit 1; fi
 # Свой шаблон desktop-файла применился (Categories=Network, а не Utility).
-DESKTOP_TXT="$(dpkg-deb --fsys-tarfile "$DEB_FILE" | tar -xO ./usr/share/applications/LAVRay.desktop)"
+# Имена в архиве данных зависят от сборщика (с "./" или без), поэтому пакет
+# распаковывается во временный каталог, а файл ищется по расширению.
+DEB_ROOT="$WORK/deb-root"
+rm -rf "$DEB_ROOT"
+mkdir -p "$DEB_ROOT"
+dpkg-deb -x "$DEB_FILE" "$DEB_ROOT"
+DESKTOP_FILE="$(find "$DEB_ROOT/usr/share/applications" -maxdepth 1 -name '*.desktop' 2>/dev/null | head -n 1)"
+if [ -z "$DESKTOP_FILE" ]; then
+  echo "::error::в deb нет desktop-файла в usr/share/applications"
+  dpkg-deb -c "$DEB_FILE" | grep -i -E 'applications|desktop' || true
+  exit 1
+fi
+echo "desktop-файл: ${DESKTOP_FILE#"$DEB_ROOT"}"
+DESKTOP_TXT="$(cat "$DESKTOP_FILE")"
 echo "$DESKTOP_TXT" | grep -q '^Categories=Network;'   || { echo "::error::desktop-файл без Categories=Network (шаблон не применился)"; exit 1; }
 echo "$DESKTOP_TXT" | grep -q '^StartupWMClass=LAVRay'   || { echo "::error::в desktop-файле нет StartupWMClass=LAVRay"; exit 1; }
 

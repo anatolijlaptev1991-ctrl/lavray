@@ -19,10 +19,13 @@ import { useSystemProxyApplied } from './hooks/useSystemProxy';
 import { usePendingConnect } from './hooks/usePendingConnect';
 import { useSystemProxyFollow } from './hooks/useSystemProxyFollow';
 import { useTrafficStats } from './hooks/useTraffic';
+import { useWindowActivity } from './hooks/useWindowActivity';
+import { useConnectFlash } from './hooks/useConnectFlash';
 import { useShellBridge } from './hooks/useShellBridge';
 import { applyDocumentLanguage, formatSpeed } from './lib/i18n';
 import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
 import { focusWhenReady, hotkeyOf, isTypingTarget } from './lib/hotkeys';
+import { bgConnOf } from './lib/bgState';
 import { loadModes, toggleConnection } from './lib/connection';
 import { keepModes } from './lib/modesState';
 import type { TrayAction } from './lib/tray';
@@ -96,6 +99,9 @@ function AppInner(): JSX.Element {
   const status = useCoreStatus();
   const core = useCore();
   const connOn = status.state === CoreState.CONNECTED;
+  const bgConn = bgConnOf(status.state);
+  const flash = useConnectFlash(bgConn);
+  useWindowActivity(); // окно скрыто/без фокуса → html[data-active="0"] → фон на паузе
   // MCP: окно ставит/снимает системный прокси, когда ядро подключил другой клиент,
   // и сообщает оболочке режим доступа агентов.
   useSystemProxyFollow(status);
@@ -391,12 +397,15 @@ function AppInner(): JSX.Element {
       </header>
 
       <div id="body">
-        <div id="bgField" aria-hidden="true" data-conn={connOn ? 'on' : 'off'}>
+        <div id="bgField" aria-hidden="true" data-conn={bgConn}>
           <i className="bf-beam b1" />
           <i className="bf-beam b2" />
           <i className="bf-floor" />
-          <i className="bf-streak" />
+          <i className="bf-tint ok" />
+          <i className="bf-tint err" />
           <i className="bf-grain" />
+          <i className={`bf-streak${flash > 0 ? ' run' : ''}`} key={`s${String(flash)}`} />
+          {flash > 0 && <i className="bf-ripple" key={`r${String(flash)}`} />}
         </div>
 
         <aside id="sidebar">
@@ -432,7 +441,7 @@ function AppInner(): JSX.Element {
               <span className={`dot${connOn ? ' ok' : ''}`} />
               <span className="sb-card-t">
                 <span className="cap">{t('core.title')}</span>
-                <span className="sb-card-v">
+                <span className="sb-card-v fx-swap" key={connOn ? 'on' : 'off'}>
                   {connOn ? t('conn.state.on') : t('conn.state.off')}
                 </span>
               </span>

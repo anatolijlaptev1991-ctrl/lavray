@@ -505,9 +505,9 @@ export function ConnectionScreen(): JSX.Element {
           </div>
           <div className="cx-state">
             <div className="conn-state" id="connState" role="status" aria-live="polite">
-              {stateLabel}
+              <span className="fx-swap" key={phase}>{stateLabel}</span>
             </div>
-            <div className="conn-state-sub">{stateSub}</div>
+            <div className="conn-state-sub fx-swap" key={phase}>{stateSub}</div>
           </div>
         </div>
 
@@ -554,7 +554,7 @@ export function ConnectionScreen(): JSX.Element {
             </div>
 
             <button
-              className={`btn btn-lg ${ready ? 'btn-danger-solid' : 'btn-pri'}`}
+              className={`btn btn-lg cx-go ${ready ? 'btn-danger-solid' : 'btn-pri'}`}
               onClick={() => void toggle()}
               disabled={busy || connecting || status.state === CoreState.DISCONNECTING}
             >

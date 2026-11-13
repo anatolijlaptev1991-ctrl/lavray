@@ -4,6 +4,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './prototype.css';
 import './base.css';
+import './effects.css';
 import App from './App';
 import { showBootError } from './app/bootError';
 import { initialRoute } from './app/initialRoute';

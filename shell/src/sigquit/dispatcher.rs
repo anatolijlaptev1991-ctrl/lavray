@@ -50,12 +50,18 @@ impl Dispatcher {
     /// Пришёл сигнал: первый запускает штатный выход и отсчёт бюджета, второй и
     /// следующие — срочный выход.
     pub fn on_signal(self: &Arc<Self>) -> Action {
-        let before = self
-            .seen
-            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| {
-                Some(n.saturating_add(1))
-            })
-            .unwrap_or(u32::MAX);
+        // Насыщающий инкремент циклом compare_exchange: `fetch_update` в новых
+        // версиях Rust объявлен устаревшим (переименован в `try_update`, которого
+        // нет в закреплённой у нас 1.96), а CI собирает с `-D warnings`.
+        let mut before = self.seen.load(Ordering::SeqCst);
+        while let Err(actual) = self.seen.compare_exchange_weak(
+            before,
+            before.saturating_add(1),
+            Ordering::SeqCst,
+            Ordering::SeqCst,
+        ) {
+            before = actual;
+        }
         let action = next_action(before);
         match action {
             Action::Graceful => {

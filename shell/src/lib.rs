@@ -85,6 +85,7 @@ pub mod prefs;
 mod private_file;
 pub mod profile;
 pub mod shellcaps;
+pub mod sigquit;
 pub mod single_instance;
 pub mod sysproxy;
 pub mod token;

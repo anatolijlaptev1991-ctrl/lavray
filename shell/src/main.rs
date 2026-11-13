@@ -559,6 +559,8 @@ fn create_main_window(app: &tauri::App, elevated: bool) -> Result<(), String> {
 }
 
 fn main() {
+    // unix: SIGTERM/SIGINT/SIGHUP → штатный выход; перехват — до любых потоков
+    lavray_shell::sigquit::start_early();
     lavray_shell::update::watchdog_entry::run_if_requested(); // T-75: --update-watchdog
     let launch = LaunchArgs::from_env();
     // T-81: перезапуск от администратора запускает этот экземпляр, пока прежний
@@ -651,6 +653,8 @@ fn main() {
                                                             // Окно в tauri.conf.json создаётся скрытым (`visible: false`): так
                                                             // `--tray` не мигает окном на старте.
             tray_start::apply_start(app.handle(), start);
+            let handle = app.handle().clone();
+            lavray_shell::sigquit::on_quit(move || begin_quit(&handle)); // сигнал = «Выход»
             Ok(())
         })
         .on_window_event(|window, event| match event {

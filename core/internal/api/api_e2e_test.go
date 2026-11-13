@@ -19,6 +19,7 @@ import (
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/gen/lavrayv1connect"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/inst"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/model"
+	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/presets"
 	"github.com/anatolijlaptev1991-ctrl/lavray/core/internal/store"
 )
 
@@ -224,7 +225,7 @@ func TestRoutingActivateAndGetActive(t *testing.T) {
 	ctx := context.Background()
 
 	list, err := cs.routing.ListPresets(ctx, connect.NewRequest(&lavrayv1.ListPresetsRequest{}))
-	if err != nil || len(list.Msg.Presets) != 5 {
+	if err != nil || len(list.Msg.Presets) != len(presets.BuiltinFiles) {
 		t.Fatalf("list presets: %v count=%d", err, len(list.Msg.Presets))
 	}
 	if _, err := cs.routing.ActivatePreset(ctx, connect.NewRequest(&lavrayv1.ActivatePresetRequest{Id: "lav-ru"})); err != nil {

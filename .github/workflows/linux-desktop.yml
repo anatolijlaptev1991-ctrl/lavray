@@ -1,0 +1,97 @@
+# linux-desktop.yml — сборка и проверка Linux-пакетов LAVRay (deb + AppImage)
+# из текущего checkout. Проверочный прогон для PR, затрагивающих оболочку,
+# интерфейс, ядро или сборочные скрипты; вручную — для любой ветки.
+# Сборка и проверки — scripts/linux/build-packages.sh, установка в чистом
+# контейнере — scripts/linux/smoke-deb.sh. Артефакты (deb, AppImage, суммы)
+# хранятся 14 дней. Публикация релиза этим workflow не делается.
+name: linux-desktop
+
+on:
+  pull_request:
+    paths:
+      - 'shell/**'
+      - 'ui/**'
+      - 'core/**'
+      - 'scripts/linux/**'
+      - '.github/workflows/linux-desktop.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: linux-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: "Сборка и проверка: deb + AppImage (amd64)"
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      # AppImage без FUSE на раннере; strip старого linuxdeploy ломается на
+      # новых бинарниках (известная особенность сборки AppImage в CI).
+      APPIMAGE_EXTRACT_AND_RUN: '1'
+      NO_STRIP: 'true'
+      # В pull_request HEAD — merge-коммит; в артефакт пишем SHA головы PR.
+      LAVRAY_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: core/go.mod
+          cache-dependency-path: core/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      - name: "Системные зависимости Tauri, AppImage и lintian"
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev build-essential curl wget file \
+            libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev \
+            patchelf desktop-file-utils lintian shellcheck
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: shell
+
+      - name: "Скрипты: синтаксис и shellcheck"
+        run: |
+          bash -n scripts/linux/build-packages.sh
+          bash -n scripts/linux/smoke-deb.sh
+          shellcheck -S error scripts/linux/build-packages.sh scripts/linux/smoke-deb.sh
+
+      - name: "Сборка deb + AppImage и проверка пакетов"
+        run: bash scripts/linux/build-packages.sh
+
+      - name: "Lintian: качество deb-пакета"
+        run: |
+          set -o pipefail
+          # --fail-on error: падает по коду на E:; pipefail не даёт tee замаскировать.
+          lintian --fail-on error dist/*.deb 2>&1 | tee lintian-report.txt
+          echo "lintian: критичных ошибок (E:) нет"
+
+      - name: "Smoke: установка deb в чистом контейнере"
+        run: |
+          docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/scripts/linux:/scripts:ro" \
+            ubuntu:24.04 bash /scripts/smoke-deb.sh '/dist/lavray-*-linux-amd64.deb'
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lavray-linux-desktop
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            dist/*.deb
+            dist/*.AppImage
+            dist/SHA256SUMS-linux-desktop.txt
+            dist/lavray-commit.txt
+            lintian-report.txt

@@ -81,7 +81,11 @@ jobs:
 
       - name: "Smoke: установка deb в чистом контейнере"
         run: |
-          docker run --rm -v "$PWD/dist:/dist:ro" -v "$PWD/scripts/linux:/scripts:ro" \
+          # --cap-add NET_ADMIN: у ядра после postinst файловая cap_net_admin с флагом
+          # effective. Если её нет в ограничивающем наборе контейнера, запуск такого
+          # файла ядро Linux отклоняет (EPERM): smoke не смог бы даже вызвать справку.
+          docker run --rm --cap-add NET_ADMIN \
+            -v "$PWD/dist:/dist:ro" -v "$PWD/scripts/linux:/scripts:ro" \
             ubuntu:24.04 bash /scripts/smoke-deb.sh '/dist/lavray-*-linux-amd64.deb'
 
       - uses: actions/upload-artifact@v4

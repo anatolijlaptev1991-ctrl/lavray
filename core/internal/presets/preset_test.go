@@ -20,8 +20,8 @@ func TestBuiltinPresetsLoad(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(list) != 5 {
-		t.Fatalf("builtin = %d, want 5", len(list))
+	if len(list) != 6 {
+		t.Fatalf("builtin = %d, want 6", len(list))
 	}
 	ids := map[string]bool{}
 	for _, p := range list {

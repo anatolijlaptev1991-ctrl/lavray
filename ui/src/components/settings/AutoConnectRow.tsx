@@ -11,6 +11,7 @@ import { create } from '@bufbuild/protobuf';
 import { SettingValueSchema } from '../../gen/lavray_pb';
 import { useCore } from '../../hooks/useCore';
 import { useI18n } from '../../hooks/useI18n';
+import { usePlatformText } from '../../hooks/useShellCaps';
 
 /** Ключ настройки ядра. */
 export const REMEMBER_ENABLE_KEY = 'remember.enable';
@@ -26,6 +27,7 @@ interface Props {
 
 export function AutoConnectRow({ value }: Props): JSX.Element | null {
   const { t } = useI18n();
+  const pt = usePlatformText();
   const core = useCore();
   const [on, setOn] = useState(value);
   const [failed, setFailed] = useState(false);
@@ -59,7 +61,7 @@ export function AutoConnectRow({ value }: Props): JSX.Element | null {
             {t('set.autoConnect')}
           </div>
           <div className="set-d" id="autoConnectDesc">
-            {t('set.autoConnect.d')}
+            {pt('set.autoConnect.d')}
           </div>
         </div>
         <div className="set-ctl">

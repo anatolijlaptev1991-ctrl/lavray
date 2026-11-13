@@ -7,8 +7,10 @@
 import type { JSX } from 'react';
 import { useI18n } from '../../hooks/useI18n';
 import type { UpdateFlowApi } from '../../hooks/useUpdateFlow';
+import { usePackageUpdates } from '../../hooks/useShellCaps';
 import type { FlowState } from '../../lib/updates/types';
 import { DownloadProgress } from './DownloadProgress';
+import { PackageUpdateNote } from './PackageUpdateNote';
 import { ReleaseNotes } from './ReleaseNotes';
 import { UpdateBadge } from './UpdateBadge';
 import { UpdateConfirm } from './UpdateConfirm';
@@ -41,6 +43,8 @@ function Actions({ state, flow }: { readonly state: Offer; readonly flow: Update
 export function UpdateOfferCard({ state, flow }: { readonly state: Offer; readonly flow: UpdateFlowApi }): JSX.Element {
   const { t, tf } = useI18n();
   const { update } = state;
+  // Linux: ни скачивать, ни ставить из приложения нечего — только пакет.
+  const byPackage = usePackageUpdates();
   return (
     <div className="upd-card" aria-labelledby="updOfferTitle" role="group">
       <div className="upd-row" style={{ border: 0, background: 'none', padding: 0 }}>
@@ -61,9 +65,9 @@ export function UpdateOfferCard({ state, flow }: { readonly state: Offer; readon
           )}
           <ReleaseNotes notes={update.notes} />
         </div>
-        <Actions state={state} flow={flow} />
+        {byPackage ? <PackageUpdateNote version={update.version} /> : <Actions state={state} flow={flow} />}
       </div>
-      {state.kind === 'downloading' && (
+      {!byPackage && state.kind === 'downloading' && (
         <DownloadProgress downloaded={state.downloaded} total={state.total} bps={state.bps} />
       )}
       {state.kind === 'ready' && state.askSession && (

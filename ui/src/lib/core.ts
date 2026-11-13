@@ -23,6 +23,7 @@ import {
   MigrationService,
 } from '../gen/lavray_pb';
 import { authInterceptors, cookieFetch, type CoreAuth } from './coreAuth';
+import { platformKey } from './platformText';
 import { errorReason } from './errorInfo';
 import { t as translate } from './i18n';
 
@@ -113,6 +114,7 @@ export type CoreErrorKey =
   | 'err.unimplemented'
   | 'err.precondition'
   | 'err.tunAccess'
+  | 'err.tunAccess.lx'
   | 'err.transport';
 export type CoreErrorTranslate = (key: CoreErrorKey) => string;
 
@@ -176,7 +178,7 @@ export function friendlyCoreError(
     ACCESS_DENIED.test(raw) &&
     TUN_ADAPTER.test(raw)
   ) {
-    return tr('err.tunAccess');
+    return tr(platformKey('err.tunAccess') as CoreErrorKey);
   }
   return msg;
 }

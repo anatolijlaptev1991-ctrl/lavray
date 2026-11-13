@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 import { useI18n } from '../../hooks/useI18n';
+import { useShellCaps } from '../../hooks/useShellCaps';
 import type { MessageKey } from '../../lib/i18n';
 import { readShellPrefs, writeShellFlag, type ShellFlag } from '../../lib/shellPrefs';
 
@@ -28,6 +29,7 @@ function inShell(): boolean {
 
 export function ShellPrefRows(): JSX.Element | null {
   const { t } = useI18n();
+  const trayAvailable = useShellCaps().trayAvailable;
   const [prefs, setPrefs] = useState(readShellPrefs);
   const [failed, setFailed] = useState(false);
   if (!inShell()) return null;
@@ -46,6 +48,11 @@ export function ShellPrefRows(): JSX.Element | null {
           <div className="set-txt">
             <div className="set-l">{t(row.labelKey)}</div>
             <div className="set-d">{t(row.descKey)}</div>
+            {!trayAvailable && row.name !== 'notify' && (
+              <div className="set-d" role="note">
+                {t('set.tray.na')}
+              </div>
+            )}
           </div>
           <div className="set-ctl">
             <button

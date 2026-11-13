@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-// dialogs.tsx — остальные диалоги прототипа v1.2 одним модулем (оболочка
-// DialogShell вынесена в DialogShell.tsx и переэкспортируется отсюда):
-// группы серверов, подтверждение, горячие клавиши, лицензии, онбординг.
-// Общая оболочка Dialog повторяет .dlg-back/.dlg/.dlg-h/.dlg-b/.dlg-f из DS.
+// dialogs.tsx — остальные диалоги прототипа v1.2 одним модулем (DialogShell —
+// в DialogShell.tsx, переэкспорт отсюда): группы, подтверждение, клавиши, лицензии, онбординг.
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { JSX } from 'react';
 import { Group_Kind } from '../gen/lavray_pb';
@@ -12,6 +10,7 @@ import { showCoreError } from '../lib/core';
 import { useCore } from '../hooks/useCore';
 import { useI18n } from '../hooks/useI18n';
 import { useKbdLabel } from '../hooks/useKbdLabel';
+import { usePlatformText } from '../hooks/useShellCaps';
 import { Icon } from '../components/Icon';
 import { DialogShell } from './DialogShell';
 import { NekoBoxTile } from './nekobox/NekoBoxTile';
@@ -305,6 +304,7 @@ export function OnboardingDialog({
   readonly onOpenImport: (tab?: 'link' | 'qr' | 'file') => void;
 }): JSX.Element {
   const { t, tf, lang, setLanguage } = useI18n();
+  const pt = usePlatformText();
   const core = useCore();
   const [step, setStep] = useState(1);
   const [presets, setPresets] = useState<{ id: string; displayName: string }[]>([]);
@@ -525,7 +525,7 @@ export function OnboardingDialog({
                 <div className="set-row onb-mode-row">
                   <div className="set-txt">
                     <div className="set-l">{t('mode.tun')}</div>
-                    <div className="set-d">{t('mode.tun.hint')}</div>
+                    <div className="set-d">{pt('mode.tun.hint')}</div>
                   </div>
                   <div className="set-ctl">
                     <button

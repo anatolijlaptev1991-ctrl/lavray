@@ -7,7 +7,7 @@
 import { create } from '@bufbuild/protobuf';
 import type { CoreClients } from './core';
 import { ConnectMode, SettingValueSchema } from '../gen/lavray_pb';
-import { tunNeedsElevation } from './elevation';
+import { tunGate } from './elevation';
 import { serialQueue } from './serialQueue';
 import { requestTunDialog } from './tunRequest';
 import type { Profile } from '../gen/lavray_pb';
@@ -312,10 +312,10 @@ export async function toggleConnection(args: {
     await disconnectAll(args.core);
     return true;
   }
-  // T-46/T-81: TUN без прав администратора не поднимется — не пытаемся. Окно
-  // показывается (трей и Ctrl+D бывают при скрытом окне), экран «Подключение»
-  // (туда переходит вызывающий) открывает диалог перезапуска от администратора.
-  if (loadModes(window.localStorage).tunMode && (await tunNeedsElevation())) {
+  // T-46/T-81: TUN без прав не поднимется (Linux: либо ядру нужен перезапуск после
+  // выдачи прав). Окно показывается, экран «Подключение» открывает диалог или перезапуск.
+  const gate = loadModes(window.localStorage).tunMode ? await tunGate() : null;
+  if (gate !== null && (gate.kind !== 'ready' || gate.restartCore)) {
     requestTunDialog();
     return false;
   }

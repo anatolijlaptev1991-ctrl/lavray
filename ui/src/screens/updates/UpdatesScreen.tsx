@@ -19,7 +19,9 @@ import type { Channel } from '../../lib/updates/types';
 import { AutoCheckRow } from './AutoCheckRow';
 import { ChainStateCard } from './ChainStateCard';
 import { DataComponentsCard } from './DataComponentsCard';
+import { usePackageUpdates } from '../../hooks/useShellCaps';
 import { InstallFromFileRow } from './InstallFromFileRow';
+import { PackageUpdateNote } from './PackageUpdateNote';
 import { RollbackRow } from './RollbackRow';
 import { UpdateStatusCard } from './UpdateStatusCard';
 import { UpdatesHeader } from './UpdatesHeader';
@@ -47,6 +49,7 @@ export function UpdatesScreen(): JSX.Element {
     });
   };
   const native = inShell();
+  const byPackage = usePackageUpdates();
 
   return (
     <div className="updates">
@@ -68,8 +71,9 @@ export function UpdatesScreen(): JSX.Element {
       <DataComponentsCard data={data} />
       <div className="card">
         <AutoCheckRow checked={settings.autoCheck} onChange={(next) => void settings.setAutoCheck(next)} />
-        {native && <InstallFromFileRow />}
-        {native && info.rollback !== null && <RollbackRow version={info.rollback.version} />}
+        {native && byPackage && <PackageUpdateNote />}
+        {native && !byPackage && <InstallFromFileRow />}
+        {native && !byPackage && info.rollback !== null && <RollbackRow version={info.rollback.version} />}
       </div>
       <ChainStateCard chain={info.chain} />
     </div>

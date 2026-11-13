@@ -13,6 +13,7 @@ import { screenIdOf } from './app/lazyViews';
 import { CoreContext, useCore, useCoreClients, useCoreStatus } from './hooks/useCore';
 import { ConnectMode, CoreState } from './gen/lavray_pb';
 import { useI18n, useStartupLanguage } from './hooks/useI18n';
+import { usePlatformText } from './hooks/useShellCaps';
 import { useAgentAccessSync } from './hooks/useAgentAccess';
 import { useSystemProxyApplied } from './hooks/useSystemProxy';
 import { usePendingConnect } from './hooks/usePendingConnect';
@@ -55,6 +56,7 @@ export default function App(): JSX.Element {
 
 function AppInner(): JSX.Element {
   const { t, lang } = useI18n();
+  const pt = usePlatformText();
   // ?theme=light&lang=de — предпросмотр темы/языка для скриншот-проверок
   // (иначе localStorage не задать в headless-браузере).
   const [prefs] = useState(() => {
@@ -568,7 +570,7 @@ function AppInner(): JSX.Element {
         </span>
         <span className="flex1" />
         {(modes.tunMode || tunOn) && (
-          <span className={`st-chip${tunOn ? ' on' : ''}`} title={t('set.tunD')}>
+          <span className={`st-chip${tunOn ? ' on' : ''}`} title={pt('set.tunD')}>
             <span className="dot" />
             TUN
           </span>

@@ -7,6 +7,7 @@
 import { useState } from 'react';
 import type { JSX } from 'react';
 import { useI18n } from '../../hooks/useI18n';
+import { useShellCaps } from '../../hooks/useShellCaps';
 import { hotkeyErrorKey, setGlobalHotkey } from '../../lib/globalHotkey';
 import { readShellPrefs, writeHotkeyConnect } from '../../lib/shellPrefs';
 import { HotkeyCaptureDialog } from './HotkeyCaptureDialog';
@@ -17,6 +18,7 @@ function inShell(): boolean {
 
 export function GlobalHotkeyRow(): JSX.Element | null {
   const { t } = useI18n();
+  const caps = useShellCaps();
   const [accel, setAccel] = useState(() => readShellPrefs().hotkeyConnect);
   const [capturing, setCapturing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +40,11 @@ export function GlobalHotkeyRow(): JSX.Element | null {
       <div className="set-txt">
         <div className="set-l">{t('hk.global')}</div>
         <div className="set-d">{t('hk.globalD')}</div>
+        {!caps.globalHotkeys && (
+          <div className="set-d" role="status">
+            {t(caps.sessionType === 'wayland' ? 'hk.global.wayland' : 'hk.global.na')}
+          </div>
+        )}
         {error !== null && (
           <div className="set-d" role="alert">
             {error}
@@ -50,6 +57,7 @@ export function GlobalHotkeyRow(): JSX.Element | null {
         </kbd>
         <button
           className="btn btn-sec btn-sm"
+          disabled={!caps.globalHotkeys}
           onClick={() => {
             setCapturing(true);
           }}

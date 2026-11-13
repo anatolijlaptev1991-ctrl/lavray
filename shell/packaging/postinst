@@ -1,0 +1,38 @@
+#!/bin/sh
+# postinst пакета lav-ray: выдаёт ядру права для режима TUN.
+#
+# Файл ядра после каждой установки/обновления пакета создаётся заново, и
+# file capabilities на нём пропадают, поэтому выставляем их на каждом
+# `configure`. Сбой setcap (контейнер, файловая система без xattr и т.п.)
+# установку не роняет: TUN просто будет недоступен, а приложение предложит
+# выдать права одним запросом пароля.
+set -e
+
+CORE=/usr/lib/LAVRay/binaries/lavray-core
+CAPS=cap_net_admin,cap_net_bind_service+ep
+
+case "$1" in
+    configure)
+        if [ ! -f "$CORE" ]; then
+            echo "lav-ray: ядро $CORE не найдено, права для TUN не выданы." >&2
+        elif ! command -v setcap >/dev/null 2>&1; then
+            echo "lav-ray: setcap не найден (установите libcap2-bin); режим TUN" >&2
+            echo "lav-ray: будет недоступен, пока права не выданы: приложение" >&2
+            echo "lav-ray: предложит это сделать, либо выполните вручную:" >&2
+            echo "lav-ray:   sudo setcap $CAPS $CORE" >&2
+        elif ! setcap "$CAPS" "$CORE"; then
+            echo "lav-ray: не удалось выдать ядру права для TUN (setcap завершился с ошибкой)." >&2
+            echo "lav-ray: установка продолжается. Выдать права позже: приложение предложит" >&2
+            echo "lav-ray: это при включении TUN, либо выполните вручную:" >&2
+            echo "lav-ray:   sudo setcap $CAPS $CORE" >&2
+        fi
+        ;;
+    abort-upgrade|abort-remove|abort-deconfigure)
+        ;;
+    *)
+        echo "postinst called with unknown argument '$1'" >&2
+        exit 1
+        ;;
+esac
+
+exit 0

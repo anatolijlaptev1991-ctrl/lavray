@@ -15,6 +15,7 @@ import { installDropGuard } from './lib/external';
 import { startupLanguage } from './lib/i18n';
 import { loadLanguage } from './lib/i18nLoad';
 import { loadLaunchInfo } from './lib/launch';
+import { loadShellCaps } from './lib/shellCaps';
 import { hydrateUiState, installUiStateSync } from './lib/uiState';
 
 // Нативный режим (Tauri): оболочка сообщает адрес и токен ядра командой
@@ -36,6 +37,8 @@ async function bootstrap(): Promise<void> {
     await hydrateUiState(window.localStorage);
     installUiStateSync(window.localStorage);
     await loadLaunchInfo();
+    // Что умеет эта ОС (самообновление, снимок экрана, трей, права для TUN): один раз до рендера.
+    await loadShellCaps();
     await Promise.race([
       followShellEndpoint(),
       new Promise<void>((resolve) => {

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 
-// os.test.ts — T-63: ОС определяется в одном месте (platform/adapter.ts).
+// os.test.ts — T-63: ОС определяется в одном месте (platform/hostOs.ts; adapter.ts его реэкспортирует).
 import { describe, expect, it } from 'vitest';
 import { detectOS, osAttribute } from './adapter';
 
@@ -31,12 +31,12 @@ describe('определение ОС', () => {
     expect(osAttribute('web')).toBe('linux'); // как раньше в main.tsx
   });
 
-  it('navigator.userAgent читает ровно один исходник — platform/adapter.ts', () => {
+  it('navigator.userAgent читает ровно один исходник — platform/hostOs.ts', () => {
     // Поле протокола group.userAgent (UA для запросов подписки) — не определение ОС.
     const readers = Object.entries(sources)
       .filter(([, text]) => /\bnavigator\.userAgent\b/.test(text))
       .map(([file]) => baseName(file));
-    expect(readers).toEqual(['adapter.ts']);
+    expect(readers).toEqual(['hostOs.ts']);
   });
 
   it('main.tsx берёт data-os из detectOS, а не из своей копии', () => {

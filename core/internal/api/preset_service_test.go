@@ -90,7 +90,7 @@ func TestPresetCRUD(t *testing.T) {
 		t.Fatalf("источник копии: %q rev %d", cp.BuiltinSourceId, cp.BuiltinSourceRevision)
 	}
 	ids, byID := listIDs(t, cs)
-	if len(ids) != 6 || ids[5] != cp.Id || byID[cp.Id].Builtin {
+	if len(ids) != len(presets.BuiltinFiles)+1 || ids[len(presets.BuiltinFiles)] != cp.Id || byID[cp.Id].Builtin {
 		t.Fatalf("ListPresets: %v", ids)
 	}
 	orig := getPreset(t, cs, "lav-ru")
@@ -116,7 +116,7 @@ func TestPresetCRUD(t *testing.T) {
 	if err != nil || del.Msg.NeedsProfileRestart || del.Msg.NewActiveId != "" {
 		t.Fatalf("Delete: %+v %v", del, err)
 	}
-	if ids, _ := listIDs(t, cs); len(ids) != 5 {
+	if ids, _ := listIDs(t, cs); len(ids) != len(presets.BuiltinFiles) {
 		t.Fatalf("после удаления: %v", ids)
 	}
 	_, err = cs.routing.GetPreset(bg, connect.NewRequest(&lavrayv1.GetPresetRequest{Id: cp.Id}))
@@ -191,8 +191,8 @@ func TestCreateLimit(t *testing.T) {
 	src := "global"
 	_, err := cs.routing.CreatePreset(bg, connect.NewRequest(&lavrayv1.CreatePresetRequest{BuiltinSourceId: &src}))
 	wantCode(t, err, connect.CodeResourceExhausted, "101-й набор")
-	if ids, _ := listIDs(t, cs); len(ids) != 105 {
-		t.Fatalf("наборов %d, ожидалось 105", len(ids))
+	if ids, _ := listIDs(t, cs); len(ids) != len(presets.BuiltinFiles)+100 {
+		t.Fatalf("наборов %d, ожидалось %d", len(ids), len(presets.BuiltinFiles)+100)
 	}
 	if _, err := cs.routing.DeletePreset(bg, connect.NewRequest(&lavrayv1.DeletePresetRequest{Id: last.Id})); err != nil {
 		t.Fatal(err)
@@ -227,7 +227,7 @@ func TestCreateTotalSizeLimit(t *testing.T) {
 	if made < 1 || made > 5 {
 		t.Fatalf("создано %d больших наборов", made)
 	}
-	if ids, _ := listIDs(t, cs); len(ids) != 5+made {
+	if ids, _ := listIDs(t, cs); len(ids) != len(presets.BuiltinFiles)+made {
 		t.Fatalf("отказ изменил список: %d наборов, создано %d", len(ids), made)
 	}
 }
@@ -414,7 +414,7 @@ func TestDeleteBuiltinIsRejected(t *testing.T) {
 	}
 	_, err := cs.routing.DeletePreset(bg, connect.NewRequest(&lavrayv1.DeletePresetRequest{Id: "custom:none"}))
 	wantCode(t, err, connect.CodeNotFound, "Delete несуществующего")
-	if ids, _ := listIDs(t, cs); len(ids) != 5 {
+	if ids, _ := listIDs(t, cs); len(ids) != len(presets.BuiltinFiles) {
 		t.Fatalf("встроенные пропали: %v", ids)
 	}
 }

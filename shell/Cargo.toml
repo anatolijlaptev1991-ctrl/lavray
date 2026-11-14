@@ -9,6 +9,12 @@ publish = false
 [lib]
 name = "lavray_shell"
 
+# Сигналы в отдельном процессе: свой main, без libtest (вывод libtest мешал
+# ребёнку, см. начало tests/sigquit_unix.rs).
+[[test]]
+name = "sigquit_unix"
+harness = false
+
 # Зависимости пинятся по semver-минорным версиям (tauri = "2" — по заданию).
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }

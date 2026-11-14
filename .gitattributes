@@ -1,23 +1,13 @@
-/conformance/** -text
-**/testdata/** -text
-
-# Фикс 14.11: на Windows-чекайте autocrlf=true перевёл часть golden-эталонов
-# в CRLF, и TestGolden (сравнение байт-в-байт) падал локально при зелёном CI.
-# Текстовые файлы — всегда LF в рабочем дереве; картинки — бинарные.
-*.go text eol=lf
-*.json text eol=lf
-*.md text eol=lf
-*.yml text eol=lf
-*.yaml text eol=lf
-*.ts text eol=lf
-*.tsx text eol=lf
-*.css text eol=lf
-*.sh text eol=lf
-*.py text eol=lf
-*.rs text eol=lf
-*.toml text eol=lf
-*.html text eol=lf
-*.svg text eol=lf
+# Перенос строки — всегда LF: в блобах и в рабочем дереве, независимо от
+# core.autocrlf машины. Фикс 14.11: часть golden-эталонов и nft-testdata
+# хранилась с CRLF — тесты байт-в-байт падали на Windows-чек-ауте при
+# зелёном CI.
+* text=auto eol=lf
 *.png binary
 *.ico binary
 *.icns binary
+*.jar binary
+*.zip binary
+
+# Conformance-векторы — сырые байты, не нормализовать (решение fix-plan).
+/conformance/** -text

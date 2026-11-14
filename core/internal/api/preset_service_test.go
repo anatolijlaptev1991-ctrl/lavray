@@ -90,7 +90,7 @@ func TestPresetCRUD(t *testing.T) {
 		t.Fatalf("источник копии: %q rev %d", cp.BuiltinSourceId, cp.BuiltinSourceRevision)
 	}
 	ids, byID := listIDs(t, cs)
-	if n := len(presets.BuiltinFiles); len(ids) != n+1 || ids[n] != cp.Id || byID[cp.Id].Builtin {
+	if len(ids) != len(presets.BuiltinFiles)+1 || ids[len(presets.BuiltinFiles)] != cp.Id || byID[cp.Id].Builtin {
 		t.Fatalf("ListPresets: %v", ids)
 	}
 	orig := getPreset(t, cs, "lav-ru")
@@ -191,8 +191,8 @@ func TestCreateLimit(t *testing.T) {
 	src := "global"
 	_, err := cs.routing.CreatePreset(bg, connect.NewRequest(&lavrayv1.CreatePresetRequest{BuiltinSourceId: &src}))
 	wantCode(t, err, connect.CodeResourceExhausted, "101-й набор")
-	if ids, _ := listIDs(t, cs); len(ids) != presets.MaxCustomPresets+len(presets.BuiltinFiles) {
-		t.Fatalf("наборов %d, ожидалось %d", len(ids), presets.MaxCustomPresets+len(presets.BuiltinFiles))
+	if ids, _ := listIDs(t, cs); len(ids) != len(presets.BuiltinFiles)+100 {
+		t.Fatalf("наборов %d, ожидалось %d", len(ids), len(presets.BuiltinFiles)+100)
 	}
 	if _, err := cs.routing.DeletePreset(bg, connect.NewRequest(&lavrayv1.DeletePresetRequest{Id: last.Id})); err != nil {
 		t.Fatal(err)

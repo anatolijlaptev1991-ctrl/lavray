@@ -312,24 +312,3 @@ func LoadPreset(data []byte) (*Preset, error) {
 	}
 	return &p, nil
 }
-
-// BuiltinPresets загружает все встроенные пресеты (синхронизированы с
-// presets/ репозитория тестом TestBuiltinInSyncWithRepo).
-func BuiltinPresets() ([]*Preset, error) {
-	out := make([]*Preset, 0, len(BuiltinFiles))
-	for _, name := range BuiltinFiles {
-		data, err := builtinFS.ReadFile("builtin/" + name)
-		if err != nil {
-			return nil, fmt.Errorf("builtin: %w", err)
-		}
-		p, err := LoadPreset(data)
-		if err != nil {
-			return nil, fmt.Errorf("builtin %s: %w", name, err)
-		}
-		if !p.Builtin {
-			return nil, fmt.Errorf("builtin %s: builtin=false", name)
-		}
-		out = append(out, p)
-	}
-	return out, nil
-}

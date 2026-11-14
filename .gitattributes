@@ -1,2 +1,13 @@
+# Перенос строки — всегда LF: в блобах и в рабочем дереве, независимо от
+# core.autocrlf машины. Фикс 14.11: часть golden-эталонов и nft-testdata
+# хранилась с CRLF — тесты байт-в-байт падали на Windows-чек-ауте при
+# зелёном CI.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary
+*.jar binary
+*.zip binary
+
+# Conformance-векторы — сырые байты, не нормализовать (решение fix-plan).
 /conformance/** -text
-**/testdata/** -text

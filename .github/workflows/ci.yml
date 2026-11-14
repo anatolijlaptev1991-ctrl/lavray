@@ -32,6 +32,7 @@ jobs:
       - uses: bufbuild/buf-setup-action@v1
         with:
           version: "1.75.0" # пин версии buf
+          github_token: ${{ github.token }} # без токена — rate limit на скачивание buf
       - name: buf lint
         working-directory: proto
         run: buf lint

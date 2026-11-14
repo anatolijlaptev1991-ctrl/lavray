@@ -15,7 +15,7 @@
 **единый React UI**: окно приложения на десктопах (работает) и веб-панель на роутере
 (ядро раздаёт её и принимает вход по паролю; пакеты OpenWrt — вне этого репозитория).
 
-> **Статус: версия 0.9.3, выпускается только для Windows.** Всё из таблицы ниже есть в
+> **Статус: версия 0.9.4, выпускается только для Windows.** Всё из таблицы ниже есть в
 > выпуске. Что ещё не сделано или работает с оговорками — в разделе «В разработке».
 
 ---
@@ -187,7 +187,7 @@ python scripts/repo-stats.py    # проверяемые числа: контр�
 - [`docs/FIX-REPORT.md`](docs/FIX-REPORT.md) — приёмка аудита
 - [`docs/HISTORY-REWRITE.md`](docs/HISTORY-REWRITE.md) — перезапись истории и хэши выпусков
 - [`docs/RELEASE-CHECKLIST.md`](docs/RELEASE-CHECKLIST.md) — чек-лист выпуска
-- [`docs/RELEASE-NOTES-windows-v0.9.3.md`](docs/RELEASE-NOTES-windows-v0.9.3.md) — что нового в 0.9.3
+- [`docs/RELEASE-NOTES-windows-v0.9.4.md`](docs/RELEASE-NOTES-windows-v0.9.4.md) — что нового в 0.9.4
 - [`docs/stage3/core-port-plan.md`](docs/stage3/core-port-plan.md) — план W1–W8
 - [`docs/rust-migration/`](docs/rust-migration/) — план переноса ядра на Rust (черновик)
 

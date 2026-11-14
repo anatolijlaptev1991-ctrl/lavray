@@ -17,7 +17,7 @@ Arquitectura: **núcleo en Go** (fork de la capa neko sobre sing-box 1.14) + **s
 **UI única en React**: ventana de la aplicación en escritorio (funciona) y panel web en el router
 (el núcleo lo sirve y acepta el inicio de sesión con contraseña; los paquetes de OpenWrt están fuera de este repositorio).
 
-> **Estado: versión 0.9.3, solo para Windows.** Todo lo de la tabla siguiente está en esta versión.
+> **Estado: versión 0.9.4, solo para Windows.** Todo lo de la tabla siguiente está en esta versión.
 > Lo que aún no está hecho o funciona con reservas, en la sección «En desarrollo».
 
 ---
@@ -169,7 +169,7 @@ Política y contactos: [`docs/SECURITY.md`](docs/SECURITY.md).
 - [`docs/FIX-REPORT.md`](docs/FIX-REPORT.md) — aceptación de la auditoría
 - [`docs/HISTORY-REWRITE.md`](docs/HISTORY-REWRITE.md) — reescritura del historial y hashes de las versiones
 - [`docs/RELEASE-CHECKLIST.md`](docs/RELEASE-CHECKLIST.md) — lista de verificación de la versión
-- [`docs/RELEASE-NOTES-windows-v0.9.3.md`](docs/RELEASE-NOTES-windows-v0.9.3.md) — novedades de la 0.9.3
+- [`docs/RELEASE-NOTES-windows-v0.9.4.md`](docs/RELEASE-NOTES-windows-v0.9.4.md) — novedades de la 0.9.4
 - [`docs/stage3/core-port-plan.md`](docs/stage3/core-port-plan.md) — plan W1–W8
 - [`docs/rust-migration/`](docs/rust-migration/) — plan para migrar el núcleo a Rust (borrador)
 

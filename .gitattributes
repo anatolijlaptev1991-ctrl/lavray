@@ -1,2 +1,23 @@
 /conformance/** -text
 **/testdata/** -text
+
+# Фикс 14.11: на Windows-чекайте autocrlf=true перевёл часть golden-эталонов
+# в CRLF, и TestGolden (сравнение байт-в-байт) падал локально при зелёном CI.
+# Текстовые файлы — всегда LF в рабочем дереве; картинки — бинарные.
+*.go text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.css text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+*.rs text eol=lf
+*.toml text eol=lf
+*.html text eol=lf
+*.svg text eol=lf
+*.png binary
+*.ico binary
+*.icns binary

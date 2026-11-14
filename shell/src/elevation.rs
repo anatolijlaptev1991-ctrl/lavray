@@ -207,51 +207,16 @@ mod imp {
 mod imp {
     use super::RunasError;
     use std::path::Path;
-    use std::process::Command;
 
     pub fn is_elevated() -> bool {
         // SAFETY: `geteuid` — сисколл без аргументов и побочных эффектов.
         unsafe { libc::geteuid() == 0 }
     }
 
-    /// pkexec доступен в PATH (PolicyKit). Без него графический запрос
-    /// пароля невозможен — пользователь запускает приложение сам.
-    pub fn pkexec_available() -> bool {
-        Command::new("pkexec")
-            .arg("--version")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .status()
-            .is_ok_and(|s| s.success())
-    }
-
-    /// Интерпретация кода возврата pkexec. Вынесена для тестируемости:
-    /// настоящий pkexec в тестах не запускается (диалог пароля).
-    pub fn interpret_exit(code: Option<i32>) -> Result<(), RunasError> {
-        match code {
-            Some(0) => Ok(()),
-            // 126 = пользователь отказал в диалоге PolicyKit.
-            Some(126) => Err(RunasError::Cancelled),
-            // 127 = команда не найдена / не авторизован.
-            Some(127) => Err(RunasError::Failed("pkexec: не авторизован".into())),
-            Some(code) => Err(RunasError::Failed(format!("pkexec: код {code}"))),
-            None => Err(RunasError::Failed("pkexec: завершён сигналом".into())),
-        }
-    }
-
-    /// Перезапуск с повышением через pkexec (PolicyKit). Диалог пароля
-    /// показывает сама система; отказ (exit 126) — не ошибка, а Cancelled.
-    pub fn run_elevated(exe: &Path, args: &[String]) -> Result<(), RunasError> {
-        if !pkexec_available() {
-            return Err(RunasError::Unsupported);
-        }
-        let status = Command::new("pkexec")
-            .arg(exe)
-            .args(args)
-            .stdin(std::process::Stdio::null())
-            .status()
-            .map_err(|e| RunasError::Failed(format!("pkexec: {e}")))?;
-        interpret_exit(status.code())
+    /// Перезапуск всего GUI с повышением на unix не поддерживается: права для
+    /// TUN выдаются ядру (`tunaccess`), а не оболочке.
+    pub fn run_elevated(_exe: &Path, _args: &[String]) -> Result<(), RunasError> {
+        Err(RunasError::Unsupported)
     }
 }
 
@@ -386,6 +351,15 @@ mod tests {
         );
     }
 
+    /// На unix перезапуска GUI с повышением нет: права для TUN выдаются ядру
+    /// (`tunaccess`). Настоящий `Runas` ничего не запускает и отвечает `unsupported`.
+    #[cfg(unix)]
+    #[test]
+    fn unix_never_relaunches_the_gui() {
+        let outcome = relaunch_elevated(&Runas, &request(false, false));
+        assert_eq!(outcome, Err(ERR_UNSUPPORTED.to_string()));
+    }
+
     #[test]
     fn outcome_serializes_as_snake_case_words() {
         assert_eq!(
@@ -428,7 +402,3 @@ mod tests {
         assert_eq!(is_elevated(), is_elevated());
     }
 }
-
-#[cfg(all(test, unix))]
-#[path = "elevation_pkexec_tests.rs"]
-mod pkexec_tests;

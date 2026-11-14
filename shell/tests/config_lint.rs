@@ -71,18 +71,21 @@ fn main_window_is_created_by_code_hidden_and_shown_unless_tray() {
     assert_eq!(window["create"], Value::Bool(false));
 
     let main_rs = read("src/main.rs");
-    assert!(main_rs.contains("window_policy::start_hidden(launch.tray, launch.elevated_relaunch"));
+    assert!(main_rs.contains("window_policy::start_mode(launch.tray, launch.elevated_relaunch"));
     assert!(main_rs.contains("fn create_main_window"));
     assert!(main_rs.contains("WebviewWindowBuilder::from_config"));
     assert!(main_rs.contains("profile::webview_data_dir("));
     assert!(main_rs.contains(".data_directory(dir)"));
     let setup = main_rs
-        .split("tray_ui::install(app)?;")
+        .split("tray_start::install_logged(app, start)")
         .nth(1)
         .and_then(|rest| rest.split("Ok(())").next())
         .expect("хвост setup()");
-    assert!(setup.contains("if !start_hidden"), "{setup}");
-    assert!(setup.contains("tray_ui::show_main_window(app.handle())"));
+    assert!(
+        setup.contains("tray_start::apply_start(app.handle(), start)"),
+        "{setup}"
+    );
+    assert!(read("src/tray_start.rs").contains("StartMode::Show => show_main_window(app)"));
 }
 
 /// T-81/Э-3, T-82: при удалении приложения установщик убирает автозапуск

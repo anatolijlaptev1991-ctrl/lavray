@@ -66,6 +66,22 @@ describe('followAction', () => {
     expect(followAction({ ...base, prev: null, next: CoreState.IDLE, applied: true })).toBeNull();
   });
 
+  it('первый настоящий ответ ядра с уже подключённым ядром — применить (смены состояния не будет)', () => {
+    const first = { ...base, initial: true };
+    expect(followAction(first)).toBe('apply');
+    expect(followAction({ ...first, prev: null })).toBe('apply');
+    // без первого настоящего ответа и без смены состояния — по-прежнему ничего
+    expect(followAction({ ...first, prev: CoreState.CONNECTED, initial: false })).toBeNull();
+  });
+
+  it('первый настоящий ответ: применённый прокси не ставится повторно, выключенный выбор уважается', () => {
+    const first = { ...base, initial: true };
+    expect(followAction({ ...first, applied: true })).toBeNull();
+    expect(followAction({ ...first, sysProxyWanted: false })).toBeNull();
+    expect(followAction({ ...first, busy: true })).toBeNull();
+    expect(followAction({ ...first, next: CoreState.IDLE })).toBeNull();
+  });
+
   it('kill switch: после падения ядра прокси остаётся, пока его не снимет пользователь', () => {
     const crashed = { ...base, prev: CoreState.CONNECTED, next: CoreState.IDLE, applied: true };
     expect(followAction({ ...crashed, kept: true })).toBeNull();

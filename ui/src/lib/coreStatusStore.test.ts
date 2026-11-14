@@ -7,7 +7,7 @@ import { create } from '@bufbuild/protobuf';
 import { CoreState, CoreStatusSchema } from '../gen/lavray_pb';
 import type { CoreStatus } from '../gen/lavray_pb';
 import type { CoreClients } from './core';
-import { coreStatusStore, STATUS_POLL_HIDDEN_MS, STATUS_POLL_MS } from './coreStatusStore';
+import { boostStatusPolling, coreStatusStore, STATUS_BOOST_MS, STATUS_POLL_HIDDEN_MS, STATUS_POLL_MS } from './coreStatusStore';
 
 const st = (state: CoreState): CoreStatus => create(CoreStatusSchema, { state, coreVersion: '1' });
 
@@ -96,6 +96,53 @@ describe('coreStatusStore', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(calls()).toBe(before + 1);
     unsub();
+  });
+
+  it('скрытое окно: ровно один запрос за STATUS_POLL_HIDDEN_MS (5 с), а не раз в секунду', async () => {
+    const { core, calls } = fakeCore(() => Promise.resolve(st(CoreState.CONNECTED)));
+    setHidden(true);
+    const unsub = coreStatusStore(core).subscribe(() => undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls()).toBe(1);
+    await vi.advanceTimersByTimeAsync(STATUS_POLL_HIDDEN_MS - 1);
+    expect(calls()).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(calls()).toBe(2);
+    unsub();
+  });
+
+  it('скрытое окно: переходное состояние опрашивается в обычном темпе', async () => {
+    let next = st(CoreState.CONNECTING);
+    const { core, calls } = fakeCore(() => Promise.resolve(create(CoreStatusSchema, next)));
+    setHidden(true);
+    const unsub = coreStatusStore(core).subscribe(() => undefined);
+    await vi.advanceTimersByTimeAsync(STATUS_POLL_MS * 3);
+    expect(calls()).toBe(4);
+    next = st(CoreState.CONNECTED);
+    await vi.advanceTimersByTimeAsync(STATUS_POLL_MS);
+    const settled = calls();
+    await vi.advanceTimersByTimeAsync(STATUS_POLL_MS * 3); // подключено: снова редко
+    expect(calls()).toBe(settled);
+    unsub();
+  });
+
+  it('boostStatusPolling: опрос сейчас и в обычном темпе STATUS_BOOST_MS даже в скрытом окне', async () => {
+    const { core, calls } = fakeCore(() => Promise.resolve(st(CoreState.IDLE)));
+    setHidden(true);
+    const unsub = coreStatusStore(core).subscribe(() => undefined);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls()).toBe(1);
+    boostStatusPolling();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls()).toBe(2);
+    await vi.advanceTimersByTimeAsync(STATUS_POLL_MS * 3);
+    expect(calls()).toBe(5);
+    await vi.advanceTimersByTimeAsync(STATUS_BOOST_MS); // подъём закончился
+    const after = calls();
+    await vi.advanceTimersByTimeAsync(STATUS_POLL_HIDDEN_MS);
+    expect(calls()).toBeLessThanOrEqual(after + 1);
+    unsub();
+    boostStatusPolling(); // без подписчиков — ничего не падает
   });
 
   it('переход подключено → отключено в скрытом окне доходит до подписчика', async () => {

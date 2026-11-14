@@ -10,6 +10,7 @@ import { Outbound } from '../../gen/lavray_pb';
 import type { ProcessRule, RoutingPreset } from '../../gen/lavray_pb';
 import { Icon } from '../../components/Icon';
 import { useI18n } from '../../hooks/useI18n';
+import { usePlatformText } from '../../hooks/useShellCaps';
 import { newProcessRule, OUTBOUND_OPTIONS, parseProcessNames } from '../../lib/presetDraft';
 
 export interface ProcessRulesEditorProps {
@@ -27,6 +28,7 @@ function platformLabel(rule: ProcessRule, t: ReturnType<typeof useI18n>['t']): s
 
 export function ProcessRulesEditor({ preset, onChange }: ProcessRulesEditorProps): JSX.Element {
   const { t, tf } = useI18n();
+  const pt = usePlatformText();
   const [names, setNames] = useState('');
   const [outbound, setOutbound] = useState(Outbound.DIRECT);
   const [error, setError] = useState('');
@@ -80,7 +82,7 @@ export function ProcessRulesEditor({ preset, onChange }: ProcessRulesEditorProps
             <input
               className="input input-mono"
               aria-label={t('rt.proc.names')}
-              placeholder={t('rt.proc.namesPh')}
+              placeholder={pt('rt.proc.namesPh')}
               autoComplete="off"
               spellCheck={false}
               value={names}

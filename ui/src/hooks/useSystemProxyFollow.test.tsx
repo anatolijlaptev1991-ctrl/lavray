@@ -17,6 +17,8 @@ import {
 } from '../gen/lavray_pb';
 import { applySystemProxy, connectWith, disconnectAll, saveModes } from '../lib/connection';
 import type { CoreClients } from '../lib/core';
+import { clearProxyError, getProxyError } from '../lib/proxyError';
+import { clearUiLog, recentUiLog } from '../lib/uiJournal';
 import { useSystemProxyFollow } from './useSystemProxyFollow';
 
 const shell = vi.hoisted(() => ({
@@ -26,6 +28,16 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: shell.invoke }));
 
 function status(state: CoreState, mode = ConnectMode.SYSTEM_PROXY, port = 2080): CoreStatus {
   return create(CoreStatusSchema, { state, mode, inbound: create(InboundInfoSchema, { listen: '127.0.0.1', port }) });
+}
+
+/** Настоящий ответ ядра (есть coreVersion), а не заглушка «idle» до первого ответа. */
+function realStatus(state: CoreState): CoreStatus {
+  return create(CoreStatusSchema, {
+    state,
+    mode: ConnectMode.SYSTEM_PROXY,
+    coreVersion: '0.1.0',
+    inbound: create(InboundInfoSchema, { listen: '127.0.0.1', port: 2080 }),
+  });
 }
 
 function Probe(props: { status: CoreStatus }): JSX.Element | null {
@@ -108,6 +120,60 @@ describe('useSystemProxyFollow', () => {
     await render(status(CoreState.CONNECTED));
     await render(status(CoreState.CONNECTED));
     expect(proxyCalls()).toEqual([]);
+  });
+
+  // Первый НАСТОЯЩИЙ ответ ядра (есть coreVersion): ядро уже подключено без окна
+  // (автоподключение, окно открыли позже) — смены состояния не будет, прокси ставится сразу.
+  it('первый настоящий ответ с подключённым ядром применяет прокси ровно один раз', async () => {
+    await render(realStatus(CoreState.CONNECTED));
+    await render(realStatus(CoreState.CONNECTED));
+    expect(proxyCalls()).toEqual([{ enabled: true, port: 2080 }]);
+  });
+
+  it('первый настоящий ответ: при выключенном «Системном прокси» или в простое прокси не трогается', async () => {
+    await render(realStatus(CoreState.IDLE));
+    expect(proxyCalls()).toEqual([]);
+    saveModes(window.localStorage, { sysProxy: false, tunMode: false });
+    await render(realStatus(CoreState.CONNECTED));
+    expect(proxyCalls()).toEqual([]);
+  });
+
+  it('отказ оболочки не глотается: причина — на экран «Подключение» и в журнал, успех её снимает', async () => {
+    clearUiLog();
+    clearProxyError();
+    shell.invoke.mockRejectedValue('gsettings: schema not found');
+    await render(status(CoreState.IDLE));
+    await render(status(CoreState.CONNECTED));
+    expect(getProxyError()).toBe('gsettings: schema not found');
+    expect(recentUiLog().map((e) => e.message)).toEqual(['system proxy: gsettings: schema not found']);
+    expect(recentUiLog()[0]?.level).toBe('error');
+    // следующее штатное изменение прокси (снятие при отключении) ошибку убирает
+    shell.invoke.mockResolvedValue('');
+    await render(status(CoreState.IDLE));
+    await render(status(CoreState.CONNECTED));
+    expect(getProxyError()).toBeNull();
+  });
+
+  it('ядро ушло в IDLE/ERROR: прежняя ошибка прокси снимается, баннер не появляется при штатном снятии', async () => {
+    clearProxyError();
+    shell.invoke.mockRejectedValueOnce('first failure');
+    await render(status(CoreState.IDLE));
+    await render(status(CoreState.CONNECTED));
+    expect(getProxyError()).toBe('first failure');
+    await render(status(CoreState.ERROR));
+    expect(getProxyError()).toBeNull();
+  });
+
+  it('пустой core-endpoint (ядро перезапускают): штатное снятие прокси баннер не вызывает', async () => {
+    clearProxyError();
+    shell.invoke.mockResolvedValue('');
+    await render(status(CoreState.IDLE));
+    await render(status(CoreState.CONNECTED));
+    expect(getProxyError()).toBeNull();
+    // новые клиенты ядра начинают с заглушки «idle»: окно снимает прокси
+    await render(status(CoreState.IDLE));
+    expect(proxyCalls().at(-1)).toEqual({ enabled: false, port: 1 });
+    expect(getProxyError()).toBeNull();
   });
 
   it('отказ оболочки не повторяется каждую секунду', async () => {

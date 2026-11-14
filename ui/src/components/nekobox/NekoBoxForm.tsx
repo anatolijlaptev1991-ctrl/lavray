@@ -6,6 +6,7 @@
 import type { JSX, MutableRefObject } from 'react';
 import type { NekoBoxCandidate } from '../../gen/lavray_pb';
 import { useI18n } from '../../hooks/useI18n';
+import { usePlatformText } from '../../hooks/useShellCaps';
 import type { MessageKey } from '../../lib/i18n';
 import { countsLine } from '../../lib/nekoBox';
 import { canPickFolder } from '../../lib/pickFolder';
@@ -79,6 +80,7 @@ function Check({ id, on, disabled, label, onChange }: { readonly id: string; rea
 
 export function NekoBoxForm(p: Props): JSX.Element {
   const { t } = useI18n();
+  const pt = usePlatformText();
   const selected = p.candidates.find((c) => c.path === p.path.trim());
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -89,7 +91,7 @@ export function NekoBoxForm(p: Props): JSX.Element {
         </div>
       )}
       {p.candidates.length > 0 && <Candidates list={p.candidates} path={p.path} onPath={p.onPath} />}
-      {p.candidates.length === 0 && !p.loading && <p className="cap">{t('nb.none')}</p>}
+      {p.candidates.length === 0 && !p.loading && <p className="cap">{pt('nb.none')}</p>}
       <div className="field">
         <label htmlFor="nbPath">{t('nb.path')}</label>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -113,7 +115,7 @@ export function NekoBoxForm(p: Props): JSX.Element {
           )}
         </div>
         <p className="cap" id="nbPathHint">
-          {t('nb.pathHint')}
+          {pt('nb.pathHint')}
         </p>
       </div>
       <Check id="nbRoutes" on={p.routes} disabled={p.busy} label={t('nb.routes')} onChange={p.onRoutes} />

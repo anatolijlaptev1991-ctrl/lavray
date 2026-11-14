@@ -14,6 +14,12 @@
  * `window.__TAURI_INTERNALS__` is present.
  */
 
+import { detectOS, type HostOS } from './hostOs';
+import { getShellCaps } from '../lib/shellCaps';
+
+export { detectOS };
+export type { HostOS };
+
 export interface Capabilities {
   /** Native window tray icon and menu. */
   readonly tray: boolean;
@@ -51,8 +57,6 @@ export interface OpenFileResult {
  * Platform surface used by the UI. Every method is a stub at this stage;
  * the shape is the contract for the Tauri implementation.
  */
-export type HostOS = 'windows' | 'macos' | 'linux' | 'web';
-
 export interface PlatformAdapter {
   readonly id: 'web' | 'tauri';
   readonly capabilities: Capabilities;
@@ -89,19 +93,6 @@ function canceled(): OpenFileResult {
   return { path: null, canceled: true };
 }
 
-/**
- * Единственное место, где ОС определяется по User-Agent. Ей пользуются и
- * адаптер (React-хром, ⌘/Ctrl), и main.tsx (`html[data-os]` для CSS) — раньше
- * там были две разные копии с разными запасными значениями.
- */
-export function detectOS(win: Window): HostOS {
-  const ua = win.navigator.userAgent;
-  if (ua.includes('Mac')) return 'macos';
-  if (ua.includes('Windows')) return 'windows';
-  if (ua.includes('Linux') || ua.includes('X11')) return 'linux';
-  return 'web';
-}
-
 /** Значение `html[data-os]` словаря прототипа: win | mac | linux. Неизвестная ОС → linux. */
 export type OsAttribute = 'win' | 'mac' | 'linux';
 
@@ -109,6 +100,19 @@ export function osAttribute(os: HostOS): OsAttribute {
   if (os === 'windows') return 'win';
   if (os === 'macos') return 'mac';
   return 'linux';
+}
+
+/** Возможности окна Tauri: трей и глобальные клавиши — как сообщила оболочка. */
+function tauriCapabilities(): Capabilities {
+  const caps = getShellCaps();
+  return {
+    tray: caps.trayAvailable,
+    globalHotkeys: caps.globalHotkeys,
+    fileDialogs: true,
+    windowControls: true,
+    autostart: true,
+    notifications: true,
+  };
 }
 
 /** Default implementation: browser/web panel — everything is a stub. */
@@ -151,7 +155,16 @@ export function getPlatformAdapter(win: Window): PlatformAdapter {
   // (статус-бар показывал «web», нативный минимум окна не применялся).
   const isTauri = (win as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
   if (isTauri) {
-    return { ...webAdapter, id: 'tauri', os: detectOS(win) };
+    // Возможности — по ответу `shell_capabilities` (lib/shellCaps.ts): геттер
+    // отдаёт актуальные значения и до, и после загрузки.
+    return {
+      ...webAdapter,
+      id: 'tauri',
+      os: detectOS(win),
+      get capabilities(): Capabilities {
+        return tauriCapabilities();
+      },
+    };
   }
   // Web stub: best-effort UA detection, so a mac-browser user keeps the
   // Cmd convention for section shortcuts.

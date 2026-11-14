@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { JSX } from 'react';
 import { useI18n } from '../hooks/useI18n';
+import { useShellCaps } from '../hooks/useShellCaps';
 import { readAutostart, writeAutostart } from '../lib/autostart';
 import { relaunchElevated } from '../lib/elevation';
 import type { AutostartInfo } from '../lib/autostart';
@@ -56,6 +57,7 @@ function problemText(problem: Problem, t: (key: MessageKey) => string): string {
 
 export function AutostartRow(): JSX.Element | null {
   const { t } = useI18n();
+  const adminFlow = useShellCaps().tunAccess === 'admin';
   // null — состояние неизвестно или автозапуск здесь не поддерживается: строки нет.
   const [info, setInfo] = useState<AutostartInfo | null>(null);
   const [busy, setBusy] = useState(false);
@@ -104,8 +106,11 @@ export function AutostartRow(): JSX.Element | null {
 
   // Выключить автозапуск задачей или перейти на неё можно только с правами
   // администратора: предлагаем перезапуск (тот же relaunch_elevated, что и у TUN).
+  // На Linux автозапуск — запись в каталоге сеанса, прав администратора не просит.
   const needsAdmin =
     info !== null &&
+    adminFlow &&
+    info.method !== 'desktop_entry' &&
     !info.elevated &&
     (info.method === 'task' || problem?.kind === 'needAdmin' || (!info.enabled && info.installed));
 

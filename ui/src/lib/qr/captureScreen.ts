@@ -3,15 +3,19 @@
 // captureScreen.ts — снимок экрана для поиска QR-кода. Снимает оболочка Tauri:
 // в браузере и веб-панели такой возможности нет, там работают файл и вставка.
 
+import { getShellCaps } from '../shellCaps';
 import { parseCapturePayload } from './capturePayload';
 import type { Pixels } from './pixels';
 
 /** Команда оболочки (shell/): без аргументов, ответ — ArrayBuffer формата capturePayload. */
 export const CAPTURE_COMMAND = 'qr_capture_screen';
 
-/** Есть ли оболочка, которая умеет снимать экран (кнопка «Снять экран» только там). */
+/**
+ * Есть ли оболочка, которая умеет снимать экран (кнопка «Снять экран» только там).
+ * На Linux снимок недоступен (`screenCapture: false`): остаются файл и вставка.
+ */
 export function canCaptureScreen(): boolean {
-  return (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined;
+  return (window as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !== undefined && getShellCaps().screenCapture;
 }
 
 /**

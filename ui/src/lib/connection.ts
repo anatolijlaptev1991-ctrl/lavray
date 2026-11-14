@@ -7,7 +7,8 @@
 import { create } from '@bufbuild/protobuf';
 import type { CoreClients } from './core';
 import { ConnectMode, SettingValueSchema } from '../gen/lavray_pb';
-import { tunNeedsElevation } from './elevation';
+import { tunGate } from './elevation';
+import { clearProxyError } from './proxyError';
 import { serialQueue } from './serialQueue';
 import { requestTunDialog } from './tunRequest';
 import type { Profile } from '../gen/lavray_pb';
@@ -167,6 +168,7 @@ const sysProxyListeners = new Set<() => void>();
 const proxyQueue = serialQueue();
 
 export function markSystemProxy(on: boolean): void {
+  clearProxyError(); // штатное применение снимает прежнюю ошибку баннера
   if (sysProxyApplied === on) return;
   sysProxyApplied = on;
   for (const fn of sysProxyListeners) fn();
@@ -183,10 +185,8 @@ export function onSystemProxyChange(fn: () => void): () => void {
   };
 }
 
-// Собственные изменения соединения (кнопка, меню, Ctrl+D, трей, смена режима):
-// пока они идут, окно само расставляет системный прокси, и «следование за
-// ядром» (proxyFollow.ts) в это не вмешивается — иначе set_system_proxy ушёл
-// бы дважды.
+// Собственные изменения соединения (кнопка, меню, Ctrl+D, трей, режимы): пока они
+// идут, прокси ставит само окно, а proxyFollow.ts не вмешивается (без дубля).
 let ownChanges = 0;
 
 /** Идёт ли собственное подключение, отключение или перезапуск соединения. */
@@ -312,10 +312,10 @@ export async function toggleConnection(args: {
     await disconnectAll(args.core);
     return true;
   }
-  // T-46/T-81: TUN без прав администратора не поднимется — не пытаемся. Окно
-  // показывается (трей и Ctrl+D бывают при скрытом окне), экран «Подключение»
-  // (туда переходит вызывающий) открывает диалог перезапуска от администратора.
-  if (loadModes(window.localStorage).tunMode && (await tunNeedsElevation())) {
+  // T-46/T-81: TUN без прав не поднимется (Linux: либо ядру нужен перезапуск после
+  // выдачи прав). Окно показывается, экран «Подключение» открывает диалог или перезапуск.
+  const gate = loadModes(window.localStorage).tunMode ? await tunGate() : null;
+  if (gate !== null && (gate.kind !== 'ready' || gate.restartCore)) {
     requestTunDialog();
     return false;
   }

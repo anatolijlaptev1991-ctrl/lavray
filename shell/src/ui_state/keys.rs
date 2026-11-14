@@ -5,7 +5,7 @@
 
 /// Ключи `localStorage`, которые общие для двух профилей `WebView`. Список
 /// повторяет `ui/src/lib/uiState.ts` (сверяется тестом).
-pub const ALLOWED_KEYS: [&str; 12] = [
+pub const ALLOWED_KEYS: [&str; 13] = [
     "lavray.lang",
     "lavray.theme",
     "lavray.accent",
@@ -18,4 +18,5 @@ pub const ALLOWED_KEYS: [&str; 12] = [
     crate::prefs::HOTKEY_CONNECT,
     crate::prefs::KILL_SWITCH_PROXY,
     "lavray.pendingConnect",
+    "lavray.motion",
 ];

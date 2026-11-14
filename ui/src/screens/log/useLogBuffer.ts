@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { LogLine } from '../../gen/lavray_pb';
 import { friendlyCoreError, type CoreClients } from '../../lib/core';
+import { isWindowHidden, subscribeWindowHidden } from '../../lib/windowVisibility';
 
 /** Настройка ядра: сколько строк журнала держит экран. */
 export const MAX_LOG_LINES_KEY = 'ui.max_log_lines';
@@ -110,9 +111,16 @@ export function useLogBuffer(core: CoreClients, tailLines: number): LogBuffer {
     };
     const onLine = (line: LogLine): void => {
       ring.push(line, maxRef.current);
-      if (timer !== undefined) return;
+      // Окно скрыто в трей: строки копятся в кольце, React не перерисовывается.
+      if (timer !== undefined || isWindowHidden()) return;
       timer = setTimeout(flush, Math.max(0, LOG_FLUSH_MS - (Date.now() - lastFlush)));
     };
+    // При показе накопленное уходит в React сразу.
+    const stopWatching = subscribeWindowHidden(() => {
+      if (isWindowHidden()) return;
+      clearTimeout(timer);
+      flush();
+    });
     void (async (): Promise<void> => {
       try {
         const stream = core.logs.subscribe({ tailLines }, { signal: abort.signal });
@@ -127,6 +135,7 @@ export function useLogBuffer(core: CoreClients, tailLines: number): LogBuffer {
     return (): void => {
       abort.abort();
       clearTimeout(timer);
+      stopWatching();
     };
   }, [core, tailLines]);
 

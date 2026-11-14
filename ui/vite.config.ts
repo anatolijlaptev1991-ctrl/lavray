@@ -14,7 +14,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['src/test-setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
-    // styles.test.ts читает текст prototype.css/base.css (?raw); без этого Vitest отдаёт ''.
-    css: { include: [/\/src\/(prototype|base)\.css/] },
+    // styles.test.ts читает текст prototype/base/effects.css (?raw); без этого Vitest отдаёт ''.
+    css: { include: [/\/src\/(prototype|base|effects)\.css/] },
   },
 });

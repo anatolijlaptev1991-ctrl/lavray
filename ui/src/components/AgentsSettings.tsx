@@ -9,6 +9,7 @@
 import { useCallback, useState } from 'react';
 import type { JSX } from 'react';
 import { useI18n } from '../hooks/useI18n';
+import { usePlatformText } from '../hooks/useShellCaps';
 import {
   AGENT_MODES,
   agentCorePath,
@@ -42,6 +43,7 @@ interface Props {
 
 export function AgentsSettings({ mode, onChange }: Props): JSX.Element {
   const { t, tf } = useI18n();
+  const pt = usePlatformText();
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<Note | null>(null);
 
@@ -68,7 +70,7 @@ export function AgentsSettings({ mode, onChange }: Props): JSX.Element {
       setNote(null);
       const path = await agentCorePath();
       if (path === null) {
-        setNote({ kind: 'err', text: t('agent.noPath') });
+        setNote({ kind: 'err', text: pt('agent.noPath') });
         return;
       }
       try {
@@ -78,7 +80,7 @@ export function AgentsSettings({ mode, onChange }: Props): JSX.Element {
         setNote({ kind: 'err', text: t('agent.copyFailed') });
       }
     },
-    [t],
+    [t, pt],
   );
 
   return (
@@ -124,7 +126,7 @@ export function AgentsSettings({ mode, onChange }: Props): JSX.Element {
       <div className="set-row">
         <div className="set-txt">
           <div className="set-l">{t('agent.copy')}</div>
-          <div className="set-d">{t('agent.cfg.d')}</div>
+          <div className="set-d">{pt('agent.cfg.d')}</div>
         </div>
         <div className="set-ctl">
           <button

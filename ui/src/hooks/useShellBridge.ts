@@ -5,6 +5,7 @@
 // сочетание «подключить / отключить» (T-82), сигнал здоровья после обновления (T-75).
 import { useEffect, useRef } from 'react';
 import { CoreState } from '../gen/lavray_pb';
+import { boostStatusPolling } from '../lib/coreStatusStore';
 import { listenGlobalHotkey } from '../lib/globalHotkey';
 import { notifyKindFor, notifyText, showNotification, windowIsAway } from '../lib/notify';
 import { readShellPrefs } from '../lib/shellPrefs';
@@ -39,7 +40,9 @@ export function useGlobalHotkey(state: CoreState, onToggle: () => void): void {
     let cancelled = false;
     let stop: (() => void) | null = null;
     listenGlobalHotkey(() => {
-      if (!isTransitional(latest.current.state)) latest.current.onToggle();
+      if (isTransitional(latest.current.state)) return;
+      boostStatusPolling(); // окно скрыто: результат нужен без паузы скрытого опроса
+      latest.current.onToggle();
     })
       .then((unlisten) => {
         if (cancelled) unlisten();

@@ -248,6 +248,7 @@ impl RealCoreProcess {
         &mut self,
         graceful_deadline: Duration,
         eof_grace: Duration,
+        sigterm_wait: Duration,
     ) -> Result<(), CoreProcessError> {
         let Some(mut run) = self.running.take() else {
             return Ok(()); // убивать нечего — идемпотентно
@@ -275,7 +276,7 @@ impl RealCoreProcess {
         if let Err(e) = run.terminate_tree() {
             run.term_err = Some(e);
         }
-        let term_deadline = deadline.min(Instant::now() + self.timeouts.sigterm_wait);
+        let term_deadline = deadline.min(Instant::now() + sigterm_wait);
         if let Some(status) = wait_exit_until(&mut run.child, term_deadline, poll) {
             self.last_exit = Some(status);
             return Ok(());
@@ -451,7 +452,8 @@ impl CoreProcess for RealCoreProcess {
                     reason: format!("no `{READY_LINE_PREFIX}<url>` line on stdout within budget"),
                 };
                 let budget = self.timeouts.sigterm_wait + self.timeouts.kill_grace;
-                let _ = self.shutdown(budget, Duration::ZERO); // молчащее ядро stdin не читает
+                let wait = self.timeouts.sigterm_wait;
+                let _ = self.shutdown(budget, Duration::ZERO, wait); // молчащее ядро stdin не читает
                 Err(err)
             }
             // Stop: процесс остаётся живым — его погасит единственный
@@ -459,14 +461,16 @@ impl CoreProcess for RealCoreProcess {
             WaitOutcome::Cancelled => Err(CoreProcessError::Cancelled),
             WaitOutcome::ChannelClosed => {
                 let budget = self.timeouts.sigterm_wait + self.timeouts.kill_grace;
-                let _ = self.shutdown(budget, Duration::ZERO);
+                let wait = self.timeouts.sigterm_wait;
+                let _ = self.shutdown(budget, Duration::ZERO, wait);
                 Err(CoreProcessError::ReadyChannelClosed)
             }
             WaitOutcome::Poll(err) => {
                 // D5 (ревью): «не могу опросить статус» ≠ «не готов» —
                 // классифицируем как Spawn-ошибку опроса.
                 let budget = self.timeouts.sigterm_wait + self.timeouts.kill_grace;
-                let _ = self.shutdown(budget, Duration::ZERO);
+                let wait = self.timeouts.sigterm_wait;
+                let _ = self.shutdown(budget, Duration::ZERO, wait);
                 Err(CoreProcessError::Spawn(format!("waitpid failed: {err}")))
             }
         }
@@ -479,7 +483,16 @@ impl CoreProcess for RealCoreProcess {
     /// `CoreService.Shutdown(REASON_EXIT)`) — ConnectRPC-клиент, врезка W6
     /// (`src/ipc.rs`): ДО него лестница стартует с шага 3.
     fn kill(&mut self, graceful_deadline: Duration) -> Result<(), CoreProcessError> {
-        self.shutdown(graceful_deadline, self.timeouts.eof_grace)
+        let t = &self.timeouts;
+        let (eof, term) = (t.eof_grace, t.sigterm_wait);
+        self.shutdown(graceful_deadline, eof, term)
+    }
+
+    fn kill_for_restart(&mut self, graceful_deadline: Duration) -> Result<(), CoreProcessError> {
+        let t = &self.timeouts;
+        let eof = t.eof_grace.min(super::T_RESTART_EOF_GRACE);
+        let term = t.sigterm_wait.min(super::T_RESTART_SIGTERM_WAIT);
+        self.shutdown(graceful_deadline, eof, term)
     }
 
     fn is_alive(&mut self) -> bool {
@@ -505,7 +518,8 @@ impl Drop for RealCoreProcess {
     /// путь (kill по команде) уже очистил `running` и здесь ничего не делает.
     fn drop(&mut self) {
         let budget = self.timeouts.sigterm_wait + self.timeouts.kill_grace;
-        let _ = self.shutdown(budget, self.timeouts.eof_grace);
+        let (eof, term) = (self.timeouts.eof_grace, self.timeouts.sigterm_wait);
+        let _ = self.shutdown(budget, eof, term);
     }
 }
 

@@ -3,6 +3,13 @@
   "bundle": {
     "category": "Utility",
     "publisher": "LAVRay <lavray@users.noreply.github.com>",
+    "icon": [
+      "icons/icon.png",
+      "icons/128x128.png",
+      "icons/64x64.png",
+      "icons/48x48.png",
+      "icons/32x32.png"
+    ],
     "targets": [
       "deb",
       "appimage"
@@ -14,14 +21,18 @@
       "deb": {
         "depends": [
           "libc6",
-          "libwebkit2gtk-4.1-0",
-          "libgtk-3-0",
-          "libayatana-appindicator3-1"
+          "libcap2-bin"
         ],
+        "recommends": [
+          "pkexec | policykit-1"
+        ],
+        "desktopTemplate": "packaging/desktop.template",
+        "postInstallScript": "packaging/postinst",
         "files": {
           "/usr/share/doc/lav-ray/changelog.gz": "packaging/changelog.gz",
           "/usr/share/doc/lav-ray/copyright": "packaging/copyright",
-          "/usr/share/lintian/overrides/lav-ray": "packaging/lintian-overrides"
+          "/usr/share/lintian/overrides/lav-ray": "packaging/lintian-overrides",
+          "/usr/share/polkit-1/rules.d/50-lavray-tun-dns.rules": "packaging/50-lavray-tun-dns.rules"
         }
       }
     }

@@ -12,9 +12,8 @@
 //! - **иначе** — значение `LAVRay` в `HKCU\...\Run`.
 //!
 //! Команды (`reg.exe`, `schtasks.exe`) идут через внедряемый [`Exec`], как в
-//! `sysproxy`: тесты проверяют точные аргументы и текст XML на подставке и
-//! не трогают ни реестр, ни планировщик. Приложение стартует с флагом `--tray`
-//! (окно скрыто, только значок).
+//! `sysproxy`: тесты проверяют аргументы и текст XML на подставке, не трогая
+//! реестр и планировщик. Приложение стартует с флагом `--tray` (окно скрыто).
 //!
 //! На Linux автозапуск — запись XDG Desktop Entry в каталоге автозапуска
 //! сеанса ([`desktop`]): внешних команд нет, состояние читается из файла.
@@ -26,6 +25,7 @@ pub mod migrate;
 
 #[cfg(target_os = "linux")]
 mod desktop;
+mod exe;
 #[cfg(target_os = "linux")]
 mod linux;
 mod task;
@@ -155,7 +155,7 @@ pub struct Env {
 
 impl Env {
     pub fn detect() -> Result<Self, String> {
-        let exe = std::env::current_exe().map_err(|e| format!("путь к LAVRay.exe: {e}"))?;
+        let exe = exe::detect()?;
         // Ссылку из Program Files на чужой каталог проверка должна разворачивать.
         let real = std::fs::canonicalize(&exe).unwrap_or_else(|_| exe.clone());
         Ok(Self {

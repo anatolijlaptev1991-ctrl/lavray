@@ -37,6 +37,7 @@ pub fn show_main_window(app: &AppHandle) {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
+        lavray_shell::window_visibility::report(app);
     }
 }
 

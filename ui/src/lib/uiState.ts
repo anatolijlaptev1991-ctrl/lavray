@@ -15,6 +15,7 @@ export const UI_STATE_KEYS: readonly string[] = [
   'lavray.lang',
   'lavray.theme',
   'lavray.accent',
+  'lavray.motion',
   'lavray.modes',
   'lavray.server',
   'lavray.onboarded',

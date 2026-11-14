@@ -154,21 +154,19 @@ html[data-shell="browser"] .tb-brand,html[data-shell="browser"] #tbMenu{display:
 #bgField[data-conn="mid"]{--field:.95} #bgField[data-conn="on"]{--field:.75} #bgField[data-conn="err"]{--field:.3}
 .bf-beam{position:absolute;left:-30%;width:160%;border-radius:50%;background:radial-gradient(closest-side,rgba(var(--ray-rgb),.14),rgba(var(--ray-rgb),0) 72%);
   opacity:var(--field);transition:opacity 900ms var(--ease)}
-.bf-beam.b1{top:4%;height:34%;animation:bfDrift1 38s ease-in-out infinite alternate}
-.bf-beam.b2{top:56%;height:22%;animation:bfDrift2 53s ease-in-out infinite alternate}
+.bf-beam.b1{top:4%;height:34%;transform:rotate(-16deg) translateX(-7%)}
+.bf-beam.b2{top:56%;height:22%;transform:rotate(-23deg) translateX(6%)}
 .bf-floor{position:absolute;inset:auto -20% -45% -20%;height:70%;background:radial-gradient(closest-side,rgba(var(--ray-rgb),.06),transparent);opacity:var(--field)}
-.bf-grain{position:absolute;inset:0;opacity:.06;mix-blend-mode:overlay;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 .5 0 0 0 0 .5 0 0 0 0 .5 0 0 0 .7 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
-.bf-streak{position:absolute;left:-40%;top:38%;width:36%;height:2px;transform:rotate(-16deg);background:linear-gradient(90deg,transparent,rgba(var(--ray-rgb),.7),transparent);opacity:0}
+.bf-grain{position:absolute;inset:0;opacity:.05;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='1' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1.6 -.55'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+html[data-theme="light"] .bf-grain{opacity:.07;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='1' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 1.6 -.55'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+.bf-streak{position:absolute;left:0;top:38%;width:36%;height:2px;transform:translateX(-110%) rotate(-16deg);background:linear-gradient(90deg,transparent,rgba(var(--ray-rgb),.7),transparent);opacity:0}
 .bf-streak.run{animation:bfStreak 1.1s var(--e-in) forwards}
 .bf-ripple{position:absolute;width:60px;height:60px;border-radius:50%;pointer-events:none;transform:translate(-50%,-50%) scale(.3);
   background:radial-gradient(circle,transparent 58%,rgba(var(--ray-rgb),.3) 64%,transparent 71%);animation:bfRipple 1s var(--e-out) forwards}
-@keyframes bfDrift1{from{transform:rotate(-16deg) translateX(-7%)}to{transform:rotate(-12deg) translateX(7%)}}
-@keyframes bfDrift2{from{transform:rotate(-23deg) translateX(6%)}to{transform:rotate(-27deg) translateX(-8%)}}
-@keyframes bfStreak{0%{opacity:0;left:-40%}20%{opacity:1}100%{opacity:0;left:110%}}
+@keyframes bfDrift1{to{transform:rotate(-12deg) translateX(7%)}}
+@keyframes bfDrift2{to{transform:rotate(-27deg) translateX(-8%)}}
+@keyframes bfStreak{0%{opacity:0;transform:translateX(-110%) rotate(-16deg)}20%{opacity:1}100%{opacity:0;transform:translateX(305%) rotate(-16deg)}}
 @keyframes bfRipple{to{transform:translate(-50%,-50%) scale(16);opacity:0}}
-html[data-bg="off"] #bgField{display:none}
-html[data-bg="quiet"] .bf-beam,html[data-bg="quiet"] .bf-floor,html[data-bg="quiet"] .bf-streak{display:none}
-html.bg-paused #bgField *{animation-play-state:paused!important}
 #sidebar{
   display:flex;flex-direction:column;gap:6px;padding:12px 10px;min-width:0;
   background:var(--surface);border-inline-end:1px solid var(--b-subtle);
@@ -302,7 +300,6 @@ html.bg-paused #bgField *{animation-play-state:paused!important}
 
 .dot{width:8px;height:8px;border-radius:50%;display:inline-block;flex:none;background:var(--t3)}
 .dot.ok{background:var(--ok)} .dot.warn{background:var(--warn)} .dot.err{background:var(--err)} .dot.info{background:var(--info)}
-.dot.pulse{animation:blink 1.2s var(--ease) infinite}
 @keyframes blink{50%{opacity:.35}}
 
 .kv{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid var(--b-subtle)}
@@ -337,14 +334,14 @@ html[data-theme="light"] .menu{box-shadow:0 1px 2px rgba(27,36,52,.06),0 8px 24p
   background:rgba(6,10,20,.55);backdrop-filter:blur(2px);padding:24px;
 }
 .dlg-back.open{display:flex;animation:bgIn var(--t-std) var(--ease)}
-@keyframes bgIn{from{background-color:rgba(6,10,20,0)}}
+@keyframes bgIn{from{opacity:0}}
 .dlg{
   display:flex;flex-direction:column;max-height:calc(100vh - 80px);
   background:var(--surface);border:1px solid var(--b-strong);border-radius:var(--r-xl);
-  box-shadow:0 12px 48px rgba(0,0,0,.45);animation:dlgIn var(--t-std) var(--ease);
+  box-shadow:0 12px 48px rgba(0,0,0,.45);animation:dlgIn var(--t-emph) var(--e-in);
 }
 html[data-theme="light"] .dlg{box-shadow:0 2px 6px rgba(27,36,52,.08),0 16px 48px rgba(27,36,52,.16)}
-@keyframes dlgIn{from{opacity:0;transform:scale(.98)}to{opacity:1;transform:none}}
+@keyframes dlgIn{from{opacity:0;transform:translateY(8px) scale(.96)}to{opacity:1;transform:none}}
 .dlg-sm{width:400px}.dlg-md{width:580px}.dlg-lg{width:800px}
 .dlg-h{display:flex;align-items:center;gap:10px;padding:16px 20px 12px}
 .dlg-h h2{font-size:1.05rem;font-weight:600;flex:1}
@@ -381,8 +378,8 @@ html[data-theme="light"] .dlg{box-shadow:0 2px 6px rgba(27,36,52,.08),0 16px 48p
 }
 html[data-theme="light"] .toast{box-shadow:0 8px 28px rgba(27,36,52,.16)}
 .toast.out{animation:toastOut var(--t-std) var(--ease) forwards}
-@keyframes toastIn{from{opacity:0;transform:translateY(8px)}}
-@keyframes toastOut{to{opacity:0;transform:translateY(6px)}}
+@keyframes toastIn{from{opacity:0;transform:translateY(8px) scale(.96)}}
+@keyframes toastOut{to{opacity:0;transform:translateY(6px) scale(.96)}}
 .toast .ic{width:16px;height:16px;color:var(--ok);flex:none}
 .toast-act{flex:none;margin-inline-start:8px;color:var(--accent);font-weight:600;font-size:.8125rem}
 
@@ -458,7 +455,7 @@ html[data-theme="light"] .toast{box-shadow:0 8px 28px rgba(27,36,52,.16)}
 .lk-k{flex:1;min-width:0;color:var(--t2)}
 .lk-v{font-family:var(--font-mono);font-size:.75rem;overflow-wrap:anywhere;text-align:end}
 .leak-foot{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:10px;flex-wrap:wrap}
-.skel{background:var(--surface2);border-radius:var(--r-sm);animation:blink 1.4s ease-in-out infinite}
+.skel{background:var(--surface2);border-radius:var(--r-sm)}
 /* ---- S2 · mark «Отражение» ---- */
 .lr-a{stop-color:var(--ray-a)} .lr-b{stop-color:var(--ray-b)}
 .lgA{display:block;overflow:visible}
@@ -476,14 +473,13 @@ html[data-theme="light"] .toast{box-shadow:0 8px 28px rgba(27,36,52,.16)}
 #stateCard[data-conn="mid"] .a-photon{fill:none;stroke:var(--ray-b);stroke-width:2.4;opacity:.85;animation:blink 1s var(--ease) infinite}
 #stateCard[data-conn="on"] .a-beam{animation:lgDraw var(--t-chor) var(--e-in) both}
 #stateCard[data-conn="on"] .a-mirror{animation:lgFlash var(--t-chor) linear both}
-#stateCard[data-conn="on"] .a-photon{animation:lgPop .32s .56s var(--e-spring) both,lgBreathe 3.2s 1.2s ease-in-out infinite}
+#stateCard[data-conn="on"] .a-photon{animation:lgPop .32s .56s var(--e-spring) both}
 #stateCard[data-conn="err"] .a-beam{stroke-dasharray:58 9 100;opacity:.75}
 #stateCard[data-conn="err"] .a-photon{fill:var(--err)}
 @keyframes lgFlow{to{stroke-dashoffset:-21}}
 @keyframes lgDraw{from{stroke-dashoffset:100}to{stroke-dashoffset:0}}
 @keyframes lgFlash{0%,50%{opacity:.25}60%{opacity:1;stroke:var(--ray-a)}100%{opacity:.92}}
 @keyframes lgPop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
-@keyframes lgBreathe{50%{opacity:.72}}
 #stateCard .conn-state{font-size:1.5rem;font-weight:700;letter-spacing:-.01em}
 #stateCard .conn-state-sub{margin-top:2px;font-size:.8125rem;color:var(--t2)}
 #connBtn .ic{width:17px;height:17px}
@@ -981,7 +977,7 @@ html[data-shell="browser"]{--font-sans:Inter,system-ui,-apple-system,"Segoe UI",
 }
 
 @media (prefers-reduced-motion: reduce){
-  *,*::before,*::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition:none !important;scroll-behavior:auto !important}
+  html:not([data-motion]) *,html:not([data-motion]) *::before,html:not([data-motion]) *::after{animation-duration:.01ms !important;animation-iteration-count:1 !important;transition:none !important;scroll-behavior:auto !important}
 }
 
 /* ---------- Подписки / настройки (RPC-экраны) ---------- */

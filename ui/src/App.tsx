@@ -13,17 +13,22 @@ import { screenIdOf } from './app/lazyViews';
 import { CoreContext, useCore, useCoreClients, useCoreStatus } from './hooks/useCore';
 import { ConnectMode, CoreState } from './gen/lavray_pb';
 import { useI18n, useStartupLanguage } from './hooks/useI18n';
+import { usePlatformText } from './hooks/useShellCaps';
 import { useAgentAccessSync } from './hooks/useAgentAccess';
 import { useSystemProxyApplied } from './hooks/useSystemProxy';
 import { usePendingConnect } from './hooks/usePendingConnect';
 import { useSystemProxyFollow } from './hooks/useSystemProxyFollow';
 import { useTrafficStats } from './hooks/useTraffic';
+import { useMotion } from './hooks/useMotion';
+import { useStatusBarModes } from './hooks/useStatusBarModes';
+import { useWindowActivity } from './hooks/useWindowActivity';
+import { useConnectFlash } from './hooks/useConnectFlash';
 import { useShellBridge } from './hooks/useShellBridge';
 import { applyDocumentLanguage, formatSpeed } from './lib/i18n';
 import { applyTheme, loadPreferences, paintTheme, watchSystemTheme } from './lib/theme';
 import { focusWhenReady, hotkeyOf, isTypingTarget } from './lib/hotkeys';
-import { loadModes, toggleConnection } from './lib/connection';
-import { keepModes } from './lib/modesState';
+import { bgConnOf } from './lib/bgState';
+import { toggleConnection } from './lib/connection';
 import type { TrayAction } from './lib/tray';
 import { onTablistKeyDown } from './lib/tabs';
 import { getPlatformAdapter } from './platform/adapter';
@@ -55,6 +60,7 @@ export default function App(): JSX.Element {
 
 function AppInner(): JSX.Element {
   const { t, lang } = useI18n();
+  const pt = usePlatformText();
   // ?theme=light&lang=de — предпросмотр темы/языка для скриншот-проверок
   // (иначе localStorage не задать в headless-браузере).
   const [prefs] = useState(() => {
@@ -94,6 +100,10 @@ function AppInner(): JSX.Element {
   const status = useCoreStatus();
   const core = useCore();
   const connOn = status.state === CoreState.CONNECTED;
+  const bgConn = bgConnOf(status.state);
+  const flash = useConnectFlash(bgConn);
+  useMotion(); // настройка «Анимации»: html[data-motion], дрейф фона только при вводе
+  useWindowActivity(); // окно скрыто/без фокуса → html[data-active="0"] → фон на паузе
   // MCP: окно ставит/снимает системный прокси, когда ядро подключил другой клиент,
   // и сообщает оболочке режим доступа агентов.
   useSystemProxyFollow(status);
@@ -316,17 +326,7 @@ function AppInner(): JSX.Element {
   // статистики, что и график; профиль берём из статуса ядра (его имя
   // приходит в CoreStatus), не загружая весь список.
   const { speed, error: trafficError } = useTrafficStats(connOn);
-  const [modes, setModes] = useState(() => loadModes(window.localStorage));
-  useEffect(() => {
-    // Экран подключения меняет режимы — статус-бар подхватывает изменения.
-    const sync = (): void => { setModes((prev) => keepModes(prev, loadModes(window.localStorage))); };
-    window.addEventListener('storage', sync);
-    const id = window.setInterval(sync, 1500);
-    return (): void => {
-      window.removeEventListener('storage', sync);
-      window.clearInterval(id);
-    };
-  }, []);
+  const [modes, syncModes] = useStatusBarModes(); // скрыто в трей — опрос снят
   const activeProfileName =
     status.activeProfileName === undefined || status.activeProfileName === ''
       ? '—'
@@ -389,12 +389,15 @@ function AppInner(): JSX.Element {
       </header>
 
       <div id="body">
-        <div id="bgField" aria-hidden="true" data-conn={connOn ? 'on' : 'off'}>
+        <div id="bgField" aria-hidden="true" data-conn={bgConn}>
           <i className="bf-beam b1" />
           <i className="bf-beam b2" />
           <i className="bf-floor" />
-          <i className="bf-streak" />
+          <i className="bf-tint ok" />
+          <i className="bf-tint err" />
           <i className="bf-grain" />
+          <i className={`bf-streak${flash > 0 ? ' run' : ''}`} key={`s${String(flash)}`} />
+          {flash > 0 && <i className="bf-ripple" key={`r${String(flash)}`} />}
         </div>
 
         <aside id="sidebar">
@@ -430,7 +433,7 @@ function AppInner(): JSX.Element {
               <span className={`dot${connOn ? ' ok' : ''}`} />
               <span className="sb-card-t">
                 <span className="cap">{t('core.title')}</span>
-                <span className="sb-card-v">
+                <span className="sb-card-v fx-swap" key={connOn ? 'on' : 'off'}>
                   {connOn ? t('conn.state.on') : t('conn.state.off')}
                 </span>
               </span>
@@ -500,7 +503,7 @@ function AppInner(): JSX.Element {
           onClose={() => {
             setOnboarding(false);
             window.localStorage.setItem('lavray.onboarded', '1');
-            setModes((prev) => keepModes(prev, loadModes(window.localStorage))); // чипы статус-бара без ожидания опроса
+            syncModes(); // чипы статус-бара без ожидания опроса
           }}
           onOpenImport={(tab) => { setQuickImport(tab ?? 'link'); }}
         />
@@ -568,7 +571,7 @@ function AppInner(): JSX.Element {
         </span>
         <span className="flex1" />
         {(modes.tunMode || tunOn) && (
-          <span className={`st-chip${tunOn ? ' on' : ''}`} title={t('set.tunD')}>
+          <span className={`st-chip${tunOn ? ' on' : ''}`} title={pt('set.tunD')}>
             <span className="dot" />
             TUN
           </span>

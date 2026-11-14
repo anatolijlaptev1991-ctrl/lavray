@@ -4,7 +4,10 @@
 // командой `is_elevated`; повысить права она может только по явной просьбе
 // пользователя — командой `relaunch_elevated` (перезапуск через UAC). Службы
 // нет: TUN работает, когда приложение, а с ним и ядро, запущено от
-// администратора (как в NekoBox).
+// администратора (как в NekoBox). На Linux права выдаются бинарю ядра: см.
+// tunAccess.ts; здесь `tunGate` сводит оба способа к одному решению.
+import { getShellCaps } from './shellCaps';
+import { gateFromAccess, readTunAccess, type TunGate } from './tunAccess';
 
 /**
  * Запущена ли оболочка с повышенными правами. `null` — не знаем: веб-панель
@@ -22,9 +25,19 @@ export async function isElevated(): Promise<boolean | null> {
   }
 }
 
-/** Режиму TUN не хватает прав: оболочка точно ответила «нет». */
+/**
+ * Что нужно режиму TUN перед подключением. Windows (`tunAccess: 'admin'`):
+ * права процесса — `elevate`, если оболочка точно ответила «нет». Linux
+ * (`'grant'`): состояние доступа ядра по `tun_access_state`, а не `is_elevated`.
+ */
+export async function tunGate(): Promise<TunGate> {
+  if (getShellCaps().tunAccess === 'grant') return gateFromAccess(await readTunAccess());
+  return (await isElevated()) === false ? { kind: 'elevate' } : { kind: 'ready', restartCore: false };
+}
+
+/** Режиму TUN не хватает прав (администратора либо разрешения ядру на Linux). */
 export async function tunNeedsElevation(): Promise<boolean> {
-  return (await isElevated()) === false;
+  return (await tunGate()).kind !== 'ready';
 }
 
 /** Ответ команды `relaunch_elevated`: `started` — приложение сейчас закроется и откроется с правами. */

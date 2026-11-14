@@ -54,6 +54,8 @@ pub struct MockCoreProcess {
     pub cancel: Arc<AtomicBool>,
     /// Поставить `cancel` внутри `wait_ready` (Stop выиграл гонку у READY).
     pub cancel_during_ready: bool,
+    /// Поставить `cancel` внутри `kill` (Stop пришёл во время перезапуска).
+    pub cancel_during_kill: bool,
     /// Ответ `verify_teardown`; `None` — все пять проб `Clean`.
     pub teardown_report: Option<TeardownReport>,
     /// Сколько раз вызвана `verify_teardown`.
@@ -76,6 +78,7 @@ impl Default for MockCoreProcess {
             kill_calls: Vec::new(),
             cancel: Arc::new(AtomicBool::new(false)),
             cancel_during_ready: false,
+            cancel_during_kill: false,
             teardown_report: None,
             teardown_calls: 0,
         }
@@ -123,6 +126,9 @@ impl CoreProcess for MockCoreProcess {
 
     fn kill(&mut self, graceful_deadline: Duration) -> Result<(), CoreProcessError> {
         self.kill_calls.push(graceful_deadline);
+        if self.cancel_during_kill {
+            self.cancel.store(true, Ordering::SeqCst);
+        }
         pop_front_or_ok(&mut self.kill_results)
     }
 

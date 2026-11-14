@@ -5,7 +5,9 @@
 use super::*;
 use crate::coreproc::backoff::FixedJitter;
 use crate::coreproc::teardown::{ProbeOutcome, StaleResource, TeardownReport};
-use crate::coreproc::{CoreProcessError, MockClock, MockCoreProcess, BACKOFF_RESET_AFTER};
+use crate::coreproc::{
+    CoreProcessError, MockClock, MockCoreProcess, BACKOFF_RESET_AFTER, RESTART_SHUTDOWN_TOTAL,
+};
 use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -387,4 +389,238 @@ fn a_failed_kill_is_not_confirmed_either() {
     assert!(!out.events.saw(CoreState::Stopped), "kill не удался");
     assert!(out.events.unconfirmed[0].contains("ядро не остановлено"));
     assert_eq!(out.sup.process().teardown_calls, 0, "сеть не проверяли");
+}
+
+/// «Перезапустить» на здоровом ядре: остановка той же лестницей, новый запуск с
+/// новым токеном; не крах (нет `Crashed`, счётчик крахов 0), `Stopped` только
+/// в конце, чистота сети проверена, сбоев нет.
+#[test]
+fn restart_on_a_healthy_core_relaunches_without_a_crash() {
+    let mut asked = false;
+    let out = simulate(MockCoreProcess::default(), 0, |events| {
+        if events.tokens.len() >= 2 {
+            Some(Command::Stop)
+        } else if events.saw(CoreState::Ready) && !asked {
+            asked = true;
+            Some(Command::ManualRestart)
+        } else {
+            None
+        }
+    });
+    assert_eq!(out.sup.process().spawn_calls.len(), 2);
+    assert_eq!(out.events.tokens.len(), 2);
+    assert_ne!(out.events.tokens[0], out.events.tokens[1], "токен новый");
+    assert!(!out.events.saw(CoreState::Crashed));
+    assert_eq!(out.sup.crashes_in_window(), 0);
+    assert!(out.events.failures.is_empty(), "{:?}", out.events.failures);
+    let states = [
+        CoreState::Spawning,
+        CoreState::Ready,
+        CoreState::Stopping,
+        CoreState::Spawning,
+        CoreState::Ready,
+        CoreState::Stopping,
+        CoreState::Stopped,
+    ];
+    assert_eq!(out.events.states, states);
+    assert_eq!(
+        out.sup.process().kill_calls,
+        [RESTART_SHUTDOWN_TOTAL, GRACEFUL_SHUTDOWN_TOTAL],
+        "перезапуск — укороченная лестница, Stop — обычная"
+    );
+    assert_eq!(out.sup.crashes_in_window(), 0);
+    assert_eq!(out.sup.process().teardown_calls, 2);
+}
+
+/// Не остановившееся ядро: предупреждение, обычный ретрай запуска, без крахов.
+#[test]
+fn restart_with_a_failed_kill_retries_the_spawn() {
+    let process = MockCoreProcess {
+        kill_results: vec![Err(CoreProcessError::Spawn("kill".to_owned()))],
+        ..MockCoreProcess::default()
+    };
+    let mut asked = false;
+    let out = simulate(process, 0, |events| {
+        if events.tokens.len() >= 2 {
+            Some(Command::Stop)
+        } else if events.saw(CoreState::Ready) && !asked {
+            asked = true;
+            Some(Command::ManualRestart)
+        } else {
+            None
+        }
+    });
+    assert_eq!(out.events.unconfirmed.len(), 1);
+    assert!(!out.events.saw(CoreState::Crashed));
+    assert_eq!(out.sup.crashes_in_window(), 0, "это не крах");
+    assert!(
+        out.events
+            .failures
+            .iter()
+            .any(|f| f.message.contains("перезапуска")),
+        "ошибка видна сразу: {:?}",
+        out.events.failures
+    );
+    assert_eq!(out.sup.process().spawn_calls.len(), 2);
+}
+
+/// Ожидание с очередью команд: так в тесте «пришло, пока цикл был занят».
+struct QueueWaiter {
+    clock: MockClock,
+    queue: std::collections::VecDeque<Command>,
+    polls: usize,
+    stop_after_polls: usize,
+    /// Команды, пришедшие во время первой команды (пока цикл занят перезапуском).
+    late: Vec<Command>,
+}
+
+impl Waiter for QueueWaiter {
+    fn wait(&mut self, delay: Duration) -> Option<Command> {
+        self.clock.advance(delay);
+        self.polls += 1;
+        if self.polls > self.stop_after_polls {
+            return Some(Command::Stop);
+        }
+        let next = self.queue.pop_front();
+        if self.polls == 1 {
+            self.queue.extend(self.late.drain(..));
+        }
+        next
+    }
+
+    fn drain_restarts(&mut self) -> bool {
+        let stop = self.queue.contains(&Command::Stop);
+        self.queue.retain(|c| *c == Command::Stop);
+        stop
+    }
+}
+
+/// Прогон с очередью команд; `cancel_in_kill` — Stop пришёл во время остановки.
+fn simulate_queue(
+    process: MockCoreProcess,
+    queue: &[Command],
+    late: &[Command],
+    stop_after_polls: usize,
+) -> Outcome {
+    let clock = MockClock::at(Instant::now());
+    let mut sup = CoreSupervisor::new(process, clock.clone());
+    let events = Rc::new(RefCell::new(Events::default()));
+    let mut calls = 0usize;
+    let mut factory = move || {
+        calls += 1;
+        Ok(CoreSpawnConfig {
+            binary: PathBuf::from("lavray-core"),
+            listen_socket: PathBuf::from("127.0.0.1:0"),
+            data_dir: PathBuf::from("data"),
+            auth_token: SecretToken::from_base64url(format!("{calls:A>43}")).unwrap(),
+            agent_token: None,
+            extra_args: Vec::new(),
+        })
+    };
+    let mut waiter = QueueWaiter {
+        clock,
+        queue: queue.iter().copied().collect(),
+        polls: 0,
+        stop_after_polls,
+        late: late.to_vec(),
+    };
+    run(
+        &mut sup,
+        &mut factory,
+        &mut Recorder(Rc::clone(&events)),
+        &mut waiter,
+        &mut FixedJitter { value: 0.5 },
+    );
+    drop(waiter);
+    let events = Rc::try_unwrap(events).ok().unwrap().into_inner();
+    Outcome {
+        sup,
+        events,
+        pauses: Vec::new(),
+    }
+}
+
+/// Два «Перезапустить» подряд (двойной клик, повтор по таймауту): ровно один
+/// перезапуск, второе выброшено при входе в наблюдение.
+#[test]
+fn a_double_restart_request_restarts_exactly_once() {
+    let out = simulate_queue(
+        MockCoreProcess::default(),
+        &[Command::ManualRestart],
+        &[Command::ManualRestart],
+        4,
+    );
+    assert_eq!(out.sup.process().spawn_calls.len(), 2);
+    assert_eq!(out.events.tokens.len(), 2);
+}
+
+/// «Перезапустить», пришедшее пока ядро поднималось (очередь не пуста ещё до
+/// наблюдения), поднявшееся ядро не перезапускает.
+#[test]
+fn a_restart_queued_while_spawning_does_not_restart_the_new_core() {
+    let out = simulate_queue(
+        MockCoreProcess::default(),
+        &[Command::ManualRestart],
+        &[],
+        3,
+    );
+    assert_eq!(out.sup.process().spawn_calls.len(), 1);
+    assert_eq!(out.events.tokens.len(), 1);
+}
+
+/// Stop, ждущий в очереди вместе с перезапуском, не теряется.
+#[test]
+fn a_stop_queued_next_to_restarts_survives_the_drain() {
+    let out = simulate_queue(
+        MockCoreProcess::default(),
+        &[Command::ManualRestart, Command::Stop],
+        &[],
+        99,
+    );
+    assert_eq!(out.sup.process().spawn_calls.len(), 1);
+    assert_eq!(out.events.states.last(), Some(&CoreState::Stopped));
+}
+
+/// Stop во время перезапуска: нового ядра нет, конечное состояние Stopped.
+#[test]
+fn stop_during_a_restart_does_not_spawn_a_second_core() {
+    let mut asked = false;
+    let process = MockCoreProcess {
+        cancel_during_kill: true,
+        ..MockCoreProcess::default()
+    };
+    let out = simulate(process, 0, |events| {
+        (events.saw(CoreState::Ready) && !std::mem::replace(&mut asked, true))
+            .then_some(Command::ManualRestart)
+    });
+    assert_eq!(out.sup.process().spawn_calls.len(), 1, "второго ядра нет");
+    assert_eq!(out.events.states.last(), Some(&CoreState::Stopped));
+    assert_eq!(out.sup.state(), CoreState::Stopped);
+    assert!(!out.events.saw(CoreState::Crashed));
+}
+
+/// Крах ровно в момент запроса перезапуска — обычный крах: счётчик, сообщение.
+#[test]
+fn a_crash_at_the_moment_of_the_restart_request_is_a_normal_crash() {
+    let process = MockCoreProcess {
+        alive_results: vec![false],
+        ..MockCoreProcess::default()
+    };
+    let mut asked = false;
+    let out = simulate(process, 0, |events| {
+        if events.tokens.len() >= 2 {
+            Some(Command::Stop)
+        } else if events.saw(CoreState::Ready) && !std::mem::replace(&mut asked, true) {
+            Some(Command::ManualRestart)
+        } else {
+            None
+        }
+    });
+    assert!(out.events.saw(CoreState::Crashed));
+    assert!(out
+        .events
+        .failures
+        .iter()
+        .any(|f| f.message.contains("неожиданно")));
+    assert_eq!(out.sup.process().spawn_calls.len(), 2);
 }

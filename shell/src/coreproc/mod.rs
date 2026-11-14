@@ -16,6 +16,7 @@ mod mock;
 mod pipe;
 mod ready;
 mod reap;
+mod restart;
 pub mod runner;
 pub mod teardown;
 
@@ -47,6 +48,13 @@ pub const T_SIGTERM_WAIT: Duration = Duration::from_secs(5);
 pub const T_KILL_GRACE: Duration = Duration::from_secs(3);
 /// Бюджет teardown-верификации сети (§6).
 pub const T_TEARDOWN_VERIFY: Duration = Duration::from_secs(3);
+/// Ожидание самостоятельного выхода ядра при намеренном перезапуске (после EOF).
+pub const T_RESTART_EOF_GRACE: Duration = Duration::from_secs(4);
+/// Ожидание выхода после SIGTERM при намеренном перезапуске.
+pub const T_RESTART_SIGTERM_WAIT: Duration = Duration::from_secs(3);
+/// Общий бюджет остановки при перезапуске здорового ядра: EOF 4 с, SIGTERM 3 с,
+/// затем SIGKILL (grace 3 с) — не более 10 с вместо 15+ у обычного `Stop`.
+pub const RESTART_SHUTDOWN_TOTAL: Duration = Duration::from_secs(10);
 /// Общий таймаут graceful-стопа (§2.2, Stopping).
 pub const GRACEFUL_SHUTDOWN_TOTAL: Duration = Duration::from_secs(15);
 /// Ретраев спавна ПОСЛЕ первой неудачной попытки до `RateLimited`
@@ -142,6 +150,12 @@ pub enum CoreEvent {
     ManualRestart,
     /// Stopped → Idle (сброс к исходному).
     Reset,
+    /// Перезапуск здорового ядра по запросу (например, после выдачи прав на
+    /// TUN): Ready/Connected → Stopping. Не крах и не выход приложения.
+    RestartRequested,
+    /// Ядро остановлено при перезапуске → новый запуск: Stopping → Spawning,
+    /// без Stopped (приложение не выходит) и без учёта крахов.
+    RestartSpawn,
 }
 
 impl fmt::Display for CoreEvent {
@@ -185,6 +199,10 @@ pub fn transition(from: CoreState, event: CoreEvent) -> Result<CoreState, Transi
         (S::RateLimited, E::ManualRestart) => S::Spawning,
         (S::Stopping, E::TeardownVerified) => S::Stopped,
         (S::Stopped, E::Reset) => S::Idle,
+        (S::Ready | S::Connected, E::RestartRequested) => S::Stopping,
+        (S::Stopping, E::RestartSpawn) => S::Spawning,
+        // перезапуск сорвался до spawn (ядро не остановилось, нет конфигурации)
+        (S::Stopping, E::SpawnFailed) => S::SpawnErr,
         _ => return Err(TransitionError { from, event }),
     };
     Ok(next)
@@ -321,6 +339,11 @@ pub trait CoreProcess {
     fn wait_ready(&mut self, budget: Duration) -> Result<CoreEndpoint, CoreProcessError>;
     /// Graceful-kill: SIGTERM → wait → SIGKILL в пределах `graceful_deadline` (§5).
     fn kill(&mut self, graceful_deadline: Duration) -> Result<(), CoreProcessError>;
+    /// Остановка при намеренном перезапуске здорового ядра: укороченная лестница
+    /// (по умолчанию — обычная).
+    fn kill_for_restart(&mut self, graceful_deadline: Duration) -> Result<(), CoreProcessError> {
+        self.kill(graceful_deadline)
+    }
     /// Жив ли процесс (неблокирующий опрос): так цикл надзирателя узнаёт о
     /// крахе (§2.2, Crashed).
     fn is_alive(&mut self) -> bool;

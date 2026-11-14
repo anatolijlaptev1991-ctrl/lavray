@@ -1,0 +1,91 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+/* ============================================================
+   LAVRay · effects — визуальные эффекты и облегчение отрисовки.
+   Правила: анимируются только transform и opacity (никаких left/top/width/
+   height/box-shadow/filter в @keyframes), will-change не используется,
+   длительности и кривые — токены из prototype.css, всё гасится при
+   prefers-reduced-motion. Грузится после prototype.css и base.css.
+   ============================================================ */
+
+/* ---- 1. Пауза: окно скрыто или без фокуса (hooks/useWindowActivity) ----
+   Только декоративные бесконечные анимации большой площади. Остальное не трогаем:
+   окно без фокуса может быть на виду, и тост или диалог, вставшие на паузу в первом
+   кадре (fill-mode backwards, opacity 0), остались бы невидимыми, а индикатор
+   загрузки выглядел бы зависшим. */
+html[data-active="0"] #bgField *,html[data-active="0"] .cx-go::after{animation-play-state:paused!important}
+/* Окно скрыто в трей (hooks/useWindowActivity, lib/windowVisibility): его никто не видит, на паузе все
+   анимации, включая бесконечные индикаторы; при показе атрибут снимается и они продолжают с того же места. */
+html[data-hidden="1"] *,html[data-hidden="1"] *::before,html[data-hidden="1"] *::after{animation-play-state:paused!important}
+
+/* ---- 2. Linux (WebKitGTK, слабая графика): плотная подложка вместо blur ---- */
+html[data-os="linux"] .dlg-back,html[data-os="linux"] #dropOv{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(6,10,20,.82)}
+
+/* ---- 3. Фон: четыре состояния data-conn (off, mid, on, err) ---- */
+.bf-floor{transition:opacity calc(var(--t-chor) + var(--t-std)) var(--ease)}
+.bf-tint{position:absolute;inset:auto -10% 6% 28%;height:64%;border-radius:50%;opacity:0;transition:opacity calc(var(--t-chor) + var(--t-std)) var(--ease)}
+.bf-tint.ok{background:radial-gradient(closest-side,var(--ok),transparent)}
+.bf-tint.err{background:radial-gradient(closest-side,var(--err),transparent)}
+#bgField[data-conn="on"] .bf-tint.ok{opacity:.09}
+#bgField[data-conn="err"] .bf-tint.err{opacity:.13}
+html[data-theme="light"] #bgField[data-conn="on"] .bf-tint.ok{opacity:.07}
+html[data-theme="light"] #bgField[data-conn="err"] .bf-tint.err{opacity:.09}
+.bf-ripple{left:62%;top:34%}
+
+/* ---- 4. Главная кнопка подключения (.cx-go) ---- */
+.cx-go{position:relative;transition:background var(--t-micro) var(--ease),border-color var(--t-micro) var(--ease),color var(--t-micro) var(--ease),transform var(--t-emph) var(--e-spring)}
+.cx-go:active:not(:disabled){transform:scale(.96)}
+.cx-go::after{content:"";position:absolute;inset:-5px;border-radius:calc(var(--r-md) + 5px);pointer-events:none;opacity:0;
+  box-shadow:0 0 0 2px rgba(var(--ray-rgb),.6),0 0 22px rgba(var(--ray-rgb),.5);transition:opacity var(--t-chor) var(--ease)}
+#stateCard[data-conn="mid"] .cx-go::after{opacity:1;animation:fxHalo calc(var(--t-chor) * 2) var(--ease) infinite}
+#stateCard[data-conn="on"] .cx-go::after{opacity:.4}
+@keyframes fxHalo{50%{opacity:.35;transform:scale(1.05)}}
+
+/* ---- 5. Смена текста статуса: короткое проявление со сдвигом ---- */
+.fx-swap{animation:fxSwap var(--t-std) var(--e-in) backwards}
+span.fx-swap{display:inline-block}
+@keyframes fxSwap{from{opacity:0;transform:translateY(5px)}}
+
+/* ---- 6. Каскад первых 9 карточек (подписки, правила). Строки серверов (.prow) без каскада:
+   список часто сортируется и фильтруется, анимация перезапускалась бы при каждом изменении. ----
+   fill-mode backwards: transform не остаётся на строке (см. T-06 в prototype.css).
+   CSS-анимация стартует при монтировании элемента, а не при каждом обновлении данных. */
+:is(.sub-card,.preset):nth-child(-n+9){animation:fxRow var(--t-emph) var(--e-in) backwards;animation-delay:calc(60ms + var(--fx-i,0) * 28ms)}
+:is(.sub-card,.preset):nth-child(2){--fx-i:1}
+:is(.sub-card,.preset):nth-child(3){--fx-i:2}
+:is(.sub-card,.preset):nth-child(4){--fx-i:3}
+:is(.sub-card,.preset):nth-child(5){--fx-i:4}
+:is(.sub-card,.preset):nth-child(6){--fx-i:5}
+:is(.sub-card,.preset):nth-child(7){--fx-i:6}
+:is(.sub-card,.preset):nth-child(8){--fx-i:7}
+:is(.sub-card,.preset):nth-child(9){--fx-i:8}
+@keyframes fxRow{from{opacity:0;transform:translateY(8px)}}
+
+/* ---- 7. Отклик на нажатие: переключатели, вкладки, пункты меню ---- */
+.sw:active:not(:disabled)::after{transform:scale(.86)}
+.sw[aria-checked="true"]:active:not(:disabled)::after{transform:translateX(18px) scale(.86)}
+.sb-item{transition:background var(--t-micro) var(--ease),color var(--t-micro) var(--ease),transform var(--t-micro) var(--ease)}
+.sb-item:active{transform:scale(.97)}
+.tab{transition:color var(--t-micro) var(--ease),border-color var(--t-std) var(--ease)}
+.tab:active{opacity:.7}
+.subtab{transition:color var(--t-micro) var(--ease),transform var(--t-micro) var(--ease)}
+.subtab:active{transform:translateY(1px)}
+
+/* ---- 8. Reduce-motion: бесконечные и однократные эффекты фона и кнопки выключены ---- */
+@media (prefers-reduced-motion: reduce){
+  html:not([data-motion]) :is(.bf-beam,.bf-streak,.fx-swap),html:not([data-motion]) .cx-go::after{animation:none!important}
+  html:not([data-motion]) .bf-ripple{display:none}
+}
+
+/* ---- 9. Настройка «Анимации» (html[data-motion], lib/motion.ts, hooks/useMotion) ----
+   full: дрейф лучей фона идёт, только пока пользователь вводит (html[data-input="1"],
+   замирает через 20 с без ввода): бесконечная анимация на паузе не перерисовывается и
+   не прыгает назад, в отличие от снятия animation. */
+html[data-motion="full"] .bf-beam.b1{--t-drift:38s;animation:bfDrift1 var(--t-drift) ease-in-out infinite alternate}
+html[data-motion="full"] .bf-beam.b2{--t-drift:53s;animation:bfDrift2 var(--t-drift) ease-in-out infinite alternate}
+html[data-motion="full"]:not([data-input="1"]) .bf-beam{animation-play-state:paused}
+/* lite: только короткие переходы (оттенок фона, статус, диалоги); без каскадов, блика, волны, дрейфа. */
+html[data-motion="lite"] :is(.bf-streak,.bf-ripple){display:none}
+html[data-motion="lite"] :is(#stateCard .a-beam,#stateCard .a-mirror,#stateCard .a-photon,.sub-card,.preset,.screen.active,.screen.active>*,.onb-pane),html[data-motion="lite"] #stateCard .cx-go::after{animation:none!important}
+/* off: ни анимаций, ни переходов (как prefers-reduced-motion). */
+html[data-motion="off"] *,html[data-motion="off"] *::before,html[data-motion="off"] *::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition:none!important;scroll-behavior:auto!important}
+html[data-motion="off"] .bf-ripple{display:none}

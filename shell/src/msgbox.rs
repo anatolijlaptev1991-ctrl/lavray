@@ -27,7 +27,8 @@ pub fn window_failed(reason: &str) -> String {
     )
 }
 
-/// Показать сообщение и вернуться после нажатия «OK». Не Windows: в stderr.
+/// Показать сообщение и вернуться после нажатия «OK». Linux: окно zenity или
+/// kdialog (если есть) и stderr; macOS: stderr.
 pub fn show(text: &str) {
     imp::show(TITLE, text);
 }
@@ -57,10 +58,87 @@ mod imp {
     }
 }
 
+/// Программа, которой показывается окно сообщения на Linux.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Dialog {
+    Zenity,
+    Kdialog,
+}
+
+impl Dialog {
+    /// Имя исполняемого файла.
+    #[must_use]
+    pub const fn program(self) -> &'static str {
+        match self {
+            Self::Zenity => "zenity",
+            Self::Kdialog => "kdialog",
+        }
+    }
+
+    /// Аргументы окна ошибки с заголовком и текстом (без разметки).
+    #[must_use]
+    pub fn args(self, title: &str, text: &str) -> Vec<String> {
+        match self {
+            Self::Zenity => vec![
+                "--error".into(),
+                "--no-markup".into(),
+                format!("--title={title}"),
+                format!("--text={text}"),
+            ],
+            // kdialog читает текст как разметку: `&`, `<`, `>` экранируются
+            Self::Kdialog => vec![
+                "--title".into(),
+                title.into(),
+                "--error".into(),
+                text.replace('&', "&amp;")
+                    .replace('<', "&lt;")
+                    .replace('>', "&gt;"),
+            ],
+        }
+    }
+}
+
+/// Каталоги поиска zenity и kdialog: фиксированные, не через `PATH`.
+pub const DIALOG_DIRS: [&str; 3] = ["/usr/bin", "/bin", "/usr/local/bin"];
+
+/// Какая программа и по какому пути доступна; `exists` проверяет файл. zenity
+/// предпочтительнее (есть и в GNOME, и в других средах), затем kdialog.
+pub fn pick_dialog(
+    exists: impl Fn(&std::path::Path) -> bool,
+) -> Option<(Dialog, std::path::PathBuf)> {
+    [Dialog::Zenity, Dialog::Kdialog]
+        .into_iter()
+        .find_map(|dialog| {
+            DIALOG_DIRS
+                .iter()
+                .map(|dir| std::path::Path::new(dir).join(dialog.program()))
+                .find(|path| exists(path))
+                .map(|path| (dialog, path))
+        })
+}
+
 #[cfg(not(windows))]
 mod imp {
+    /// Окно сообщения: zenity или kdialog из фиксированных каталогов; ждёт
+    /// нажатия «OK» не дольше двух минут.
+    #[cfg(target_os = "linux")]
+    fn dialog(title: &str, text: &str) {
+        const TIMEOUT: std::time::Duration = std::time::Duration::from_mins(2);
+        if let Some((dialog, path)) = super::pick_dialog(std::path::Path::is_file) {
+            let mut cmd = std::process::Command::new(path);
+            cmd.args(dialog.args(title, text));
+            let _ = crate::exec::run_timeout(&mut cmd, TIMEOUT);
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn dialog(_title: &str, _text: &str) {}
+
+    /// stderr всегда (журнал при запуске из терминала); на Linux ещё и окно:
+    /// релизный запуск из меню приложений консоли не имеет.
     pub fn show(title: &str, text: &str) {
         eprintln!("{title}: {text}");
+        dialog(title, text);
     }
 }
 
@@ -83,5 +161,40 @@ mod tests {
         assert_eq!(alive.matches("4242").count(), 2);
         assert!(alive.contains("20 с") && alive.contains("20 s"));
         assert_eq!(window_failed("boom").matches("boom").count(), 2);
+    }
+
+    #[test]
+    fn dialog_arguments_carry_title_and_text_verbatim() {
+        let zenity = Dialog::Zenity.args(
+            "LAVRay", "a <b>
+c",
+        );
+        assert_eq!(zenity[0], "--error");
+        assert!(zenity.contains(&"--no-markup".to_string()));
+        assert!(zenity.contains(
+            &"--text=a <b>
+c"
+            .to_string()
+        ));
+        assert_eq!(
+            Dialog::Kdialog.args("T", "x"),
+            ["--title", "T", "--error", "x"]
+        );
+    }
+
+    #[test]
+    fn dialog_is_looked_up_in_fixed_directories_zenity_first() {
+        use std::path::Path;
+        let both = |_: &Path| true;
+        assert_eq!(
+            pick_dialog(both),
+            Some((Dialog::Zenity, Path::new("/usr/bin/zenity").to_path_buf()))
+        );
+        let kde_only = |p: &Path| p.ends_with("kdialog") && p.starts_with("/bin");
+        assert_eq!(
+            pick_dialog(kde_only),
+            Some((Dialog::Kdialog, Path::new("/bin/kdialog").to_path_buf()))
+        );
+        assert_eq!(pick_dialog(|_| false), None);
     }
 }

@@ -27,7 +27,7 @@ fn registered(entry: &str) -> bool {
 #[test]
 fn tray_is_built_from_the_spec_without_hardcoded_labels() {
     let main_rs = source("main.rs");
-    assert!(main_rs.contains("tray_ui::install(app)"));
+    assert!(main_rs.contains("tray_start::install_logged(app"));
     assert!(main_rs.contains("fn tray_update"));
     for banned in ["\"Открыть LAVRay\"", "\"Выход\""] {
         assert!(!main_rs.contains(banned), "зашита подпись трея: {banned}");
@@ -405,7 +405,8 @@ fn close_button_follows_the_close_to_tray_setting() {
             .next()
         })
         .expect("close_window");
-    assert!(close.contains("window_policy::on_close(&ShellPrefs::load(&data_dir()))"));
+    assert!(close.contains("window_policy::on_close(&ShellPrefs::load(&data_dir()), tray)"));
+    assert!(close.contains("CloseAction::Minimize => window.minimize()"));
     assert!(close.contains(
         "CloseAction::Quit => {
             begin_quit("
@@ -465,10 +466,18 @@ fn update_commands_are_registered_and_the_watchdog_mode_runs_first() {
 
     let main_rs = source("main.rs");
     let body = main_rs.split("fn main() {").nth(1).expect("main()");
-    let first_statement = body.lines().find(|l| !l.trim().is_empty()).unwrap();
+    let mut statements = body
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with("//"));
+    // перехват сигналов (sigquit) стоит ещё раньше: обработчики — до любых потоков
+    assert!(statements
+        .next()
+        .unwrap()
+        .contains("sigquit::start_early()"));
+    let first_statement = statements.next().unwrap();
     assert!(
         first_statement.contains("update::watchdog_entry::run_if_requested()"),
-        "watchdog должен идти первым: {first_statement}"
+        "watchdog должен идти сразу за перехватом сигналов: {first_statement}"
     );
     for later in ["LaunchArgs::from_env()", "tauri::generate_context!()"] {
         assert!(body.find(later).unwrap() > body.find("run_if_requested").unwrap());
@@ -492,4 +501,66 @@ fn update_commands_need_no_extra_capability() {
 fn launch_args_is_copy() {
     fn assert_copy<T: Copy>() {}
     assert_copy::<lavray_shell::launch::LaunchArgs>();
+}
+
+/// Сигналы SIGTERM/SIGINT/SIGHUP (unix) доходят до штатного выхода: перехват
+/// ставится первой строкой `main()` — до создания любых потоков (Tauri, GTK,
+/// надзиратель ядра), чтобы сигнал не застал процесс с умолчанием;
+/// обработчик выхода ставится в `setup`, когда есть `AppHandle`, и зовёт тот же
+/// `begin_quit`, что пункт «Выход» трея.
+#[test]
+fn termination_signals_start_the_graceful_quit_before_any_thread() {
+    let main_rs = source("main.rs");
+    let body = main_rs.split("fn main() {").nth(1).expect("main()");
+    let hook = body.find("sigquit::start_early()").expect("start_early");
+    for thread_source in [
+        "run_if_requested",
+        "LaunchArgs::from_env()",
+        "start_tray_watch()",
+        "tauri::Builder::default()",
+        "spawn_supervisor(",
+        ".run(|app, event|",
+    ] {
+        let at = body.find(thread_source).expect(thread_source);
+        assert!(
+            hook < at,
+            "перехват сигналов должен идти до {thread_source}"
+        );
+    }
+    assert!(
+        body.contains("sigquit::on_quit(move || begin_quit(&handle))"),
+        "сигнал должен запускать тот же begin_quit, что меню трея"
+    );
+    assert!(
+        body.find("sigquit::on_quit(").unwrap() > body.find(".setup(move |app|").unwrap(),
+        "обработчик ставится из setup, где есть AppHandle"
+    );
+    assert!(
+        !main_rs.contains("signal(") && !main_rs.contains("sigaction"),
+        "обработчики сигналов — только в sigquit"
+    );
+}
+
+/// Перехват — в отдельном модуле, а не в `main.rs`: он растёт за порог файла.
+#[test]
+fn sigquit_logic_lives_outside_main_rs() {
+    let sigquit = source("sigquit/mod.rs");
+    for needed in [
+        "pub const fn next_action",
+        "QUIT_BUDGET",
+        "pub fn start_early",
+    ] {
+        assert!(sigquit.contains(needed), "нет в sigquit: {needed}");
+    }
+    let unix = source("sigquit/unix.rs");
+    for needed in [
+        "libc::sigaction",
+        "libc::SA_RESTART",
+        "libc::write(",
+        "libc::SIGTERM",
+        "libc::SIGINT",
+        "libc::SIGHUP",
+    ] {
+        assert!(unix.contains(needed), "нет в sigquit/unix.rs: {needed}");
+    }
 }

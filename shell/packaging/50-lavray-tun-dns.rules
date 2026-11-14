@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: GPL-3.0-only
+//
+// LAVRay: DNS туннельного интерфейса без запроса пароля.
+//
+// В режиме TUN ядро (sing-box) через resolvectl сообщает systemd-resolved, что
+// DNS-запросы должны идти в туннель: задаёт интерфейсу DNS-сервер, домен
+// маршрутизации «~.» и признак маршрута по умолчанию, а при отключении
+// возвращает прежние настройки (revert). systemd-resolved требует для каждого
+// из этих действий пароль администратора, поэтому без правила система
+// спрашивала пароль 3 раза при подключении и ещё раз при отключении.
+//
+// Правило разрешает только эти четыре действия и только администратору
+// (группы sudo, wheel, admin) в активном локальном сеансе, то есть тому, кто
+// и так вправе подтвердить их своим паролем. Для остальных пользователей и
+// для удалённых сеансов ничего не меняется: система по-прежнему спросит пароль.
+polkit.addRule(function(action, subject) {
+    if (action.id != "org.freedesktop.resolve1.set-dns-servers" &&
+        action.id != "org.freedesktop.resolve1.set-domains" &&
+        action.id != "org.freedesktop.resolve1.set-default-route" &&
+        action.id != "org.freedesktop.resolve1.revert") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (!subject.local || !subject.active) {
+        return polkit.Result.NOT_HANDLED;
+    }
+    if (subject.isInGroup("sudo") || subject.isInGroup("wheel") || subject.isInGroup("admin")) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

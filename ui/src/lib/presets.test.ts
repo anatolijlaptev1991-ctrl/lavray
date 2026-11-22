@@ -9,7 +9,9 @@ import { presetDescription, presetRuleCount, presetTitle } from './presets';
 
 // Идентификаторы файлов core/internal/presets/builtin/*.json; displayName
 // встроенного ядро отдаёт как «preset.<id>» (api/convert.go: presetToProto).
-const CORE_BUILTIN = ['lav-ru', 'lav-cn', 'global', 'all-proxy', 'all-direct'];
+// Полноту списка относительно файлов ядра проверяет Go-тест
+// TestBuiltinKnownToUI (core/internal/presets/ui_sync_test.go).
+const CORE_BUILTIN = ['lav-ru', 'lav-cn', 'lav-openwrt', 'global', 'all-proxy', 'all-direct'];
 
 describe('presetTitle / presetDescription', () => {
   it.each(LANGUAGES)('%s: у каждого встроенного пресета ядра есть название и описание, а не ключ', (lang) => {

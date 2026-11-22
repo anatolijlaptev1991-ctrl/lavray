@@ -94,6 +94,40 @@ describe('карточки пресетов на экране «Правила»
       '1 правило',
     ]);
   });
+
+  it('пресет роутера lav-openwrt показывается именем и с описанием, а не сырым id', async () => {
+    setLanguage('ru');
+    stubCore({
+      'RoutingService/ListPresets': {
+        presets: [
+          builtin('lav-openwrt', 1, {
+            directDomain: ['geosite:category-ru', 'geosite:riot'],
+            directIp: ['geoip:ru', 'geoip:private'],
+          }),
+          builtin('global', 1),
+        ],
+        activePresetId: 'lav-openwrt',
+      },
+    });
+    const view = await mount(createElement(RulesScreen));
+
+    const list = cards(view.container);
+    expect(list.map((c) => part(c, 'h3'))).toEqual(['LAV Preset OpenWrt', 'Глобальный']);
+    expect(part(list[0]!, '.desc')).toBe(t('preset.lavow.desc', 'ru'));
+    expect(part(list[0]!, '.badge-soft')).toBe('Встроенный');
+    // Активен ровно один набор: подсвечена одна карточка.
+    expect(view.container.querySelectorAll('.preset.on')).toHaveLength(1);
+    expect(view.container.querySelector('.preset.on h3')?.textContent).toBe('LAV Preset OpenWrt');
+    expect(view.container.querySelector('.preset-grid')?.textContent).not.toMatch(/lav-openwrt|preset\./);
+  });
+
+  it('описание LAV Preset RU называет системы, для которых он сделан', async () => {
+    setLanguage('ru');
+    stubCore({ 'RoutingService/ListPresets': LIST_PRESETS });
+    const view = await mount(createElement(RulesScreen));
+
+    expect(part(cards(view.container)[0]!, '.desc')).toMatch(/^Для Windows и Linux\./);
+  });
 });
 
 describe('название активного пресета в других местах', () => {

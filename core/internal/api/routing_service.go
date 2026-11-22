@@ -22,6 +22,12 @@ func (s *Server) presetProto(p *presets.Preset) (*lavrayv1.RoutingPreset, error)
 }
 
 // allPresets — встроенные наборы, затем пользовательские (порядок карточек в UI).
+//
+// Пользовательская запись с id встроенного набора в список не попадает: иначе
+// id встречается дважды, UI подсвечивает обе карточки как активные, а применяется
+// всё равно встроенный (lookupPreset и findPreset ищут его первым). Такая запись
+// — копия встроенного файла с его же id и builtin=true, записанная в обход API;
+// в хранилище её список не трогает.
 func (s *Server) allPresets() ([]*presets.Preset, error) {
 	list, err := s.builtinList()
 	if err != nil {
@@ -31,7 +37,18 @@ func (s *Server) allPresets() ([]*presets.Preset, error) {
 	if err != nil {
 		return nil, err
 	}
-	return append(list, custom...), nil
+	builtinIDs := make(map[string]bool, len(list))
+	for _, p := range list {
+		builtinIDs[p.ID] = true
+	}
+	out := list
+	for _, p := range custom {
+		if builtinIDs[p.ID] {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out, nil
 }
 
 func (s *Server) ListPresets(ctx context.Context, req *connect.Request[lavrayv1.ListPresetsRequest]) (*connect.Response[lavrayv1.ListPresetsResponse], error) {

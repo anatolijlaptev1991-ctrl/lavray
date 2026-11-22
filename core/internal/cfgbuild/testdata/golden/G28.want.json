@@ -101,6 +101,11 @@
       },
       {
         "action": "route",
+        "domain": [
+          "blzddist1-a.akamaihd.net",
+          "bnetcmsus-a.akamaihd.net",
+          "bnetproduct-a.akamaihd.net"
+        ],
         "domain_suffix": [
           "exitgames.com",
           "photonengine.io",
@@ -120,7 +125,12 @@
           "debian.org",
           "dl.flathub.org",
           "fedoraproject.org",
-          "archlinux.org"
+          "archlinux.org",
+          "blizzard.com",
+          "battle.net",
+          "worldofwarcraft.com",
+          "blz-contentstack.com",
+          "bogolubov.center"
         ],
         "rule_set": [
           "geosite-category-ru",
@@ -424,6 +434,11 @@
         ]
       },
       {
+        "domain": [
+          "blzddist1-a.akamaihd.net",
+          "bnetcmsus-a.akamaihd.net",
+          "bnetproduct-a.akamaihd.net"
+        ],
         "domain_suffix": [
           "exitgames.com",
           "photonengine.io",
@@ -443,7 +458,12 @@
           "debian.org",
           "dl.flathub.org",
           "fedoraproject.org",
-          "archlinux.org"
+          "archlinux.org",
+          "blizzard.com",
+          "battle.net",
+          "worldofwarcraft.com",
+          "blz-contentstack.com",
+          "bogolubov.center"
         ],
         "outbound": "bypass",
         "rule_set": [
@@ -507,7 +527,16 @@
           "Icarus-Win64-Shipping.exe",
           "PEAK.exe",
           "Phasmophobia.exe",
-          "UnityCrashHandler64.exe"
+          "UnityCrashHandler64.exe",
+          "Wow.exe",
+          "WowVoiceProxy.exe",
+          "World of Warcraft Launcher.exe",
+          "BlizzardError.exe",
+          "BlizzardBrowser.exe",
+          "Battle.net.exe",
+          "Battle.net Launcher.exe",
+          "GameSessionMonitor.exe",
+          "battlenet.overlay.runtime.exe"
         ]
       },
       {

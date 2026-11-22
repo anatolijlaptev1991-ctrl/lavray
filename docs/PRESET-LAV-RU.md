@@ -10,9 +10,11 @@
 |---|---|
 | Русские сайты (`.ru`, `.su`, `.рф`, gov, category-ru) | напрямую |
 | Игровые домены: Riot, Steam, Photon/Exitgames | напрямую |
+| Blizzard, Battle.net и World of Warcraft (с rev 5, §3f) | напрямую |
+| `bogolubov.center` и его поддомены (`www.`, `lk.`) (с rev 5, §3g) | напрямую |
 | Обновления и магазины приложений Linux: Ubuntu/Launchpad/snap, Debian, Flathub (`dl.flathub.org`), Fedora, Arch | напрямую (с rev 4, §3e) |
 | BigModel (`bigmodel.cn`), DeepSeek (`deepseek.com`), Kimi (`kimi.com`, `kimi.ai`), Moonshot (`moonshot.cn`, `moonshot.ai`) — суффиксные правила, покрывают поддомены (в т.ч. `open.bigmodel.cn`, `api.deepseek.com`, `api.kimi.ai`) | напрямую (с rev 3) |
-| Игры по имени процесса: LoL (весь стек + Vanguard), Icarus, PEAK, Phasmophobia (+ Unity crash handler) | напрямую |
+| Игры по имени процесса (Windows): LoL (весь стек + Vanguard), Icarus, PEAK, Phasmophobia (+ Unity crash handler), World of Warcraft: Forever и Battle.net (с rev 5, §3f) | напрямую |
 | AI/IDE-инструменты по имени процесса: Cursor, Windsurf, Kimi, VS Code, Claude, Codex, Gemini, ollama, LM Studio, Jan, node/python и др. | через прокси |
 | AI/Dev-домены: Google/Gemini, OpenAI, Anthropic/Claude, xAI/Grok, Perplexity, HuggingFace, GitHub, npm, PyPI и др. (большой явный список) | через прокси |
 | Всё остальное (`def_outbound: proxy`) | через прокси |
@@ -89,6 +91,26 @@
 **Выгода маленькая.** В нашем порядке правил (sniff → hijack-dns → `custom_rules` пресета → block → proxy-домены → direct-домены → block/proxy/direct IP → процессные правила → TUN-bypass пользователя → встроенные блокировки) процессные правила стоят ПОСЛЕ списков и действуют лишь на то, что в списки не попало. Поэтому правило `proxy` по процессу при `def_outbound = proxy` ничего не меняет (то же исходящее, что и по умолчанию), а прямые списки (DeepSeek, Kimi, BigModel, `geoip:ru`, `geoip:private`) оно не перебивает. Реальный эффект мог бы дать только `direct` для игр на IP-адреса вне списков (Steam, Wine/Proton, Moonlight через интернет).
 
 **Как добавить правила в свою копию набора и чего это стоит.** В пользовательской копии пресета (не во встроенном) можно добавить процессное правило, например `{"platforms": ["linux"], "outbound": "direct", "process_names": ["steam", "steamwebhelper", "wine-preloader", "wine64-preloader", "moonlight"]}`. Цена — таблица выше для всей системы, пока правило включено. Особенности имён: ядро сравнивает точное базовое имя из `/proc/<pid>/exe` с учётом регистра, без шаблонов; `python3` — ссылка на `python3.14`, виден `python3.14`; Electron-приложения (VS Code, Cursor, Windsurf, Antigravity) выполняют сеть в дочерних процессах того же exe; npm-инструменты идут как `node`; игры под Proton/Wine видны только как `wine-preloader`/`wine64-preloader`; нативный Claude Code — как `~/.local/share/claude/versions/<номер версии>`; после обновления пакета под запущенным приложением имя читается как `<...> (deleted)`. Не распознаются процессы других пользователей и служб (systemd-служба `ollama`, `apt` под `_apt`): без `CAP_SYS_PTRACE` ядро не читает их `/proc/<pid>/exe`. `process_path_regex` схема не поддерживает (SCHEMA §4.3: только имена без путей).
+
+## 3f. World of Warcraft: Forever и Battle.net — напрямую (rev 5)
+
+**Процессы (только Windows).** Имена добавлены в существующее правило «напрямую», третьего правила нет (порядок правил не менялся: сначала прокси, потом напрямую): `Wow.exe`, `WowVoiceProxy.exe`, `World of Warcraft Launcher.exe`, `BlizzardError.exe`, `BlizzardBrowser.exe`, `Battle.net.exe`, `Battle.net Launcher.exe`, `GameSessionMonitor.exe`, `battlenet.overlay.runtime.exe`. Имена взяты из установленной игры, а не подобраны: игра — `D:\World of Warcraft\_forever_`, клиент — `D:\Battle.net`. Для Linux процессных правил по-прежнему нет (§3e).
+
+**Домены (все ОС).** В `direct_domain`: `domain:blizzard.com`, `domain:battle.net`, `domain:worldofwarcraft.com`, `domain:blz-contentstack.com`, `full:blzddist1-a.akamaihd.net`, `full:bnetcmsus-a.akamaihd.net`, `full:bnetproduct-a.akamaihd.net`. Источник — список `blizzard` из v2fly/domain-list-community; взяты только домены учётной записи, Battle.net и WoW. Корейские узлы, домены остальных игр Blizzard и магазин в пресет не входят.
+
+**Зачем домены, если есть процессы.** Всё, что лежит в `direct_domain`, резолвится через `dns-direct` — DNS провайдера. Без этого адреса игровых серверов выбрались бы по выходу прокси, а шёл бы трафик из России. Домены срабатывают и для соединений от процессов, которых нет в правиле.
+
+**Проверки.** Пересечений с `proxy_domain` и с пинами Riot в `custom_rules` нет (по тексту списков; содержимое geosite `.srs` не сверялось). `TestGoldenLavRU` сходится, `TestBuiltinsHaveNoLinuxProcessRules` зелёный, в Linux-конфиге поиска процессов нет (G28b). Обновлённые конфиги Windows и Linux приняты настоящим sing-box (`TestGoldenSingBoxCheck`, 38 из 38). На живой игре маршрут не проверялся: нужен запуск с пресетом rev 5.
+
+## 3g. bogolubov.center — напрямую (rev 5)
+
+**Правило.** `domain:bogolubov.center` в `direct_domain` — суффиксное, покрывает и поддомены (`www.bogolubov.center`, `lk.bogolubov.center`). DNS домена идёт через `dns-direct`. Добавлено по просьбе владельца; в ту же ревизию, что и §3f, потому что rev 5 ещё не выпущена.
+
+**Почему мало правила по стране.** Сайт хостится в Москве, и его адрес есть в `geoip:ru`. Но в режиме системного прокси браузер отдаёт ядру имя сайта, а не адрес, и для такого соединения правило по стране не срабатывает — оно сравнивается с адресом, которого ещё нет. Сайта нет в `geosite:category-ru`, поэтому он доходил до `def_outbound` и шёл через прокси. Правило домена стоит до процессных правил и в `def_outbound` не попадает.
+
+**Не входит.** Сайт ссылается на `bogolubov.expert` и `proc-servis.clinic` (карточки партнёров): это переходы, а не ресурсы страницы, — их в пресете нет. Другие внешние ресурсы страницы — ВКонтакте, MAX, Одноклассники, сайты госорганов — уже напрямую через `category-ru` и `gov-ru`.
+
+**Проверки.** `TestLavRURev5DomainsGoDirect` держит домен в `direct_domain` и не пускает в `proxy_domain`; в golden G28 (Windows) домен — в правиле `bypass` и в правиле `dns-direct`, в G28b (Linux) — так же. Зонд на настоящем движке (форк sing-box, конфиг `Build()` для Windows без TUN, настоящие `geo/*.srs`, исходящий прокси — закрытый порт, 2026-11-22): по пресету без этого правила `bogolubov.center:443` ушёл в `outbound/socks[proxy]`; то же соединение по адресу `5.35.16.80:443` — в `outbound/direct[bypass]`; с правилом `bogolubov.center`, `www.bogolubov.center` и `lk.bogolubov.center` — в `outbound/direct[bypass]`, TLS и HEAD до сайта прошли. В режиме TUN и в установленном приложении не проверялся.
 
 ## 4. Риски
 

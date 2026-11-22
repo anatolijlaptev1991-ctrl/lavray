@@ -3,7 +3,9 @@
 // presets.ts — названия и описания пресетов маршрутов через словарь.
 // Для встроенного пресета ядро отдаёт displayName ключом локализации
 // («preset.lav-ru», core/internal/api/convert.go: presetToProto), для своего —
-// готовым именем. Идентификаторы встроенных — файлы core/internal/presets/builtin.
+// готовым именем. Идентификаторы встроенных — файлы core/internal/presets/builtin;
+// каждый из них должен быть в BUILTIN, иначе карточка показывает сырой id без
+// описания (проверяет Go-тест TestBuiltinKnownToUI в core/internal/presets).
 import type { RoutingPreset } from '../gen/lavray_pb';
 import type { MessageKey } from './i18n';
 
@@ -17,6 +19,7 @@ interface Builtin {
 const BUILTIN: Readonly<Record<string, Builtin>> = {
   'lav-ru': { name: 'LAV Preset RU', descKey: 'preset.lavru.desc' },
   'lav-cn': { name: 'LAV Preset CN', descKey: 'preset.lavcn.desc' },
+  'lav-openwrt': { name: 'LAV Preset OpenWrt', descKey: 'preset.lavow.desc' },
   global: { nameKey: 'preset.global.t', descKey: 'preset.global.d' },
   'all-proxy': { nameKey: 'preset.allproxy.t', descKey: 'preset.allproxy.d' },
   'all-direct': { nameKey: 'preset.alldirect.t', descKey: 'preset.alldirect.d' },

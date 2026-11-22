@@ -1,7 +1,7 @@
 {
   "$schema": "preset.schema.v1.json",
   "version": 1,
-  "revision": 4,
+  "revision": 5,
   "id": "lav-ru",
   "builtin": true,
   "name": {
@@ -18,7 +18,7 @@
     "es": "Los sitios rusos (geosite category-ru/gov-ru), los dominios/programas de juegos, BigModel, DeepSeek y Kimi/Moonshot van directos; los demás servicios de IA/desarrollo y el resto del tráfico van por proxy; los anuncios se bloquean. DNS dividido: RU, juegos, BigModel, DeepSeek y Kimi/Moonshot usan el DNS del proveedor; el resto usa DoH a través del túnel. Las actualizaciones del sistema y las tiendas de aplicaciones de Linux (Ubuntu, Debian, snap, Flathub, Fedora, Arch) van directas.",
     "de": "Russische Webseiten (geosite category-ru/gov-ru), Spiele-Domains/-Apps, BigModel, DeepSeek und Kimi/Moonshot laufen direkt; andere KI-/Dev-Dienste und der übrige Datenverkehr laufen über den Proxy; Werbung wird blockiert. Getrenntes DNS: RU, Spiele, BigModel, DeepSeek und Kimi/Moonshot über den Provider-DNS, der Rest über DoH durch den Tunnel. Linux-Systemupdates und App-Stores (Ubuntu, Debian, snap, Flathub, Fedora, Arch) laufen direkt."
   },
-  "maintainer_notes": "Конвертация lavray/presets/lav-ru.source.json (RU-bypass + Games, формат NekoRay 4.x) по SCHEMA.md §6. Отличия от источника: + geosite:category-ads-all в block (PRESET-LAV-RU §3b); dns_final_out/dns-стратегии DROP-полей некора не переносятся (§3, конвертер логирует warning). google.ru закреплён за proxy (приоритет proxy-списка перед direct-geosite — §3.3). Процессные правила *.exe — windows-only (§3c). Rev 3: domain:bigmodel.cn, domain:deepseek.com, domain:kimi.com, domain:moonshot.cn и domain:moonshot.ai перенесены из proxy_domain в direct_domain; domain:kimi.ai добавлен в direct_domain для api.kimi.ai; DNS этих сервисов переключён с dns-remote на dns-direct; z.ai и ZCode Start Plan не изменены. Rev 4: в direct_domain добавлены домены обновлений и магазинов приложений Linux (ubuntu.com, launchpad.net, launchpadcontent.net, snapcraft.io, snapcraftcontent.com, debian.org, dl.flathub.org, fedoraproject.org, archlinux.org) — большие загрузки идут напрямую, проверено с мини-ПК в обход туннеля; DNS этих доменов — dns-direct. Процессных правил для Linux нет намеренно: любое процессное правило включает поиск процесса для каждого соединения (замер 2026-11-14, Intel N100, 134 процесса пользователя, 300 соединений: медиана 0,86 → 12,98 мс, CPU ядра 1,1 → 14,0 мс на соединение, 945 → 75 соединений/с); при def_outbound=proxy правило proxy по процессу ничего не меняет, так как процессные правила стоят после списков (PRESET-LAV-RU §3e). Правила windows не менялись.",
+  "maintainer_notes": "Конвертация lavray/presets/lav-ru.source.json (RU-bypass + Games, формат NekoRay 4.x) по SCHEMA.md §6. Отличия от источника: + geosite:category-ads-all в block (PRESET-LAV-RU §3b); dns_final_out/dns-стратегии DROP-полей некора не переносятся (§3, конвертер логирует warning). google.ru закреплён за proxy (приоритет proxy-списка перед direct-geosite — §3.3). Процессные правила *.exe — windows-only (§3c). Rev 3: domain:bigmodel.cn, domain:deepseek.com, domain:kimi.com, domain:moonshot.cn и domain:moonshot.ai перенесены из proxy_domain в direct_domain; domain:kimi.ai добавлен в direct_domain для api.kimi.ai; DNS этих сервисов переключён с dns-remote на dns-direct; z.ai и ZCode Start Plan не изменены. Rev 4: в direct_domain добавлены домены обновлений и магазинов приложений Linux (ubuntu.com, launchpad.net, launchpadcontent.net, snapcraft.io, snapcraftcontent.com, debian.org, dl.flathub.org, fedoraproject.org, archlinux.org) — большие загрузки идут напрямую, проверено с мини-ПК в обход туннеля; DNS этих доменов — dns-direct. Процессных правил для Linux нет намеренно: любое процессное правило включает поиск процесса для каждого соединения (замер 2026-11-14, Intel N100, 134 процесса пользователя, 300 соединений: медиана 0,86 → 12,98 мс, CPU ядра 1,1 → 14,0 мс на соединение, 945 → 75 соединений/с); при def_outbound=proxy правило proxy по процессу ничего не меняет, так как процессные правила стоят после списков (PRESET-LAV-RU §3e). Правила windows не менялись. Rev 5: World of Warcraft: Forever и Battle.net — напрямую (Windows): в процессное правило direct добавлены Wow.exe, WowVoiceProxy.exe, World of Warcraft Launcher.exe, BlizzardError.exe, BlizzardBrowser.exe, Battle.net.exe, Battle.net Launcher.exe, GameSessionMonitor.exe, battlenet.overlay.runtime.exe (имена — из установки игры на Windows); в direct_domain добавлены domain:blizzard.com, domain:battle.net, domain:worldofwarcraft.com, domain:blz-contentstack.com, full:blzddist1-a.akamaihd.net, full:bnetcmsus-a.akamaihd.net, full:bnetproduct-a.akamaihd.net (v2fly/domain-list-community, data/blizzard; корейские узлы и домены прочих игр не включались). Пересечений с proxy_domain и custom_rules нет (по тексту списков; содержимое geosite .srs не сверялось). Домены общие для всех ОС; их DNS идёт через dns-direct, чтобы игровые серверы выбирались по расположению провайдера, а не по выходу прокси. В той же ревизии: domain:bogolubov.center (домен и его поддомены) — напрямую, добавлен по просьбе владельца; DNS домена — dns-direct.",
   "routing": {
     "def_outbound": "proxy",
     "outbound_domain_strategy": "",
@@ -138,7 +138,15 @@
       "domain:debian.org",
       "domain:dl.flathub.org",
       "domain:fedoraproject.org",
-      "domain:archlinux.org"
+      "domain:archlinux.org",
+      "domain:blizzard.com",
+      "domain:battle.net",
+      "domain:worldofwarcraft.com",
+      "domain:blz-contentstack.com",
+      "full:blzddist1-a.akamaihd.net",
+      "full:bnetcmsus-a.akamaihd.net",
+      "full:bnetproduct-a.akamaihd.net",
+      "domain:bogolubov.center"
     ],
     "block_domain": [
       "geosite:category-ads-all"
@@ -203,7 +211,16 @@
           "Icarus-Win64-Shipping.exe",
           "PEAK.exe",
           "Phasmophobia.exe",
-          "UnityCrashHandler64.exe"
+          "UnityCrashHandler64.exe",
+          "Wow.exe",
+          "WowVoiceProxy.exe",
+          "World of Warcraft Launcher.exe",
+          "BlizzardError.exe",
+          "BlizzardBrowser.exe",
+          "Battle.net.exe",
+          "Battle.net Launcher.exe",
+          "GameSessionMonitor.exe",
+          "battlenet.overlay.runtime.exe"
         ]
       }
     ],
